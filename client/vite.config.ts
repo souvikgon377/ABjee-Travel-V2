@@ -5,6 +5,14 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    host: true,
+    allowedHosts: [
+      'unminding-emil-cateringly.ngrok-free.dev',
+      '.ngrok-free.app',
+      '.ngrok.io'
+    ]
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
