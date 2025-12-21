@@ -5,7 +5,6 @@ import Home from './Pages/HomePage';
 import LandingPage from './Pages/LandingPage'
 import ChatPage from './Pages/ChatPage';
 import AuthPage from './Pages/AuthPage';
-import ChatRoom from './components/chat/ChatRoom';
 import {BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import HotelList from './components/bookings/hotel_list';
 import CabBooking from './components/bookings/cab_booking';
@@ -25,9 +24,7 @@ function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path='/home' element={<Home/>} />
             <Route path='/auth' element={<AuthPage />} />
-            <Route path='/chat' element={<ChatPage />}>
-              <Route path='room/:roomId' element={<ChatRoom />} />
-            </Route>
+            <Route path='/chat/*' element={<ChatPage />} />
             <Route path="/test" element={
               <div style={{padding: '20px'}}>
                 <h1>Test Route Works!</h1>

@@ -1,0 +1,46 @@
+{
+  "rules": {
+    "chatrooms": {
+      ".read": "auth != null",
+      "$roomId": {
+        ".write": "auth != null",
+        "lastMessage": {
+          ".write": "auth != null"
+        },
+        "messages": {
+          ".indexOn": ["timestamp"],
+          ".read": "auth != null",
+          "$messageId": {
+            ".write": "auth != null && (!data.exists() || data.child('userId').val() == auth.uid)",
+            ".validate": "newData.hasChildren(['userId', 'username', 'text', 'timestamp']) && newData.child('userId').val() == auth.uid && newData.child('text').val().length > 0 && newData.child('text').val().length <= 5000"
+          }
+        }
+      }
+    },
+    "status": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['uid', 'username', 'online', 'lastSeen']) && newData.child('uid').val() == $uid"
+      }
+    },
+    "lastSeen": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.isNumber() && newData.val() <= now"
+      }
+    },
+    "typing": {
+      "$roomId": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.uid == $uid",
+          ".validate": "newData.hasChildren(['userId', 'username', 'timestamp']) && newData.child('userId').val() == $uid"
+        }
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}

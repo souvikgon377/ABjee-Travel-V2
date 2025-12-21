@@ -9,10 +9,10 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
-import socketService from '../lib/socket';
 
 interface AuthContextType {
   currentUser: any | null;
+  user: any | null;
   userProfile: UserProfile | null;
   loading: boolean;
   signup: (email: string, password: string, additionalData?: any) => Promise<{ success: boolean; user: any }>;
@@ -191,7 +191,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign out
   const logout = useCallback(async () => {
     try {
-      socketService.disconnect();
       await signOut(auth);
       setUserProfile(null);
       localStorage.removeItem('token');
@@ -243,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Listen for auth state changes and manage socket connection
+  // Listen for auth state changes
   useEffect(() => {
     let isActive = true;
     let refreshInterval: NodeJS.Timeout | null = null;
@@ -255,31 +254,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(user);
       
         if (user) {
-          // Set up token refresh callback for socket
-          socketService.setTokenRefreshCallback(async () => {
-            const token = await refreshToken(user);
-            return token;
-          });
-
           const token = await refreshToken(user);
-          
-          // Initial socket connection
-          if (!socketService.isConnected()) {
-            await socketService.connect(token).catch(error => {
-              console.error('Initial socket connection failed:', error);
-            });
-          }
 
           // Set up periodic token refresh (30 minutes)
           refreshInterval = setInterval(async () => {
             if (!isActive || isRefreshing) return;
             try {
               const freshToken = await refreshToken(user);
-              // Socket service will use the refresh callback if needed
-              if (socketService.isConnected()) {
-                // Just refresh the token, don't reconnect
-                localStorage.setItem('token', freshToken);
-              }
+              localStorage.setItem('token', freshToken);
             } catch (error) {
               console.error('Periodic token refresh failed:', error);
             }
@@ -307,7 +289,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (isActive) {
             setUserProfile(null);
             localStorage.removeItem('token');
-            socketService.disconnect();
           }
         }
       } catch (error) {
@@ -323,12 +304,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (refreshInterval) {
         clearInterval(refreshInterval);
       }
-      socketService.disconnect();
     };
   }, [refreshToken, isRefreshing]);
 
   const value: AuthContextType = {
     currentUser,
+    user: currentUser,
     userProfile,
     loading,
     signup,

@@ -46,7 +46,8 @@ try {
   console.log('[Firebase-Admin] Initializing app with service account');
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`,
+    databaseURL: process.env.FIREBASE_DATABASE_URL || 'https://abjee-travel-4fc38-default-rtdb.asia-southeast1.firebasedatabase.app'
   });
   console.log('[Firebase-Admin] Firebase Admin SDK initialized successfully');
 
@@ -66,5 +67,6 @@ try {
 export const auth = admin.auth();
 export const db = admin.firestore();
 export const storage = admin.storage();
+export const realtimeDb = admin.database();
 
 export default admin;

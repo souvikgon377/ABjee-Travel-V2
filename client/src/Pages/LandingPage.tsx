@@ -6,7 +6,6 @@ import { FeatureBlock3 } from '@/components/mvpblocks/feature'
 import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
 import Faq3 from '@/components/mvpblocks/faq-3'
 import Footer4Col from '@/components/mvpblocks/footer-4col'
-import Header2 from '@/components/mvpblocks/Header-2'
 
 function LandingPage() {
   return (
@@ -14,7 +13,7 @@ function LandingPage() {
       <Header1 />
        {/* Spacer for fixed header - matches dark header background */}
             <div className="h-10 bg-white dark:bg-black"></div>
-      <Header2 />
+      
       <GradientTypewriter/>
       <section className="w-full">
         <video
