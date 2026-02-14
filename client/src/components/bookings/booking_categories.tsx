@@ -4,7 +4,6 @@ import Header1 from '../mvpblocks/header-1';
 import Footer4Col from '../mvpblocks/footer-4col';
 import { GroupToursPopup } from './GroupToursPopup';
 import Header2 from '../mvpblocks/Header-2';
-import GradientTypewriter from '../mvpblocks/gradient-typewriter';
 
 // --- TYPE DEFINITIONS ---
 interface TourPackage {
@@ -344,12 +343,11 @@ export default function BookingCategories() {
       {/* Header */}
       <Header1/>
       
-            {/* Spacer for fixed header - matches dark header background */}
+            {/* Spacer for fixed header */}
             <div className="h-10 bg-white dark:bg-black"></div>
             
       <Header2/>
       
-      <GradientTypewriter/>
       <main >
         {/* Hero Section */}
         <section className="w-full">

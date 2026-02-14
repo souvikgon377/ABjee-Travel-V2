@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendPasswordResetEmail,
+  signInWithCustomToken,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
@@ -17,6 +18,7 @@ interface AuthContextType {
   loading: boolean;
   signup: (email: string, password: string, additionalData?: any) => Promise<{ success: boolean; user: any }>;
   login: (email: string, password: string) => Promise<void>;
+  adminLogin: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -34,6 +36,7 @@ interface UserProfile {
   city?: string;
   zipCode?: string;
   username?: string;
+  role?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -154,6 +157,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'auth/too-many-requests': 'Too many failed login attempts. Please try again later.',
       };
       throw new Error(errorMessages[error.code] || 'Failed to log in. Please try again.');
+    }
+  };
+
+  // Admin login with custom token
+  const adminLogin = async (email: string, password: string) => {
+    try {
+      console.log('[Auth] Initiating admin login...');
+      
+      // Call backend admin login endpoint
+      const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/admin-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Admin login failed');
+      }
+
+      console.log('[Auth] Admin login successful, signing in with custom token...');
+      
+      // Sign in to Firebase with custom token
+      const { user } = await signInWithCustomToken(auth, result.data.customToken);
+      
+      // Get and store Firebase token
+      const token = await refreshToken(user);
+      localStorage.setItem('token', token);
+      
+      // Set user profile with admin data
+      setUserProfile(result.data.user);
+      
+      console.log('[Auth] Admin login complete');
+    } catch (error: any) {
+      console.error('[Auth] Admin login error:', error);
+      throw new Error(error.message || 'Failed to log in as admin. Please try again.');
     }
   };
 
@@ -314,6 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     signup,
     login,
+    adminLogin,
     loginWithGoogle,
     logout,
     resetPassword,

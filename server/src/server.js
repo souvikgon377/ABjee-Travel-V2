@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import subscriptionRoutes from './routes/subscriptions.js';
 import travelPartnerRoutes from './routes/travel-partners.js';
+import adminRoutes from './routes/admin.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -59,6 +60,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/travel-partners', travelPartnerRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

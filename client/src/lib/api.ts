@@ -74,4 +74,17 @@ export const subscriptionsAPI = {
   getBillingHistory: () => api.get('/subscriptions/billing-history'),
 };
 
+// Admin API
+export const adminAPI = {
+  getStats: () => api.get('/admin/stats'),
+  getUsers: (params?: any) => api.get('/admin/users', { params }),
+  getUser: (userId: string) => api.get(`/admin/users/${userId}`),
+  updateUser: (userId: string, data: any) => api.put(`/admin/users/${userId}`, data),
+  deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
+  getSubscriptions: (params?: any) => api.get('/admin/subscriptions', { params }),
+  getActivity: (params?: any) => api.get('/admin/activity', { params }),
+  getRevenue: (params?: any) => api.get('/admin/revenue', { params }),
+  getSystemStatus: () => api.get('/admin/system-status'),
+};
+
 export default api;

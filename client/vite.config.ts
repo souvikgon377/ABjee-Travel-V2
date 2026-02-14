@@ -20,15 +20,21 @@ export default defineConfig({
   },
   build: {
     minify: 'esbuild',
+    sourcemap: false,
+    cssCodeSplit: true,
     rollupOptions: {
       output: {
         manualChunks: {
           'firebase': ['firebase/app', 'firebase/auth', 'firebase/database'],
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui': ['framer-motion', 'lucide-react']
+          'ui': ['framer-motion', 'lucide-react'],
+          'forms': ['react-hook-form', 'zod', '@hookform/resolvers']
         }
       }
     },
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 600
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom']
   }
 })

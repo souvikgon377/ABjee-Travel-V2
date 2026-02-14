@@ -1,12 +1,9 @@
-'use client';
-
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Sparkles } from 'lucide-react';
-import { useTheme } from 'next-themes';
+import { useTheme } from './theme-provider';
 import { ModeToggle } from './mode-toggle'
-import MultiStepForm from '../ui/multi-step-form'
 import { animate } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -57,8 +54,8 @@ export default function Header1() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const { theme } = useTheme();
-  const [showSignIn, setShowSignIn] = useState(false);
   const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -67,17 +64,6 @@ export default function Header1() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  useEffect(() => {
-    if (showSignIn) {
-      document.body.classList.add('overflow-hidden');
-    } else {
-      document.body.classList.remove('overflow-hidden');
-    }
-    return () => {
-      document.body.classList.remove('overflow-hidden');
-    };
-  }, [showSignIn]);
 
   const headerVariants = {
     initial: { y: -100, opacity: 0 },
@@ -236,7 +222,10 @@ export default function Header1() {
                   )}
                 </div>
                 <button
-                  onClick={() => logout()}
+                  onClick={() => {
+                    logout();
+                    navigate('/');
+                  }}
                   className="text-sm font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
                 >
                   Sign Out
@@ -367,6 +356,7 @@ export default function Header1() {
                         onClick={() => {
                           setIsMobileMenuOpen(false);
                           logout();
+                          navigate('/');
                         }}
                         className="block w-full rounded-lg py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted"
                       >
@@ -397,20 +387,6 @@ export default function Header1() {
           )}
         </AnimatePresence>
       </div>
-      {showSignIn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-6 relative w-full max-w-lg">
-            <button
-              className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 dark:hover:text-white"
-              onClick={() => setShowSignIn(false)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <MultiStepForm />
-          </div>
-        </div>
-      )}
     </motion.header>
   );
-  
 }

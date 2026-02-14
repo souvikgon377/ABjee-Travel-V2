@@ -86,7 +86,7 @@ export interface RoomJoinResponse {
 export interface ISocketService {
   connect(token: string, isReconnect?: boolean): Promise<void>;
   disconnect(): void;
-  getSocket(): ReturnType<typeof import('socket.io-client')> | null;
+  getSocket(): any | null;
   isConnected(): boolean;
   getLastError(): Error | null;
   setTokenRefreshCallback(callback: () => Promise<string>): void;

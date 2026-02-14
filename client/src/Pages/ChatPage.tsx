@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Routes, Route } from 'react-router-dom';
-import { Plus, MessageCircle, Users, Clock } from 'lucide-react';
+import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
+import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock } from 'lucide-react';
 import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +24,13 @@ const ChatRoomsList: React.FC = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
+  const [newRoomPassword, setNewRoomPassword] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareRoom, setShareRoom] = useState<ChatRoomType | null>(null);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  const [userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
 
   // Load chat rooms
   useEffect(() => {
@@ -36,6 +42,11 @@ const ChatRoomsList: React.FC = () => {
     try {
       const unsubscribe = chatService.listenToUserRooms((loadedRooms: ChatRoomType[]) => {
         setRooms(loadedRooms);
+        
+        // Count rooms created by current user
+        const count = loadedRooms.filter(room => room.createdBy === user.uid).length;
+        setUserCreatedRoomsCount(count);
+        
         setLoading(false);
       });
 
@@ -52,26 +63,73 @@ const ChatRoomsList: React.FC = () => {
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newRoomName.trim() || !user) return;
+    if (!newRoomName.trim() || !newRoomPassword.trim() || !user) return;
 
     setCreating(true);
     try {
       const roomId = await chatService.createGroupRoom(
         newRoomName.trim(),
         newRoomDescription.trim() || 'No description',
+        newRoomPassword.trim(),
         [user.uid]
       );
 
       setShowCreateDialog(false);
       setNewRoomName('');
       setNewRoomDescription('');
+      setNewRoomPassword('');
       
       // Navigate to the new room
       navigate(`/chat/room/${roomId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating room:', error);
+      alert(error.message || 'Failed to create room');
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Handle share room
+  const handleShareRoom = (room: ChatRoomType, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShareRoom(room);
+    setShowShareDialog(true);
+    setCopiedInvite(false);
+    setCopiedPassword(false);
+  };
+
+  // Copy invite link
+  const copyInviteLink = () => {
+    if (!shareRoom || !shareRoom.id || !shareRoom.inviteToken) return;
+    
+    const inviteLink = chatService.getInviteLink(shareRoom.id, shareRoom.inviteToken);
+    navigator.clipboard.writeText(inviteLink);
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 2000);
+  };
+
+  // Copy room credentials
+  const copyCredentials = () => {
+    if (!shareRoom || !shareRoom.id) return;
+    
+    const credentials = `Room ID: ${shareRoom.id}\nPassword: ${shareRoom.password || 'N/A'}`;
+    navigator.clipboard.writeText(credentials);
+    setCopiedPassword(true);
+    setTimeout(() => setCopiedPassword(false), 2000);
+  };
+
+  // Delete room
+  const handleDeleteRoom = async (roomId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!confirm('Are you sure you want to delete this room? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await chatService.deleteRoom(roomId);
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete room');
     }
   };
 
@@ -108,11 +166,16 @@ const ChatRoomsList: React.FC = () => {
           <p className="text-muted-foreground">
             Join a conversation or create your own room
           </p>
+          {user && (
+            <p className="text-sm text-muted-foreground mt-1">
+              You have created <span className="font-semibold text-primary">{userCreatedRoomsCount}/5</span> rooms
+            </p>
+          )}
         </div>
         
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
           <DialogTrigger asChild>
-            <Button size="lg">
+            <Button size="lg" disabled={userCreatedRoomsCount >= 5}>
               <Plus className="h-5 w-5 mr-2" />
               Create Room
             </Button>
@@ -121,7 +184,7 @@ const ChatRoomsList: React.FC = () => {
             <DialogHeader>
               <DialogTitle>Create New Chat Room</DialogTitle>
               <DialogDescription>
-                Create a new room for your community to chat
+                Create a new password-protected room for your community ({userCreatedRoomsCount}/5 rooms created)
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateRoom} className="space-y-4">
@@ -143,6 +206,20 @@ const ChatRoomsList: React.FC = () => {
                   value={newRoomDescription}
                   onChange={(e) => setNewRoomDescription(e.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="roomPassword">Room Password</Label>
+                <Input
+                  id="roomPassword"
+                  type="password"
+                  placeholder="Enter a secure password"
+                  value={newRoomPassword}
+                  onChange={(e) => setNewRoomPassword(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  This password will be required to join the room
+                </p>
               </div>
               <Button type="submit" className="w-full" disabled={creating}>
                 {creating ? 'Creating...' : 'Create Room'}
@@ -179,6 +256,7 @@ const ChatRoomsList: React.FC = () => {
                 <CardTitle className="flex items-center gap-2">
                   <MessageCircle className="h-5 w-5 text-primary" />
                   {room.name}
+                  {room.password && <Lock className="h-4 w-4 text-muted-foreground" />}
                 </CardTitle>
                 <CardDescription>{room.description}</CardDescription>
               </CardHeader>
@@ -193,11 +271,89 @@ const ChatRoomsList: React.FC = () => {
                     <span>Created {formatDate(room.createdAt)}</span>
                   </div>
                 </div>
+                
+                {/* Action buttons for room creator */}
+                {user && room.createdBy === user.uid && (
+                  <div className="flex gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={(e) => handleShareRoom(room, e)}
+                    >
+                      <Share2 className="h-4 w-4 mr-1" />
+                      Share
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={(e) => handleDeleteRoom(room.id!, e)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      
+      {/* Share Dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Share Room: {shareRoom?.name}</DialogTitle>
+            <DialogDescription>
+              Share this room with others using an invite link or room credentials
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Invite Link */}
+            <div className="space-y-2">
+              <Label>Invite Link (No Password Required)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={shareRoom?.id && shareRoom?.inviteToken ? chatService.getInviteLink(shareRoom.id, shareRoom.inviteToken) : ''}
+                  readOnly
+                  className="flex-1"
+                />
+                <Button onClick={copyInviteLink} variant="outline">
+                  <Copy className="h-4 w-4 mr-2" />
+                  {copiedInvite ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Anyone with this link can join directly without a password
+              </p>
+            </div>
+            
+            {/* Room Credentials */}
+            <div className="space-y-2">
+              <Label>Room Credentials</Label>
+              <div className="bg-muted p-3 rounded-md space-y-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Room ID</p>
+                  <p className="font-mono text-sm">{shareRoom?.id}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Password</p>
+                  <p className="font-mono text-sm">{shareRoom?.password}</p>
+                </div>
+              </div>
+              <Button onClick={copyCredentials} variant="outline" className="w-full">
+                <Copy className="h-4 w-4 mr-2" />
+                {copiedPassword ? 'Copied!' : 'Copy ID & Password'}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Share these credentials for manual room access
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -206,9 +362,12 @@ const ChatRoomsList: React.FC = () => {
  * Main Chat Page with routing
  */
 const ChatPage: React.FC = () => {
+  const location = useLocation();
+  const isInChatRoom = location.pathname.includes('/room/');
+
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      {!isInChatRoom && <Header />}
       <Routes>
         <Route index element={<ChatRoomsList />} />
         <Route path="room/:roomId" element={<ChatRoom />} />

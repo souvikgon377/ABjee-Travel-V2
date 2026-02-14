@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
@@ -10,9 +8,25 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Progress } from '../../components/ui/progress';
-import { CheckCircle2, ArrowRight, ArrowLeft, Mail, Lock, User, MapPin } from 'lucide-react';
+import { CheckCircle2, ArrowRight, ArrowLeft, Mail, Lock, User, MapPin, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleSignInButton from './GoogleSignInButton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+
+// Field type definition
+interface FieldOption {
+  value: string;
+  label: string;
+}
+
+interface FormField {
+  name: string;
+  label: string;
+  type: string;
+  placeholder: string;
+  icon: any;
+  options?: FieldOption[];
+}
 
 // Define the form schema for each step
 const personalInfoSchema = z.object({
@@ -67,8 +81,9 @@ export default function AuthMultiStepForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<string>('user');
 
-  const { signup, login, loginWithGoogle } = useAuth();
+  const { signup, login, adminLogin, loginWithGoogle } = useAuth();
 
   // Define the steps for signup
   const signupSteps = [
@@ -172,9 +187,22 @@ export default function AuthMultiStepForm({
     schema: z.object({
       email: z.string().email('Please enter a valid email address'),
       password: z.string().min(1, 'Password is required'),
+      role: z.string().optional(),
     }),
     icon: Lock,
     fields: [
+      {
+        name: 'role',
+        label: 'Login As',
+        type: 'select',
+        placeholder: 'Select your role',
+        icon: Shield,
+        options: [
+          { value: 'user', label: 'User' },
+          { value: 'admin', label: 'Admin' },
+          { value: 'owner', label: 'Owner' },
+        ],
+      },
       {
         name: 'email',
         label: 'Email',
@@ -233,7 +261,18 @@ const handleNextStep = async (data: any) => {
 
     if (mode === 'login') {
       setIsSubmitting(true);
-      await login(data.email, data.password);
+      
+      // Use adminLogin for admin and owner roles
+      if (selectedRole === 'admin' || selectedRole === 'owner') {
+        await adminLogin(data.email, data.password);
+        setIsComplete(true);
+        // Navigate to admin dashboard instead of calling onComplete
+        window.location.href = '/admin';
+        return;
+      } else {
+        await login(data.email, data.password);
+      }
+      
       setIsComplete(true);
       if (onComplete) onComplete();
     } else if (step < steps.length - 1) {
@@ -352,25 +391,39 @@ const handleNextStep = async (data: any) => {
                 </p>
               </div>
 
-              {/* Google Sign In Button */}
-              <div className="mb-6">
-                <GoogleSignInButton 
-                  onClick={handleGoogleSignIn}
-                  disabled={isSubmitting}
-                  text={mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
-                />
-              </div>
+              {/* Google Sign In Button - Only show for regular users, not for admin/owner */}
+              {!(mode === 'login' && (selectedRole === 'admin' || selectedRole === 'owner')) && (
+                <>
+                  <div className="mb-6">
+                    <GoogleSignInButton 
+                      onClick={handleGoogleSignIn}
+                      disabled={isSubmitting}
+                      text={mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
+                    />
+                  </div>
 
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
+                        Or continue with email
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Info message for admin/owner login */}
+              {mode === 'login' && (selectedRole === 'admin' || selectedRole === 'owner') && (
+                <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    {selectedRole === 'admin' ? 'Admin' : 'Owner'} login requires email and password authentication only.
+                  </p>
                 </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
-                    Or continue with email
-                  </span>
-                </div>
-              </div>
+              )}
 
               {error && (
                 <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -384,6 +437,41 @@ const handleNextStep = async (data: any) => {
               >
                 {steps[step].fields.map((field) => {
                   const IconComponent = field.icon;
+                  
+                  // Handle select field for role
+                  if (field.type === 'select' && 'options' in field && field.options) {
+                    return (
+                      <div key={field.name} className="space-y-2">
+                        <Label htmlFor={field.name} className="text-gray-700 dark:text-gray-300 font-medium">
+                          {field.label}
+                        </Label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                            <IconComponent className="h-5 w-5 text-gray-400" />
+                          </div>
+                          <Select
+                            value={selectedRole}
+                            onValueChange={(value) => {
+                              setSelectedRole(value);
+                            }}
+                          >
+                            <SelectTrigger className="pl-10 h-12 border-gray-300 dark:border-gray-600">
+                              <SelectValue placeholder={field.placeholder} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {field.options.map((option: FieldOption) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Handle regular input fields
                   return (
                     <div key={field.name} className="space-y-2">
                       <Label htmlFor={field.name} className="text-gray-700 dark:text-gray-300 font-medium">

@@ -14,6 +14,12 @@ export default function AuthPage() {
 
   const location = useLocation();
   const handleAuthComplete = () => {
+    // Check if user has admin role and redirect to admin dashboard
+    if (userProfile?.role === 'admin' || userProfile?.role === 'owner') {
+      navigate('/admin');
+      return;
+    }
+    
     // Get the intended destination from location state, or fallback to chat page
     const from = (location.state as any)?.from || '/chat';
     navigate(from);
@@ -22,6 +28,7 @@ export default function AuthPage() {
   const handleLogout = async () => {
     try {
       await logout();
+      navigate('/');
     } catch (error) {
       console.error('Failed to log out:', error);
     }
