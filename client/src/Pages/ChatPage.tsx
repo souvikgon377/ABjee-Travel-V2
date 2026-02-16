@@ -1184,7 +1184,7 @@ const ChatRoomsList: React.FC = () => {
                           <h3 className="text-2xl font-bold text-gray-900 mb-6">Temple Gallery</h3>
                           <div className="relative group">
                             {/* Main Image Slider */}
-                            <div className="relative rounded-2xl overflow-hidden shadow-2xl h-96">
+                            <div className="relative rounded-2xl overflow-hidden shadow-2xl h-[550px]">
                               <AnimatePresence mode="wait">
                                 <motion.img
                                   key={gallerySlideIndex}
@@ -1207,9 +1207,9 @@ const ChatRoomsList: React.FC = () => {
                                       : prev - 1
                                   );
                                 }}
-                                className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+                                className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-4 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
                               >
-                                <ChevronLeft className="h-6 w-6" />
+                                <ChevronLeft className="h-7 w-7" />
                               </button>
                               
                               {/* Next Button */}
@@ -1219,19 +1219,19 @@ const ChatRoomsList: React.FC = () => {
                                     (prev + 1) % TEMPLE_DETAILS[selectedAttraction].images.length
                                   );
                                 }}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+                                className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-4 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
                               >
-                                <ChevronRight className="h-6 w-6" />
+                                <ChevronRight className="h-7 w-7" />
                               </button>
                               
                               {/* Slide Counter */}
-                              <div className="absolute bottom-4 left-4 bg-black/60 text-white px-4 py-2 rounded-full text-sm font-semibold">
+                              <div className="absolute bottom-6 left-6 bg-black/60 text-white px-5 py-2.5 rounded-full text-base font-semibold">
                                 {gallerySlideIndex + 1} / {TEMPLE_DETAILS[selectedAttraction].images.length}
                               </div>
                             </div>
                             
                             {/* Thumbnail Indicators */}
-                            <div className="flex justify-center gap-3 mt-6">
+                            <div className="flex justify-center gap-4 mt-8">
                               {TEMPLE_DETAILS[selectedAttraction].images.map((image: string, idx: number) => (
                                 <motion.button
                                   key={idx}
@@ -1243,7 +1243,7 @@ const ChatRoomsList: React.FC = () => {
                                       ? 'ring-4 ring-orange-500 shadow-xl' 
                                       : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
                                   }`}
-                                  style={{ width: '80px', height: '60px' }}
+                                  style={{ width: '120px', height: '90px' }}
                                 >
                                   <img
                                     src={image}
