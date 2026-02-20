@@ -25,7 +25,9 @@ export const UsersTable = memo(({ onAddUser }: UsersTableProps) => {
         const response = await adminAPI.getUsers({ limit: 5, page: 1 });
         setUsers(response.data.data.users);
       } catch (error) {
-        console.error('Failed to fetch users:', error);
+        if (import.meta.env.DEV) {
+          console.error('Failed to fetch users:', error);
+        }
       } finally {
         setLoading(false);
       }

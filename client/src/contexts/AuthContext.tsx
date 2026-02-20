@@ -66,7 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('token', token);
       return token;
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      if (import.meta.env.DEV) {
+        console.error('Token refresh failed:', error);
+      }
       throw error;
     } finally {
       setIsRefreshing(false);
@@ -109,7 +111,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(newProfile);
 
     } catch (error) {
-      console.error('Error creating user profile:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error creating user profile:', error);
+      }
       throw error;
     }
   };
@@ -133,7 +137,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: true, user };
 
     } catch (error: any) {
-      console.error('Signup error:', error);
+      if (import.meta.env.DEV) {
+        console.error('Signup error:', error);
+      }
       const errorMessages: Record<string, string> = {
         'auth/email-already-in-use': 'This email is already registered. Please use a different email or sign in.',
         'auth/weak-password': 'Password should be at least 6 characters.',
@@ -150,7 +156,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
     } catch (error: any) {
-      console.error('Login error:', error);
+      if (import.meta.env.DEV) {
+        console.error('Login error:', error);
+      }
       const errorMessages: Record<string, string> = {
         'auth/user-not-found': 'Invalid email or password.',
         'auth/wrong-password': 'Invalid email or password.',
@@ -163,7 +171,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Admin login with custom token
   const adminLogin = async (email: string, password: string) => {
     try {
-      console.log('[Auth] Initiating admin login...');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Initiating admin login...');
+      }
       
       // Call backend admin login endpoint
       const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/admin-login`, {
@@ -180,7 +190,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(result.message || 'Admin login failed');
       }
 
-      console.log('[Auth] Admin login successful, signing in with custom token...');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Admin login successful, signing in with custom token...');
+      }
       
       // Sign in to Firebase with custom token
       const { user } = await signInWithCustomToken(auth, result.data.customToken);
@@ -192,9 +204,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Set user profile with admin data
       setUserProfile(result.data.user);
       
-      console.log('[Auth] Admin login complete');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Admin login complete');
+      }
     } catch (error: any) {
-      console.error('[Auth] Admin login error:', error);
+      if (import.meta.env.DEV) {
+        console.error('[Auth] Admin login error:', error);
+      }
       throw new Error(error.message || 'Failed to log in as admin. Please try again.');
     }
   };
@@ -202,22 +218,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign in with Google
   const loginWithGoogle = async () => {
     try {
-      console.log('[Auth] Initiating Google Sign-In...');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Initiating Google Sign-In...');
+      }
       const result = await signInWithPopup(auth, googleProvider);
       const { user } = result;
       
-      console.log('[Auth] Google Sign-In successful, getting token...');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Google Sign-In successful, getting token...');
+      }
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
       
-      console.log('[Auth] Creating/updating user profile...');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Creating/updating user profile...');
+      }
       await createUserProfile(user);
       
-      console.log('[Auth] Google Sign-In complete');
+      if (import.meta.env.DEV) {
+        console.log('[Auth] Google Sign-In complete');
+      }
     } catch (error: any) {
-      console.error('[Auth] Google login error:', error);
-      console.error('[Auth] Error code:', error.code);
-      console.error('[Auth] Error message:', error.message);
+      if (import.meta.env.DEV) {
+        console.error('[Auth] Google login error:', error);
+        console.error('[Auth] Error code:', error.code);
+        console.error('[Auth] Error message:', error.message);
+      }
       
       const errorMessages: Record<string, string> = {
         'auth/popup-closed-by-user': 'Sign in cancelled. Please try again.',
@@ -237,7 +263,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(null);
       localStorage.removeItem('token');
     } catch (error) {
-      console.error('Logout error:', error);
+      if (import.meta.env.DEV) {
+        console.error('Logout error:', error);
+      }
       throw error;
     }
   }, []);
@@ -247,7 +275,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error: any) {
-      console.error('Password reset error:', error);
+      if (import.meta.env.DEV) {
+        console.error('Password reset error:', error);
+      }
       const errorMessages: Record<string, string> = {
         'auth/user-not-found': 'No account found with this email address.',
         'auth/invalid-email': 'Please enter a valid email address.',
@@ -279,7 +309,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: updatedUser } = await response.json();
       setUserProfile(updatedUser);
     } catch (error) {
-      console.error('Error updating user profile:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error updating user profile:', error);
+      }
       throw error;
     }
   };
@@ -305,7 +337,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const freshToken = await refreshToken(user);
               localStorage.setItem('token', freshToken);
             } catch (error) {
-              console.error('Periodic token refresh failed:', error);
+              if (import.meta.env.DEV) {
+                console.error('Periodic token refresh failed:', error);
+              }
             }
           }, 1000 * 60 * 30); // 30 minutes
 
@@ -334,7 +368,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (error) {
-        console.error('Auth state change error:', error);
+        if (import.meta.env.DEV) {
+          console.error('Auth state change error:', error);
+        }
       } finally {
         if (isActive) setLoading(false);
       }

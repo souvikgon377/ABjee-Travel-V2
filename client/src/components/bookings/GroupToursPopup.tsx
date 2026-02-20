@@ -103,11 +103,13 @@ export const GroupToursPopup: React.FC<GroupToursPopupProps> = ({ isOpen, onClos
   };
 
   const handleLocationSelect = (location: Location): void => {
-    console.log('Selected:', {
-      country: selectedCountry,
-      state: selectedState,
-      location
-    });
+    if (import.meta.env.DEV) {
+      console.log('Selected:', {
+        country: selectedCountry,
+        state: selectedState,
+        location
+      });
+    }
     onClose();
   };
 

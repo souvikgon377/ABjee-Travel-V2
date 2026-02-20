@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
-import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, ChevronLeft, ChevronRight, Star, Upload, Image as ImageIcon, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
+import { uploadImageToCloudinary, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/imageUpload';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import Header from '@/components/mvpblocks/header-1';
 import ChatRoom from '@/components/chat/ChatRoom';
 
@@ -253,6 +256,14 @@ const ChatRoomsList: React.FC = () => {
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [newRoomPassword, setNewRoomPassword] = useState('');
   const [creating, setCreating] = useState(false);
+  
+  // Image upload states
+  const [backgroundImageFile, setBackgroundImageFile] = useState<File | null>(null);
+  const [backgroundImagePreview, setBackgroundImagePreview] = useState<string>('');
+  const [iconImageFile, setIconImageFile] = useState<File | null>(null);
+  const [iconImagePreview, setIconImagePreview] = useState<string>('');
+  const [uploadingImages, setUploadingImages] = useState(false);
+  
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareRoom, setShareRoom] = useState<ChatRoomType | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -270,8 +281,15 @@ const ChatRoomsList: React.FC = () => {
   const [currentTempleImageIndex, setCurrentTempleImageIndex] = useState(0);
   const [selectedAttraction, setSelectedAttraction] = useState<string | null>(null);
   const [gallerySlideIndex, setGallerySlideIndex] = useState(0);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewImages, setReviewImages] = useState<File[]>([]);
+  const [reviewImagePreviews, setReviewImagePreviews] = useState<string[]>([]);
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const templeDetailsRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const communityRoomsRef = useRef<HTMLDivElement>(null);
 
   // Auto-slide gallery images
   useEffect(() => {
@@ -334,12 +352,80 @@ const ChatRoomsList: React.FC = () => {
     if (hasImages) {
       setSelectedAttraction(attractionName);
       setGallerySlideIndex(0); // Reset gallery to first image
+      
+      // Scroll to temple details after a short delay to allow rendering
+      setTimeout(() => {
+        templeDetailsRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+      }, 100);
     }
+  }, []);
+
+  const scrollToCommunityRooms = useCallback(() => {
+    setTimeout(() => {
+      communityRoomsRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }, 100);
   }, []);
 
   const closeAttractionDetails = useCallback(() => {
     setSelectedAttraction(null);
   }, []);
+
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + reviewImages.length > 5) {
+      alert('You can upload maximum 5 images');
+      return;
+    }
+    
+    setReviewImages(prev => [...prev, ...files]);
+    
+    // Create preview URLs
+    const newPreviews = files.map(file => URL.createObjectURL(file));
+    setReviewImagePreviews(prev => [...prev, ...newPreviews]);
+  }, [reviewImages.length]);
+
+  const removeReviewImage = useCallback((index: number) => {
+    setReviewImages(prev => prev.filter((_, i) => i !== index));
+    setReviewImagePreviews(prev => {
+      URL.revokeObjectURL(prev[index]); // Clean up memory
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
+  const handleSubmitReview = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!reviewText.trim()) {
+      alert('Please write your review');
+      return;
+    }
+
+    // TODO: Implement backend API call to save review
+    // const reviewData = {
+    //   rating: reviewRating,
+    //   text: reviewText,
+    //   images: reviewImages,
+    //   attraction: selectedAttraction,
+    //   timestamp: Date.now()
+    // };
+
+    // Clean up image previews
+    reviewImagePreviews.forEach(url => URL.revokeObjectURL(url));
+    
+    // Reset form
+    setReviewText('');
+    setReviewRating(5);
+    setReviewImages([]);
+    setReviewImagePreviews([]);
+    
+    alert('✨ Thank you for your review! It will be published after moderation.');
+  }, [reviewText, reviewRating, reviewImages, reviewImagePreviews, selectedAttraction]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -378,10 +464,64 @@ const ChatRoomsList: React.FC = () => {
         if (unsubscribe) unsubscribe();
       };
     } catch (error) {
-      console.error('Error loading chat rooms:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error loading chat rooms:', error);
+      }
       setLoading(false);
     }
   }, [user]);
+
+  // Handle background image selection
+  const handleBackgroundImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Revoke previous preview if exists
+      if (backgroundImagePreview) {
+        revokeImagePreview(backgroundImagePreview);
+      }
+      setBackgroundImageFile(file);
+      setBackgroundImagePreview(createImagePreview(file));
+    }
+  }, [backgroundImagePreview]);
+
+  // Handle icon image selection
+  const handleIconImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Revoke previous preview if exists
+      if (iconImagePreview) {
+        revokeImagePreview(iconImagePreview);
+      }
+      setIconImageFile(file);
+      setIconImagePreview(createImagePreview(file));
+    }
+  }, [iconImagePreview]);
+
+  // Remove background image
+  const removeBackgroundImage = useCallback(() => {
+    if (backgroundImagePreview) {
+      revokeImagePreview(backgroundImagePreview);
+    }
+    setBackgroundImageFile(null);
+    setBackgroundImagePreview('');
+  }, [backgroundImagePreview]);
+
+  // Remove icon image
+  const removeIconImage = useCallback(() => {
+    if (iconImagePreview) {
+      revokeImagePreview(iconImagePreview);
+    }
+    setIconImageFile(null);
+    setIconImagePreview('');
+  }, [iconImagePreview]);
+
+  // Cleanup previews on unmount
+  useEffect(() => {
+    return () => {
+      if (backgroundImagePreview) revokeImagePreview(backgroundImagePreview);
+      if (iconImagePreview) revokeImagePreview(iconImagePreview);
+    };
+  }, [backgroundImagePreview, iconImagePreview]);
 
   // Create new room
   const handleCreateRoom = async (e: React.FormEvent) => {
@@ -390,24 +530,62 @@ const ChatRoomsList: React.FC = () => {
     if (!newRoomName.trim() || !newRoomPassword.trim() || !user) return;
 
     setCreating(true);
+    setUploadingImages(true);
+    
     try {
+      let backgroundImageData: ImageUploadResult | undefined;
+      let iconImageData: ImageUploadResult | undefined;
+
+      // Upload background image if selected
+      if (backgroundImageFile) {
+        try {
+          backgroundImageData = await uploadImageToCloudinary(backgroundImageFile, {
+            folder: 'chat-rooms/backgrounds'
+          });
+        } catch (error: any) {
+          throw new Error(`Background image upload failed: ${error.message}`);
+        }
+      }
+
+      // Upload icon image if selected
+      if (iconImageFile) {
+        try {
+          iconImageData = await uploadImageToCloudinary(iconImageFile, {
+            folder: 'chat-rooms/icons'
+          });
+        } catch (error: any) {
+          throw new Error(`Icon image upload failed: ${error.message}`);
+        }
+      }
+
+      setUploadingImages(false);
+
+      // Create room with image metadata
       const roomId = await chatService.createGroupRoom(
         newRoomName.trim(),
         newRoomDescription.trim() || 'No description',
         newRoomPassword.trim(),
-        [user.uid]
+        [user.uid],
+        backgroundImageData,
+        iconImageData
       );
 
+      // Reset form
       setShowCreateDialog(false);
       setNewRoomName('');
       setNewRoomDescription('');
       setNewRoomPassword('');
+      removeBackgroundImage();
+      removeIconImage();
       
       // Navigate to the new room
       navigate(`/chat/room/${roomId}`);
     } catch (error: any) {
-      console.error('Error creating room:', error);
+      if (import.meta.env.DEV) {
+        console.error('Error creating room:', error);
+      }
       alert(error.message || 'Failed to create room');
+      setUploadingImages(false);
     } finally {
       setCreating(false);
     }
@@ -511,7 +689,281 @@ const ChatRoomsList: React.FC = () => {
           transition={{ delay: 0.2 }}
           className="mb-12 py-4"
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Mobile Layout: Single column with explore section after first card */}
+          <div className="md:hidden space-y-6">
+            {/* Card 1: Explore Your Interest */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              className="group cursor-pointer"
+              onClick={() => setShowExploreCategories(!showExploreCategories)}
+            >
+              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
+                {/* Video Background */}
+                <video 
+                  autoPlay 
+                  loop 
+                  muted 
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v1.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative z-10 h-full flex flex-col justify-between">
+                  <motion.div
+                    animate={{ rotate: [0, 10, -10, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                    className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                  >
+                    <Compass className="h-8 w-8 text-white" />
+                  </motion.div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">
+                      Explore Your Interest
+                    </h3>
+                    <p className="text-white/90 text-base drop-shadow-md">
+                      Discover communities that match your passions and travel style
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Explore by Category Section - Mobile Only */}
+            <AnimatePresence>
+              {showExploreCategories && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="space-y-6">
+                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                      Explore by category
+                    </h2>
+                    
+                    <div className="space-y-4">
+                      {/* Outdoors Card */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        whileHover={{ scale: 1.03 }}
+                        className="group cursor-pointer"
+                        onClick={() => setSelectedCategory('outdoors')}
+                      >
+                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
+                          <img 
+                            src="/img6.jpg" 
+                            alt="Outdoors"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-6">
+                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
+                              Outdoors
+                            </h3>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Food Card */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        whileHover={{ scale: 1.03 }}
+                        className="group cursor-pointer"
+                      >
+                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
+                          <img 
+                            src="/img7.jpg" 
+                            alt="Food"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-6">
+                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
+                              Food
+                            </h3>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Culture Card */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        whileHover={{ scale: 1.03 }}
+                        className="group cursor-pointer"
+                      >
+                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
+                          <img 
+                            src="/img8.jpg" 
+                            alt="Culture"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-6">
+                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
+                              Culture
+                            </h3>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Water Card */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        whileHover={{ scale: 1.03 }}
+                        className="group cursor-pointer"
+                      >
+                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
+                          <img 
+                            src="/img9.jpg" 
+                            alt="Water"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-6">
+                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
+                              Water
+                            </h3>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Card 2: Communicate with fellow travellers */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
+              onClick={scrollToCommunityRooms}
+              className="group cursor-pointer"
+            >
+              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500">
+                {/* Video Background */}
+                <video 
+                  autoPlay 
+                  loop 
+                  muted 
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v2.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
+                <div className="absolute inset-0 bg-gradient-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <motion.div 
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                  animate={{ x: ['-100%', '100%'] }}
+                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                />
+                <div className="relative z-10 h-full flex flex-col justify-between">
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.15, 1],
+                      rotate: [0, 5, -5, 0]
+                    }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
+                  >
+                    <Users className="h-9 w-9 text-white drop-shadow-lg" />
+                  </motion.div>
+                  <div>
+                    <motion.h3 
+                      className="text-2xl font-bold text-white mb-2 drop-shadow-2xl"
+                      whileHover={{ scale: 1.05 }}
+                    >
+                      Communicate with Fellow Travellers
+                    </motion.h3>
+                    <p className="text-white/95 text-base drop-shadow-lg font-medium">
+                      Connect and share experiences with travelers worldwide 🌍✨
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Card 3: Visualize your destination */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              className="group cursor-pointer"
+            >
+              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-8 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative z-10 h-full flex flex-col justify-between">
+                  <motion.div
+                    animate={{ y: [0, -5, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 0.5 }}
+                    className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                  >
+                    <Eye className="h-8 w-8 text-white" />
+                  </motion.div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-3">
+                      Visualize Your Destination
+                    </h3>
+                    <p className="text-white/90 text-base">
+                      Get inspired by photos and stories from real travelers
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Card 4: Make a perfect plan */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              whileHover={{ scale: 1.05, y: -5 }}
+              className="group cursor-pointer"
+            >
+              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-8 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <div className="absolute inset-0 bg-gradient-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative z-10 h-full flex flex-col justify-between">
+                  <motion.div
+                    animate={{ rotate: [0, 5, -5, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                    className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                  >
+                    <Calendar className="h-8 w-8 text-white" />
+                  </motion.div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-2">
+                      Make a Perfect Plan
+                    </h3>
+                    <p className="text-white/90 text-base">
+                      Collaborate with others to create unforgettable journeys
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Desktop/Tablet Layout: Grid with explore section below */}
+          <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Card 1: Explore Your Interest */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -560,10 +1012,11 @@ const ChatRoomsList: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              whileHover={{ scale: 1.05, y: -5 }}
+              whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
+              onClick={scrollToCommunityRooms}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-rose-300 via-pink-300 to-red-300 p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500">
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -576,21 +1029,32 @@ const ChatRoomsList: React.FC = () => {
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-gradient-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-gradient-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <motion.div 
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                  animate={{ x: ['-100%', '100%'] }}
+                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 0.5 }}
-                    className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                    animate={{ 
+                      scale: [1, 1.15, 1],
+                      rotate: [0, 5, -5, 0]
+                    }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
-                    <Users className="h-8 w-8 text-white" />
+                    <Users className="h-9 w-9 text-white drop-shadow-lg" />
                   </motion.div>
                   <div>
-                    <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">
+                    <motion.h3 
+                      className="text-2xl font-bold text-white mb-2 drop-shadow-2xl"
+                      whileHover={{ scale: 1.05 }}
+                    >
                       Communicate with Fellow Travellers
-                    </h3>
-                    <p className="text-white/90 text-base drop-shadow-md">
-                      Connect and share experiences with travelers worldwide
+                    </motion.h3>
+                    <p className="text-white/95 text-base drop-shadow-lg font-medium">
+                      Connect and share experiences with travelers worldwide 🌍✨
                     </p>
                   </div>
                 </div>
@@ -659,7 +1123,7 @@ const ChatRoomsList: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* Explore by Category Section */}
+        {/* Explore by Category Section - Desktop/Tablet Only */}
         <AnimatePresence>
           {showExploreCategories && (
             <motion.div
@@ -667,7 +1131,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3 }}
-              className="mb-12"
+              className="mb-12 hidden md:block"
             >
               <div className="space-y-6">
                 <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
@@ -822,13 +1286,13 @@ const ChatRoomsList: React.FC = () => {
                     }
                   `}</style>
                   <div className="min-h-full flex flex-col items-center justify-between px-4 py-12">
-                  {/* Search Bar and Cascading Dropdowns */}
-                  <motion.div
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="w-full max-w-2xl"
-                  >
+                    {/* Search Bar and Cascading Dropdowns */}
+                    <motion.div
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="w-full max-w-2xl"
+                    >
                     {/* Search Bar */}
                     <div className="relative dropdown-container">
                       <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-400 z-10" />
@@ -986,7 +1450,506 @@ const ChatRoomsList: React.FC = () => {
                       >
                         Popular Attractions in {searchDestination}
                       </motion.h2>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full px-8">
+
+                      {/* Mobile Layout - Show details inline */}
+                      <div className="md:hidden w-full px-4 space-y-6">
+                        {attractions.map((attraction, index) => (
+                          <React.Fragment key={index}>
+                            <motion.div
+                              initial={{ opacity: 0, y: 40, scale: 0.8 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={{ 
+                                delay: 0.4 + (0.1 * index),
+                                duration: 0.5,
+                                type: "spring",
+                                stiffness: 100
+                              }}
+                              whileHover={{ 
+                                scale: 1.08, 
+                                y: -10,
+                                rotateY: 5,
+                                transition: { duration: 0.3 }
+                              }}
+                              onClick={() => handleAttractionClick(attraction.name, !!attraction.images)}
+                              className="bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-2xl hover:shadow-3xl transition-all duration-300 cursor-pointer group relative overflow-hidden"
+                            >
+                              {/* Background Image for Tirumala Temple with Shuffle Animation */}
+                              {attraction.images && (
+                                <div className="absolute inset-0 rounded-3xl overflow-hidden">
+                                  <AnimatePresence mode="wait">
+                                    <motion.img
+                                      key={currentTempleImageIndex}
+                                      src={attraction.images[currentTempleImageIndex]}
+                                      alt={attraction.name}
+                                      initial={{ opacity: 0, scale: 1.1 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      exit={{ opacity: 0, scale: 0.9 }}
+                                      transition={{ duration: 1 }}
+                                      className="absolute inset-0 w-full h-full object-cover"
+                                    />
+                                  </AnimatePresence>
+                                  {/* Dark overlay for better text readability */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
+                                </div>
+                              )}
+                              
+                              <div className="flex flex-col items-center text-center gap-4 relative z-10">
+                                {attraction.images ? (
+                                  <>
+                                    <motion.div 
+                                      className="text-6xl mb-2 drop-shadow-2xl"
+                                      animate={{ 
+                                        scale: [1, 1.1, 1],
+                                        rotate: [0, 5, -5, 0]
+                                      }}
+                                      transition={{ 
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        repeatDelay: 3
+                                      }}
+                                    >
+                                      {attraction.icon}
+                                    </motion.div>
+                                    <div>
+                                      <h3 className="font-bold text-white text-2xl mb-3 group-hover:text-yellow-300 transition-colors drop-shadow-lg">
+                                        {attraction.name}
+                                      </h3>
+                                      <p className="text-base text-gray-100 leading-relaxed drop-shadow-md">
+                                        {attraction.description}
+                                      </p>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <motion.div 
+                                      className="text-6xl mb-2"
+                                      animate={{ 
+                                        scale: [1, 1.1, 1],
+                                        rotate: [0, 5, -5, 0]
+                                      }}
+                                      transition={{ 
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        repeatDelay: 3
+                                      }}
+                                    >
+                                      {attraction.icon}
+                                    </motion.div>
+                                    <div>
+                                      <h3 className="font-bold text-gray-900 text-2xl mb-3 group-hover:text-blue-600 transition-colors">
+                                        {attraction.name}
+                                      </h3>
+                                      <p className="text-base text-gray-600 leading-relaxed">
+                                        {attraction.description}
+                                      </p>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </motion.div>
+
+                            {/* Temple Details - Shows immediately after clicked card on mobile */}
+                            {selectedAttraction === attraction.name && TEMPLE_DETAILS[selectedAttraction] && (
+                              <motion.div
+                                ref={templeDetailsRef}
+                                initial={{ opacity: 0, y: 40 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 40 }}
+                                transition={{ duration: 0.5 }}
+                                className="w-full"
+                              >
+                                <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-2xl">
+                                  {/* Header with Close Button */}
+                                  <div className="flex items-start justify-between mb-6 gap-4">
+                                    <motion.h2 
+                                      initial={{ x: -20, opacity: 0 }}
+                                      animate={{ x: 0, opacity: 1 }}
+                                      className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent"
+                                    >
+                                      {TEMPLE_DETAILS[selectedAttraction].title}
+                                    </motion.h2>
+                                    <button
+                                      onClick={closeAttractionDetails}
+                                      className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex-shrink-0"
+                                    >
+                                      <X className="h-5 w-5 text-gray-700" />
+                                    </button>
+                                  </div>
+
+                                  {/* Main Description */}
+                                  <motion.p 
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.2 }}
+                                    className="text-base text-gray-700 mb-4 leading-relaxed"
+                                  >
+                                    {TEMPLE_DETAILS[selectedAttraction].description}
+                                  </motion.p>
+
+                                  {/* History Section */}
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                    className="mb-4"
+                                  >
+                                    <h3 className="text-xl font-bold text-gray-900 mb-2">History</h3>
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                      {TEMPLE_DETAILS[selectedAttraction].history}
+                                    </p>
+                                  </motion.div>
+
+                                  {/* Significance */}
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.4 }}
+                                    className="mb-4"
+                                  >
+                                    <h3 className="text-xl font-bold text-gray-900 mb-2">Significance</h3>
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                      {TEMPLE_DETAILS[selectedAttraction].significance}
+                                    </p>
+                                  </motion.div>
+
+                                  {/* Key Features */}
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.5 }}
+                                    className="mb-6"
+                                  >
+                                    <h3 className="text-xl font-bold text-gray-900 mb-3">Key Features</h3>
+                                    <ul className="space-y-2">
+                                      {TEMPLE_DETAILS[selectedAttraction].features.map((feature: string, idx: number) => (
+                                        <motion.li
+                                          key={idx}
+                                          initial={{ x: -20, opacity: 0 }}
+                                          animate={{ x: 0, opacity: 1 }}
+                                          transition={{ delay: 0.6 + (idx * 0.1) }}
+                                          className="flex items-start gap-2"
+                                        >
+                                          <span className="text-orange-600 text-lg mt-1 flex-shrink-0">•</span>
+                                          <span className="text-sm text-gray-700">{feature}</span>
+                                        </motion.li>
+                                      ))}
+                                    </ul>
+                                  </motion.div>
+
+                                  {/* Temple Images Gallery - Auto Slider */}
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.8 }}
+                                    className="mb-4"
+                                  >
+                                    <h3 className="text-xl font-bold text-gray-900 mb-4">Temple Gallery</h3>
+                                    <div className="relative group">
+                                      {/* Main Image Slider */}
+                                      <div className="relative rounded-xl overflow-hidden shadow-2xl h-64">
+                                        <AnimatePresence mode="wait">
+                                          <motion.img
+                                            key={gallerySlideIndex}
+                                            src={TEMPLE_DETAILS[selectedAttraction].images[gallerySlideIndex]}
+                                            alt={`${TEMPLE_DETAILS[selectedAttraction].title} - View ${gallerySlideIndex + 1}`}
+                                            initial={{ opacity: 0, x: 100 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -100 }}
+                                            transition={{ duration: 0.5 }}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </AnimatePresence>
+                                        
+                                        {/* Previous Button */}
+                                        <button
+                                          onClick={() => {
+                                            setGallerySlideIndex((prev) => 
+                                              prev === 0 
+                                                ? TEMPLE_DETAILS[selectedAttraction].images.length - 1 
+                                                : prev - 1
+                                            );
+                                          }}
+                                          className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-2 shadow-lg opacity-60 transition-all duration-300 hover:scale-110"
+                                        >
+                                          <ChevronLeft className="h-5 w-5" />
+                                        </button>
+                                        
+                                        {/* Next Button */}
+                                        <button
+                                          onClick={() => {
+                                            setGallerySlideIndex((prev) => 
+                                              (prev + 1) % TEMPLE_DETAILS[selectedAttraction].images.length
+                                            );
+                                          }}
+                                          className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-2 shadow-lg opacity-60 transition-all duration-300 hover:scale-110"
+                                        >
+                                          <ChevronRight className="h-5 w-5" />
+                                        </button>
+                                        
+                                        {/* Slide Counter */}
+                                        <div className="absolute bottom-3 left-3 bg-black/60 text-white px-3 py-1.5 rounded-full text-sm font-semibold">
+                                          {gallerySlideIndex + 1} / {TEMPLE_DETAILS[selectedAttraction].images.length}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Thumbnail Indicators */}
+                                      <div className="flex justify-start gap-2 mt-4 overflow-x-auto pb-2">
+                                        {TEMPLE_DETAILS[selectedAttraction].images.map((image: string, idx: number) => (
+                                          <motion.button
+                                            key={idx}
+                                            onClick={() => setGallerySlideIndex(idx)}
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            className={`relative rounded-lg overflow-hidden transition-all duration-300 flex-shrink-0 w-20 h-[60px] ${
+                                              gallerySlideIndex === idx 
+                                                ? 'ring-3 ring-orange-500 shadow-xl' 
+                                                : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
+                                            }`}
+                                          >
+                                            <img
+                                              src={image}
+                                              alt={`Thumbnail ${idx + 1}`}
+                                              className="w-full h-full object-cover"
+                                            />
+                                            {gallerySlideIndex === idx && (
+                                              <motion.div
+                                                layoutId="activeSlide"
+                                                className="absolute inset-0 border-2 border-orange-500 bg-orange-500/20"
+                                              />
+                                            )}
+                                          </motion.button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </motion.div>
+
+                                  {/* Visiting Information */}
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 1.2 }}
+                                    className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-4"
+                                  >
+                                    <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                      <Calendar className="h-4 w-4 text-orange-600" />
+                                      Visiting Information
+                                    </h3>
+                                    <div className="space-y-2 text-gray-700 text-sm">
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-semibold">Timings:</span>
+                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.timings}</span>
+                                      </div>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-semibold">Entry Fee:</span>
+                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.entryFee}</span>
+                                      </div>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-semibold">Dress Code:</span>
+                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dresscode}</span>
+                                      </div>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-semibold">Best Time:</span>
+                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.bestTimeToVisit}</span>
+                                      </div>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-semibold">Daily Visitors:</span>
+                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dailyVisitors}</span>
+                                      </div>
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-semibold">Special Days:</span>
+                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.specialDays}</span>
+                                      </div>
+                                    </div>
+                                  </motion.div>
+
+                                  {/* Reviews Section - Mobile */}
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 1.4 }}
+                                    className="mt-4"
+                                  >
+                                    <div className="bg-white rounded-xl p-4 shadow-lg">
+                                      <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                        <Star className="h-4 w-4 text-orange-600 fill-orange-600" />
+                                        Visitor Reviews
+                                      </h3>
+                                      
+                                      {/* Overall Rating */}
+                                      <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-3 mb-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="text-center">
+                                            <div className="text-3xl font-bold text-orange-600">4.8</div>
+                                            <div className="text-xs text-gray-600">out of 5</div>
+                                          </div>
+                                          <div className="flex-1">
+                                            <div className="flex gap-1 mb-1">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star key={star} className={`h-4 w-4 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
+                                              ))}
+                                            </div>
+                                            <p className="text-xs text-gray-600">Based on 12,450+ reviews</p>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Individual Reviews */}
+                                      <div className="space-y-3">
+                                        {/* Review 1 */}
+                                        <div className="border-b border-gray-200 pb-3">
+                                          <div className="flex items-start gap-2 mb-1">
+                                            <div className="flex gap-0.5">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star key={star} className="h-3 w-3 text-orange-500 fill-orange-500" />
+                                              ))}
+                                            </div>
+                                            <span className="text-xs font-semibold text-gray-900">Rajesh Kumar</span>
+                                          </div>
+                                          <p className="text-xs text-gray-700 leading-relaxed">
+                                            "Divine experience! The spiritual atmosphere is beyond words. The darshan was well-organized despite huge crowds. A must-visit for devotees."
+                                          </p>
+                                          <span className="text-xs text-gray-500 mt-1 inline-block">2 weeks ago</span>
+                                        </div>
+
+                                        {/* Review 2 */}
+                                        <div className="border-b border-gray-200 pb-3">
+                                          <div className="flex items-start gap-2 mb-1">
+                                            <div className="flex gap-0.5">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star key={star} className={`h-3 w-3 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
+                                              ))}
+                                            </div>
+                                            <span className="text-xs font-semibold text-gray-900">Priya Sharma</span>
+                                          </div>
+                                          <p className="text-xs text-gray-700 leading-relaxed">
+                                            "Amazing temple architecture and peaceful surroundings. The prasadam is delicious. Online booking made the visit hassle-free."
+                                          </p>
+                                          <span className="text-xs text-gray-500 mt-1 inline-block">1 month ago</span>
+                                        </div>
+
+                                        {/* Review 3 */}
+                                        <div>
+                                          <div className="flex items-start gap-2 mb-1">
+                                            <div className="flex gap-0.5">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star key={star} className="h-3 w-3 text-orange-500 fill-orange-500" />
+                                              ))}
+                                            </div>
+                                            <span className="text-xs font-semibold text-gray-900">Anand Reddy</span>
+                                          </div>
+                                          <p className="text-xs text-gray-700 leading-relaxed">
+                                            "Blessed to visit Lord Venkateswara! The temple management is excellent. The journey up the seven hills was memorable. Highly recommended!"
+                                          </p>
+                                          <span className="text-xs text-gray-500 mt-1 inline-block">3 weeks ago</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Write Your Review Section - Mobile */}
+                                      <div className="mt-6 pt-6 border-t-2 border-gray-200">
+                                        <h4 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                          <Send className="h-4 w-4 text-orange-600" />
+                                          Share Your Experience
+                                        </h4>
+                                        
+                                        <form onSubmit={handleSubmitReview} className="space-y-4">
+                                          {/* Rating Selection */}
+                                          <div>
+                                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Your Rating</label>
+                                            <div className="flex gap-2">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <button
+                                                  key={star}
+                                                  type="button"
+                                                  onClick={() => setReviewRating(star)}
+                                                  className="transition-transform hover:scale-110"
+                                                >
+                                                  <Star 
+                                                    className={`h-7 w-7 ${star <= reviewRating ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} 
+                                                  />
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          {/* Review Text */}
+                                          <div>
+                                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Your Review</label>
+                                            <Textarea
+                                              value={reviewText}
+                                              onChange={(e) => setReviewText(e.target.value)}
+                                              placeholder="Share your experience about this temple..."
+                                              className="min-h-[100px] text-sm resize-none"
+                                              required
+                                            />
+                                          </div>
+
+                                          {/* Image Upload */}
+                                          <div>
+                                            <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                              <ImageIcon className="h-4 w-4" />
+                                              Add Photos (Optional, Max 5)
+                                            </label>
+                                            <input
+                                              ref={fileInputRef}
+                                              type="file"
+                                              accept="image/*"
+                                              multiple
+                                              onChange={handleImageUpload}
+                                              className="hidden"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => fileInputRef.current?.click()}
+                                              className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-orange-600"
+                                            >
+                                              <Upload className="h-4 w-4" />
+                                              Click to upload photos
+                                            </button>
+                                            
+                                            {/* Image Previews */}
+                                            {reviewImagePreviews.length > 0 && (
+                                              <div className="grid grid-cols-3 gap-2 mt-3">
+                                                {reviewImagePreviews.map((preview, idx) => (
+                                                  <div key={idx} className="relative group">
+                                                    <img 
+                                                      src={preview} 
+                                                      alt={`Preview ${idx + 1}`}
+                                                      className="w-full h-20 object-cover rounded-lg"
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => removeReviewImage(idx)}
+                                                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                      <X className="h-3 w-3" />
+                                                    </button>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Submit Button */}
+                                          <button
+                                            type="submit"
+                                            className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+                                          >
+                                            <Send className="h-4 w-4" />
+                                            Submit Review
+                                          </button>
+                                        </form>
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+
+                      {/* Desktop/Tablet Layout - Original grid */}
+                      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full px-8">
                         {attractions.map((attraction, index) => (
                           <motion.div
                             key={index}
@@ -1087,18 +2050,19 @@ const ChatRoomsList: React.FC = () => {
                     <div className="flex-1"></div>
                   )}
 
-                  {/* Temple Detailed Information Section */}
+                  {/* Temple Detailed Information Section - Desktop Only */}
                   {selectedAttraction && TEMPLE_DETAILS[selectedAttraction] && (
                     <motion.div
+                      ref={templeDetailsRef}
                       initial={{ opacity: 0, y: 40 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 40 }}
                       transition={{ duration: 0.5 }}
-                      className="w-full max-w-7xl px-8 my-12"
+                      className="hidden md:block w-full max-w-7xl px-8 my-12"
                     >
                       <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-10 shadow-2xl">
                         {/* Header with Close Button */}
-                        <div className="flex items-start justify-between mb-8">
+                        <div className="flex items-start justify-between mb-8 gap-4">
                           <motion.h2 
                             initial={{ x: -20, opacity: 0 }}
                             animate={{ x: 0, opacity: 1 }}
@@ -1108,7 +2072,7 @@ const ChatRoomsList: React.FC = () => {
                           </motion.h2>
                           <button
                             onClick={closeAttractionDetails}
-                            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
+                            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex-shrink-0"
                           >
                             <X className="h-6 w-6 text-gray-700" />
                           </button>
@@ -1132,7 +2096,7 @@ const ChatRoomsList: React.FC = () => {
                           className="mb-6"
                         >
                           <h3 className="text-2xl font-bold text-gray-900 mb-3">History</h3>
-                          <p className="text-gray-700 leading-relaxed">
+                          <p className="text-base text-gray-700 leading-relaxed">
                             {TEMPLE_DETAILS[selectedAttraction].history}
                           </p>
                         </motion.div>
@@ -1145,7 +2109,7 @@ const ChatRoomsList: React.FC = () => {
                           className="mb-6"
                         >
                           <h3 className="text-2xl font-bold text-gray-900 mb-3">Significance</h3>
-                          <p className="text-gray-700 leading-relaxed">
+                          <p className="text-base text-gray-700 leading-relaxed">
                             {TEMPLE_DETAILS[selectedAttraction].significance}
                           </p>
                         </motion.div>
@@ -1167,8 +2131,8 @@ const ChatRoomsList: React.FC = () => {
                                 transition={{ delay: 0.6 + (idx * 0.1) }}
                                 className="flex items-start gap-3"
                               >
-                                <span className="text-orange-600 text-xl mt-1">•</span>
-                                <span className="text-gray-700">{feature}</span>
+                                <span className="text-orange-600 text-xl mt-1 flex-shrink-0">•</span>
+                                <span className="text-base text-gray-700">{feature}</span>
                               </motion.li>
                             ))}
                           </ul>
@@ -1238,12 +2202,11 @@ const ChatRoomsList: React.FC = () => {
                                   onClick={() => setGallerySlideIndex(idx)}
                                   whileHover={{ scale: 1.1 }}
                                   whileTap={{ scale: 0.95 }}
-                                  className={`relative rounded-lg overflow-hidden transition-all duration-300 ${
+                                  className={`relative rounded-lg overflow-hidden transition-all duration-300 w-[120px] h-[90px] ${
                                     gallerySlideIndex === idx 
                                       ? 'ring-4 ring-orange-500 shadow-xl' 
                                       : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
                                   }`}
-                                  style={{ width: '120px', height: '90px' }}
                                 >
                                   <img
                                     src={image}
@@ -1300,6 +2263,198 @@ const ChatRoomsList: React.FC = () => {
                             </div>
                           </div>
                         </motion.div>
+
+                        {/* Reviews Section - Desktop */}
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 1.4 }}
+                          className="mt-8"
+                        >
+                          <div className="bg-white rounded-2xl p-6 shadow-lg">
+                            <h3 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                              <Star className="h-6 w-6 text-orange-600 fill-orange-600" />
+                              Visitor Reviews
+                            </h3>
+                            
+                            {/* Overall Rating */}
+                            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-6 mb-6">
+                              <div className="flex items-center gap-6">
+                                <div className="text-center">
+                                  <div className="text-5xl font-bold text-orange-600">4.8</div>
+                                  <div className="text-sm text-gray-600 mt-1">out of 5</div>
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex gap-2 mb-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <Star key={star} className={`h-6 w-6 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
+                                    ))}
+                                  </div>
+                                  <p className="text-gray-600">Based on 12,450+ reviews</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Individual Reviews */}
+                            <div className="space-y-4">
+                              {/* Review 1 */}
+                              <div className="border-b border-gray-200 pb-4">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div>
+                                    <div className="flex items-center gap-3 mb-1">
+                                      <span className="font-semibold text-gray-900">Rajesh Kumar</span>
+                                      <div className="flex gap-1">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star key={star} className="h-4 w-4 text-orange-500 fill-orange-500" />
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <span className="text-sm text-gray-500">2 weeks ago</span>
+                                  </div>
+                                </div>
+                                <p className="text-gray-700 leading-relaxed">
+                                  "Divine experience! The spiritual atmosphere is beyond words. The darshan was well-organized despite huge crowds. A must-visit for devotees."
+                                </p>
+                              </div>
+
+                              {/* Review 2 */}
+                              <div className="border-b border-gray-200 pb-4">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div>
+                                    <div className="flex items-center gap-3 mb-1">
+                                      <span className="font-semibold text-gray-900">Priya Sharma</span>
+                                      <div className="flex gap-1">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star key={star} className={`h-4 w-4 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <span className="text-sm text-gray-500">1 month ago</span>
+                                  </div>
+                                </div>
+                                <p className="text-gray-700 leading-relaxed">
+                                  "Amazing temple architecture and peaceful surroundings. The prasadam is delicious. Online booking made the visit hassle-free."
+                                </p>
+                              </div>
+
+                              {/* Review 3 */}
+                              <div>
+                                <div className="flex items-start justify-between mb-2">
+                                  <div>
+                                    <div className="flex items-center gap-3 mb-1">
+                                      <span className="font-semibold text-gray-900">Anand Reddy</span>
+                                      <div className="flex gap-1">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <Star key={star} className="h-4 w-4 text-orange-500 fill-orange-500" />
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <span className="text-sm text-gray-500">3 weeks ago</span>
+                                  </div>
+                                </div>
+                                <p className="text-gray-700 leading-relaxed">
+                                  "Blessed to visit Lord Venkateswara! The temple management is excellent. The journey up the seven hills was memorable. Highly recommended!"
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Write Your Review Section - Desktop */}
+                            <div className="mt-8 pt-8 border-t-2 border-gray-200">
+                              <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                                <Send className="h-5 w-5 text-orange-600" />
+                                Share Your Experience
+                              </h4>
+                              
+                              <form onSubmit={handleSubmitReview} className="space-y-6">
+                                {/* Rating Selection */}
+                                <div>
+                                  <label className="text-sm font-semibold text-gray-700 mb-3 block">Your Rating</label>
+                                  <div className="flex gap-3">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => setReviewRating(star)}
+                                        className="transition-transform hover:scale-110"
+                                      >
+                                        <Star 
+                                          className={`h-8 w-8 ${star <= reviewRating ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} 
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Review Text */}
+                                <div>
+                                  <label className="text-sm font-semibold text-gray-700 mb-3 block">Your Review</label>
+                                  <Textarea
+                                    value={reviewText}
+                                    onChange={(e) => setReviewText(e.target.value)}
+                                    placeholder="Share your experience about this temple..."
+                                    className="min-h-[120px] resize-none"
+                                    required
+                                  />
+                                </div>
+
+                                {/* Image Upload */}
+                                <div>
+                                  <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                    <ImageIcon className="h-5 w-5" />
+                                    Add Photos (Optional, Maximum 5 photos)
+                                  </label>
+                                  <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-orange-500 transition-colors flex items-center justify-center gap-3 text-gray-600 hover:text-orange-600"
+                                  >
+                                    <Upload className="h-6 w-6" />
+                                    <span className="font-medium">Click to upload photos from your visit</span>
+                                  </button>
+                                  
+                                  {/* Image Previews */}
+                                  {reviewImagePreviews.length > 0 && (
+                                    <div className="grid grid-cols-5 gap-3 mt-4">
+                                      {reviewImagePreviews.map((preview, idx) => (
+                                        <div key={idx} className="relative group">
+                                          <img 
+                                            src={preview} 
+                                            alt={`Preview ${idx + 1}`}
+                                            className="w-full h-24 object-cover rounded-lg shadow-md"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => removeReviewImage(idx)}
+                                            className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                          >
+                                            <X className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Submit Button */}
+                                <button
+                                  type="submit"
+                                  className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl"
+                                >
+                                  <Send className="h-5 w-5" />
+                                  Submit Your Review
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        </motion.div>
                       </div>
                     </motion.div>
                   )}
@@ -1352,18 +2507,19 @@ const ChatRoomsList: React.FC = () => {
           <>
             {/* Header */}
             <motion.div
+              ref={communityRoomsRef}
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               className="mb-12"
             >
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 p-8 rounded-3xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg">
-                  <MessageCircle className="h-8 w-8 text-white" />
-                </div>
-                <h1 className="text-4xl font-extrabold bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
-                  Community Rooms
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 p-8 rounded-3xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg">
+                      <MessageCircle className="h-8 w-8 text-white" />
+                    </div>
+                    <h1 className="text-4xl font-extrabold bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
+                      Community Rooms
                 </h1>
               </div>
               <p className="text-lg text-gray-600 dark:text-gray-300 ml-1">
@@ -1393,13 +2549,13 @@ const ChatRoomsList: React.FC = () => {
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
+              <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
                     Create New Chat Room
                   </DialogTitle>
                   <DialogDescription className="text-base">
-                    Create a password-protected room for your community ({userCreatedRoomsCount}/5 rooms created)
+                    Create a password-protected room with custom images ({userCreatedRoomsCount}/5 rooms created)
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateRoom} className="space-y-5">
@@ -1443,6 +2599,104 @@ const ChatRoomsList: React.FC = () => {
                       This password will be required to join the room
                     </p>
                   </div>
+                  
+                  {/* Background Image Upload */}
+                  <div className="space-y-2">
+                    <Label htmlFor="backgroundImage" className="text-sm font-semibold flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-primary" />
+                      Room Background Image (Optional)
+                    </Label>
+                    <div className="space-y-3">
+                      {backgroundImagePreview ? (
+                        <div className="relative group">
+                          <img 
+                            src={backgroundImagePreview} 
+                            alt="Background preview" 
+                            className="w-full h-32 object-cover rounded-xl border-2 border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={removeBackgroundImage}
+                            className="absolute top-2 right-2 p-1.5 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                          <div className="absolute bottom-2 left-2 bg-black/60 text-white px-2 py-1 rounded text-xs">
+                            {(backgroundImageFile!.size / 1024).toFixed(0)} KB
+                          </div>
+                        </div>
+                      ) : (
+                        <label htmlFor="backgroundImage" className="cursor-pointer">
+                          <div className="w-full h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
+                            <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                            <p className="text-sm text-gray-500">Click to upload background</p>
+                            <p className="text-xs text-gray-400 mt-1">PNG, JPG, WEBP (Max 5MB)</p>
+                          </div>
+                        </label>
+                      )}
+                      <Input
+                        id="backgroundImage"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBackgroundImageChange}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Icon Image Upload */}
+                  <div className="space-y-2">
+                    <Label htmlFor="iconImage" className="text-sm font-semibold flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      Room Icon (Optional)
+                    </Label>
+                    <div className="space-y-3">
+                      {iconImagePreview ? (
+                        <div className="relative group inline-block">
+                          <img 
+                            src={iconImagePreview} 
+                            alt="Icon preview" 
+                            className="w-24 h-24 object-cover rounded-xl border-2 border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={removeIconImage}
+                            className="absolute top-1 right-1 p-1 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                          <div className="absolute bottom-1 left-1 bg-black/60 text-white px-1.5 py-0.5 rounded text-xs">
+                            {(iconImageFile!.size / 1024).toFixed(0)} KB
+                          </div>
+                        </div>
+                      ) : (
+                        <label htmlFor="iconImage" className="cursor-pointer inline-block">
+                          <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center hover:border-primary hover:bg-primary/5 transition-colors">
+                            <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                            <p className="text-xs text-gray-500 text-center px-1">Upload icon</p>
+                          </div>
+                        </label>
+                      )}
+                      <Input
+                        id="iconImage"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleIconImageChange}
+                        className="hidden"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Square images work best (recommended: 256x256px)
+                    </p>
+                  </div>
+
+                  {uploadingImages && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+                      <p className="text-sm text-blue-700 font-medium">Uploading images...</p>
+                    </div>
+                  )}
+
                   <Button 
                     type="submit" 
                     className="w-full h-12 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white font-semibold shadow-lg" 
@@ -1451,7 +2705,7 @@ const ChatRoomsList: React.FC = () => {
                     {creating ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
-                        Creating...
+                        {uploadingImages ? 'Uploading...' : 'Creating...'}
                       </>
                     ) : (
                       <>
@@ -1532,9 +2786,17 @@ const ChatRoomsList: React.FC = () => {
                     
                     <CardHeader className="relative">
                       <CardTitle className="flex items-center gap-2.5 text-xl">
-                        <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-md group-hover:shadow-lg transition-shadow">
-                          <MessageCircle className="h-5 w-5 text-white" />
-                        </div>
+                        {/* Room Icon */}
+                        {room.iconImage ? (
+                          <Avatar className="h-10 w-10 border-2 border-primary/20">
+                            <AvatarImage src={room.iconImage.url} alt={room.name} />
+                            <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-md group-hover:shadow-lg transition-shadow">
+                            <MessageCircle className="h-5 w-5 text-white" />
+                          </div>
+                        )}
                         <span className="flex-1 truncate group-hover:text-primary transition-colors">
                           {room.name}
                         </span>

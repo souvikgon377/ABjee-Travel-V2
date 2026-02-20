@@ -23,6 +23,16 @@ import { database, auth } from './firebase';
 
 // ==================== INTERFACES ====================
 
+export interface MessageAttachment {
+  type: 'image' | 'document' | 'voice' | 'video' | 'audio';
+  url: string;
+  publicId: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  duration?: number; // For audio/video in seconds
+}
+
 export interface ChatMessage {
   id?: string;
   roomId: string;
@@ -35,6 +45,18 @@ export interface ChatMessage {
   editedAt?: number;
   deletedForEveryone?: boolean;
   deletedBy?: string[]; // Array of userIds who deleted this message for themselves
+  attachment?: MessageAttachment;
+}
+
+export interface ChatRoomImage {
+  url: string;
+  publicId: string;
+  hash: string;
+  width: number;
+  height: number;
+  format: string;
+  bytes: number;
+  createdAt: string;
 }
 
 export interface ChatRoom {
@@ -47,6 +69,10 @@ export interface ChatRoom {
   createdAt: number;
   password?: string;
   inviteToken?: string;
+  backgroundImage?: ChatRoomImage;
+  iconImage?: ChatRoomImage;
+  backgroundImageHistory?: ChatRoomImage[];
+  iconImageHistory?: ChatRoomImage[];
   lastMessage?: {
     text: string;
     timestamp: number;
@@ -140,7 +166,14 @@ class ChatService {
    * WHY: Create a group chat room
    * DECISION: Store in RTDB for consistency, not Firestore
    */
-  async createGroupRoom(name: string, description: string, password: string, participantIds: string[] = []) {
+  async createGroupRoom(
+    name: string, 
+    description: string, 
+    password: string, 
+    participantIds: string[] = [],
+    backgroundImage?: ChatRoomImage,
+    iconImage?: ChatRoomImage
+  ) {
     const user = this.getCurrentUser();
     
     // Check room limit (5 rooms per user)
@@ -166,7 +199,15 @@ class ChatService {
       createdBy: user.uid,
       createdAt: Date.now(),
       password,
-      inviteToken
+      inviteToken,
+      ...(backgroundImage && { 
+        backgroundImage,
+        backgroundImageHistory: [backgroundImage]
+      }),
+      ...(iconImage && { 
+        iconImage,
+        iconImageHistory: [iconImage]
+      })
     };
     
     await set(newRoomRef, room);
@@ -224,8 +265,10 @@ class ChatService {
       
       callback(rooms);
     }, (error) => {
-      console.error('Error listening to chat rooms:', error);
-      console.error('Make sure Firebase Realtime Database rules are deployed!');
+      if (import.meta.env.DEV) {
+        console.error('Error listening to chat rooms:', error);
+        console.error('Make sure Firebase Realtime Database rules are deployed!');
+      }
       callback([]); // Return empty array on error
     });
   }
@@ -243,6 +286,33 @@ class ChatService {
       id: roomId,
       ...snapshot.val()
     };
+  }
+
+  /**
+   * WHY: Listen to real-time updates for a specific room
+   * DECISION: Useful for seeing icon/background changes instantly
+   */
+  listenToRoom(roomId: string, callback: (room: ChatRoom | null) => void) {
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    
+    return onValue(roomRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null);
+        return;
+      }
+      
+      const room: ChatRoom = {
+        id: roomId,
+        ...snapshot.val()
+      };
+      
+      callback(room);
+    }, (error) => {
+      if (import.meta.env.DEV) {
+        console.error('Error listening to room:', error);
+      }
+      callback(null);
+    });
   }
 
   /**
@@ -309,12 +379,66 @@ class ChatService {
     await remove(roomRef);
   }
 
+  /**
+   * WHY: Update room images (background and/or icon)
+   * DECISION: Only creator can update room images
+   */
+  async updateRoomImages(
+    roomId: string, 
+    backgroundImage?: ChatRoomImage, 
+    iconImage?: ChatRoomImage
+  ) {
+    const user = this.getCurrentUser();
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    
+    // Verify ownership
+    const snapshot = await get(roomRef);
+    if (!snapshot.exists()) {
+      throw new Error('Room not found');
+    }
+    
+    const room = snapshot.val();
+    if (room.createdBy !== user.uid) {
+      throw new Error('Cannot update room: not the creator');
+    }
+    
+    // Prepare updates
+    const updates: any = {};
+    if (backgroundImage) {
+      updates.backgroundImage = backgroundImage;
+      // Add to history if not already present (check by hash)
+      const existingHistory = room.backgroundImageHistory || [];
+      const isDuplicate = existingHistory.some((img: ChatRoomImage) => img.hash === backgroundImage.hash);
+      if (!isDuplicate) {
+        updates.backgroundImageHistory = [...existingHistory, backgroundImage];
+      } else {
+        // Preserve existing history even when selecting from history
+        updates.backgroundImageHistory = existingHistory;
+      }
+    }
+    if (iconImage) {
+      updates.iconImage = iconImage;
+      // Add to history if not already present (check by hash)
+      const existingHistory = room.iconImageHistory || [];
+      const isDuplicate = existingHistory.some((img: ChatRoomImage) => img.hash === iconImage.hash);
+      if (!isDuplicate) {
+        updates.iconImageHistory = [...existingHistory, iconImage];
+      } else {
+        // Preserve existing history even when selecting from history
+        updates.iconImageHistory = existingHistory;
+      }
+    }
+    
+    // Update the room
+    await update(roomRef, updates);
+  }
+
   // ==================== MESSAGES ====================
 
   /**
    * Send a message to a chat room
    */
-  async sendMessage(roomId: string, text: string) {
+  async sendMessage(roomId: string, text: string, attachment?: MessageAttachment) {
     const user = this.getCurrentUser();
     const messagesRef = ref(database, `chatrooms/${roomId}/messages`);
     const newMessageRef = push(messagesRef);
@@ -325,7 +449,8 @@ class ChatService {
       username: user.displayName || 'Anonymous',
       photoURL: user.photoURL || undefined,
       text,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      ...(attachment && { attachment })
     };
     
     // Write message
@@ -333,8 +458,12 @@ class ChatService {
     
     // Update room's last message
     const roomRef = ref(database, `chatrooms/${roomId}/lastMessage`);
+    const lastMessageText = attachment 
+      ? `📎 ${attachment.type === 'voice' ? 'Voice message' : attachment.name}`
+      : text.substring(0, 100);
+    
     await set(roomRef, {
-      text: text.substring(0, 100),
+      text: lastMessageText,
       timestamp: Date.now(),
       userId: user.uid
     });
@@ -370,7 +499,9 @@ class ChatService {
       };
       callback(message);
     }, (error) => {
-      console.error('PERMISSION_DENIED: Check Firebase RTDB rules are deployed');
+      if (import.meta.env.DEV) {
+        console.error('PERMISSION_DENIED: Check Firebase RTDB rules are deployed');
+      }
     });
   }
 

@@ -99,7 +99,9 @@ export default function AdminDashboard() {
         },
       ]);
     } catch (error) {
-      console.error('Failed to fetch stats:', error);
+      if (import.meta.env.DEV) {
+        console.error('Failed to fetch stats:', error);
+      }
     } finally {
       setLoading(false);
     }
@@ -116,12 +118,16 @@ export default function AdminDashboard() {
   };
 
   const handleExport = () => {
-    console.log('Exporting data...');
+    if (import.meta.env.DEV) {
+      console.log('Exporting data...');
+    }
     // TODO: Implement export functionality
   };
 
   const handleAddUser = () => {
-    console.log('Adding new user...');
+    if (import.meta.env.DEV) {
+      console.log('Adding new user...');
+    }
     // TODO: Implement add user functionality
   };
 

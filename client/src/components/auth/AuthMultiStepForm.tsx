@@ -299,7 +299,9 @@ const handleNextStep = async (data: any) => {
   } catch (error: any) {
     // This will catch and display the specific error message from signup
     setError(error.message || 'Failed to create account. Please try again.');
-    console.error('Authentication error:', error);
+    if (import.meta.env.DEV) {
+      console.error('Authentication error:', error);
+    }
   } finally {
     setIsSubmitting(false);
   }

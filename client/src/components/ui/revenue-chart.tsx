@@ -35,7 +35,9 @@ export const RevenueChart = memo(() => {
         setChartData(chartDataWithColors);
         setTotalRevenue(response.data.data.total);
       } catch (error) {
-        console.error('Failed to fetch revenue data:', error);
+        if (import.meta.env.DEV) {
+          console.error('Failed to fetch revenue data:', error);
+        }
       } finally {
         setLoading(false);
       }

@@ -33,7 +33,9 @@ export const RecentActivity = memo(() => {
         }));
         setActivities(activityData);
       } catch (error) {
-        console.error('Failed to fetch activity:', error);
+        if (import.meta.env.DEV) {
+          console.error('Failed to fetch activity:', error);
+        }
       } finally {
         setLoading(false);
       }

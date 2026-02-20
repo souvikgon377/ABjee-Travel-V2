@@ -30,7 +30,10 @@ export default function AuthPage() {
       await logout();
       navigate('/');
     } catch (error) {
-      console.error('Failed to log out:', error);
+      if (import.meta.env.DEV) {
+        console.error('Failed to log out:', error);
+      }
+      // Silently handle logout errors - user can retry
     }
   };
 

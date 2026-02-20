@@ -72,7 +72,9 @@ export const SystemStatus = memo(() => {
           },
         ]);
       } catch (error) {
-        console.error('Failed to fetch system status:', error);
+        if (import.meta.env.DEV) {
+          console.error('Failed to fetch system status:', error);
+        }
       }
     };
 
