@@ -70,13 +70,9 @@ export const VirtualizedMessageList = memo<VirtualizedMessageListProps>(({
   return (
     <div
       ref={containerRef}
-      style={{
-        height: '100%',
-        overflow: 'auto',
-        position: 'relative'
-      }}
+      className="h-full overflow-auto relative"
     >
-      <div style={{ height: totalHeight, position: 'relative' }}>
+      <div className="relative" style={{ height: totalHeight }}>
         <div style={{ transform: `translateY(${offsetY}px)` }}>
           {visibleMessages.map((message, index) =>
             renderMessage(message, visibleRange.start + index)

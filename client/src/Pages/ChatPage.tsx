@@ -2,6 +2,10 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, ChevronLeft, ChevronRight, Star, Upload, Image as ImageIcon, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Autoplay, EffectFade } from 'swiper/modules';
+import 'swiper/css';
+import 'swiper/css/effect-fade';
 import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToCloudinary, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/imageUpload';
@@ -2778,61 +2782,101 @@ const ChatRoomsList: React.FC = () => {
                   layout
                 >
                   <Card
-                    className="cursor-pointer h-full bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden group"
+                    className="cursor-pointer h-full border border-white/20 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden group relative"
                     onClick={() => navigate(`/chat/room/${room.id}`)}
                   >
-                    {/* Gradient overlay on hover */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/5 group-hover:via-pink-500/5 group-hover:to-red-500/5 transition-all duration-300 pointer-events-none"></div>
+                    {/* Sliding Background Images Carousel */}
+                    {(() => {
+                      const allImages = [
+                        ...(room.backgroundImage ? [room.backgroundImage] : []),
+                        ...(room.backgroundImageHistory || [])
+                      ];
+                      
+                      return allImages.length > 0 ? (
+                        <div className="absolute inset-0 overflow-hidden z-0">
+                          <Swiper
+                            modules={[Autoplay, EffectFade]}
+                            effect="fade"
+                            autoplay={{
+                              delay: 3000,
+                              disableOnInteraction: false,
+                              pauseOnMouseEnter: false
+                            }}
+                            loop={allImages.length > 1}
+                            speed={1500}
+                            className="h-full w-full"
+                            allowTouchMove={false}
+                          >
+                            {allImages.map((image, idx) => (
+                              <SwiperSlide key={`${image.url}-${idx}`}>
+                                <div
+                                  className="absolute inset-0"
+                                  style={{
+                                    backgroundImage: `url(${image.url})`,
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                    backgroundRepeat: 'no-repeat'
+                                  }}
+                                />
+                              </SwiperSlide>
+                            ))}
+                          </Swiper>
+                        </div>
+                      ) : null;
+                    })()}
                     
-                    <CardHeader className="relative">
-                      <CardTitle className="flex items-center gap-2.5 text-xl">
+                    {/* Gradient overlay on hover */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-[2] pointer-events-none"></div>
+                    
+                    <CardHeader className="relative z-10">
+                      <CardTitle className="flex items-center gap-2.5 text-xl text-white dark:text-white font-bold" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' }}>
                         {/* Room Icon */}
                         {room.iconImage ? (
-                          <Avatar className="h-10 w-10 border-2 border-primary/20">
+                          <Avatar className="h-10 w-10 border-2 border-white/50 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
                             <AvatarImage src={room.iconImage.url} alt={room.name} />
                             <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                           </Avatar>
                         ) : (
-                          <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-md group-hover:shadow-lg transition-shadow">
+                          <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
                             <MessageCircle className="h-5 w-5 text-white" />
                           </div>
                         )}
-                        <span className="flex-1 truncate group-hover:text-primary transition-colors">
+                        <span className="flex-1 truncate group-hover:text-rose-300 transition-colors font-bold">
                           {room.name}
                         </span>
                         {room.password && (
-                          <div className="p-1.5 rounded-lg bg-amber-500/10 dark:bg-amber-400/10">
-                            <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          <div className="p-1.5 rounded-lg bg-amber-500/30 backdrop-blur-sm">
+                            <Lock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                           </div>
                         )}
                       </CardTitle>
-                      <CardDescription className="text-base mt-2">
+                      <CardDescription className="text-base mt-2 text-white font-medium" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' }}>
                         {room.description}
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="relative">
+                    <CardContent className="relative z-10">
                       <div className="space-y-3 text-sm">
-                        <div className="flex items-center gap-2.5 text-gray-600 dark:text-gray-300">
-                          <div className="p-1.5 rounded-lg bg-rose-500/10 dark:bg-rose-400/10">
-                            <Users className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                        <div className="flex items-center gap-2.5 text-white">
+                          <div className="p-1.5 rounded-lg bg-rose-500/30 backdrop-blur-sm">
+                            <Users className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                           </div>
-                          <span className="font-medium">{room.participants?.length || 0} participants</span>
+                          <span className="font-semibold" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' }}>{room.participants?.length || 0} participants</span>
                         </div>
-                        <div className="flex items-center gap-2.5 text-gray-600 dark:text-gray-300">
-                          <div className="p-1.5 rounded-lg bg-pink-500/10 dark:bg-pink-400/10">
-                            <Clock className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+                        <div className="flex items-center gap-2.5 text-white">
+                          <div className="p-1.5 rounded-lg bg-pink-500/30 backdrop-blur-sm">
+                            <Clock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                           </div>
-                          <span className="font-medium">Created {formatDate(room.createdAt)}</span>
+                          <span className="font-semibold" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6)' }}>Created {formatDate(room.createdAt)}</span>
                         </div>
                       </div>
                       
                       {/* Action buttons for room creator */}
                       {user && room.createdBy === user.uid && (
-                        <div className="flex gap-2 mt-5 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex gap-2 mt-5 pt-4 border-t border-white/30">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex-1 rounded-xl border-2 hover:border-primary hover:bg-primary/5 transition-all"
+                            className="flex-1 rounded-xl border-2 border-white/50 bg-black/30 backdrop-blur-sm hover:border-white hover:bg-white/20 transition-all font-semibold text-white"
                             onClick={(e) => handleShareRoom(room, e)}
                           >
                             <Share2 className="h-4 w-4 mr-1.5" />
@@ -2841,7 +2885,7 @@ const ChatRoomsList: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="rounded-xl border-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 dark:hover:border-red-800 transition-all"
+                            className="rounded-xl border-2 border-red-400/50 bg-red-500/30 backdrop-blur-sm text-white hover:bg-red-500/50 hover:border-red-300 transition-all font-semibold"
                             onClick={(e) => handleDeleteRoom(room.id!, e)}
                           >
                             <Trash2 className="h-4 w-4" />

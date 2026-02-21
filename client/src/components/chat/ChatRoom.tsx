@@ -859,18 +859,18 @@ const ChatRoom = () => {
 
       {/* Settings Dialog */}
       <Dialog open={settingsDialogOpen} onOpenChange={(open) => !open && handleCloseSettings()}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
               Room Settings
             </DialogTitle>
             <DialogDescription>
               Customize the appearance of your chat room by uploading new images or selecting from previous uploads.
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-6 mt-4">
+
+          <div className="space-y-4 sm:space-y-6 mt-4">
             {/* Background Image Section */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">Background Image</Label>
@@ -884,9 +884,9 @@ const ChatRoom = () => {
                 </TabsList>
                 
                 <TabsContent value="upload" className="space-y-3 mt-4">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                     {backgroundPreview || selectedBackgroundImage || room.backgroundImage ? (
-                      <div className="w-20 h-20 rounded-lg border-2 border-border overflow-hidden">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-border overflow-hidden">
                         <img 
                           src={backgroundPreview || selectedBackgroundImage?.url || room.backgroundImage?.url} 
                           alt="Background preview" 
@@ -895,7 +895,7 @@ const ChatRoom = () => {
                         />
                       </div>
                     ) : (
-                      <div className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted">
                         <span className="text-xs text-muted-foreground">No image</span>
                       </div>
                     )}
@@ -921,7 +921,7 @@ const ChatRoom = () => {
                 
                 <TabsContent value="history" className="mt-4">
                   {room.backgroundImageHistory && room.backgroundImageHistory.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                       {room.backgroundImageHistory.map((image, index) => (
                         <div 
                           key={`bg-${index}-${image.hash}`}
@@ -972,9 +972,9 @@ const ChatRoom = () => {
                 </TabsList>
                 
                 <TabsContent value="upload" className="space-y-3 mt-4">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                     {iconPreview || selectedIconImage || room.iconImage ? (
-                      <div className="w-20 h-20 rounded-full border-2 border-border overflow-hidden">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-border overflow-hidden">
                         <img 
                           src={iconPreview || selectedIconImage?.url || room.iconImage?.url} 
                           alt="Icon preview" 
@@ -983,7 +983,7 @@ const ChatRoom = () => {
                         />
                       </div>
                     ) : (
-                      <div className="w-20 h-20 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-muted">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-muted">
                         <Lock className="h-8 w-8 text-muted-foreground" />
                       </div>
                     )}
@@ -1009,7 +1009,7 @@ const ChatRoom = () => {
                 
                 <TabsContent value="history" className="mt-4">
                   {room.iconImageHistory && room.iconImageHistory.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
                       {room.iconImageHistory.map((image, index) => (
                         <div 
                           key={`icon-${index}-${image.hash}`}
@@ -1023,7 +1023,7 @@ const ChatRoom = () => {
                           <img 
                             src={image.url} 
                             alt={`Icon ${index + 1}`}
-                            className="w-full h-20 object-cover"
+                            className="w-full h-16 sm:h-20 object-cover"
                             loading="lazy"
                           />
                           {selectedIconImage?.hash === image.hash && (
@@ -1059,22 +1059,22 @@ const ChatRoom = () => {
       </Dialog>
 
       {/* Main Chat UI */}
-      <div className="flex h-screen bg-background">
+      <div className="flex h-screen bg-background overflow-hidden">
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           {/* Header */}
           <div 
-            className="border-b p-4 flex items-center justify-between backdrop-blur-md shadow-sm"
+            className="border-b p-2 sm:p-3 md:p-4 flex items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm flex-shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderBottomColor: `${imageColors.primary}40`
             } : { backgroundColor: 'hsl(var(--card) / 0.8)' }}
           >
-            <div className="flex-1 flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden">
               {/* Room Icon */}
               {room.iconImage ? (
                 <Avatar 
-                  className="h-12 w-12 border-2"
+                  className="h-8 w-8 sm:h-10 md:h-12 sm:w-10 md:w-12 border-2 flex-shrink-0"
                   style={imageColors ? {
                     borderColor: `${imageColors.primary}60`
                   } : { borderColor: 'hsl(var(--primary) / 0.2)' }}
@@ -1084,45 +1084,52 @@ const ChatRoom = () => {
                 </Avatar>
               ) : (
                 <div 
-                  className="p-2 rounded-xl shadow-md"
+                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow-md flex-shrink-0"
                   style={imageColors ? {
                     background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`
                   } : undefined}
                 >
-                  <Lock className="h-6 w-6 text-white" />
+                  <Lock className="h-4 w-4 sm:h-5 md:h-6 sm:w-5 md:w-6 text-white" />
                 </div>
               )}
-              <div>
-                <h2 className="text-xl font-bold">{room.name}</h2>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm sm:text-base md:text-lg lg:text-xl font-bold truncate">{room.name}</h2>
                 {room.description && (
-                  <p className="text-sm text-muted-foreground">{room.description}</p>
+                  <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground truncate">{room.description}</p>
                 )}
               </div>
             </div>
-            <div className="flex-1 flex justify-center">
-              <ModeToggle />
-            </div>
-            <div className="flex-1 flex justify-end gap-2">
-              {/* Settings button - only for room creator */}
+            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 flex-shrink-0">
+              <div className="flex-shrink-0">
+                <ModeToggle />
+              </div>
               {user && room.createdBy === user.uid && (
                 <Button 
                   variant="outline" 
                   size="icon"
                   onClick={() => setSettingsDialogOpen(true)}
                   title="Room Settings"
+                  className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
                 >
-                  <Settings className="h-4 w-4" />
+                  <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Button>
               )}
-              <Button variant="outline" onClick={handleLeaveRoom}>
-                Leave Room
+              <Button 
+                variant="outline" 
+                onClick={handleLeaveRoom}
+                className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 flex-shrink-0"
+              >
+                <span className="text-[10px] sm:text-xs md:text-sm font-medium">
+                  <span className="hidden sm:inline">Leave Room</span>
+                  <span className="sm:hidden">Leave</span>
+                </span>
               </Button>
             </div>
           </div>
 
           {/* Messages */}
           <div 
-            className="flex-1 overflow-y-auto p-4 space-y-4 relative"
+            className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 space-y-3 sm:space-y-4 relative min-h-0"
             style={room.backgroundImage ? {
               backgroundImage: `url(${room.backgroundImage.url})`,
               backgroundSize: 'cover',
@@ -1131,10 +1138,10 @@ const ChatRoom = () => {
             } : undefined}
           >
             {/* Messages content with higher z-index */}
-            <div className="relative z-10 space-y-4">
+            <div className="relative z-10 space-y-3 sm:space-y-4">
             {/* Load More Button */}
             {hasMoreMessages && messages.length >= 50 && (
-              <div className="flex justify-center mb-4">
+              <div className="flex justify-center mb-3 sm:mb-4">
                 <Button
                   variant="outline"
                   onClick={handleLoadMoreMessages}
@@ -1172,9 +1179,9 @@ const ChatRoom = () => {
                 return (
                   <div
                     key={message.id}
-                    className={`flex items-start gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
+                    className={`flex items-start gap-2 sm:gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
                   >
-                    <Avatar className="w-8 h-8">
+                    <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 flex-shrink-0">
                       <AvatarImage 
                         src={message.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`}
                         alt={message.username}
@@ -1183,15 +1190,15 @@ const ChatRoom = () => {
                         {message.username.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[70%]`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium">{message.username}</span>
-                        <span className="text-xs text-muted-foreground">{formatTime(message.timestamp)}</span>
+                    <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[80%] md:max-w-[70%]`}>
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                        <span className="text-xs sm:text-sm font-medium">{message.username}</span>
+                        <span className="text-[10px] sm:text-xs text-muted-foreground">{formatTime(message.timestamp)}</span>
                       </div>
                       <div className={`group relative flex items-center gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                         {/* Inline Edit UI */}
                         {editingMessageId === message.id ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
                             <Input
                               value={editText}
                               onChange={(e) => setEditText(e.target.value)}
@@ -1203,13 +1210,13 @@ const ChatRoom = () => {
                                   cancelEditing();
                                 }
                               }}
-                              className="min-w-[200px] bg-card/90 backdrop-blur-sm"
+                              className="min-w-[150px] sm:min-w-[200px] bg-card/90 backdrop-blur-sm text-sm"
                               autoFocus
                             />
                             <Button
                               size="sm"
                               onClick={saveEdit}
-                              className="h-8 w-8 p-0"
+                              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                             >
                               <Check className="h-4 w-4" />
                             </Button>
@@ -1217,7 +1224,7 @@ const ChatRoom = () => {
                               size="sm"
                               variant="ghost"
                               onClick={cancelEditing}
-                              className="h-8 w-8 p-0"
+                              className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                             >
                               <X className="h-4 w-4" />
                             </Button>
@@ -1225,7 +1232,7 @@ const ChatRoom = () => {
                         ) : (
                           <>
                             <div 
-                              className={isOnlyEmoji ? 'text-4xl animate-bounce-in' : `rounded-lg px-4 py-2 backdrop-blur-sm shadow-md ${
+                              className={isOnlyEmoji ? 'text-2xl sm:text-3xl md:text-4xl animate-bounce-in' : `rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 backdrop-blur-sm shadow-md ${
                                 isDeleted 
                                   ? 'bg-muted/70 text-muted-foreground italic'
                                   : isOwnMessage 
@@ -1252,87 +1259,91 @@ const ChatRoom = () => {
                                 <>
                                   {/* Attachment Rendering */}
                                   {message.attachment && (
-                                    <div className="mb-2">
+                                    <div className="mb-1.5 sm:mb-2">
                                       {message.attachment.type === 'image' ? (
                                         <img 
                                           src={message.attachment.url} 
                                           alt={message.attachment.name}
-                                          className="max-w-sm max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                          className="max-w-[200px] sm:max-w-[280px] md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity w-full object-cover"
                                           onClick={() => window.open(message.attachment!.url, '_blank')}
                                           loading="lazy"
                                         />
                                       ) : message.attachment.type === 'voice' ? (
-                                        <div className="flex items-center gap-3 bg-black/10 rounded-lg p-3 min-w-[250px]">
-                                          <Mic className="h-5 w-5 flex-shrink-0" />
+                                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-[180px] sm:min-w-[220px] md:min-w-[250px]">
+                                          <Mic className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                                           <audio 
                                             controls 
                                             className="flex-1" 
                                             src={message.attachment.url}
-                                            style={{ height: '32px' }}
+                                            style={{ height: '28px' }}
                                           >
                                             Your browser does not support the audio element.
                                           </audio>
                                           <a 
                                             href={message.attachment.url} 
                                             download={message.attachment.name}
-                                            className="flex-shrink-0 hover:opacity-70 transition-opacity"
+                                            className="flex-shrink-0 hover:opacity-70 transition-opacity p-1"
                                           >
-                                            <Download className="h-4 w-4" />
+                                            <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                           </a>
                                         </div>
                                       ) : message.attachment.type === 'video' ? (
                                         <video 
                                           controls 
-                                          className="max-w-sm max-h-64 rounded-lg"
+                                          className="max-w-[200px] sm:max-w-[280px] md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg w-full"
                                           src={message.attachment.url}
+                                          controlsList="nodownload"
+                                          playsInline
                                         >
                                           Your browser does not support the video element.
                                         </video>
                                       ) : message.attachment.type === 'audio' ? (
-                                        <div className="flex items-center gap-3 bg-black/10 rounded-lg p-3 min-w-[250px]">
-                                          <FileText className="h-5 w-5 flex-shrink-0" />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium truncate">{message.attachment.name}</div>
-                                            <div className="text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
+                                        <div className="flex flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-[180px] sm:min-w-[220px] md:min-w-[250px]">
+                                          <div className="flex items-center gap-1.5 sm:gap-2">
+                                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="text-xs sm:text-sm font-medium truncate">{message.attachment.name}</div>
+                                              <div className="text-[10px] sm:text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
+                                            </div>
+                                            <a 
+                                              href={message.attachment.url} 
+                                              download={message.attachment.name}
+                                              className="flex-shrink-0 hover:opacity-70 transition-opacity p-1"
+                                            >
+                                              <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                            </a>
                                           </div>
                                           <audio 
                                             controls 
-                                            className="flex-1 max-w-[150px]" 
+                                            className="w-full" 
                                             src={message.attachment.url}
-                                            style={{ height: '32px' }}
+                                            style={{ height: '28px' }}
                                           />
-                                          <a 
-                                            href={message.attachment.url} 
-                                            download={message.attachment.name}
-                                            className="flex-shrink-0 hover:opacity-70 transition-opacity"
-                                          >
-                                            <Download className="h-4 w-4" />
-                                          </a>
                                         </div>
                                       ) : (
                                         <a 
                                           href={message.attachment.url} 
                                           download={message.attachment.name}
-                                          className="flex items-center gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-3 transition-colors min-w-[250px]"
+                                          className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors min-w-[180px] sm:min-w-[220px] md:min-w-[250px]"
                                         >
-                                          <span className="text-2xl flex-shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
+                                          <span className="text-xl sm:text-2xl flex-shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
                                           <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-medium truncate">{message.attachment.name}</div>
-                                            <div className="text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
+                                            <div className="text-xs sm:text-sm font-medium truncate">{message.attachment.name}</div>
+                                            <div className="text-[10px] sm:text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
                                           </div>
-                                          <Download className="h-4 w-4 flex-shrink-0" />
+                                          <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
                                         </a>
                                       )}
                                     </div>
                                   )}
 
                                   {message.text && (
-                                    <span className={isOnlyEmoji ? 'inline-block hover:animate-wiggle' : ''}>
+                                    <span className={isOnlyEmoji ? 'inline-block hover:animate-wiggle' : 'text-xs sm:text-sm break-words'}>
                                       {message.text}
                                     </span>
                                   )}
                                   {message.edited && (
-                                    <span className="text-xs ml-2 opacity-70">(edited)</span>
+                                    <span className="text-[10px] sm:text-xs ml-1.5 sm:ml-2 opacity-70">(edited)</span>
                                   )}
                                 </>
                               )}
@@ -1345,7 +1356,7 @@ const ChatRoom = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-6 w-6 p-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity"
                               >
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
@@ -1390,12 +1401,12 @@ const ChatRoom = () => {
             {/* Typing Indicator */}
             {typingUsers.length > 0 && (
               <div 
-                className="flex items-center gap-2 text-sm"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
                 style={imageColors ? { color: imageColors.primary } : { color: 'hsl(var(--muted-foreground))' }}
               >
                 <div className="flex gap-1">
                   <span 
-                    className="w-2 h-2 rounded-full animate-bounce" 
+                    className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-bounce" 
                     style={imageColors ? { 
                       backgroundColor: imageColors.primary,
                       animationDelay: '0ms' 
@@ -1405,7 +1416,7 @@ const ChatRoom = () => {
                     }}
                   ></span>
                   <span 
-                    className="w-2 h-2 rounded-full animate-bounce" 
+                    className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-bounce" 
                     style={imageColors ? { 
                       backgroundColor: imageColors.secondary,
                       animationDelay: '150ms' 
@@ -1415,7 +1426,7 @@ const ChatRoom = () => {
                     }}
                   ></span>
                   <span 
-                    className="w-2 h-2 rounded-full animate-bounce" 
+                    className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-bounce" 
                     style={imageColors ? { 
                       backgroundColor: imageColors.accent,
                       animationDelay: '300ms' 
@@ -1442,7 +1453,7 @@ const ChatRoom = () => {
           {/* Message Input */}
           <form 
             onSubmit={handleSendMessage} 
-            className="border-t p-4 backdrop-blur-md shadow-sm"
+            className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm flex-shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderTopColor: `${imageColors.primary}40`
@@ -1450,59 +1461,59 @@ const ChatRoom = () => {
           >
             {/* Attachment Preview */}
             {(attachmentFile || isRecording) && (
-              <div className="mb-3 p-3 rounded-lg border" style={imageColors ? {
+              <div className="mb-2 sm:mb-3 p-2 sm:p-3 rounded-lg border" style={imageColors ? {
                 backgroundColor: `${imageColors.primary}15`,
                 borderColor: `${imageColors.accent}40`
               } : { backgroundColor: 'hsl(var(--muted))' }}>
                 {isRecording ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <div className="relative">
                         <Mic className="h-5 w-5 text-red-500 animate-pulse" />
                         <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium">Recording voice message...</span>
-                        <span className="text-xs opacity-70">{formatDuration(recordingTime)}</span>
+                        <span className="text-xs sm:text-sm font-medium">Recording voice message...</span>
+                        <span className="text-[10px] sm:text-xs opacity-70">{formatDuration(recordingTime)}</span>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={handleStopRecording}>
-                        <Pause className="h-4 w-4 mr-1" />
-                        Stop
+                    <div className="flex gap-1.5 sm:gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={handleStopRecording} className="text-xs">
+                        <Pause className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Stop</span>
                       </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={handleCancelRecording}>
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Cancel
+                      <Button type="button" size="sm" variant="ghost" onClick={handleCancelRecording} className="text-xs">
+                        <XCircle className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">Cancel</span>
                       </Button>
                     </div>
                   </div>
                 ) : attachmentFile && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                       {attachmentPreview ? (
                         <img src={attachmentPreview} alt="Preview" className="w-12 h-12 object-cover rounded" loading="lazy" />
                       ) : (
                         <div className="text-2xl">{getFileIcon(attachmentFile.type)}</div>
                       )}
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium truncate max-w-xs">{attachmentFile.name}</span>
-                        <span className="text-xs opacity-70">{formatFileSize(attachmentFile.size)}</span>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-xs sm:text-sm font-medium truncate">{attachmentFile.name}</span>
+                        <span className="text-[10px] sm:text-xs opacity-70">{formatFileSize(attachmentFile.size)}</span>
                       </div>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment}>
-                      <XCircle className="h-4 w-4" />
+                    <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment} className="flex-shrink-0">
+                      <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
                 <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" size="icon">
-                    <SmilePlus className="h-5 w-5" />
+                  <Button type="button" variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0">
+                    <SmilePlus className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80" align="start">
@@ -1538,8 +1549,9 @@ const ChatRoom = () => {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isRecording || uploadingAttachment}
+                className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
               >
-                <Paperclip className="h-5 w-5" />
+                <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
 
               {/* Voice Recording Button */}
@@ -1549,9 +1561,9 @@ const ChatRoom = () => {
                 size="icon"
                 onClick={isRecording ? handleStopRecording : handleStartRecording}
                 disabled={!!attachmentFile || uploadingAttachment}
-                className={isRecording ? 'bg-red-50 border-red-300' : ''}
+                className={`h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
               >
-                <Mic className={`h-5 w-5 ${isRecording ? 'text-red-500' : ''}`} />
+                <Mic className={`h-4 w-4 sm:h-5 sm:w-5 ${isRecording ? 'text-red-500' : ''}`} />
               </Button>
 
               <Input
@@ -1561,18 +1573,19 @@ const ChatRoom = () => {
                   handleTyping();
                 }}
                 placeholder="Type a message..."
-                className="flex-1"
+                className="flex-1 min-w-0 text-sm sm:text-base h-8 sm:h-9"
               />
               <Button 
                 type="submit" 
                 disabled={(!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
-                className="hover:shadow-lg transition-all"
+                className="hover:shadow-lg transition-all text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9 flex-shrink-0"
                 style={imageColors ? {
                   background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
                   color: 'white'
                 } : undefined}
               >
-                {uploadingAttachment ? 'Uploading...' : 'Send'}
+                <span className="hidden sm:inline">{uploadingAttachment ? 'Uploading...' : 'Send'}</span>
+                <span className="sm:hidden">{uploadingAttachment ? '...' : 'Send'}</span>
               </Button>
             </div>
           </form>
