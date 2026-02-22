@@ -421,7 +421,7 @@ export default function BookingCategories() {
                     {tourPackages.map(tour => (
                       <div key={tour.id} className="bg-white dark:bg-black rounded-lg shadow-lg dark:shadow-gray-900/50 overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 group">
                           <div className="relative">
-                              <img src={tour.image} alt={tour.name} className="w-full h-56 object-cover" />
+                              <img src={tour.image} alt={tour.name} className="w-full h-56 object-cover" loading="lazy" />
                               <div className="absolute top-4 left-4 bg-rose-500 text-white text-xs font-bold px-3 py-1 rounded-full">{tour.duration}</div>
                           </div>
                           <div className="p-6">
@@ -452,7 +452,7 @@ export default function BookingCategories() {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     {trendingHolidays.map(holiday => (
                         <div key={holiday.id} className="relative rounded-lg overflow-hidden h-48 text-white group shadow-lg cursor-pointer">
-                            <img src={holiday.image} alt={holiday.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-300" />
+                            <img src={holiday.image} alt={holiday.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-300" loading="lazy" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-end p-3">
                                 <h3 className="font-bold text-base md:text-lg whitespace-nowrap overflow-hidden text-ellipsis">{holiday.name}</h3>
                                 <div className="text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-300 max-h-0 group-hover:max-h-20 overflow-hidden">
@@ -479,7 +479,7 @@ export default function BookingCategories() {
                         <div className="flex transition-transform duration-500 ease-in-out" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
                             {testimonials.map(t => (
                                 <div key={t.id} className="w-full flex-shrink-0 text-center px-8">
-                                    <img src={t.avatar} alt={t.name} className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white dark:border-gray-700 shadow-lg" />
+                                    <img src={t.avatar} alt={t.name} className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white dark:border-gray-700 shadow-lg" loading="lazy" />
                                     <p className="text-lg italic text-gray-700 dark:text-gray-300 mb-4">"{t.quote}"</p>
                                     <h4 className="font-bold text-fuchsia-600 dark:text-fuchsia-400">{t.name}</h4>
                                     <p className="text-sm text-gray-500 dark:text-gray-400">{t.location}</p>

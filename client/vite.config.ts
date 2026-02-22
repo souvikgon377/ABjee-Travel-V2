@@ -11,7 +11,11 @@ export default defineConfig({
       'unminding-emil-cateringly.ngrok-free.dev',
       '.ngrok-free.app',
       '.ngrok.io'
-    ]
+    ],
+    headers: {
+      // Enable browser caching for static assets
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    }
   },
   resolve: {
     alias: {
@@ -42,9 +46,14 @@ export default defineConfig({
           }
           return `assets/[name]-[hash][extname]`;
         },
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        entryFileNames: 'assets/js/[name]-[hash].js',
       }
     },
-    chunkSizeWarningLimit: 600
+    chunkSizeWarningLimit: 600,
+    cssMinify: 'esbuild',
+    reportCompressedSize: false, // Faster builds
+    assetsInlineLimit: 4096, // Inline assets smaller than 4KB
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'firebase/app', 'firebase/auth', 'firebase/database']

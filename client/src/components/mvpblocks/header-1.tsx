@@ -214,6 +214,7 @@ export default function Header1() {
                       src={currentUser.photoURL}
                       alt="Profile"
                       className="w-8 h-8 rounded-full border-2 border-rose-500"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center text-white text-sm font-bold">

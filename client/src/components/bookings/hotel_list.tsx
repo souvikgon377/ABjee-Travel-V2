@@ -740,7 +740,7 @@ const HotelList: React.FC = () => {
                         {/* Map Section */}
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-4 overflow-hidden border border-gray-100 dark:border-gray-700">
                             <div className="h-32 bg-gradient-to-br from-blue-100 to-blue-200 relative">
-                                <img src="https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/88.2627,27.0410,12,0/280x128?access_token=pk.placeholder" alt="Map" className="w-full h-full object-cover opacity-60" />
+                                <img src="https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/88.2627,27.0410,12,0/280x128?access_token=pk.placeholder" alt="Map" className="w-full h-full object-cover opacity-60" loading="lazy" />
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
                                     className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-red-800 to-red-900 text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 shadow-md"
@@ -964,7 +964,7 @@ const HotelList: React.FC = () => {
                                         className="flex-shrink-0 w-56 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden cursor-pointer hover:border-red-800 transition-colors"
                                     >
                                         <div className="h-36 overflow-hidden">
-                                            <img src={deal.image} alt={deal.name} className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" />
+                                            <img src={deal.image} alt={deal.name} className="w-full h-full object-cover hover:scale-110 transition-transform duration-300" loading="lazy" />
                                         </div>
                                         <div className="p-3">
                                             <h4 className="font-bold text-gray-800 dark:text-white text-sm line-clamp-2">{deal.name}</h4>
@@ -1014,7 +1014,7 @@ const HotelList: React.FC = () => {
                                             <div className="flex gap-2 mt-2">
                                                 {hotel.images.slice(1, 4).map((img, i) => (
                                                     <div key={i} className="w-14 h-10 rounded overflow-hidden">
-                                                        <img src={img} alt="" className="w-full h-full object-cover hover:opacity-80 transition-opacity cursor-pointer" />
+                                                        <img src={img} alt="" className="w-full h-full object-cover hover:opacity-80 transition-opacity cursor-pointer" loading="lazy" />
                                                     </div>
                                                 ))}
                                                 <div className="w-14 h-10 rounded bg-gray-800 flex items-center justify-center text-white text-xs font-medium cursor-pointer hover:bg-gray-700">

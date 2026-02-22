@@ -64,10 +64,11 @@ export interface ChatRoom {
   name: string;
   description?: string;
   type: 'group';
+  isPublic: boolean; // Public rooms don't require password
   participants: string[];
   createdBy: string;
   createdAt: number;
-  password?: string;
+  password?: string; // Only for private rooms
   inviteToken?: string;
   backgroundImage?: ChatRoomImage;
   iconImage?: ChatRoomImage;
@@ -169,6 +170,7 @@ class ChatService {
   async createGroupRoom(
     name: string, 
     description: string, 
+    isPublic: boolean,
     password: string, 
     participantIds: string[] = [],
     backgroundImage?: ChatRoomImage,
@@ -195,10 +197,11 @@ class ChatService {
       name,
       description,
       type: 'group',
+      isPublic,
       participants: uniqueParticipants,
       createdBy: user.uid,
       createdAt: Date.now(),
-      password,
+      ...(isPublic ? {} : { password }), // Only add password for private rooms
       inviteToken,
       ...(backgroundImage && { 
         backgroundImage,
@@ -335,18 +338,22 @@ class ChatService {
       return;
     }
     
-    // Check authentication: either valid invite token or correct password
-    if (inviteToken) {
-      // Validate invite token
-      if (room.inviteToken !== inviteToken) {
-        throw new Error('Invalid invite link');
-      }
-    } else {
-      // Validate password
-      if (!password || room.password !== password) {
-        throw new Error('Incorrect password');
+    // For public rooms, skip password check
+    if (!room.isPublic) {
+      // For private rooms, check authentication: either valid invite token or correct password
+      if (inviteToken) {
+        // Validate invite token
+        if (room.inviteToken !== inviteToken) {
+          throw new Error('Invalid invite link');
+        }
+      } else {
+        // Validate password
+        if (!password || room.password !== password) {
+          throw new Error('Incorrect password');
+        }
       }
     }
+    // For public rooms, allow joining without password
     
     // Add user to participants
     participants.push(userId);

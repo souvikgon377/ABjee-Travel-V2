@@ -239,8 +239,18 @@ const ChatRoom = () => {
               navigate('/chat');
               return;
             }
+          } else if (roomData.isPublic) {
+            // For public rooms, join automatically without password
+            try {
+              await chatService.joinRoom(roomId, user.uid);
+              // Room listener will update the state automatically
+            } catch (error: any) {
+              alert(error.message || 'Failed to join room');
+              navigate('/chat');
+              return;
+            }
           } else {
-            // Show password dialog
+            // For private rooms, show password dialog
             setShowPasswordDialog(true);
             setLoading(false);
             return; // Don't load messages yet
