@@ -15,6 +15,12 @@ export default defineConfig({
     headers: {
       // Enable browser caching for static assets
       'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+    hmr: {
+      overlay: true
+    },
+    watch: {
+      usePolling: false
     }
   },
   resolve: {
@@ -56,6 +62,11 @@ export default defineConfig({
     assetsInlineLimit: 4096, // Inline assets smaller than 4KB
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'firebase/app', 'firebase/auth', 'firebase/database']
-  }
+    include: ['react', 'react-dom', 'react-router-dom', 'firebase/app', 'firebase/auth', 'firebase/database'],
+    force: false,
+    esbuildOptions: {
+      target: 'es2020'
+    }
+  },
+  clearScreen: false
 })

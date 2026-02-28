@@ -91,7 +91,7 @@ export const RevenueChart = memo(() => {
                 initial={{ height: 0 }}
                 animate={{ height: `${(item.value / maxValue) * 180}px` }}
                 transition={{ duration: 1, delay: index * 0.1 }}
-                className={`w-full ${item.color} relative min-h-[20px] cursor-pointer rounded-t-lg transition-opacity hover:opacity-80`}
+                className={`w-full ${item.color} relative min-h-5 cursor-pointer rounded-t-lg transition-opacity hover:opacity-80`}
               >
                 {/* Tooltip */}
                 <div className="border-border bg-popover absolute -top-16 left-1/2 z-10 -translate-x-1/2 transform rounded-lg border px-3 py-2 text-sm whitespace-nowrap opacity-0 shadow-lg transition-opacity group-hover:opacity-100">

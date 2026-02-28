@@ -97,8 +97,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip Firebase and external API requests
-  if (url.hostname.includes('firebase') || 
+  // Skip chrome extensions, browser internals, and external APIs
+  if (url.protocol === 'chrome-extension:' ||
+      url.protocol === 'chrome:' ||
+      url.protocol === 'about:' ||
+      url.hostname.includes('firebase') || 
       url.hostname.includes('cloudinary') ||
       url.hostname.includes('googleapis')) {
     return;

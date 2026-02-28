@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Users, Activity, DollarSign, Eye } from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
@@ -10,8 +11,11 @@ import { RecentActivity } from '@/components/ui/recent-activity';
 import { DashboardHeader } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
 import { adminAPI } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function AdminDashboard() {
+  const { userProfile } = useAuth();
+  const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [stats, setStats] = useState([
@@ -118,17 +122,43 @@ export default function AdminDashboard() {
   };
 
   const handleExport = () => {
-    if (import.meta.env.DEV) {
-      console.log('Exporting data...');
+    try {
+      // Export dashboard data as JSON
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        stats: stats.map(s => ({ title: s.title, value: s.value, change: s.change })),
+        timestamp: Date.now()
+      };
+      
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `abjee-travel-dashboard-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      if (import.meta.env.DEV) {
+        console.log('Dashboard data exported successfully');
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export data. Please try again.');
     }
-    // TODO: Implement export functionality
   };
 
   const handleAddUser = () => {
-    if (import.meta.env.DEV) {
-      console.log('Adding new user...');
+    // Navigate to users section or open add user dialog
+    const usersSection = document.getElementById('users');
+    if (usersSection) {
+      usersSection.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      // Could also open a modal here
+      alert('Add User functionality: Navigate to Users management section to add new users.');
     }
-    // TODO: Implement add user functionality
   };
 
   if (loading) {
@@ -159,10 +189,10 @@ export default function AdminDashboard() {
             <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
               <div className="px-2 sm:px-0">
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  Welcome Admin
+                  Welcome, {userProfile?.displayName || userProfile?.email || 'Admin'}
                 </h1>
                 <p className="text-muted-foreground text-sm sm:text-base">
-                  Here&apos;s what&apos;s happening with your platform today.
+                  Here&apos;s what&apos;s happening with ABjee Travel platform today.
                 </p>
               </div>
 
@@ -176,9 +206,11 @@ export default function AdminDashboard() {
               {/* Main Content Grid */}
               <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
                 {/* Charts Section */}
-                <div className="space-y-4 sm:space-y-6 xl:col-span-2">
+                <div id="analytics" className="space-y-4 sm:space-y-6 xl:col-span-2">
                   <RevenueChart />
-                  <UsersTable onAddUser={handleAddUser} />
+                  <div id="users">
+                    <UsersTable onAddUser={handleAddUser} />
+                  </div>
                 </div>
 
                 {/* Sidebar Section */}
@@ -187,8 +219,12 @@ export default function AdminDashboard() {
                     onAddUser={handleAddUser}
                     onExport={handleExport}
                   />
-                  <SystemStatus />
-                  <RecentActivity />
+                  <div id="settings">
+                    <SystemStatus />
+                  </div>
+                  <div id="activity">
+                    <RecentActivity />
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { useTheme } from '../mvpblocks/theme-provider';
-import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -21,30 +22,42 @@ import {
   FileText,
   Activity,
   Database,
-  Shield,
-  Zap,
-  Bell,
   Settings,
+  Zap,
   Moon,
   Sun,
-  User,
+  Home,
+  LogOut,
 } from 'lucide-react';
 
 const menuItems = [
-  { title: 'Dashboard', icon: LayoutDashboard, href: '#dashboard' },
-  { title: 'Analytics', icon: BarChart3, href: '#analytics' },
-  { title: 'Users', icon: Users, href: '#users' },
-  { title: 'Content', icon: FileText, href: '#content' },
-  { title: 'Activity', icon: Activity, href: '#activity' },
-  { title: 'Database', icon: Database, href: '#database' },
-  { title: 'Security', icon: Shield, href: '#security' },
-  { title: 'Performance', icon: Zap, href: '#performance' },
-  { title: 'Notifications', icon: Bell, href: '#notifications' },
-  { title: 'Settings', icon: Settings, href: '#settings' },
+  { title: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
+  { title: 'Users', icon: Users, href: '/admin#users' },
+  { title: 'Analytics', icon: BarChart3, href: '/admin#analytics' },
+  { title: 'Bookings', icon: FileText, href: '/admin#bookings' },
+  { title: 'Activity', icon: Activity, href: '/admin#activity' },
+  { title: 'Chat Rooms', icon: Database, href: '/admin#chatrooms' },
+  { title: 'Revenue', icon: Zap, href: '/admin#revenue' },
+  { title: 'Settings', icon: Settings, href: '/admin#settings' },
 ];
 
 export const AdminSidebar = memo(() => {
   const { theme, setTheme } = useTheme();
+  const { userProfile, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/auth');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  const handleBackToWebsite = () => {
+    navigate('/');
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -52,13 +65,13 @@ export const AdminSidebar = memo(() => {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link to="#dashboard">
+              <Link to="/admin">
                 <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <LayoutDashboard className="h-5 w-5" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">TechCorp</span>
-                  <span className="truncate text-xs">Admin Panel</span>
+                  <span className="truncate font-semibold">ABjee Travel</span>
+                  <span className="truncate text-xs">Admin Dashboard</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -66,7 +79,7 @@ export const AdminSidebar = memo(() => {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="flex-1 overflow-y-auto py-2">
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -77,7 +90,7 @@ export const AdminSidebar = memo(() => {
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild>
                       <Link to={item.href}>
-                        <Icon />
+                        <Icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
@@ -89,22 +102,27 @@ export const AdminSidebar = memo(() => {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="mt-auto border-t border-sidebar-border pt-2 pb-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="w-full"
             >
-              {theme === 'dark' ? <Sun /> : <Moon />}
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link to="#profile">
-                <User />
-                <span>Admin Profile</span>
-              </Link>
+            <SidebarMenuButton onClick={handleBackToWebsite} className="w-full">
+              <Home className="h-4 w-4" />
+              <span>Back to Website</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 hover:text-rose-700">
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

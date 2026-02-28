@@ -47,16 +47,30 @@ export const QuickActions = memo(
           onAddUser();
           break;
         case 'analytics':
+          // Scroll to analytics/revenue section
+          const analyticsSection = document.querySelector('[class*="revenue"]') || 
+                                  document.querySelector('[class*="chart"]');
+          if (analyticsSection) {
+            analyticsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
           if (import.meta.env.DEV) {
-            console.log('Viewing analytics...');
+            console.log('Scrolling to analytics section');
           }
           break;
         case 'export':
           onExport();
           break;
         case 'settings':
+          // Navigate to settings section
+          window.location.hash = 'settings';
+          const settingsSection = document.getElementById('settings');
+          if (settingsSection) {
+            settingsSection.scrollIntoView({ behavior: 'smooth' });
+          } else {
+            alert('Settings: Configure dashboard preferences, notifications, and system options.');
+          }
           if (import.meta.env.DEV) {
-            console.log('Opening settings...');
+            console.log('Navigating to settings');
           }
           break;
       }

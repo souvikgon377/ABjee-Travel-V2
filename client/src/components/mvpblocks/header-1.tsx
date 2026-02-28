@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ChevronDown, ArrowRight, Sparkles } from 'lucide-react';
+import { Menu, X, ChevronDown, ArrowRight, Sparkles, Shield, LogOut } from 'lucide-react';
 import { useTheme } from './theme-provider';
 import { ModeToggle } from './mode-toggle'
 import { animate } from 'framer-motion'
@@ -54,7 +54,7 @@ export default function Header1() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const { theme } = useTheme();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, userProfile, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -202,6 +202,17 @@ export default function Header1() {
           <div className="hidden items-center space-x-4 lg:flex">
             {currentUser ? (
               <>
+                {userProfile?.role === 'admin' && (
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Link
+                      to="/admin"
+                      className="inline-flex items-center space-x-2 rounded-full bg-gradient-to-r from-purple-500 to-purple-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>Admin Dashboard</span>
+                    </Link>
+                  </motion.div>
+                )}
                 <div className="flex items-center space-x-3">
                   <div className="text-right">
                     <p className="text-sm font-medium text-foreground">
@@ -222,15 +233,18 @@ export default function Header1() {
                     </div>
                   )}
                 </div>
-                <button
+                <motion.button
                   onClick={() => {
                     logout();
                     navigate('/');
                   }}
-                  className="text-sm font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="inline-flex items-center space-x-2 rounded-full border-2 border-rose-500 px-4 py-2 text-sm font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white"
                 >
-                  Sign Out
-                </button>
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </motion.button>
               </>
             ) : (
               <>
@@ -353,15 +367,26 @@ export default function Header1() {
                           <p className="text-xs text-muted-foreground">Welcome back!</p>
                         </div>
                       </div>
+                      {userProfile?.role === 'admin' && (
+                        <Link
+                          to="/admin"
+                          className="flex items-center justify-center space-x-2 w-full rounded-lg bg-gradient-to-r from-purple-500 to-purple-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          <Shield className="h-4 w-4" />
+                          <span>Admin Dashboard</span>
+                        </Link>
+                      )}
                       <button
                         onClick={() => {
                           setIsMobileMenuOpen(false);
                           logout();
                           navigate('/');
                         }}
-                        className="block w-full rounded-lg py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+                        className="flex items-center justify-center space-x-2 w-full rounded-lg border-2 border-rose-500 py-2.5 text-center font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white"
                       >
-                        Sign Out
+                        <LogOut className="h-4 w-4" />
+                        <span>Logout</span>
                       </button>
                     </>
                   ) : (

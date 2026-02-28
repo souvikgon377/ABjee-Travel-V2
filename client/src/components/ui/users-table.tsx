@@ -128,7 +128,14 @@ export const UsersTable = memo(({ onAddUser }: UsersTableProps) => {
                 <span>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</span>
               </div>
 
-              <Button variant="ghost" size="sm" className="ml-auto">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="ml-auto"
+                onClick={() => {
+                  alert(`User Actions for ${user.displayName || user.email}:\n\n• View Profile\n• Edit User\n• Change Role (${user.role})\n• ${user.isActive ? 'Suspend' : 'Activate'} Account\n• View Activity Log`);
+                }}
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </div>

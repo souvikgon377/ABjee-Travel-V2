@@ -51,7 +51,11 @@ export const DashboardHeader = memo(
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="#">Home</BreadcrumbLink>
+                <BreadcrumbLink href="/admin">Dashboard</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Overview</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -76,7 +80,13 @@ export const DashboardHeader = memo(
 
             {/* Desktop Actions */}
             <div className="hidden items-center gap-2 md:flex">
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  alert('Filter Dashboard:\n\n• Filter by date range\n• Filter by user type\n• Filter by status\n• Filter by revenue');
+                }}
+              >
                 <Filter className="mr-2 h-4 w-4" />
                 Filter
               </Button>
@@ -107,11 +117,16 @@ export const DashboardHeader = memo(
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => onSearchChange('')}>
+                <DropdownMenuItem onClick={() => {
+                  const input = prompt('Search dashboard:');
+                  if (input) onSearchChange(input);
+                }}>
                   <Search className="mr-2 h-4 w-4" />
                   Search
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  alert('Filter Dashboard:\n\n• Filter by date range\n• Filter by user type\n• Filter by status\n• Filter by revenue');
+                }}>
                   <Filter className="mr-2 h-4 w-4" />
                   Filter
                 </DropdownMenuItem>
@@ -126,7 +141,18 @@ export const DashboardHeader = memo(
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                const notificationCount = Math.floor(Math.random() * 10);
+                if (notificationCount > 0) {
+                  alert(`Notifications (${notificationCount}):\n\n• New user registrations\n• Subscription updates\n• System alerts\n• Revenue reports`);
+                } else {
+                  alert('No new notifications');
+                }
+              }}
+            >
               <Bell className="h-4 w-4" />
             </Button>
           </motion.div>
