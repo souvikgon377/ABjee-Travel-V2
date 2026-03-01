@@ -18,18 +18,20 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 
-// CORS setup
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? [
-      "https://abjee-travels.netlify.app",
-      process.env.CLIENT_URL
-    ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i) // Remove undefined and duplicates
-  : [
-      "http://localhost:5173", 
-      "http://localhost:5174", 
-      "http://localhost:5175", 
-      "http://localhost:5176"
-    ];
+// CORS setup - Allow both production and development origins
+const allowedOrigins = [
+  // Production origins
+  "https://abjee-travels.netlify.app",
+  "https://abjee-travel.netlify.app",
+  process.env.CLIENT_URL,
+  // Development origins
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  "http://localhost:5176"
+].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i); // Remove undefined and duplicates
+
+console.log('🔐 CORS Allowed Origins:', allowedOrigins);
 
 // Initialize Firebase Firestore
 initializeFirestore();
