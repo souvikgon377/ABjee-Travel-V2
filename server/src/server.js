@@ -22,8 +22,6 @@ const server = createServer(app);
 const allowedOrigins = [
   // Production origins
   "https://abjee-travels.netlify.app",
-  "https://abjee-travel.netlify.app",
-  process.env.CLIENT_URL,
   // Development origins
   "http://localhost:5173",
   "http://localhost:5174",
