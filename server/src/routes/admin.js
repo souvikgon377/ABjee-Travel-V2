@@ -645,7 +645,7 @@ router.get('/chatrooms', async (req, res) => {
     const { page = 1, limit = 10, search, type, status } = req.query;
     
     // Fetch all rooms from Realtime Database
-    const roomsRef = realtimeDb.ref('chatRooms');
+    const roomsRef = realtimeDb.ref('chatrooms');
     const snapshot = await roomsRef.once('value');
     const roomsData = snapshot.val();
     
@@ -667,20 +667,42 @@ router.get('/chatrooms', async (req, res) => {
     // Convert to array and add IDs
     let rooms = Object.keys(roomsData).map(id => {
       const room = roomsData[id];
+      // Support both participants array (chatService) and members object (admin-created)
+      const memberCount =
+        Array.isArray(room.participants) ? room.participants.length :
+        room.members && typeof room.members === 'object' ? Object.keys(room.members).length : 0;
+      const maxMembers = room.maxMembers || 1000;
+      // Normalise type: chatService uses isPublic, admin routes use type
+      const resolvedType =
+        room.type === 'public' || room.type === 'private' || room.type === 'premium'
+          ? room.type
+          : room.isPublic === false ? 'private' : 'public';
       return {
         id,
         name: room.name || '',
         description: room.description || '',
-        type: room.type || 'public',
+        type: resolvedType,
+        isPublic: room.isPublic !== false,
         destination: room.destination || {},
         isActive: room.isActive !== false,
-        maxMembers: room.maxMembers || 1000,
-        memberCount: room.members ? Object.keys(room.members).length : 0,
+        maxMembers,
+        memberCount,
+        capacityPercent: Math.round((memberCount / maxMembers) * 100),
         messageCount: room.messageCount || 0,
         createdAt: room.createdAt || null,
         updatedAt: room.updatedAt || null,
         lastActivity: room.lastActivity || null,
-        createdBy: room.createdBy || null
+        createdBy: room.createdBy || null,
+        // iconImage from chatService rooms
+        iconImage: room.iconImage || null,
+        backgroundImage: room.backgroundImage || null,
+        // legacy avatar field from admin-created rooms
+        avatar: room.avatar || room.iconImage?.url || null,
+        tags: Array.isArray(room.tags) ? room.tags : [],
+        rules: Array.isArray(room.rules) ? room.rules : [],
+        subscriptionRequired: room.subscriptionRequired || false,
+        lastMessage: room.lastMessage || null,
+        inviteToken: room.inviteToken || null,
       };
     });
 
@@ -765,7 +787,7 @@ router.post('/chatrooms', async (req, res) => {
     }
 
     // Check if room name already exists
-    const roomsRef = realtimeDb.ref('chatRooms');
+    const roomsRef = realtimeDb.ref('chatrooms');
     const snapshot = await roomsRef.orderByChild('name').equalTo(name).once('value');
     
     if (snapshot.exists()) {
@@ -825,7 +847,7 @@ router.post('/chatrooms', async (req, res) => {
 // @access  Admin only
 router.get('/chatrooms/:roomId', async (req, res) => {
   try {
-    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const roomRef = realtimeDb.ref(`chatrooms/${req.params.roomId}`);
     const snapshot = await roomRef.once('value');
     const data = snapshot.val();
 
@@ -861,7 +883,7 @@ router.get('/chatrooms/:roomId', async (req, res) => {
 // @access  Admin only
 router.put('/chatrooms/:roomId', async (req, res) => {
   try {
-    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const roomRef = realtimeDb.ref(`chatrooms/${req.params.roomId}`);
     const snapshot = await roomRef.once('value');
 
     if (!snapshot.exists()) {
@@ -920,7 +942,7 @@ router.put('/chatrooms/:roomId', async (req, res) => {
 // @access  Admin only
 router.delete('/chatrooms/:roomId', async (req, res) => {
   try {
-    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const roomRef = realtimeDb.ref(`chatrooms/${req.params.roomId}`);
     const snapshot = await roomRef.once('value');
 
     if (!snapshot.exists()) {
@@ -964,7 +986,7 @@ router.delete('/chatrooms/:roomId', async (req, res) => {
 // @access  Admin only
 router.get('/chatrooms/:roomId/members', async (req, res) => {
   try {
-    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const roomRef = realtimeDb.ref(`chatrooms/${req.params.roomId}`);
     const snapshot = await roomRef.once('value');
     const room = snapshot.val();
 

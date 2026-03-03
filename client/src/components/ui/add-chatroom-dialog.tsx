@@ -1,4 +1,6 @@
 import { memo, useState, useCallback } from 'react';
+import { ref, push, set } from 'firebase/database';
+import { database } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -52,12 +54,30 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
           region: null,
         };
 
-        await adminAPI.createChatRoom({
+        // Write directly to RTDB
+        const roomsRef = ref(database, 'chatrooms');
+        const newRoomRef = push(roomsRef);
+        await set(newRoomRef, {
           name: formData.name,
-          description: formData.description,
+          description: formData.description || '',
           type: formData.type,
+          isPublic: formData.type === 'public',
           destination,
           maxMembers: parseInt(formData.maxMembers) || 1000,
+          isActive: true,
+          participants: [],
+          members: {},
+          messageCount: 0,
+          subscriptionRequired: formData.type === 'premium',
+          tags: [],
+          rules: [],
+          lastMessage: null,
+          avatar: null,
+          iconImage: null,
+          backgroundImage: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastActivity: new Date().toISOString(),
         });
 
         // Reset form
@@ -74,7 +94,7 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
         onOpenChange(false);
       } catch (error: any) {
         console.error('Failed to create chat room:', error);
-        alert(error.response?.data?.message || 'Failed to create chat room. Please try again.');
+        alert('Failed to create chat room. Please try again.');
       } finally {
         setLoading(false);
       }
