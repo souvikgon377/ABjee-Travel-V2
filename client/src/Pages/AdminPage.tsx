@@ -6,18 +6,19 @@ import AdminDashboard from '@/components/mvpblocks/index';
 export default function AdminPage() {
   const { userProfile, loading } = useAuth();
   const navigate = useNavigate();
+  const canAccessAdmin = userProfile?.role === 'admin' || userProfile?.role === 'owner';
 
   useEffect(() => {
     if (!loading) {
       // Check if user is authenticated and has admin role
       if (!userProfile) {
         navigate('/auth');
-      } else if (userProfile.role !== 'admin') {
+      } else if (!canAccessAdmin) {
         // Redirect non-admin users to home
         navigate('/');
       }
     }
-  }, [userProfile, loading, navigate]);
+  }, [userProfile, loading, navigate, canAccessAdmin]);
 
   // Show loading while checking auth
   if (loading) {
@@ -31,8 +32,8 @@ export default function AdminPage() {
     );
   }
 
-  // Only render dashboard if user is admin
-  if (!userProfile || userProfile.role !== 'admin') {
+  // Only render dashboard if user is admin/owner
+  if (!userProfile || !canAccessAdmin) {
     return null;
   }
 

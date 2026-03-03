@@ -79,12 +79,21 @@ export const adminAPI = {
   getStats: () => api.get('/admin/stats'),
   getUsers: (params?: any) => api.get('/admin/users', { params }),
   getUser: (userId: string) => api.get(`/admin/users/${userId}`),
+  createUser: (data: any) => api.post('/admin/users', data),
   updateUser: (userId: string, data: any) => api.put(`/admin/users/${userId}`, data),
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
+  getUserActivity: (userId: string) => api.get(`/admin/users/${userId}/activity`),
   getSubscriptions: (params?: any) => api.get('/admin/subscriptions', { params }),
   getActivity: (params?: any) => api.get('/admin/activity', { params }),
   getRevenue: (params?: any) => api.get('/admin/revenue', { params }),
   getSystemStatus: () => api.get('/admin/system-status'),
+  // Chat Rooms
+  getChatRooms: (params?: any) => api.get('/admin/chatrooms', { params }),
+  getChatRoom: (roomId: string) => api.get(`/admin/chatrooms/${roomId}`),
+  createChatRoom: (data: any) => api.post('/admin/chatrooms', data),
+  updateChatRoom: (roomId: string, data: any) => api.put(`/admin/chatrooms/${roomId}`, data),
+  deleteChatRoom: (roomId: string) => api.delete(`/admin/chatrooms/${roomId}`),
+  getRoomMembers: (roomId: string) => api.get(`/admin/chatrooms/${roomId}/members`),
 };
 
 export default api;

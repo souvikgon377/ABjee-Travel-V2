@@ -24,6 +24,7 @@ export default defineConfig({
     }
   },
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
@@ -63,7 +64,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'firebase/app', 'firebase/auth', 'firebase/database'],
-    force: false,
+    force: true,
     esbuildOptions: {
       target: 'es2020'
     }

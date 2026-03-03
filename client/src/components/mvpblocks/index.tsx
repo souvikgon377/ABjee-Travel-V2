@@ -1,23 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Users, Activity, DollarSign, Eye } from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
 import { RevenueChart } from '@/components/ui/revenue-chart';
 import { UsersTable } from '@/components/ui/users-table';
+import { ChatRoomsTable } from '@/components/ui/chatrooms-table';
 import { QuickActions } from '@/components/ui/quick-actions';
 import { SystemStatus } from '@/components/ui/system-status';
 import { RecentActivity } from '@/components/ui/recent-activity';
 import { DashboardHeader } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
+import { AddUserDialog } from '@/components/ui/add-user-dialog';
+import { SettingsDialog } from '@/components/ui/settings-dialog';
 import { adminAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function AdminDashboard() {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
+  const [currentView, setCurrentView] = useState('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAddUserDialog, setShowAddUserDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [usersTableRefresh, setUsersTableRefresh] = useState(0);
   const [stats, setStats] = useState([
     {
       title: 'Total Users',
@@ -59,7 +66,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   // Fetch dashboard stats
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await adminAPI.getStats();
       const data = response.data.data;
@@ -109,19 +116,19 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [fetchStats]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await fetchStats();
     setIsRefreshing(false);
-  };
+  }, [fetchStats]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     try {
       // Export dashboard data as JSON
       const exportData = {
@@ -148,18 +155,24 @@ export default function AdminDashboard() {
       console.error('Export failed:', error);
       alert('Failed to export data. Please try again.');
     }
-  };
+  }, [stats]);
 
-  const handleAddUser = () => {
-    // Navigate to users section or open add user dialog
-    const usersSection = document.getElementById('users');
-    if (usersSection) {
-      usersSection.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      // Could also open a modal here
-      alert('Add User functionality: Navigate to Users management section to add new users.');
-    }
-  };
+  const handleAddUser = useCallback(() => {
+    // Open the Add User dialog
+    setShowAddUserDialog(true);
+  }, []);
+
+  const handleSettings = useCallback(() => {
+    // Open the Settings dialog
+    setShowSettingsDialog(true);
+  }, []);
+
+  const handleUserAdded = useCallback(() => {
+    // Refresh stats after adding a user
+    fetchStats();
+    // Trigger users table refresh
+    setUsersTableRefresh(prev => prev + 1);
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -172,9 +185,160 @@ export default function AdminDashboard() {
     );
   }
 
+  const renderView = () => {
+    switch (currentView) {
+      case 'dashboard':
+        return (
+          <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Welcome, {userProfile?.displayName || userProfile?.email || 'Admin'}
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Here&apos;s what&apos;s happening with ABjee Travel platform today.
+              </p>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              {stats.map((stat, index) => (
+                <DashboardCard key={stat.title} stat={stat} index={index} />
+              ))}
+            </div>
+
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
+              {/* Charts Section */}
+              <div id="analytics" className="space-y-4 sm:space-y-6 xl:col-span-2">
+                <RevenueChart />
+              </div>
+
+              {/* Sidebar Section */}
+              <div className="space-y-4 sm:space-y-6">
+                <QuickActions
+                  onAddUser={handleAddUser}
+                  onExport={handleExport}
+                  onSettings={handleSettings}
+                  onViewChange={setCurrentView}
+                />
+                <div id="settings">
+                  <SystemStatus />
+                </div>
+                <div id="activity">
+                  <RecentActivity />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'users':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                User Management
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Manage all users, roles, and permissions
+              </p>
+            </div>
+
+            <UsersTable 
+              onAddUser={handleAddUser} 
+              refreshTrigger={usersTableRefresh}
+            />
+          </div>
+        );
+
+      case 'analytics':
+        return (
+          <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Analytics
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                View detailed analytics and insights
+              </p>
+            </div>
+            <RevenueChart />
+          </div>
+        );
+
+      case 'activity':
+        return (
+          <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Recent Activity
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Monitor platform activity and user actions
+              </p>
+            </div>
+            <RecentActivity />
+          </div>
+        );
+
+      case 'settings':
+        return (
+          <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                System Settings
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Configure system preferences and options
+              </p>
+            </div>
+            <SystemStatus />
+            <div className="mt-6">
+              <button
+                onClick={handleSettings}
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                Open Settings
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'chatrooms':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Chat Rooms Management
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Manage all chat rooms, members, and moderation
+              </p>
+            </div>
+
+            <ChatRoomsTable />
+          </div>
+        );
+
+      default:
+        return (
+          <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                {currentView.charAt(0).toUpperCase() + currentView.slice(1)}
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                This section is coming soon...
+              </p>
+            </div>
+          </div>
+        );
+    }
+  };
+
   return (
     <SidebarProvider>
-      <AdminSidebar />
+      <AdminSidebar currentView={currentView} onViewChange={setCurrentView} />
       <SidebarInset>
         <DashboardHeader
           searchQuery={searchQuery}
@@ -186,50 +350,20 @@ export default function AdminDashboard() {
 
         <div className="flex flex-1 flex-col gap-2 p-2 pt-0 sm:gap-4 sm:p-4">
           <div className="min-h-[calc(100vh-4rem)] flex-1 rounded-lg p-3 sm:rounded-xl sm:p-4 md:p-6">
-            <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
-              <div className="px-2 sm:px-0">
-                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  Welcome, {userProfile?.displayName || userProfile?.email || 'Admin'}
-                </h1>
-                <p className="text-muted-foreground text-sm sm:text-base">
-                  Here&apos;s what&apos;s happening with ABjee Travel platform today.
-                </p>
-              </div>
-
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-                {stats.map((stat, index) => (
-                  <DashboardCard key={stat.title} stat={stat} index={index} />
-                ))}
-              </div>
-
-              {/* Main Content Grid */}
-              <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
-                {/* Charts Section */}
-                <div id="analytics" className="space-y-4 sm:space-y-6 xl:col-span-2">
-                  <RevenueChart />
-                  <div id="users">
-                    <UsersTable onAddUser={handleAddUser} />
-                  </div>
-                </div>
-
-                {/* Sidebar Section */}
-                <div className="space-y-4 sm:space-y-6">
-                  <QuickActions
-                    onAddUser={handleAddUser}
-                    onExport={handleExport}
-                  />
-                  <div id="settings">
-                    <SystemStatus />
-                  </div>
-                  <div id="activity">
-                    <RecentActivity />
-                  </div>
-                </div>
-              </div>
-            </div>
+            {renderView()}
           </div>
         </div>
+
+        {/* Dialogs */}
+        <AddUserDialog
+          open={showAddUserDialog}
+          onOpenChange={setShowAddUserDialog}
+          onUserAdded={handleUserAdded}
+        />
+        <SettingsDialog
+          open={showSettingsDialog}
+          onOpenChange={setShowSettingsDialog}
+        />
       </SidebarInset>
     </SidebarProvider>
   );

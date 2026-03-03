@@ -9,22 +9,38 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// Register Service Worker for caching
+// Service Worker: enable only in production to avoid stale cache issues in development
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((registration) => {
-        console.log('✅ Service Worker registered successfully:', registration.scope);
-        
-        // Check for updates every hour
-        setInterval(() => {
-          registration.update();
-        }, 60 * 60 * 1000);
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          console.log('✅ Service Worker registered successfully:', registration.scope);
+
+          // Check for updates every hour
+          setInterval(() => {
+            registration.update();
+          }, 60 * 60 * 1000);
+        })
+        .catch((error) => {
+          console.warn('❌ Service Worker registration failed:', error);
+        });
+    });
+  } else {
+    // Remove any previously registered SW in dev to prevent stale bundle/runtime mismatches
+    navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .then(() => {
+        if (import.meta.env.DEV) {
+          console.log('🧹 Service workers unregistered for development');
+        }
       })
       .catch((error) => {
-        console.warn('❌ Service Worker registration failed:', error);
+        if (import.meta.env.DEV) {
+          console.warn('Failed to unregister service workers in development:', error);
+        }
       });
-  });
+  }
 }
 

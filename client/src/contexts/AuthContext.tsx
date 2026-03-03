@@ -168,41 +168,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Admin login with custom token
+  // Admin login with Firebase email/password + role verification
   const adminLogin = async (email: string, password: string) => {
     try {
       if (import.meta.env.DEV) {
         console.log('[Auth] Initiating admin login...');
       }
-      
-      // Call backend admin login endpoint
-      const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/admin-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
 
-      const result = await response.json();
+      let user: any;
 
-      if (!response.ok) {
-        throw new Error(result.message || 'Admin login failed');
+      try {
+        const signInResult = await signInWithEmailAndPassword(auth, email, password);
+        user = signInResult.user;
+      } catch (firebaseLoginError: any) {
+        // Fallback for legacy admins that are not yet present in Firebase Email/Password Auth
+        if (firebaseLoginError?.code !== 'auth/invalid-credential' && firebaseLoginError?.code !== 'auth/user-not-found') {
+          throw firebaseLoginError;
+        }
+
+        if (import.meta.env.DEV) {
+          console.log('[Auth] Firebase email/password failed, attempting admin custom-token fallback...');
+        }
+
+        const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/admin-login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result?.message || 'Invalid email or password.');
+        }
+
+        const customToken = result?.data?.customToken || result?.data?.token;
+        if (!customToken) {
+          throw new Error('Admin login succeeded but no Firebase custom token was returned.');
+        }
+
+        const signInResult = await signInWithCustomToken(auth, customToken);
+        user = signInResult.user;
       }
 
-      if (import.meta.env.DEV) {
-        console.log('[Auth] Admin login successful, signing in with custom token...');
-      }
-      
-      // Sign in to Firebase with custom token
-      const { user } = await signInWithCustomToken(auth, result.data.customToken);
-      
-      // Get and store Firebase token
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
-      
-      // Set user profile with admin data
-      setUserProfile(result.data.user);
+
+      const profileResponse = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const profileResult = await profileResponse.json();
+      if (!profileResponse.ok) {
+        throw new Error(profileResult.message || 'Failed to verify admin profile');
+      }
+
+      const role = profileResult?.data?.user?.role;
+      if (role !== 'admin' && role !== 'owner') {
+        await signOut(auth);
+        localStorage.removeItem('token');
+        throw new Error('This account does not have admin access.');
+      }
+
+      setUserProfile(profileResult.data.user);
       
       if (import.meta.env.DEV) {
         console.log('[Auth] Admin login complete');

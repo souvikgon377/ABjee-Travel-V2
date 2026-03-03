@@ -3,6 +3,7 @@ import { authenticate, requireAdmin } from '../middleware/auth.js';
 import userService from '../models/User.js';
 import subscriptionService from '../models/Subscription.js';
 import { db } from '../config/database.js';
+import { realtimeDb } from '../config/firebase-admin.js';
 
 const router = express.Router();
 
@@ -121,6 +122,7 @@ router.get('/users', async (req, res) => {
     let users = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
+      phoneNumber: doc.data().phone, // Map phone to phoneNumber for client compatibility
       createdAt: doc.data().createdAt?.toDate?.() || null,
       lastSeen: doc.data().lastSeen?.toDate?.() || null
     }));
@@ -163,6 +165,76 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// @route   POST /api/admin/users
+// @desc    Create new user
+// @access  Admin only
+router.post('/users', async (req, res) => {
+  try {
+    const { email, displayName, role = 'user', city, phoneNumber } = req.body;
+
+    // Validate required fields
+    if (!email || !displayName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and display name are required'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await userService.findByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Validate role
+    if (!['user', 'moderator', 'admin'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role'
+      });
+    }
+
+    // Create user document
+    const userRef = db.collection('users').doc();
+    const userData = {
+      email,
+      displayName,
+      role,
+      city: city || '',
+      phone: phoneNumber || '', // Map phoneNumber to phone
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastSeen: new Date(),
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}`
+    };
+
+    await userRef.set(userData);
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: {
+        user: {
+          id: userRef.id,
+          ...userData,
+          phoneNumber: userData.phone // Return as phoneNumber for client
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create user'
+    });
+  }
+});
+
 // @route   GET /api/admin/users/:userId
 // @desc    Get single user details
 // @access  Admin only
@@ -191,12 +263,82 @@ router.get('/users/:userId', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/users/:userId/activity
+// @desc    Get user activity log
+// @access  Admin only
+router.get('/users/:userId/activity', async (req, res) => {
+  try {
+    const user = await userService.findById(req.params.userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Mock activity data - in production, this would come from an activity log collection
+    const activities = [
+      {
+        id: '1',
+        type: 'account_created',
+        description: 'Account created',
+        timestamp: user.createdAt || new Date(),
+        metadata: { source: 'admin_panel' }
+      },
+      {
+        id: '2',
+        type: 'profile_updated',
+        description: 'Profile information updated',
+        timestamp: user.updatedAt || new Date(),
+        metadata: { fields: ['displayName', 'city'] }
+      }
+    ];
+
+    // Add last seen activity if available
+    if (user.lastSeen) {
+      activities.push({
+        id: '3',
+        type: 'last_seen',
+        description: 'Last active on platform',
+        timestamp: user.lastSeen,
+        metadata: {}
+      });
+    }
+
+    // Sort by timestamp descending
+    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    res.json({
+      success: true,
+      data: {
+        activities
+      }
+    });
+
+  } catch (error) {
+    console.error('Get user activity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user activity'
+    });
+  }
+});
+
 // @route   PUT /api/admin/users/:userId
 // @desc    Update user (including role)
 // @access  Admin only
 router.put('/users/:userId', async (req, res) => {
   try {
-    const { role, isActive, subscription } = req.body;
+    const { 
+      role, 
+      isActive, 
+      subscription, 
+      displayName, 
+      city, 
+      phoneNumber, 
+      email 
+    } = req.body;
     const updates = {};
 
     if (role !== undefined) {
@@ -215,6 +357,30 @@ router.put('/users/:userId', async (req, res) => {
 
     if (subscription !== undefined) {
       updates.subscription = subscription;
+    }
+
+    if (displayName !== undefined) {
+      updates.displayName = displayName;
+    }
+
+    if (city !== undefined) {
+      updates.city = city;
+    }
+
+    if (phoneNumber !== undefined) {
+      updates.phone = phoneNumber;
+    }
+
+    if (email !== undefined) {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid email format'
+        });
+      }
+      updates.email = email.toLowerCase();
     }
 
     const user = await userService.update(req.params.userId, updates);
@@ -467,6 +633,382 @@ router.get('/system-status', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to get system status'
+    });
+  }
+});
+
+// @route   GET /api/admin/chatrooms
+// @desc    Get all chat rooms with filters
+// @access  Admin only
+router.get('/chatrooms', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, type, status } = req.query;
+    
+    // Fetch all rooms from Realtime Database
+    const roomsRef = realtimeDb.ref('chatRooms');
+    const snapshot = await roomsRef.once('value');
+    const roomsData = snapshot.val();
+    
+    if (!roomsData) {
+      return res.json({
+        success: true,
+        data: {
+          rooms: [],
+          pagination: {
+            total: 0,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            pages: 0
+          }
+        }
+      });
+    }
+
+    // Convert to array and add IDs
+    let rooms = Object.keys(roomsData).map(id => {
+      const room = roomsData[id];
+      return {
+        id,
+        name: room.name || '',
+        description: room.description || '',
+        type: room.type || 'public',
+        destination: room.destination || {},
+        isActive: room.isActive !== false,
+        maxMembers: room.maxMembers || 1000,
+        memberCount: room.members ? Object.keys(room.members).length : 0,
+        messageCount: room.messageCount || 0,
+        createdAt: room.createdAt || null,
+        updatedAt: room.updatedAt || null,
+        lastActivity: room.lastActivity || null,
+        createdBy: room.createdBy || null
+      };
+    });
+
+    // Apply filters
+    if (type && type !== 'all') {
+      rooms = rooms.filter(room => room.type === type);
+    }
+
+    if (status === 'active') {
+      rooms = rooms.filter(room => room.isActive === true);
+    } else if (status === 'inactive') {
+      rooms = rooms.filter(room => room.isActive === false);
+    }
+
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      rooms = rooms.filter(room => 
+        room.name?.toLowerCase().includes(searchLower) ||
+        room.description?.toLowerCase().includes(searchLower) ||
+        room.destination?.country?.toLowerCase().includes(searchLower) ||
+        room.destination?.city?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Sort by createdAt descending
+    rooms.sort((a, b) => {
+      const dateA = new Date(b.createdAt || 0).getTime();
+      const dateB = new Date(a.createdAt || 0).getTime();
+      return dateA - dateB;
+    });
+
+    // Pagination
+    const total = rooms.length;
+    const startIndex = (parseInt(page) - 1) * parseInt(limit);
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedRooms = rooms.slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      data: {
+        rooms: paginatedRooms,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get chat rooms error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get chat rooms'
+    });
+  }
+});
+
+// @route   POST /api/admin/chatrooms
+// @desc    Create new chat room
+// @access  Admin only
+router.post('/chatrooms', async (req, res) => {
+  try {
+    const { name, description, type = 'public', destination, maxMembers = 1000 } = req.body;
+
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Room name is required'
+      });
+    }
+
+    // Validate type
+    if (!['public', 'private', 'premium'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid room type'
+      });
+    }
+
+    // Check if room name already exists
+    const roomsRef = realtimeDb.ref('chatRooms');
+    const snapshot = await roomsRef.orderByChild('name').equalTo(name).once('value');
+    
+    if (snapshot.exists()) {
+      return res.status(400).json({
+        success: false,
+        message: 'A room with this name already exists'
+      });
+    }
+
+    // Create room in Realtime Database
+    const newRoomRef = roomsRef.push();
+    const roomData = {
+      name,
+      description: description || '',
+      type,
+      destination: destination || { country: null, city: null, region: null },
+      isActive: true,
+      maxMembers: parseInt(maxMembers) || 1000,
+      members: {},
+      createdBy: req.user.id,
+      subscriptionRequired: type === 'premium',
+      messageCount: 0,
+      lastActivity: new Date().toISOString(),
+      lastMessage: null,
+      avatar: null,
+      tags: [],
+      rules: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await newRoomRef.set(roomData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Chat room created successfully',
+      data: {
+        room: {
+          id: newRoomRef.key,
+          ...roomData,
+          memberCount: 0
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Create chat room error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create chat room'
+    });
+  }
+});
+
+// @route   GET /api/admin/chatrooms/:roomId
+// @desc    Get chat room by ID
+// @access  Admin only
+router.get('/chatrooms/:roomId', async (req, res) => {
+  try {
+    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const snapshot = await roomRef.once('value');
+    const data = snapshot.val();
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat room not found'
+      });
+    }
+
+    const room = {
+      id: req.params.roomId,
+      ...data,
+      memberCount: data.members ? Object.keys(data.members).length : 0
+    };
+
+    res.json({
+      success: true,
+      data: { room }
+    });
+
+  } catch (error) {
+    console.error('Get chat room error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get chat room'
+    });
+  }
+});
+
+// @route   PUT /api/admin/chatrooms/:roomId
+// @desc    Update chat room
+// @access  Admin only
+router.put('/chatrooms/:roomId', async (req, res) => {
+  try {
+    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const snapshot = await roomRef.once('value');
+
+    if (!snapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat room not found'
+      });
+    }
+
+    const allowedUpdates = ['name', 'description', 'type', 'destination', 'isActive', 'maxMembers'];
+    const updates = {};
+    
+    for (const key of allowedUpdates) {
+      if (req.body[key] !== undefined) {
+        updates[key] = req.body[key];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields to update'
+      });
+    }
+
+    updates.updatedAt = new Date().toISOString();
+
+    await roomRef.update(updates);
+
+    // Get updated room
+    const updatedSnapshot = await roomRef.once('value');
+    const data = updatedSnapshot.val();
+    const room = {
+      id: req.params.roomId,
+      ...data,
+      memberCount: data.members ? Object.keys(data.members).length : 0
+    };
+
+    res.json({
+      success: true,
+      message: 'Chat room updated successfully',
+      data: { room }
+    });
+
+  } catch (error) {
+    console.error('Update chat room error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update chat room'
+    });
+  }
+});
+
+// @route   DELETE /api/admin/chatrooms/:roomId
+// @desc    Delete chat room
+// @access  Admin only
+router.delete('/chatrooms/:roomId', async (req, res) => {
+  try {
+    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const snapshot = await roomRef.once('value');
+
+    if (!snapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat room not found'
+      });
+    }
+
+    // Delete all messages in the room from Realtime Database
+    const messagesRef = realtimeDb.ref(`messages`);
+    const messagesSnapshot = await messagesRef.orderByChild('roomId').equalTo(req.params.roomId).once('value');
+    
+    if (messagesSnapshot.exists()) {
+      const updates = {};
+      messagesSnapshot.forEach(child => {
+        updates[child.key] = null;
+      });
+      await messagesRef.update(updates);
+    }
+
+    // Delete the room
+    await roomRef.remove();
+
+    res.json({
+      success: true,
+      message: 'Chat room deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete chat room error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete chat room'
+    });
+  }
+});
+
+// @route   GET /api/admin/chatrooms/:roomId/members
+// @desc    Get chat room members
+// @access  Admin only
+router.get('/chatrooms/:roomId/members', async (req, res) => {
+  try {
+    const roomRef = realtimeDb.ref(`chatRooms/${req.params.roomId}`);
+    const snapshot = await roomRef.once('value');
+    const room = snapshot.val();
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chat room not found'
+      });
+    }
+
+    const members = room.members || {};
+    const memberIds = Object.keys(members);
+
+    // Get user details for each member
+    const memberDetails = await Promise.all(
+      memberIds.map(async (userId) => {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          return {
+            id: userDoc.id,
+            displayName: userData.displayName,
+            email: userData.email,
+            avatar: userData.avatar,
+            role: members[userId].role || 'member',
+            joinedAt: members[userId].joinedAt || null
+          };
+        }
+        return null;
+      })
+    );
+
+    res.json({
+      success: true,
+      data: {
+        members: memberDetails.filter(m => m !== null)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get room members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get room members'
     });
   }
 });

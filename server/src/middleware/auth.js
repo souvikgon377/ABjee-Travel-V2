@@ -1,5 +1,6 @@
 import admin from '../config/firebase-admin.js';
 import userService from '../models/User.js';
+import { db } from '../config/database.js';
 
 // Authentication middleware
 const authenticate = async (req, res, next) => {
@@ -19,6 +20,46 @@ const authenticate = async (req, res, next) => {
       // Verify the Firebase ID token
       const decodedToken = await admin.auth().verifyIdToken(token);
       
+      const normalizedEmail = (decodedToken.email || '').toLowerCase();
+
+      // Resolve elevated role from admins collection (Firebase-driven admin access)
+      let elevatedRole = null;
+      const tokenRole = decodedToken?.role;
+      if (tokenRole === 'admin' || tokenRole === 'owner') {
+        elevatedRole = tokenRole;
+      }
+
+      if (normalizedEmail) {
+        let adminSnapshot = await db
+          .collection('admins')
+          .where('email', '==', normalizedEmail)
+          .limit(1)
+          .get();
+
+        // Fallback for legacy mixed-case email values in admins collection
+        if (adminSnapshot.empty) {
+          const allAdmins = await db.collection('admins').get();
+          const matchedAdmin = allAdmins.docs.find((doc) => {
+            const data = doc.data();
+            return (data?.email || '').toLowerCase() === normalizedEmail;
+          });
+
+          if (matchedAdmin) {
+            adminSnapshot = { empty: false, docs: [matchedAdmin] };
+          }
+        }
+
+        if (!adminSnapshot.empty) {
+          const adminData = adminSnapshot.docs[0].data();
+          const candidateRole = adminData?.role;
+          if (candidateRole === 'admin' || candidateRole === 'owner') {
+            elevatedRole = candidateRole;
+          } else {
+            elevatedRole = 'admin';
+          }
+        }
+      }
+
       // Get or create user in our database
       let user = await userService.findByFirebaseUid(decodedToken.uid);
       
@@ -37,7 +78,8 @@ const authenticate = async (req, res, next) => {
           firstName: firstName,
           lastName: lastName,
           username: decodedToken.email?.split('@')[0] || '',
-          avatar: decodedToken.picture || ''
+          avatar: decodedToken.picture || '',
+          role: elevatedRole || 'user'
         });
       } else {
         // Check if existing user needs firstName/lastName populated
@@ -58,6 +100,12 @@ const authenticate = async (req, res, next) => {
             await userService.update(user.id, updates);
             user = { ...user, ...updates };
           }
+        }
+
+        // Keep user role in sync with admins collection
+        if (elevatedRole && user.role !== elevatedRole) {
+          await userService.update(user.id, { role: elevatedRole });
+          user = { ...user, role: elevatedRole };
         }
       }
       
@@ -192,7 +240,7 @@ const requireAdmin = async (req, res, next) => {
   }
   
   // Check if user has admin role
-  if (req.user.role !== 'admin') {
+  if (!['admin', 'owner'].includes(req.user.role)) {
     return res.status(403).json({
       success: false,
       message: 'Admin access required.'

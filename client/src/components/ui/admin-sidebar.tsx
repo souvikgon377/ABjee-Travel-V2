@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTheme } from '../mvpblocks/theme-provider';
 import { useAuth } from '@/contexts/AuthContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
@@ -31,17 +31,22 @@ import {
 } from 'lucide-react';
 
 const menuItems = [
-  { title: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
-  { title: 'Users', icon: Users, href: '/admin#users' },
-  { title: 'Analytics', icon: BarChart3, href: '/admin#analytics' },
-  { title: 'Bookings', icon: FileText, href: '/admin#bookings' },
-  { title: 'Activity', icon: Activity, href: '/admin#activity' },
-  { title: 'Chat Rooms', icon: Database, href: '/admin#chatrooms' },
-  { title: 'Revenue', icon: Zap, href: '/admin#revenue' },
-  { title: 'Settings', icon: Settings, href: '/admin#settings' },
+  { title: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
+  { title: 'Users', icon: Users, view: 'users' },
+  { title: 'Analytics', icon: BarChart3, view: 'analytics' },
+  { title: 'Bookings', icon: FileText, view: 'bookings' },
+  { title: 'Activity', icon: Activity, view: 'activity' },
+  { title: 'Chat Rooms', icon: Database, view: 'chatrooms' },
+  { title: 'Revenue', icon: Zap, view: 'revenue' },
+  { title: 'Settings', icon: Settings, view: 'settings' },
 ];
 
-export const AdminSidebar = memo(() => {
+interface AdminSidebarProps {
+  currentView: string;
+  onViewChange: (view: string) => void;
+}
+
+export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarProps) => {
   const { theme, setTheme } = useTheme();
   const { userProfile, logout } = useAuth();
   const navigate = useNavigate();
@@ -64,16 +69,14 @@ export const AdminSidebar = memo(() => {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link to="/admin">
-                <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <LayoutDashboard className="h-5 w-5" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">ABjee Travel</span>
-                  <span className="truncate text-xs">Admin Dashboard</span>
-                </div>
-              </Link>
+            <SidebarMenuButton size="lg" onClick={() => onViewChange('dashboard')}>
+              <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                <LayoutDashboard className="h-5 w-5" />
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold">ABjee Travel</span>
+                <span className="truncate text-xs">Admin Dashboard</span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -86,13 +89,16 @@ export const AdminSidebar = memo(() => {
             <SidebarMenu>
               {menuItems.map((item) => {
                 const Icon = item.icon;
+                const isActive = currentView === item.view;
                 return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild>
-                      <Link to={item.href}>
-                        <Icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
+                  <SidebarMenuItem key={item.view}>
+                    <SidebarMenuButton 
+                      onClick={() => onViewChange(item.view)}
+                      isActive={isActive}
+                      className={isActive ? 'bg-accent' : ''}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

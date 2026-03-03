@@ -279,7 +279,6 @@ const ChatRoomsList: React.FC = () => {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
-  const [showExploreCategories, setShowExploreCategories] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<string>('');
@@ -300,6 +299,7 @@ const ChatRoomsList: React.FC = () => {
   const templeDetailsRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const communityRoomsRef = useRef<HTMLDivElement>(null);
+  const exploreOutdoorsRef = useRef<HTMLDivElement>(null);
 
   // Auto-slide gallery images
   useEffect(() => {
@@ -380,6 +380,17 @@ const ChatRoomsList: React.FC = () => {
         block: 'start' 
       });
     }, 100);
+  }, []);
+
+  const scrollToExploreOutdoors = useCallback(() => {
+    setSelectedCategory('outdoors');
+    setSearchDestination('Tirupati');
+    setTimeout(() => {
+      exploreOutdoorsRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }, 600);
   }, []);
 
   const closeAttractionDetails = useCallback(() => {
@@ -711,7 +722,7 @@ const ChatRoomsList: React.FC = () => {
               transition={{ delay: 0.3 }}
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
-              onClick={() => setShowExploreCategories(!showExploreCategories)}
+              onClick={scrollToExploreOutdoors}
             >
               <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
                 {/* Video Background */}
@@ -739,126 +750,13 @@ const ChatRoomsList: React.FC = () => {
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2 drop-shadow-lg">
                       Explore Your Interest
                     </h3>
-                    <p className="text-gray-300 dark:text-gray-300 dark:text-white/90 text-base drop-shadow-md">
+                    <p className="text-gray-300 dark:text-white/90 text-base drop-shadow-md">
                       Discover communities that match your passions and travel style
                     </p>
                   </div>
                 </div>
               </div>
             </motion.div>
-
-            {/* Explore by Category Section - Mobile Only */}
-            <AnimatePresence>
-              {showExploreCategories && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                      Explore by category
-                    </h2>
-                    
-                    <div className="space-y-4">
-                      {/* Outdoors Card */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                        whileHover={{ scale: 1.03 }}
-                        className="group cursor-pointer"
-                        onClick={() => setSelectedCategory('outdoors')}
-                      >
-                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                          <img 
-                            src="/img6.jpg" 
-                            alt="Outdoors"
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                          <div className="absolute bottom-0 left-0 right-0 p-6">
-                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                              Outdoors
-                            </h3>
-                          </div>
-                        </div>
-                      </motion.div>
-
-                      {/* Food Card */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        whileHover={{ scale: 1.03 }}
-                        className="group cursor-pointer"
-                      >
-                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                          <img 
-                            src="/img7.jpg" 
-                            alt="Food"
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                          <div className="absolute bottom-0 left-0 right-0 p-6">
-                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                              Food
-                            </h3>
-                          </div>
-                        </div>
-                      </motion.div>
-
-                      {/* Culture Card */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        whileHover={{ scale: 1.03 }}
-                        className="group cursor-pointer"
-                      >
-                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                          <img 
-                            src="/img8.jpg" 
-                            alt="Culture"
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                          <div className="absolute bottom-0 left-0 right-0 p-6">
-                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                              Culture
-                            </h3>
-                          </div>
-                        </div>
-                      </motion.div>
-
-                      {/* Water Card */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4 }}
-                        whileHover={{ scale: 1.03 }}
-                        className="group cursor-pointer"
-                      >
-                        <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                          <img 
-                            src="/img9.jpg" 
-                            alt="Water"
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                          <div className="absolute bottom-0 left-0 right-0 p-6">
-                            <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                              Water
-                            </h3>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             {/* Card 2: Communicate with fellow travellers */}
             <motion.div
@@ -914,7 +812,7 @@ const ChatRoomsList: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Card 3: Visualize your destination */}
+            {/* Card 3: Trip Stories */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -934,7 +832,7 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-3">
-                      Visualize Your Destination
+                      Trip Stories
                     </h3>
                     <p className="text-white/90 text-base">
                       Get inspired by photos and stories from real travelers
@@ -984,7 +882,7 @@ const ChatRoomsList: React.FC = () => {
               transition={{ delay: 0.3 }}
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
-              onClick={() => setShowExploreCategories(!showExploreCategories)}
+              onClick={scrollToExploreOutdoors}
             >
               <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
                 {/* Video Background */}
@@ -1012,7 +910,7 @@ const ChatRoomsList: React.FC = () => {
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2 drop-shadow-lg">
                       Explore Your Interest
                     </h3>
-                    <p className="text-gray-300 dark:text-gray-300 dark:text-white/90 text-base drop-shadow-md">
+                    <p className="text-gray-300 dark:text-white/90 text-base drop-shadow-md">
                       Discover communities that match your passions and travel style
                     </p>
                   </div>
@@ -1074,7 +972,7 @@ const ChatRoomsList: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Card 3: Visualize your destination */}
+            {/* Card 3: Trip Stories */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1094,7 +992,7 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-3">
-                      Visualize Your Destination
+                      Trip Stories
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
                       Get inspired by photos and stories from real travelers
@@ -1135,120 +1033,6 @@ const ChatRoomsList: React.FC = () => {
             </motion.div>
           </div>
         </motion.div>
-
-        {/* Explore by Category Section - Desktop/Tablet Only */}
-        <AnimatePresence>
-          {showExploreCategories && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-              className="mb-12 hidden md:block"
-            >
-              <div className="space-y-6">
-                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
-                  Explore by category
-                </h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {/* Outdoors Card */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    whileHover={{ scale: 1.03 }}
-                    className="group cursor-pointer"
-                    onClick={() => setSelectedCategory('outdoors')}
-                  >
-                    <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                      <img 
-                        src="/img6.jpg" 
-                        alt="Outdoors"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-6">
-                        <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                          Outdoors
-                        </h3>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Food Card */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    whileHover={{ scale: 1.03 }}
-                    className="group cursor-pointer"
-                  >
-                    <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                      <img 
-                        src="/img7.jpg" 
-                        alt="Food"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-6">
-                        <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                          Food
-                        </h3>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Culture Card */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    whileHover={{ scale: 1.03 }}
-                    className="group cursor-pointer"
-                  >
-                    <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                      <img 
-                        src="/img8.jpg" 
-                        alt="Culture"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-6">
-                        <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                          Culture
-                        </h3>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Water Card */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    whileHover={{ scale: 1.03 }}
-                    className="group cursor-pointer"
-                  >
-                    <div className="relative h-48 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300">
-                      <img 
-                        src="/img9.jpg" 
-                        alt="Water"
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-6">
-                        <h3 className="text-2xl font-bold text-white drop-shadow-lg">
-                          Water
-                        </h3>
-                      </div>
-                    </div>
-                  </motion.div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Category Explore Section (Full Screen) */}
         <AnimatePresence>
@@ -1299,153 +1083,24 @@ const ChatRoomsList: React.FC = () => {
                     }
                   `}</style>
                   <div className="min-h-full flex flex-col items-center justify-between px-4 py-12">
-                    {/* Search Bar and Cascading Dropdowns */}
+                    {/* Search Bar */}
                     <motion.div
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.2 }}
                       className="w-full max-w-2xl"
                     >
-                    {/* Search Bar */}
-                    <div className="relative dropdown-container">
-                      <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-400 z-10" />
-                      <input
-                        type="text"
-                        placeholder="Search by country, state, or area"
-                        value={searchDestination}
-                        onChange={(e) => setSearchDestination(e.target.value)}
-                        className="w-full pl-16 pr-6 py-5 rounded-full bg-white text-gray-900 placeholder-gray-500 text-lg focus:outline-none focus:ring-4 focus:ring-white/30 shadow-2xl transition-all"
-                      />
-                    </div>
-
-                    {/* Cascading Dropdown System */}
-                    <div className="mt-6 space-y-4 dropdown-container">
-                      {/* Country Selection Dropdown */}
                       <div className="relative">
-                        <button
-                          onClick={() => {
-                            setShowCountryDropdown(!showCountryDropdown);
-                            setShowStateDropdown(false);
-                            setShowPlaceDropdown(false);
-                          }}
-                          className="w-full px-6 py-4 bg-white rounded-2xl text-left font-semibold text-gray-900 shadow-xl hover:shadow-2xl transition-all flex items-center justify-between"
-                        >
-                          <span>{selectedCountry || 'Select Country'}</span>
-                          <Calendar className="h-5 w-5 text-gray-400" />
-                        </button>
-                        
-                        {showCountryDropdown && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-2xl overflow-hidden z-30"
-                          >
-                            <div className="max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                              {COUNTRIES.map((country, index) => (
-                                <button
-                                  key={index}
-                                  onClick={() => {
-                                    setSelectedCountry(country);
-                                    setSelectedState('');
-                                    setSearchDestination('');
-                                    setShowCountryDropdown(false);
-                                    if (country === 'India') {
-                                      setShowStateDropdown(true);
-                                    }
-                                  }}
-                                  className="w-full text-left px-6 py-3 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
-                                >
-                                  <p className="font-medium text-gray-900">{country}</p>
-                                </button>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
+                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-400 z-10" />
+                        <input
+                          type="text"
+                          placeholder="Try: Tirupati, Manali, Shimla, Goa, Kerala..."
+                          value={searchDestination}
+                          onChange={(e) => setSearchDestination(e.target.value)}
+                          className="w-full pl-16 pr-6 py-5 rounded-full bg-white text-gray-900 placeholder-gray-500 text-lg focus:outline-none focus:ring-4 focus:ring-white/30 shadow-2xl transition-all"
+                        />
                       </div>
-
-                      {/* State Selection Dropdown (Only for India) */}
-                      {selectedCountry === 'India' && (
-                        <div className="relative">
-                          <button
-                            onClick={() => {
-                              setShowStateDropdown(!showStateDropdown);
-                              setShowPlaceDropdown(false);
-                            }}
-                            className="w-full px-6 py-4 bg-white rounded-2xl text-left font-semibold text-gray-900 shadow-xl hover:shadow-2xl transition-all flex items-center justify-between"
-                          >
-                            <span>{selectedState || 'Select State'}</span>
-                            <Calendar className="h-5 w-5 text-gray-400" />
-                          </button>
-                          
-                          {showStateDropdown && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-2xl overflow-hidden z-30"
-                            >
-                              <div className="max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                                {availableStates.map((state, index) => (
-                                  <button
-                                    key={index}
-                                    onClick={() => {
-                                      setSelectedState(state);
-                                      setSearchDestination('');
-                                      setShowStateDropdown(false);
-                                      setShowPlaceDropdown(true);
-                                    }}
-                                    className="w-full text-left px-6 py-3 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0"
-                                  >
-                                    <p className="font-medium text-gray-900">{state}</p>
-                                  </button>
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Tourist Places Dropdown (Based on Selected State) */}
-                      {selectedCountry === 'India' && selectedState && (
-                        <div className="relative">
-                          <button
-                            onClick={() => setShowPlaceDropdown(!showPlaceDropdown)}
-                            className="w-full px-6 py-4 bg-white rounded-2xl text-left font-semibold text-gray-900 shadow-xl hover:shadow-2xl transition-all flex items-center justify-between"
-                          >
-                            <span>{searchDestination || 'Select Tourist Place'}</span>
-                            <Compass className="h-5 w-5 text-gray-400" />
-                          </button>
-                          
-                          {showPlaceDropdown && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-2xl overflow-hidden z-30"
-                            >
-                              <div className="max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                                {touristPlaces.map((place, index) => (
-                                  <button
-                                    key={index}
-                                    onClick={() => {
-                                      setSearchDestination(place);
-                                      setShowPlaceDropdown(false);
-                                    }}
-                                    className="w-full text-left px-6 py-3 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0 group"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className="p-2 rounded-lg bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                                        <Compass className="h-4 w-4 text-blue-600" />
-                                      </div>
-                                      <p className="font-medium text-gray-900">{place}</p>
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
+                    </motion.div>
 
                   {/* Popular Attractions Cards - Centered */}
                   {searchDestination && attractions.length > 0 ? (
@@ -1583,7 +1238,7 @@ const ChatRoomsList: React.FC = () => {
                                     </motion.h2>
                                     <button
                                       onClick={closeAttractionDetails}
-                                      className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex-shrink-0"
+                                      className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors shrink-0"
                                     >
                                       <X className="h-5 w-5 text-gray-700" />
                                     </button>
@@ -1642,7 +1297,7 @@ const ChatRoomsList: React.FC = () => {
                                           transition={{ delay: 0.6 + (idx * 0.1) }}
                                           className="flex items-start gap-2"
                                         >
-                                          <span className="text-orange-600 text-lg mt-1 flex-shrink-0">•</span>
+                                          <span className="text-orange-600 text-lg mt-1 shrink-0">•</span>
                                           <span className="text-sm text-gray-700">{feature}</span>
                                         </motion.li>
                                       ))}
@@ -1713,7 +1368,7 @@ const ChatRoomsList: React.FC = () => {
                                             onClick={() => setGallerySlideIndex(idx)}
                                             whileHover={{ scale: 1.1 }}
                                             whileTap={{ scale: 0.95 }}
-                                            className={`relative rounded-lg overflow-hidden transition-all duration-300 flex-shrink-0 w-20 h-[60px] ${
+                                            className={`relative rounded-lg overflow-hidden transition-all duration-300 shrink-0 w-20 h-15 ${
                                               gallerySlideIndex === idx 
                                                 ? 'ring-3 ring-orange-500 shadow-xl' 
                                                 : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
@@ -1891,7 +1546,7 @@ const ChatRoomsList: React.FC = () => {
                                               value={reviewText}
                                               onChange={(e) => setReviewText(e.target.value)}
                                               placeholder="Share your experience about this temple..."
-                                              className="min-h-[100px] text-sm resize-none"
+                                              className="min-h-25 text-sm resize-none"
                                               required
                                             />
                                           </div>
@@ -2085,7 +1740,7 @@ const ChatRoomsList: React.FC = () => {
                           </motion.h2>
                           <button
                             onClick={closeAttractionDetails}
-                            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex-shrink-0"
+                            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors shrink-0"
                           >
                             <X className="h-6 w-6 text-gray-700" />
                           </button>
@@ -2144,7 +1799,7 @@ const ChatRoomsList: React.FC = () => {
                                 transition={{ delay: 0.6 + (idx * 0.1) }}
                                 className="flex items-start gap-3"
                               >
-                                <span className="text-orange-600 text-xl mt-1 flex-shrink-0">•</span>
+                                <span className="text-orange-600 text-xl mt-1 shrink-0">•</span>
                                 <span className="text-base text-gray-700">{feature}</span>
                               </motion.li>
                             ))}
@@ -2215,7 +1870,7 @@ const ChatRoomsList: React.FC = () => {
                                   onClick={() => setGallerySlideIndex(idx)}
                                   whileHover={{ scale: 1.1 }}
                                   whileTap={{ scale: 0.95 }}
-                                  className={`relative rounded-lg overflow-hidden transition-all duration-300 w-[120px] h-[90px] ${
+                                  className={`relative rounded-lg overflow-hidden transition-all duration-300 w-30 h-22.5 ${
                                     gallerySlideIndex === idx 
                                       ? 'ring-4 ring-orange-500 shadow-xl' 
                                       : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
@@ -2251,27 +1906,27 @@ const ChatRoomsList: React.FC = () => {
                           </h3>
                           <div className="space-y-3 text-gray-700">
                             <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-[140px]">Timings:</span>
+                              <span className="font-semibold min-w-35">Timings:</span>
                               <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.timings}</span>
                             </div>
                             <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-[140px]">Entry Fee:</span>
+                              <span className="font-semibold min-w-35">Entry Fee:</span>
                               <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.entryFee}</span>
                             </div>
                             <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-[140px]">Dress Code:</span>
+                              <span className="font-semibold min-w-35">Dress Code:</span>
                               <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dresscode}</span>
                             </div>
                             <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-[140px]">Best Time:</span>
+                              <span className="font-semibold min-w-35">Best Time:</span>
                               <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.bestTimeToVisit}</span>
                             </div>
                             <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-[140px]">Daily Visitors:</span>
+                              <span className="font-semibold min-w-35">Daily Visitors:</span>
                               <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dailyVisitors}</span>
                             </div>
                             <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-[140px]">Special Days:</span>
+                              <span className="font-semibold min-w-35">Special Days:</span>
                               <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.specialDays}</span>
                             </div>
                           </div>
@@ -2405,7 +2060,7 @@ const ChatRoomsList: React.FC = () => {
                                     value={reviewText}
                                     onChange={(e) => setReviewText(e.target.value)}
                                     placeholder="Share your experience about this temple..."
-                                    className="min-h-[120px] resize-none"
+                                    className="min-h-30 resize-none"
                                     required
                                   />
                                 </div>
@@ -2476,13 +2131,14 @@ const ChatRoomsList: React.FC = () => {
                   <div className="w-full px-8">
                     {/* Title and Video Control */}
                     <motion.div
+                      ref={exploreOutdoorsRef}
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.4 }}
                       className="flex items-center justify-between"
                     >
                       <h1 className="text-5xl md:text-6xl font-bold text-white drop-shadow-2xl">
-                        Explore the outdoors
+                        Explore Your Interest...
                       </h1>
 
                       {/* Video Control */}
@@ -2562,7 +2218,7 @@ const ChatRoomsList: React.FC = () => {
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+              <DialogContent className="sm:max-w-137.5 max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
                     Create New Chat Room

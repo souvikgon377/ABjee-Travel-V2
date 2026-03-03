@@ -6,6 +6,8 @@ import { Users, BarChart3, Download, Settings } from 'lucide-react';
 interface QuickActionsProps {
   onAddUser: () => void;
   onExport: () => void;
+  onSettings?: () => void;
+  onViewChange?: (view: string) => void;
 }
 
 const actions = [
@@ -40,34 +42,46 @@ const actions = [
 ];
 
 export const QuickActions = memo(
-  ({ onAddUser, onExport }: QuickActionsProps) => {
+  ({ onAddUser, onExport, onSettings, onViewChange }: QuickActionsProps) => {
     const handleAction = (action: string) => {
       switch (action) {
         case 'addUser':
           onAddUser();
           break;
         case 'analytics':
-          // Scroll to analytics/revenue section
-          const analyticsSection = document.querySelector('[class*="revenue"]') || 
-                                  document.querySelector('[class*="chart"]');
-          if (analyticsSection) {
-            analyticsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Navigate to analytics view
+          if (onViewChange) {
+            onViewChange('analytics');
+          } else {
+            // Fallback to scrolling
+            const analyticsSection = document.querySelector('[class*="revenue"]') || 
+                                    document.querySelector('[class*="chart"]');
+            if (analyticsSection) {
+              analyticsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
           }
           if (import.meta.env.DEV) {
-            console.log('Scrolling to analytics section');
+            console.log('Navigating to analytics section');
           }
           break;
         case 'export':
           onExport();
           break;
         case 'settings':
-          // Navigate to settings section
-          window.location.hash = 'settings';
-          const settingsSection = document.getElementById('settings');
-          if (settingsSection) {
-            settingsSection.scrollIntoView({ behavior: 'smooth' });
+          // Call the settings handler if provided
+          if (onSettings) {
+            onSettings();
+          } else if (onViewChange) {
+            onViewChange('settings');
           } else {
-            alert('Settings: Configure dashboard preferences, notifications, and system options.');
+            // Fallback to scrolling behavior
+            window.location.hash = 'settings';
+            const settingsSection = document.getElementById('settings');
+            if (settingsSection) {
+              settingsSection.scrollIntoView({ behavior: 'smooth' });
+            } else {
+              alert('Settings: Configure dashboard preferences, notifications, and system options.');
+            }
           }
           if (import.meta.env.DEV) {
             console.log('Navigating to settings');
