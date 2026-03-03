@@ -1,46 +1,48 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import ChatRoom from '../models/ChatRoom.js';
-import User from '../models/User.js';
-import TravelPartnerRequest from '../models/TravelPartnerRequest.js';
+import { db, admin } from '../config/database.js';
 
 dotenv.config();
 
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/abjee-travel');
-    console.log('📦 MongoDB Connected');
-  } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
-    process.exit(1);
-  }
-};
+const timestamp = () => admin.firestore.FieldValue.serverTimestamp();
 
 const createDemoRooms = async () => {
   try {
-    // Create a demo admin user
-    let adminUser = await User.findOne({ email: 'admin@abjee.com' });
+    const adminEmail = 'admin@abjee.com';
+    const usersRef = db.collection('users');
+    const adminSnapshot = await usersRef.where('email', '==', adminEmail).limit(1).get();
+    let adminUserId = null;
     
-    if (!adminUser) {
-      adminUser = new User({
+    if (adminSnapshot.empty) {
+      const adminUserRef = usersRef.doc();
+      await adminUserRef.set({
+        firebaseUid: null,
         firstName: 'Admin',
         lastName: 'User',
         username: 'admin',
-        email: 'admin@abjee.com',
-        password: 'Admin123!',
+        displayName: 'Admin User',
+        email: adminEmail,
+        role: 'admin',
+        emailVerified: true,
         address: '123 Admin St',
         city: 'Admin City',
         zipCode: '12345',
         subscription: {
           type: 'premium',
           isActive: true
-        }
+        },
+        isActive: true,
+        createdAt: timestamp(),
+        updatedAt: timestamp(),
+        lastSeen: timestamp()
       });
-      await adminUser.save();
+      adminUserId = adminUserRef.id;
       console.log('✅ Created admin user');
+    } else {
+      adminUserId = adminSnapshot.docs[0].id;
     }
 
-    // Demo public rooms
+    const joinedAt = admin.firestore.Timestamp.now();
+
     const publicRooms = [
       {
         name: 'General Travel Chat',
@@ -48,7 +50,7 @@ const createDemoRooms = async () => {
         type: 'public',
         destination: { country: 'Global', region: 'Worldwide' },
         tags: ['general', 'travel', 'tips'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       },
       {
         name: 'Europe Backpackers',
@@ -56,7 +58,7 @@ const createDemoRooms = async () => {
         type: 'public',
         destination: { country: 'Europe', region: 'Multiple Countries' },
         tags: ['europe', 'backpacking', 'budget'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       },
       {
         name: 'Southeast Asia Adventures',
@@ -64,7 +66,7 @@ const createDemoRooms = async () => {
         type: 'public',
         destination: { country: 'Thailand', city: 'Bangkok', region: 'Southeast Asia' },
         tags: ['asia', 'adventure', 'culture'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       },
       {
         name: 'Japan Travel Guide',
@@ -72,7 +74,7 @@ const createDemoRooms = async () => {
         type: 'public',
         destination: { country: 'Japan', city: 'Tokyo' },
         tags: ['japan', 'culture', 'food'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       },
       {
         name: 'Solo Female Travelers',
@@ -80,7 +82,7 @@ const createDemoRooms = async () => {
         type: 'public',
         destination: { country: 'Global', region: 'Worldwide' },
         tags: ['solo', 'female', 'safety'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       },
       {
         name: 'Digital Nomads Hub',
@@ -88,11 +90,10 @@ const createDemoRooms = async () => {
         type: 'public',
         destination: { country: 'Global', region: 'Worldwide' },
         tags: ['nomad', 'remote-work', 'wifi'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       }
     ];
 
-    // Private rooms (for demo)
     const privateRooms = [
       {
         name: 'VIP Travel Lounge',
@@ -101,7 +102,7 @@ const createDemoRooms = async () => {
         subscriptionRequired: true,
         destination: { country: 'Global', region: 'Worldwide' },
         tags: ['vip', 'luxury', 'premium'],
-        createdBy: adminUser._id,
+        createdBy: adminUserId,
         maxMembers: 50
       },
       {
@@ -111,12 +112,11 @@ const createDemoRooms = async () => {
         subscriptionRequired: true,
         destination: { country: 'Global', region: 'Worldwide' },
         tags: ['luxury', 'resorts', 'reviews'],
-        createdBy: adminUser._id,
+        createdBy: adminUserId,
         maxMembers: 30
       }
     ];
 
-    // Travel partner rooms
     const travelPartnerRooms = [
       {
         name: 'Find Travel Buddies',
@@ -124,28 +124,36 @@ const createDemoRooms = async () => {
         type: 'travel_partner',
         destination: { country: 'Global', region: 'Worldwide' },
         tags: ['partners', 'buddies', 'companions'],
-        createdBy: adminUser._id
+        createdBy: adminUserId
       }
     ];
 
     const allRooms = [...publicRooms, ...privateRooms, ...travelPartnerRooms];
+    const roomsRef = db.collection('chatRooms');
 
     for (const roomData of allRooms) {
-      const existingRoom = await ChatRoom.findOne({ name: roomData.name });
+      const existingRoom = await roomsRef.where('name', '==', roomData.name).limit(1).get();
       
-      if (!existingRoom) {
-        const room = new ChatRoom(roomData);
-        
-        // Add admin as a member
-        room.members.push({
-          user: adminUser._id,
-          role: 'admin',
-          joinedAt: new Date(),
-          lastReadAt: new Date()
+      if (existingRoom.empty) {
+        const roomRef = roomsRef.doc();
+        await roomRef.set({
+          ...roomData,
+          id: roomRef.id,
+          members: [
+            {
+              user: adminUserId,
+              role: 'admin',
+              joinedAt,
+              lastReadAt: joinedAt
+            }
+          ],
+          isActive: true,
+          messageCount: 0,
+          createdAt: timestamp(),
+          updatedAt: timestamp(),
+          lastActivity: timestamp()
         });
-        
-        await room.save();
-        console.log(`✅ Created room: ${room.name}`);
+        console.log(`✅ Created room: ${roomData.name}`);
       } else {
         console.log(`⏭️  Room already exists: ${roomData.name}`);
       }
@@ -160,12 +168,15 @@ const createDemoRooms = async () => {
 
 const createDemoTravelRequests = async () => {
   try {
-    const adminUser = await User.findOne({ email: 'admin@abjee.com' });
-    if (!adminUser) return;
+    const adminSnapshot = await db.collection('users').where('email', '==', 'admin@abjee.com').limit(1).get();
+    if (adminSnapshot.empty) return;
+    const adminUserId = adminSnapshot.docs[0].id;
+
+    const requestsRef = db.collection('travelPartnerRequests');
 
     const demoRequests = [
       {
-        requester: adminUser._id,
+        requester: adminUserId,
         title: 'Looking for travel buddy to explore Japan',
         description: 'Planning a 2-week trip to Japan in spring 2024. Looking for someone to share the experience, split costs, and explore together. Interested in culture, food, and traditional sites.',
         destination: {
@@ -194,7 +205,7 @@ const createDemoTravelRequests = async () => {
         }
       },
       {
-        requester: adminUser._id,
+        requester: adminUserId,
         title: 'Backpacking through Southeast Asia',
         description: 'Planning a 3-month backpacking adventure through Thailand, Vietnam, Cambodia, and Laos. Looking for adventurous travel companions who love street food and off-the-beaten-path experiences.',
         destination: {
@@ -225,14 +236,24 @@ const createDemoTravelRequests = async () => {
     ];
 
     for (const requestData of demoRequests) {
-      const existingRequest = await TravelPartnerRequest.findOne({ 
-        title: requestData.title 
-      });
+      const existingRequest = await requestsRef.where('title', '==', requestData.title).limit(1).get();
       
-      if (!existingRequest) {
-        const request = new TravelPartnerRequest(requestData);
-        await request.save();
-        console.log(`✅ Created travel request: ${request.title}`);
+      if (existingRequest.empty) {
+        const requestRef = requestsRef.doc();
+        await requestRef.set({
+          ...requestData,
+          id: requestRef.id,
+          status: 'active',
+          responses: [],
+          matchedPartners: [],
+          isPublic: true,
+          allowDirectContact: true,
+          views: 0,
+          responseCount: 0,
+          createdAt: timestamp(),
+          updatedAt: timestamp()
+        });
+        console.log(`✅ Created travel request: ${requestData.title}`);
       } else {
         console.log(`⏭️  Travel request already exists: ${requestData.title}`);
       }
@@ -247,8 +268,7 @@ const createDemoTravelRequests = async () => {
 
 const setupDemo = async () => {
   console.log('🚀 Setting up ABjee Travel demo data...');
-  
-  await connectDB();
+
   await createDemoRooms();
   await createDemoTravelRequests();
   
