@@ -1,24 +1,27 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Users, Activity, DollarSign, Eye } from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
-import { RevenueChart } from '@/components/ui/revenue-chart';
-import { UsersTable } from '@/components/ui/users-table';
-import { ChatRoomsTable } from '@/components/ui/chatrooms-table';
 import { QuickActions } from '@/components/ui/quick-actions';
-import { SystemStatus } from '@/components/ui/system-status';
-import { RecentActivity } from '@/components/ui/recent-activity';
 import { DashboardHeader } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
-import { AddUserDialog } from '@/components/ui/add-user-dialog';
-import { SettingsDialog } from '@/components/ui/settings-dialog';
 import { adminAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
+const RevenueChart = lazy(() => import('@/components/ui/revenue-chart').then((module) => ({ default: module.RevenueChart })));
+const UsersTable = lazy(() => import('@/components/ui/users-table').then((module) => ({ default: module.UsersTable })));
+const ChatRoomsTable = lazy(() => import('@/components/ui/chatrooms-table').then((module) => ({ default: module.ChatRoomsTable })));
+const SystemStatus = lazy(() => import('@/components/ui/system-status').then((module) => ({ default: module.SystemStatus })));
+const RecentActivity = lazy(() => import('@/components/ui/recent-activity').then((module) => ({ default: module.RecentActivity })));
+const AddUserDialog = lazy(() => import('@/components/ui/add-user-dialog').then((module) => ({ default: module.AddUserDialog })));
+const SettingsDialog = lazy(() => import('@/components/ui/settings-dialog').then((module) => ({ default: module.SettingsDialog })));
+
+function SectionLoader() {
+  return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
+}
+
 export default function AdminDashboard() {
   const { userProfile } = useAuth();
-  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -210,7 +213,9 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
               {/* Charts Section */}
               <div id="analytics" className="space-y-4 sm:space-y-6 xl:col-span-2">
-                <RevenueChart />
+                <Suspense fallback={<SectionLoader />}>
+                  <RevenueChart />
+                </Suspense>
               </div>
 
               {/* Sidebar Section */}
@@ -222,10 +227,14 @@ export default function AdminDashboard() {
                   onViewChange={setCurrentView}
                 />
                 <div id="settings">
-                  <SystemStatus />
+                  <Suspense fallback={<SectionLoader />}>
+                    <SystemStatus />
+                  </Suspense>
                 </div>
                 <div id="activity">
-                  <RecentActivity />
+                  <Suspense fallback={<SectionLoader />}>
+                    <RecentActivity />
+                  </Suspense>
                 </div>
               </div>
             </div>
@@ -244,10 +253,12 @@ export default function AdminDashboard() {
               </p>
             </div>
 
-            <UsersTable 
-              onAddUser={handleAddUser} 
-              refreshTrigger={usersTableRefresh}
-            />
+            <Suspense fallback={<SectionLoader />}>
+              <UsersTable
+                onAddUser={handleAddUser}
+                refreshTrigger={usersTableRefresh}
+              />
+            </Suspense>
           </div>
         );
 
@@ -262,7 +273,9 @@ export default function AdminDashboard() {
                 View detailed analytics and insights
               </p>
             </div>
-            <RevenueChart />
+            <Suspense fallback={<SectionLoader />}>
+              <RevenueChart />
+            </Suspense>
           </div>
         );
 
@@ -277,7 +290,9 @@ export default function AdminDashboard() {
                 Monitor platform activity and user actions
               </p>
             </div>
-            <RecentActivity />
+            <Suspense fallback={<SectionLoader />}>
+              <RecentActivity />
+            </Suspense>
           </div>
         );
 
@@ -292,7 +307,9 @@ export default function AdminDashboard() {
                 Configure system preferences and options
               </p>
             </div>
-            <SystemStatus />
+            <Suspense fallback={<SectionLoader />}>
+              <SystemStatus />
+            </Suspense>
             <div className="mt-6">
               <button
                 onClick={handleSettings}
@@ -316,7 +333,9 @@ export default function AdminDashboard() {
               </p>
             </div>
 
-            <ChatRoomsTable />
+            <Suspense fallback={<SectionLoader />}>
+              <ChatRoomsTable />
+            </Suspense>
           </div>
         );
 
@@ -355,15 +374,17 @@ export default function AdminDashboard() {
         </div>
 
         {/* Dialogs */}
-        <AddUserDialog
-          open={showAddUserDialog}
-          onOpenChange={setShowAddUserDialog}
-          onUserAdded={handleUserAdded}
-        />
-        <SettingsDialog
-          open={showSettingsDialog}
-          onOpenChange={setShowSettingsDialog}
-        />
+        <Suspense fallback={null}>
+          <AddUserDialog
+            open={showAddUserDialog}
+            onOpenChange={setShowAddUserDialog}
+            onUserAdded={handleUserAdded}
+          />
+          <SettingsDialog
+            open={showSettingsDialog}
+            onOpenChange={setShowSettingsDialog}
+          />
+        </Suspense>
       </SidebarInset>
     </SidebarProvider>
   );

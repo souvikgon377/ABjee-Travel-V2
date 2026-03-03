@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -7,9 +7,21 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendPasswordResetEmail,
-  signInWithCustomToken,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
+
+const REQUEST_TIMEOUT_MS = 15000;
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 interface AuthContextType {
   currentUser: any | null;
@@ -18,7 +30,7 @@ interface AuthContextType {
   loading: boolean;
   signup: (email: string, password: string, additionalData?: any) => Promise<{ success: boolean; user: any }>;
   login: (email: string, password: string) => Promise<void>;
-  adminLogin: (email: string, password: string) => Promise<void>;
+  adminLogin: (email: string, password: string, requiredRole?: 'admin' | 'owner') => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -55,13 +67,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+
+  useEffect(() => {
+    const failSafeTimer = setTimeout(() => {
+      setLoading(false);
+    }, 8000);
+
+    return () => clearTimeout(failSafeTimer);
+  }, []);
 
   // Helper to get fresh token
   const refreshToken = useCallback(async (user = currentUser) => {
     if (!user) throw new Error('No authenticated user');
     try {
-      setIsRefreshing(true);
+      isRefreshingRef.current = true;
       const token = await user.getIdToken(true);
       localStorage.setItem('token', token);
       return token;
@@ -71,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       throw error;
     } finally {
-      setIsRefreshing(false);
+      isRefreshingRef.current = false;
     }
   }, [currentUser]);
 
@@ -83,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await refreshToken(user);
       
       // Check if profile exists
-      const checkResponse = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+      const checkResponse = await fetchWithTimeout(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -169,53 +189,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Admin login with Firebase email/password + role verification
-  const adminLogin = async (email: string, password: string) => {
+  const adminLogin = async (email: string, password: string, requiredRole: 'admin' | 'owner' = 'admin') => {
     try {
       if (import.meta.env.DEV) {
         console.log('[Auth] Initiating admin login...');
       }
 
-      let user: any;
-
-      try {
-        const signInResult = await signInWithEmailAndPassword(auth, email, password);
-        user = signInResult.user;
-      } catch (firebaseLoginError: any) {
-        // Fallback for legacy admins that are not yet present in Firebase Email/Password Auth
-        if (firebaseLoginError?.code !== 'auth/invalid-credential' && firebaseLoginError?.code !== 'auth/user-not-found') {
-          throw firebaseLoginError;
-        }
-
-        if (import.meta.env.DEV) {
-          console.log('[Auth] Firebase email/password failed, attempting admin custom-token fallback...');
-        }
-
-        const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/admin-login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result?.message || 'Invalid email or password.');
-        }
-
-        const customToken = result?.data?.customToken || result?.data?.token;
-        if (!customToken) {
-          throw new Error('Admin login succeeded but no Firebase custom token was returned.');
-        }
-
-        const signInResult = await signInWithCustomToken(auth, customToken);
-        user = signInResult.user;
-      }
+      const signInResult = await signInWithEmailAndPassword(auth, email, password);
+      const user = signInResult.user;
 
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
 
-      const profileResponse = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+      const profileResponse = await fetchWithTimeout(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -227,10 +213,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const role = profileResult?.data?.user?.role;
-      if (role !== 'admin' && role !== 'owner') {
+      const hasRequiredAccess = requiredRole === 'owner'
+        ? role === 'owner'
+        : role === 'admin' || role === 'owner';
+
+      if (!hasRequiredAccess) {
         await signOut(auth);
         localStorage.removeItem('token');
-        throw new Error('This account does not have admin access.');
+        throw new Error(`You are not ${requiredRole}. Please login as a user.`);
       }
 
       setUserProfile(profileResult.data.user);
@@ -241,6 +231,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       if (import.meta.env.DEV) {
         console.error('[Auth] Admin login error:', error);
+      }
+      if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/user-not-found' || error?.code === 'auth/wrong-password') {
+        throw new Error('Invalid email or password.');
       }
       throw new Error(error.message || 'Failed to log in as admin. Please try again.');
     }
@@ -324,7 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const token = await refreshToken();
-      const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/users/profile`, {
+      const response = await fetchWithTimeout(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/users/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -363,7 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // Set up periodic token refresh (30 minutes)
           refreshInterval = setInterval(async () => {
-            if (!isActive || isRefreshing) return;
+            if (!isActive || isRefreshingRef.current) return;
             try {
               const freshToken = await refreshToken(user);
               localStorage.setItem('token', freshToken);
@@ -376,7 +369,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // Load user profile
           try {
-            const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+            const response = await fetchWithTimeout(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
               headers: {
                 'Authorization': `Bearer ${token}`,
               },
@@ -389,7 +382,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await createUserProfile(user);
             }
           } catch (error) {
-            console.error('Error loading user profile:', error);
+            if (import.meta.env.DEV) {
+              console.error('Error loading user profile:', error);
+            }
             await createUserProfile(user);
           }
         } else {
@@ -414,7 +409,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearInterval(refreshInterval);
       }
     };
-  }, [refreshToken, isRefreshing]);
+  }, [refreshToken]);
 
   const value: AuthContextType = useMemo(() => ({
     currentUser,
@@ -443,7 +438,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }

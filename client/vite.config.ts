@@ -12,10 +12,6 @@ export default defineConfig({
       '.ngrok-free.app',
       '.ngrok.io'
     ],
-    headers: {
-      // Enable browser caching for static assets
-      'Cache-Control': 'public, max-age=31536000, immutable',
-    },
     hmr: {
       overlay: true
     },
@@ -26,6 +22,8 @@ export default defineConfig({
   resolve: {
     dedupe: ['react', 'react-dom'],
     alias: {
+      "react": path.resolve(__dirname, "./node_modules/react"),
+      "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
       "@": path.resolve(__dirname, "./src"),
     },
   },
@@ -63,8 +61,24 @@ export default defineConfig({
     assetsInlineLimit: 4096, // Inline assets smaller than 4KB
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'firebase/app', 'firebase/auth', 'firebase/database'],
-    force: true,
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'firebase/app',
+      'firebase/auth',
+      'firebase/database',
+      '@number-flow/react',
+      '@radix-ui/react-avatar',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-label',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-select',
+      '@radix-ui/react-switch',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-tooltip'
+    ],
     esbuildOptions: {
       target: 'es2020'
     }

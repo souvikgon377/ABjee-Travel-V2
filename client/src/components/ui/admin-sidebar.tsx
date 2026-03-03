@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   LayoutDashboard,
@@ -50,9 +51,27 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
   const { theme, setTheme } = useTheme();
   const { userProfile, logout } = useAuth();
   const navigate = useNavigate();
+  const { isMobile, setOpenMobile, setOpen } = useSidebar();
+
+  const closeSidebarOnSmallScreens = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+      return;
+    }
+
+    if (window.innerWidth < 1024) {
+      setOpen(false);
+    }
+  };
+
+  const handleViewChange = (view: string) => {
+    onViewChange(view);
+    closeSidebarOnSmallScreens();
+  };
 
   const handleLogout = async () => {
     try {
+      closeSidebarOnSmallScreens();
       await logout();
       navigate('/auth');
     } catch (error) {
@@ -61,6 +80,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
   };
 
   const handleBackToWebsite = () => {
+    closeSidebarOnSmallScreens();
     navigate('/');
   };
 
@@ -69,7 +89,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" onClick={() => onViewChange('dashboard')}>
+            <SidebarMenuButton size="lg" onClick={() => handleViewChange('dashboard')}>
               <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                 <LayoutDashboard className="h-5 w-5" />
               </div>
@@ -93,7 +113,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
                 return (
                   <SidebarMenuItem key={item.view}>
                     <SidebarMenuButton 
-                      onClick={() => onViewChange(item.view)}
+                      onClick={() => handleViewChange(item.view)}
                       isActive={isActive}
                       className={isActive ? 'bg-accent' : ''}
                     >
@@ -112,7 +132,10 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={() => {
+                setTheme(theme === 'dark' ? 'light' : 'dark');
+                closeSidebarOnSmallScreens();
+              }}
               className="w-full"
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

@@ -5,6 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 // Create axios instance
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -32,7 +33,9 @@ api.interceptors.response.use(
       // Token expired or invalid
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/';
+      if (window.location.pathname !== '/auth') {
+        window.location.href = '/auth';
+      }
     }
     return Promise.reject(error);
   }

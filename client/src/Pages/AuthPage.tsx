@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -13,9 +13,17 @@ export default function AuthPage() {
   const navigate = useNavigate();
 
   const location = useLocation();
+  const canAccessAdmin = userProfile?.role === 'admin' || userProfile?.role === 'owner';
+
+  useEffect(() => {
+    if (currentUser && canAccessAdmin) {
+      navigate('/admin', { replace: true });
+    }
+  }, [currentUser, canAccessAdmin, navigate]);
+
   const handleAuthComplete = () => {
     // Check if user has admin role and redirect to admin dashboard
-    if (userProfile?.role === 'admin' || userProfile?.role === 'owner') {
+    if (canAccessAdmin) {
       navigate('/admin');
       return;
     }
@@ -70,10 +78,10 @@ export default function AuthPage() {
 
             <div className="space-y-4">
               <Button
-                onClick={() => navigate('/chat')}
+                onClick={() => navigate(canAccessAdmin ? '/admin' : '/chat')}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
-                Go to Community Chat
+                {canAccessAdmin ? 'Go to Admin Dashboard' : 'Go to Community Chat'}
               </Button>
               <Button
                 onClick={handleLogout}

@@ -3,6 +3,22 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+
+  const reloadKey = 'vite-preload-error-reloaded';
+  const alreadyReloaded = sessionStorage.getItem(reloadKey) === '1';
+
+  if (!alreadyReloaded) {
+    sessionStorage.setItem(reloadKey, '1');
+    window.location.reload();
+  }
+});
+
+window.addEventListener('load', () => {
+  sessionStorage.removeItem('vite-preload-error-reloaded');
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

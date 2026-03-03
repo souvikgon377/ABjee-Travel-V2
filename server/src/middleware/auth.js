@@ -2,6 +2,49 @@ import admin from '../config/firebase-admin.js';
 import userService from '../models/User.js';
 import { db } from '../config/database.js';
 
+const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000;
+const LAST_SEEN_UPDATE_MS = 2 * 60 * 1000;
+let adminRoleCache = new Map();
+let adminRoleCacheLoadedAt = 0;
+
+const shouldUpdateLastSeen = (lastSeen) => {
+  if (!lastSeen) return true;
+  const value = lastSeen instanceof Date ? lastSeen : new Date(lastSeen);
+  if (Number.isNaN(value.getTime())) return true;
+  return Date.now() - value.getTime() > LAST_SEEN_UPDATE_MS;
+};
+
+const getRoleFromTokenClaims = (decodedToken) => {
+  const tokenRole = decodedToken?.role;
+  return tokenRole === 'admin' || tokenRole === 'owner' ? tokenRole : null;
+};
+
+const getCachedAdminRole = async (normalizedEmail) => {
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const now = Date.now();
+  if (now - adminRoleCacheLoadedAt > ADMIN_CACHE_TTL_MS) {
+    const allAdminsSnapshot = await db.collection('admins').get();
+    const nextCache = new Map();
+
+    allAdminsSnapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      const email = (data?.email || '').toLowerCase();
+      if (!email) return;
+
+      const role = data?.role;
+      nextCache.set(email, role === 'owner' ? 'owner' : 'admin');
+    });
+
+    adminRoleCache = nextCache;
+    adminRoleCacheLoadedAt = now;
+  }
+
+  return adminRoleCache.get(normalizedEmail) || null;
+};
+
 // Authentication middleware
 const authenticate = async (req, res, next) => {
   try {
@@ -22,42 +65,10 @@ const authenticate = async (req, res, next) => {
       
       const normalizedEmail = (decodedToken.email || '').toLowerCase();
 
-      // Resolve elevated role from admins collection (Firebase-driven admin access)
-      let elevatedRole = null;
-      const tokenRole = decodedToken?.role;
-      if (tokenRole === 'admin' || tokenRole === 'owner') {
-        elevatedRole = tokenRole;
-      }
-
-      if (normalizedEmail) {
-        let adminSnapshot = await db
-          .collection('admins')
-          .where('email', '==', normalizedEmail)
-          .limit(1)
-          .get();
-
-        // Fallback for legacy mixed-case email values in admins collection
-        if (adminSnapshot.empty) {
-          const allAdmins = await db.collection('admins').get();
-          const matchedAdmin = allAdmins.docs.find((doc) => {
-            const data = doc.data();
-            return (data?.email || '').toLowerCase() === normalizedEmail;
-          });
-
-          if (matchedAdmin) {
-            adminSnapshot = { empty: false, docs: [matchedAdmin] };
-          }
-        }
-
-        if (!adminSnapshot.empty) {
-          const adminData = adminSnapshot.docs[0].data();
-          const candidateRole = adminData?.role;
-          if (candidateRole === 'admin' || candidateRole === 'owner') {
-            elevatedRole = candidateRole;
-          } else {
-            elevatedRole = 'admin';
-          }
-        }
+      // Resolve elevated role from token first, then cached admins collection fallback
+      let elevatedRole = getRoleFromTokenClaims(decodedToken);
+      if (!elevatedRole && normalizedEmail) {
+        elevatedRole = await getCachedAdminRole(normalizedEmail);
       }
 
       // Get or create user in our database
@@ -116,8 +127,10 @@ const authenticate = async (req, res, next) => {
         });
       }
       
-      // Update user's last seen
-      await userService.update(user.id, { lastSeen: new Date() });
+      // Update user's last seen (throttled to reduce write pressure)
+      if (shouldUpdateLastSeen(user.lastSeen)) {
+        await userService.update(user.id, { lastSeen: new Date() });
+      }
       
       // Attach user to request object
       req.user = user;
@@ -157,7 +170,9 @@ const optionalAuth = async (req, res, next) => {
       const user = await userService.findByFirebaseUid(decodedToken.uid);
       
       if (user && user.isActive) {
-        await userService.update(user.id, { lastSeen: new Date() });
+        if (shouldUpdateLastSeen(user.lastSeen)) {
+          await userService.update(user.id, { lastSeen: new Date() });
+        }
         req.user = user;
       } else {
         req.user = null;

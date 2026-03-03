@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Progress } from '../../components/ui/progress';
-import { CheckCircle2, ArrowRight, ArrowLeft, Mail, Lock, User, MapPin, Shield } from 'lucide-react';
+import { CheckCircle2, ArrowRight, ArrowLeft, Mail, Lock, User, MapPin, Shield, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleSignInButton from './GoogleSignInButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -82,8 +82,9 @@ export default function AuthMultiStepForm({
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<string>('user');
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
-  const { signup, login, adminLogin, loginWithGoogle } = useAuth();
+  const { signup, login, adminLogin, loginWithGoogle, logout } = useAuth();
 
   // Define the steps for signup
   const signupSteps = [
@@ -243,10 +244,47 @@ export default function AuthMultiStepForm({
       setError('');
       setIsSubmitting(true);
       await loginWithGoogle();
+
+      if (mode === 'login' && (selectedRole === 'admin' || selectedRole === 'owner')) {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication token not found. Please try again.');
+        }
+
+        const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result?.message || 'Failed to verify account role.');
+        }
+
+        const role = result?.data?.user?.role;
+        const hasAdminAccess = selectedRole === 'owner'
+          ? role === 'owner'
+          : role === 'admin' || role === 'owner';
+
+        if (!hasAdminAccess) {
+          await logout();
+          throw new Error(`You are not ${selectedRole}. Please login as a user.`);
+        }
+
+        setIsComplete(true);
+        window.location.href = '/admin';
+        return;
+      }
+
       setIsComplete(true);
       if (onComplete) onComplete();
     } catch (error: any) {
-      setError(error.message || 'Failed to sign in with Google');
+      const errorMessage = error.message || 'Failed to sign in with Google';
+      setError(errorMessage);
+      if (errorMessage.includes('Please login as a user.')) {
+        alert(errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -264,7 +302,7 @@ const handleNextStep = async (data: any) => {
       
       // Use adminLogin for admin and owner roles
       if (selectedRole === 'admin' || selectedRole === 'owner') {
-        await adminLogin(data.email, data.password);
+        await adminLogin(data.email, data.password, selectedRole);
         setIsComplete(true);
         // Navigate to admin dashboard instead of calling onComplete
         window.location.href = '/admin';
@@ -297,8 +335,12 @@ const handleNextStep = async (data: any) => {
       if (onComplete) onComplete();
     }
   } catch (error: any) {
-    // This will catch and display the specific error message from signup
-    setError(error.message || 'Failed to create account. Please try again.');
+    // This will catch and display the specific error message from signup/login
+    const errorMessage = error.message || 'Failed to create account. Please try again.';
+    setError(errorMessage);
+    if (errorMessage.includes('Please login as a user.')) {
+      alert(errorMessage);
+    }
     if (import.meta.env.DEV) {
       console.error('Authentication error:', error);
     }
@@ -313,6 +355,13 @@ const handleNextStep = async (data: any) => {
     if (step > 0) {
       setStep(step - 1);
     }
+  };
+
+  const togglePasswordVisibility = (fieldName: string) => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [fieldName]: !prev[fieldName],
+    }));
   };
 
   // Animation variants
@@ -393,39 +442,26 @@ const handleNextStep = async (data: any) => {
                 </p>
               </div>
 
-              {/* Google Sign In Button - Only show for regular users, not for admin/owner */}
-              {!(mode === 'login' && (selectedRole === 'admin' || selectedRole === 'owner')) && (
-                <>
-                  <div className="mb-6">
-                    <GoogleSignInButton 
-                      onClick={handleGoogleSignIn}
-                      disabled={isSubmitting}
-                      text={mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
-                    />
-                  </div>
-
-                  <div className="relative mb-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300 dark:border-gray-600" />
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
-                        Or continue with email
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Info message for admin/owner login */}
-              {mode === 'login' && (selectedRole === 'admin' || selectedRole === 'owner') && (
-                <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <p className="text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    {selectedRole === 'admin' ? 'Admin' : 'Owner'} login requires email and password authentication only.
-                  </p>
+              <>
+                <div className="mb-6">
+                  <GoogleSignInButton 
+                    onClick={handleGoogleSignIn}
+                    disabled={isSubmitting}
+                    text={mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
+                  />
                 </div>
-              )}
+
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
+                      Or continue with email
+                    </span>
+                  </div>
+                </div>
+              </>
 
               {error && (
                 <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -485,14 +521,29 @@ const handleNextStep = async (data: any) => {
                         </div>
                         <Input
                           id={field.name}
-                          type={field.type}
+                          type={field.type === 'password' && showPasswords[field.name] ? 'text' : field.type}
                           placeholder={field.placeholder}
                           {...register(field.name as any)}
                           className={cn(
                             'pl-10 h-12 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                            field.type === 'password' && 'pr-12',
                             errors[field.name as string] && 'border-red-500 focus:ring-red-500',
                           )}
                         />
+                        {field.type === 'password' && (
+                          <button
+                            type="button"
+                            onClick={() => togglePasswordVisibility(field.name)}
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            aria-label={showPasswords[field.name] ? 'Hide password' : 'Show password'}
+                          >
+                            {showPasswords[field.name] ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        )}
                       </div>
                       {errors[field.name as string] && (
                         <p className="text-red-500 text-sm flex items-center gap-1">
