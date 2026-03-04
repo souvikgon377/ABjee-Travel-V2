@@ -12,7 +12,7 @@ import travelPartnerRoutes from './routes/travel-partners.js';
 import adminRoutes from './routes/admin.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-// Load environment variables
+// Load environment variables from .env file
 dotenv.config();
 
 const app = express();
