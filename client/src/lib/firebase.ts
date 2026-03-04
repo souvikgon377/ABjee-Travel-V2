@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
+import { getFirestore } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 // You'll need to replace these with your actual Firebase config values
@@ -25,5 +26,8 @@ export const googleProvider = new GoogleAuthProvider();
 
 // Initialize Realtime Database (for messages only)
 export const database = getDatabase(app);
+
+// Initialize Firestore (for users, subscriptions, etc.)
+export const firestoreDb = getFirestore(app);
 
 export default app;
