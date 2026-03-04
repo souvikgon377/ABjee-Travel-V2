@@ -1,14 +1,22 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Users, Activity, DollarSign, Eye } from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
 import { QuickActions } from '@/components/ui/quick-actions';
-import { DashboardHeader } from '@/components/ui/dashboard-header';
+import { DashboardHeader, DEFAULT_FILTERS, type DashboardFilters } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getCountFromServer, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, getCountFromServer, getDocs } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { firestoreDb, database } from '@/lib/firebase';
+
+// ── Static stat shape (reset between fetches) ──────────────────────────────
+const STAT_DEFAULTS = [
+  { title: 'Total Users',      value: '0',  change: '+0%', changeType: 'positive' as const, icon: Users,       color: 'text-blue-500',   bgColor: 'bg-blue-500/10'   },
+  { title: 'Revenue',          value: '$0', change: '+0%', changeType: 'positive' as const, icon: DollarSign,  color: 'text-green-500',  bgColor: 'bg-green-500/10'  },
+  { title: 'Active Sessions',  value: '0',  change: '+0%', changeType: 'positive' as const, icon: Activity,    color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  { title: 'Page Views',       value: '0',  change: '+0%', changeType: 'negative' as const, icon: Eye,         color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
+];
 
 const RevenueChart = lazy(() => import('@/components/ui/revenue-chart').then((module) => ({ default: module.RevenueChart })));
 const UsersTable = lazy(() => import('@/components/ui/users-table').then((module) => ({ default: module.UsersTable })));
@@ -17,6 +25,7 @@ const SystemStatus = lazy(() => import('@/components/ui/system-status').then((mo
 const RecentActivity = lazy(() => import('@/components/ui/recent-activity').then((module) => ({ default: module.RecentActivity })));
 const AddUserDialog = lazy(() => import('@/components/ui/add-user-dialog').then((module) => ({ default: module.AddUserDialog })));
 const SettingsDialog = lazy(() => import('@/components/ui/settings-dialog').then((module) => ({ default: module.SettingsDialog })));
+const ExportDialog  = lazy(() => import('@/components/ui/export-dialog').then((module) => ({ default: module.ExportDialog })));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -29,148 +38,80 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddUserDialog, setShowAddUserDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showExportDialog,   setShowExportDialog]   = useState(false);
   const [usersTableRefresh, setUsersTableRefresh] = useState(0);
-  const [stats, setStats] = useState([
-    {
-      title: 'Total Users',
-      value: '0',
-      change: '+0%',
-      changeType: 'positive' as const,
-      icon: Users,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-500/10',
-    },
-    {
-      title: 'Revenue',
-      value: '$0',
-      change: '+0%',
-      changeType: 'positive' as const,
-      icon: DollarSign,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-    },
-    {
-      title: 'Active Sessions',
-      value: '0',
-      change: '+0%',
-      changeType: 'positive' as const,
-      icon: Activity,
-      color: 'text-purple-500',
-      bgColor: 'bg-purple-500/10',
-    },
-    {
-      title: 'Page Views',
-      value: '0',
-      change: '+0%',
-      changeType: 'negative' as const,
-      icon: Eye,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-500/10',
-    },
-  ]);
+  const [activeFilters, setActiveFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
+
+  const handleFilterChange = useCallback((filters: DashboardFilters) => {
+    setActiveFilters(filters);
+  }, []);
+  const [stats, setStats] = useState(STAT_DEFAULTS);
   const [loading, setLoading] = useState(true);
 
-  // Fetch dashboard stats — reads directly from Firestore + RTDB (no server needed)
+  // Fetch all 4 sources in parallel — one failure never affects the rest
   const fetchStats = useCallback(async () => {
-    try {
-      // ── Total Users (Firestore `users` collection) ────────────────────────
-      const usersCol = collection(firestoreDb, 'users');
-      const totalUsersSnap = await getCountFromServer(usersCol);
-      const totalUsers = totalUsersSnap.data().count;
+    const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
 
-      // ── Active Users (Firestore users active in last 30 days) ────────────
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      let activeUsers = 0;
-      try {
-        const activeSnap = await getCountFromServer(
-          query(usersCol, where('lastSeen', '>', Timestamp.fromDate(thirtyDaysAgo)))
-        );
-        activeUsers = activeSnap.data().count;
-      } catch {
-        // lastSeen may not be indexed — fall back to counting RTDB status nodes
-        const statusSnap = await get(ref(database, 'status'));
-        const statusData = statusSnap.val();
-        if (statusData) {
-          activeUsers = Object.values(statusData).filter((s: any) =>
-            s?.lastSeen && s.lastSeen > thirtyDaysAgo.getTime()
-          ).length;
-        }
+    const [usersResult, statusResult, subsResult, pvResult] = await Promise.allSettled([
+      // 1. Total Users (Firestore)
+      getCountFromServer(collection(firestoreDb, 'users')),
+      // 2. Active Sessions (RTDB status nodes)
+      get(ref(database, 'status')),
+      // 3. Revenue (Firestore subscriptions)
+      getDocs(collection(firestoreDb, 'subscriptions')),
+      // 4. Page Views (RTDB analytics/pageViews)
+      get(ref(database, 'analytics/pageViews')),
+    ]);
+
+    // 1. Total Users
+    const totalUsers = usersResult.status === 'fulfilled' ? usersResult.value.data().count : 0;
+    if (usersResult.status === 'rejected' && import.meta.env.DEV)
+      console.warn('Total users fetch failed:', usersResult.reason);
+
+    // 2. Active Sessions
+    let activeUsers = 0;
+    if (statusResult.status === 'fulfilled') {
+      const data = statusResult.value.val();
+      if (data) {
+        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+        activeUsers = Object.values(data).filter(
+          (s: any) => s?.isOnline || (s?.lastSeen && s.lastSeen > fiveMinAgo)
+        ).length;
       }
+    } else if (import.meta.env.DEV) {
+      console.warn('Active sessions fetch failed:', statusResult.reason);
+    }
 
-      // ── Revenue + Subscriptions (Firestore `subscriptions` collection) ───
-      const subsSnap = await getDocs(collection(firestoreDb, 'subscriptions'));
+    // 3. Revenue
+    let totalRevenue = 0;
+    let activeSubCount = 0;
+    if (subsResult.status === 'fulfilled') {
       const now = new Date();
-      const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
-      let totalRevenue = 0;
-      let activeSubCount = 0;
-      subsSnap.forEach((doc) => {
-        const sub = doc.data();
-        const expiresAt = sub.expiresAt?.toDate?.() ?? (sub.expiresAt ? new Date(sub.expiresAt) : null);
-        if (expiresAt && expiresAt > now) {
-          totalRevenue += prices[sub.type] || 0;
+      subsResult.value.forEach((d) => {
+        const sub = d.data();
+        if (sub.status !== 'active') return;
+        const endDate = sub.endDate?.toDate?.() ?? (sub.endDate ? new Date(sub.endDate) : null);
+        if (!endDate || endDate > now) {
+          totalRevenue += sub.plan?.price?.amount ?? prices[sub.plan?.type] ?? 0;
           activeSubCount++;
         }
       });
-
-      // ── Page Views — live RTDB counter ───────────────────────────────────
-      // Stored as analytics/pageViews; incremented by the main app on each load
-      let pageViews = 0;
-      try {
-        const pvSnap = await get(ref(database, 'analytics/pageViews'));
-        pageViews = pvSnap.val() || 0;
-      } catch { /* leave 0 */ }
-
-      // ── User growth ( active / total ) ───────────────────────────────────
-      const growthPct = totalUsers > 0
-        ? ((activeUsers / totalUsers) * 100).toFixed(1)
-        : '0';
-
-      setStats([
-        {
-          title: 'Total Users',
-          value: totalUsers.toLocaleString(),
-          change: `+${growthPct}%`,
-          changeType: 'positive' as const,
-          icon: Users,
-          color: 'text-blue-500',
-          bgColor: 'bg-blue-500/10',
-        },
-        {
-          title: 'Revenue',
-          value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          change: `+${totalRevenue > 0 ? '0' : '0'}%`,
-          changeType: totalRevenue > 0 ? 'positive' as const : 'positive' as const,
-          icon: DollarSign,
-          color: 'text-green-500',
-          bgColor: 'bg-green-500/10',
-        },
-        {
-          title: 'Active Users',
-          value: activeUsers.toLocaleString(),
-          change: `${activeSubCount} subs`,
-          changeType: 'positive' as const,
-          icon: Activity,
-          color: 'text-purple-500',
-          bgColor: 'bg-purple-500/10',
-        },
-        {
-          title: 'Page Views',
-          value: pageViews.toLocaleString(),
-          change: '+0%',
-          changeType: 'positive' as const,
-          icon: Eye,
-          color: 'text-orange-500',
-          bgColor: 'bg-orange-500/10',
-        },
-      ]);
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('Failed to fetch stats:', error);
-      }
-    } finally {
-      setLoading(false);
+    } else if (import.meta.env.DEV) {
+      console.warn('Revenue fetch failed:', subsResult.reason);
     }
+
+    // 4. Page Views
+    const pageViews = pvResult.status === 'fulfilled' ? (pvResult.value.val() || 0) : 0;
+    if (pvResult.status === 'rejected' && import.meta.env.DEV)
+      console.warn('Page views fetch failed:', pvResult.reason);
+
+    setStats([
+      { ...STAT_DEFAULTS[0], value: totalUsers.toLocaleString(),                               change: totalUsers > 0 ? `${totalUsers} registered` : '+0%' },
+      { ...STAT_DEFAULTS[1], value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, change: activeSubCount > 0 ? `${activeSubCount} active subs` : '+0%' },
+      { ...STAT_DEFAULTS[2], value: activeUsers.toLocaleString(),                              change: activeUsers > 0 ? `${activeUsers} online` : '+0%' },
+      { ...STAT_DEFAULTS[3], value: pageViews.toLocaleString(),                                change: pageViews > 0 ? `${pageViews} total` : '+0%', changeType: 'positive' as const },
+    ]);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -184,33 +125,8 @@ export default function AdminDashboard() {
   }, [fetchStats]);
 
   const handleExport = useCallback(() => {
-    try {
-      // Export dashboard data as JSON
-      const exportData = {
-        exportDate: new Date().toISOString(),
-        stats: stats.map(s => ({ title: s.title, value: s.value, change: s.change })),
-        timestamp: Date.now()
-      };
-      
-      const dataStr = JSON.stringify(exportData, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `abjee-travel-dashboard-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      if (import.meta.env.DEV) {
-        console.log('Dashboard data exported successfully');
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export data. Please try again.');
-    }
-  }, [stats]);
+    setShowExportDialog(true);
+  }, []);
 
   const handleAddUser = useCallback(() => {
     // Open the Add User dialog
@@ -229,18 +145,7 @@ export default function AdminDashboard() {
     setUsersTableRefresh(prev => prev + 1);
   }, [fetchStats]);
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const renderView = () => {
+  const renderView = useMemo(() => {
     switch (currentView) {
       case 'dashboard':
         return (
@@ -309,6 +214,8 @@ export default function AdminDashboard() {
               <UsersTable
                 onAddUser={handleAddUser}
                 refreshTrigger={usersTableRefresh}
+                externalRoleFilter={activeFilters.userRole}
+                externalStatusFilter={activeFilters.userStatus}
               />
             </Suspense>
           </div>
@@ -405,7 +312,8 @@ export default function AdminDashboard() {
           </div>
         );
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, stats, userProfile, handleAddUser, handleExport, handleSettings, activeFilters, usersTableRefresh]);
 
   return (
     <SidebarProvider>
@@ -417,11 +325,21 @@ export default function AdminDashboard() {
           onRefresh={handleRefresh}
           onExport={handleExport}
           isRefreshing={isRefreshing}
+          currentView={currentView}
+          activeFilters={activeFilters}
+          onFilterChange={handleFilterChange}
         />
 
         <div className="flex flex-1 flex-col gap-2 p-2 pt-0 sm:gap-4 sm:p-4">
           <div className="min-h-[calc(100vh-4rem)] flex-1 rounded-lg p-3 sm:rounded-xl sm:p-4 md:p-6">
-            {renderView()}
+            {loading ? (
+              <div className="flex h-full min-h-[60vh] items-center justify-center">
+                <div className="text-center">
+                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+                  <p className="text-muted-foreground">Loading dashboard...</p>
+                </div>
+              </div>
+            ) : renderView}
           </div>
         </div>
 
@@ -435,6 +353,11 @@ export default function AdminDashboard() {
           <SettingsDialog
             open={showSettingsDialog}
             onOpenChange={setShowSettingsDialog}
+          />
+          <ExportDialog
+            open={showExportDialog}
+            onOpenChange={setShowExportDialog}
+            stats={stats.map(s => ({ title: s.title, value: s.value, change: s.change }))}
           />
         </Suspense>
       </SidebarInset>

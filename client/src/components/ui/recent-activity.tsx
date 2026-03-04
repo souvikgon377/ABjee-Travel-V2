@@ -1,6 +1,6 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, MessageSquare, UserPlus, Shield } from 'lucide-react';
+import { User, MessageSquare, UserPlus } from 'lucide-react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { firestoreDb, database } from '@/lib/firebase';
@@ -22,8 +22,7 @@ export const RecentActivity = memo(() => {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchActivity = async () => {
+  const fetchActivity = useCallback(async () => {
       try {
         const combined: any[] = [];
 
@@ -96,10 +95,9 @@ export const RecentActivity = memo(() => {
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchActivity();
   }, []);
+
+  useEffect(() => { fetchActivity(); }, [fetchActivity]);
 
   if (loading) {
     return (
