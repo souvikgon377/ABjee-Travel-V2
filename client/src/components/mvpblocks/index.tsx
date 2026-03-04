@@ -5,8 +5,10 @@ import { DashboardCard } from '@/components/ui/dashboard-card';
 import { QuickActions } from '@/components/ui/quick-actions';
 import { DashboardHeader } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
-import { adminAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { collection, getCountFromServer, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { ref, get } from 'firebase/database';
+import { firestoreDb, database } from '@/lib/firebase';
 
 const RevenueChart = lazy(() => import('@/components/ui/revenue-chart').then((module) => ({ default: module.RevenueChart })));
 const UsersTable = lazy(() => import('@/components/ui/users-table').then((module) => ({ default: module.UsersTable })));
@@ -68,17 +70,67 @@ export default function AdminDashboard() {
   ]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch dashboard stats
+  // Fetch dashboard stats — reads directly from Firestore + RTDB (no server needed)
   const fetchStats = useCallback(async () => {
     try {
-      const response = await adminAPI.getStats();
-      const data = response.data.data;
+      // ── Total Users (Firestore `users` collection) ────────────────────────
+      const usersCol = collection(firestoreDb, 'users');
+      const totalUsersSnap = await getCountFromServer(usersCol);
+      const totalUsers = totalUsersSnap.data().count;
+
+      // ── Active Users (Firestore users active in last 30 days) ────────────
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      let activeUsers = 0;
+      try {
+        const activeSnap = await getCountFromServer(
+          query(usersCol, where('lastSeen', '>', Timestamp.fromDate(thirtyDaysAgo)))
+        );
+        activeUsers = activeSnap.data().count;
+      } catch {
+        // lastSeen may not be indexed — fall back to counting RTDB status nodes
+        const statusSnap = await get(ref(database, 'status'));
+        const statusData = statusSnap.val();
+        if (statusData) {
+          activeUsers = Object.values(statusData).filter((s: any) =>
+            s?.lastSeen && s.lastSeen > thirtyDaysAgo.getTime()
+          ).length;
+        }
+      }
+
+      // ── Revenue + Subscriptions (Firestore `subscriptions` collection) ───
+      const subsSnap = await getDocs(collection(firestoreDb, 'subscriptions'));
+      const now = new Date();
+      const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
+      let totalRevenue = 0;
+      let activeSubCount = 0;
+      subsSnap.forEach((doc) => {
+        const sub = doc.data();
+        const expiresAt = sub.expiresAt?.toDate?.() ?? (sub.expiresAt ? new Date(sub.expiresAt) : null);
+        if (expiresAt && expiresAt > now) {
+          totalRevenue += prices[sub.type] || 0;
+          activeSubCount++;
+        }
+      });
+
+      // ── Page Views — live RTDB counter ───────────────────────────────────
+      // Stored as analytics/pageViews; incremented by the main app on each load
+      let pageViews = 0;
+      try {
+        const pvSnap = await get(ref(database, 'analytics/pageViews'));
+        pageViews = pvSnap.val() || 0;
+      } catch { /* leave 0 */ }
+
+      // ── User growth ( active / total ) ───────────────────────────────────
+      const growthPct = totalUsers > 0
+        ? ((activeUsers / totalUsers) * 100).toFixed(1)
+        : '0';
 
       setStats([
         {
           title: 'Total Users',
-          value: data.totalUsers.toLocaleString(),
-          change: `+${data.stats.users.growth}%`,
+          value: totalUsers.toLocaleString(),
+          change: `+${growthPct}%`,
           changeType: 'positive' as const,
           icon: Users,
           color: 'text-blue-500',
@@ -86,17 +138,17 @@ export default function AdminDashboard() {
         },
         {
           title: 'Revenue',
-          value: `$${parseFloat(data.revenue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          change: `+${data.stats.revenue.growth}%`,
-          changeType: parseFloat(data.stats.revenue.growth) >= 0 ? 'positive' as const : 'negative' as const,
+          value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          change: `+${totalRevenue > 0 ? '0' : '0'}%`,
+          changeType: totalRevenue > 0 ? 'positive' as const : 'positive' as const,
           icon: DollarSign,
           color: 'text-green-500',
           bgColor: 'bg-green-500/10',
         },
         {
           title: 'Active Users',
-          value: data.activeUsers.toLocaleString(),
-          change: `${data.activeSubscriptions} subs`,
+          value: activeUsers.toLocaleString(),
+          change: `${activeSubCount} subs`,
           changeType: 'positive' as const,
           icon: Activity,
           color: 'text-purple-500',
@@ -104,8 +156,8 @@ export default function AdminDashboard() {
         },
         {
           title: 'Page Views',
-          value: data.pageViews.toLocaleString(),
-          change: '+5.2%',
+          value: pageViews.toLocaleString(),
+          change: '+0%',
           changeType: 'positive' as const,
           icon: Eye,
           color: 'text-orange-500',

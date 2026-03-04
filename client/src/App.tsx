@@ -1,8 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { ThemeProvider } from './components/mvpblocks/theme-provider'
 import { AuthProvider } from './contexts/AuthContext'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { lazyWithRetry } from './lib/lazyWithRetry'
+import { ref, increment, update } from 'firebase/database';
+import { database } from './lib/firebase';
 
 // Lazy load pages
 const LandingPage = lazyWithRetry(() => import('./Pages/LandingPage'))
@@ -24,6 +26,11 @@ const LoadingFallback = () => (
 )
 
 function App() {
+  // Increment page-view counter once per app load (tracked in RTDB analytics node)
+  useEffect(() => {
+    update(ref(database, 'analytics'), { pageViews: increment(1) }).catch(() => {});
+  }, []);
+
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <AuthProvider>
