@@ -10,8 +10,11 @@ const router = express.Router();
 // @access  Private
 router.get('/profile', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
-    
+    // req.user is already populated by the authenticate middleware
+    const { id, ...userData } = req.user;
+    const user = { id, ...userData };
+    delete user.password;
+
     res.json({
       success: true,
       data: { user }
@@ -58,11 +61,8 @@ router.put('/profile', authenticate, [
       }
     });
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      updates,
-      { new: true, runValidators: true }
-    ).select('-password');
+    const user = await userService.update(req.user.id, updates);
+    if (user) delete user.password;
 
     res.json({
       success: true,
@@ -84,39 +84,44 @@ router.put('/profile', authenticate, [
 // @access  Private
 router.get('/search', authenticate, async (req, res) => {
   try {
-    const { q, interests, destination, page = 1, limit = 20 } = req.query;
+    const { q, page = 1, limit = 50 } = req.query;
 
-    let query = { 
-      isActive: true,
-      _id: { $ne: req.user._id } // Exclude current user
-    };
+    // Fetch all active users via userService (Firestore)
+    const allUsers = await userService.getAll({ limit: 500 });
 
-    if (q) {
-      query.$or = [
-        { username: new RegExp(q, 'i') },
-        { firstName: new RegExp(q, 'i') },
-        { lastName: new RegExp(q, 'i') }
-      ];
+    // Exclude current user and inactive users
+    let filtered = allUsers.filter(u =>
+      u.isActive !== false &&
+      u.id !== req.user.id
+    );
+
+    // Apply text search filter if query provided
+    if (q && q.trim()) {
+      const search = q.trim().toLowerCase();
+      filtered = filtered.filter(u =>
+        (u.username || '').toLowerCase().includes(search) ||
+        (u.firstName || '').toLowerCase().includes(search) ||
+        (u.lastName || '').toLowerCase().includes(search) ||
+        (`${u.firstName || ''} ${u.lastName || ''}`).toLowerCase().includes(search)
+      );
     }
 
-    if (interests) {
-      const interestArray = interests.split(',').map(i => i.trim());
-      query.travelInterests = { $in: interestArray };
-    }
-
-    if (destination) {
-      query.preferredDestinations = new RegExp(destination, 'i');
-    }
-
-    const skip = (page - 1) * limit;
-
-    const users = await User.find(query)
-      .select('username firstName lastName avatar bio travelInterests preferredDestinations isOnline lastSeen')
-      .sort({ isOnline: -1, lastSeen: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await User.countDocuments(query);
+    // Paginate
+    const total = filtered.length;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const users = filtered.slice(skip, skip + parseInt(limit)).map(u => ({
+      id: u.id,
+      _id: u.id,
+      username: u.username,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      avatar: u.avatar,
+      bio: u.bio,
+      travelInterests: u.travelInterests,
+      preferredDestinations: u.preferredDestinations,
+      isOnline: u.isOnline,
+      lastSeen: u.lastSeen,
+    }));
 
     res.json({
       success: true,
@@ -126,9 +131,9 @@ router.get('/search', authenticate, async (req, res) => {
           page: parseInt(page),
           limit: parseInt(limit),
           total,
-          pages: Math.ceil(total / limit),
-          hasNext: page * limit < total,
-          hasPrev: page > 1
+          pages: Math.ceil(total / parseInt(limit)),
+          hasNext: skip + parseInt(limit) < total,
+          hasPrev: parseInt(page) > 1
         }
       }
     });

@@ -65,11 +65,14 @@ export interface ChatRoom {
   description?: string;
   type: 'group';
   isPublic: boolean; // Public rooms don't require password
+  visibility?: 'exposed' | 'private'; // Only for private rooms: exposed = visible to all, private = hidden
   participants: string[];
   createdBy: string;
   createdAt: number;
   password?: string; // Only for private rooms
   inviteToken?: string;
+  pendingInvites?: string[]; // User IDs pending invitation acceptance for private rooms
+  joinRequests?: string[]; // User IDs who requested to join (for exposed private rooms)
   backgroundImage?: ChatRoomImage;
   iconImage?: ChatRoomImage;
   backgroundImageHistory?: ChatRoomImage[];
@@ -174,7 +177,8 @@ class ChatService {
     password: string, 
     participantIds: string[] = [],
     backgroundImage?: ChatRoomImage,
-    iconImage?: ChatRoomImage
+    iconImage?: ChatRoomImage,
+    visibility?: 'exposed' | 'private'
   ) {
     const user = this.getCurrentUser();
     
@@ -187,8 +191,11 @@ class ChatService {
     const roomsRef = ref(database, 'chatrooms');
     const newRoomRef = push(roomsRef);
     
-    // Remove duplicates and ensure creator is included
-    const uniqueParticipants = Array.from(new Set([user.uid, ...participantIds]));
+    // For private rooms: only creator is initial participant
+    // For public rooms: include all selected participants
+    const participants = isPublic 
+      ? Array.from(new Set([user.uid, ...participantIds]))
+      : [user.uid];
     
     // Generate invite token for shareable link
     const inviteToken = this.generateInviteToken();
@@ -198,11 +205,14 @@ class ChatService {
       description,
       type: 'group',
       isPublic,
-      participants: uniqueParticipants,
+      ...(!isPublic && visibility && { visibility }), // Only add visibility for private rooms
+      participants,
       createdBy: user.uid,
       createdAt: Date.now(),
       ...(isPublic ? {} : { password }), // Only add password for private rooms
       inviteToken,
+      pendingInvites: !isPublic ? participantIds : [], // Store pending invites for private rooms
+      ...(!isPublic && visibility === 'exposed' && { joinRequests: [] }), // Initialize join requests for exposed rooms
       ...(backgroundImage && { 
         backgroundImage,
         backgroundImageHistory: [backgroundImage]
@@ -258,7 +268,19 @@ class ChatService {
       snapshot.forEach((childSnapshot) => {
         const room = childSnapshot.val() as ChatRoom;
         if (room) {
-          rooms.push({ id: childSnapshot.key!, ...room });
+          // Filter rooms based on user access:
+          // 1. Public rooms are always visible
+          // 2. Private exposed rooms are visible to all users
+          // 3. Private private rooms are only visible if user is creator or participant
+          const isPublicRoom = room.isPublic === true;
+          const isCreator = room.createdBy === user.uid;
+          const isParticipant = room.participants?.includes(user.uid) || false;
+          const isExposedPrivateRoom = !room.isPublic && room.visibility === 'exposed';
+          
+          // Only add room if user has access to it
+          if (isPublicRoom || isExposedPrivateRoom || isCreator || isParticipant) {
+            rooms.push({ id: childSnapshot.key!, ...room });
+          }
         }
       });
       
@@ -367,6 +389,111 @@ class ChatService {
   getInviteLink(roomId: string, inviteToken: string): string {
     const baseUrl = window.location.origin;
     return `${baseUrl}/chat/room/${roomId}?invite=${inviteToken}`;
+  }
+
+  /**
+   * WHY: Request to join an exposed private room
+   * DECISION: Adds user to joinRequests array for admin approval
+   */
+  async requestToJoinRoom(roomId: string, userId: string) {
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const snapshot = await get(roomRef);
+  
+    if (!snapshot.exists()) {
+      throw new Error('Room not found');
+    }
+  
+    const room = snapshot.val();
+  
+    // Validate room is exposed private room
+    if (room.isPublic || room.visibility !== 'exposed') {
+      throw new Error('Join requests are only available for exposed private rooms');
+    }
+  
+    // Check if user is already a participant
+    const participants = room.participants || [];
+    if (participants.includes(userId)) {
+      throw new Error('You are already a member of this room');
+    }
+  
+    // Check if user already requested
+    const joinRequests = room.joinRequests || [];
+    if (joinRequests.includes(userId)) {
+      throw new Error('You have already requested to join this room');
+    }
+  
+    // Add user to join requests
+    joinRequests.push(userId);
+    await update(roomRef, { joinRequests });
+  }
+
+  /**
+   * WHY: Accept a join request for an exposed private room
+   * DECISION: Only room creator/admin can accept requests
+   */
+  async acceptJoinRequest(roomId: string, requestUserId: string, adminUserId: string) {
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const snapshot = await get(roomRef);
+  
+    if (!snapshot.exists()) {
+      throw new Error('Room not found');
+    }
+  
+    const room = snapshot.val();
+  
+    // Check if admin is the creator
+    if (room.createdBy !== adminUserId) {
+      throw new Error('Only the room creator can accept join requests');
+    }
+  
+    const joinRequests = room.joinRequests || [];
+    const participants = room.participants || [];
+  
+    // Check if request exists
+    if (!joinRequests.includes(requestUserId)) {
+      throw new Error('Join request not found');
+    }
+  
+    // Remove from join requests and add to participants
+    const updatedRequests = joinRequests.filter((uid: string) => uid !== requestUserId);
+    const updatedParticipants = [...participants, requestUserId];
+  
+    await update(roomRef, { 
+      joinRequests: updatedRequests,
+      participants: updatedParticipants 
+    });
+  }
+
+  /**
+   * WHY: Reject a join request for an exposed private room
+   * DECISION: Only room creator/admin can reject requests
+   */
+  async rejectJoinRequest(roomId: string, requestUserId: string, adminUserId: string) {
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const snapshot = await get(roomRef);
+  
+    if (!snapshot.exists()) {
+      throw new Error('Room not found');
+    }
+  
+    const room = snapshot.val();
+  
+    // Check if admin is the creator
+    if (room.createdBy !== adminUserId) {
+      throw new Error('Only the room creator can reject join requests');
+    }
+  
+    const joinRequests = room.joinRequests || [];
+  
+    // Check if request exists
+    if (!joinRequests.includes(requestUserId)) {
+      throw new Error('Join request not found');
+    }
+  
+    // Remove from join requests
+    const updatedRequests = joinRequests.filter((uid: string) => uid !== requestUserId);
+  
+    await update(roomRef, { joinRequests: updatedRequests });
   }
 
   /**
