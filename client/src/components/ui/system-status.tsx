@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { Shield, Database, Zap, Activity } from 'lucide-react';
 import { ref, get } from 'firebase/database';
 import { getCountFromServer, collection } from 'firebase/firestore';
-import { database, firestoreDb } from '@/lib/firebase';
+import { database } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 export const SystemStatus = memo(() => {
   const [statusItems, setStatusItems] = useState([

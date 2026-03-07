@@ -9,6 +9,8 @@
       }
     },
     "status": {
+      ".read": "auth != null",
+      ".indexOn": ["isOnline", "lastSeen"],
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null && auth.uid == $uid"
@@ -32,3 +34,4 @@
     ".write": false
   }
 }
+

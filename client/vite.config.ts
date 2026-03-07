@@ -43,12 +43,16 @@ export default defineConfig({
       output: {
         manualChunks: {
           'firebase': ['firebase/app', 'firebase/auth', 'firebase/database'],
+          'firebase-firestore': ['firebase/firestore'],
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'ui': ['framer-motion', 'lucide-react'],
           'forms': ['react-hook-form', 'zod', '@hookform/resolvers'],
           'dropdown-menu': ['@radix-ui/react-dropdown-menu'],
           'dialog': ['@radix-ui/react-dialog'],
-          'popover': ['@radix-ui/react-popover']
+          'popover': ['@radix-ui/react-popover'],
+          'swiper': ['swiper'],
+          'gsap': ['gsap'],
+          'axios': ['axios'],
         },
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name?.split('.');

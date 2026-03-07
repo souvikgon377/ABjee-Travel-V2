@@ -113,6 +113,8 @@ const CardCarousel: React.FC<CarouselProps> = ({
                         src={image.src}
                         width={500}
                         height={500}
+                        loading="lazy"
+                        decoding="async"
                         className="h-full w-full object-cover rounded-xl"
                         alt={image.alt}
                       />

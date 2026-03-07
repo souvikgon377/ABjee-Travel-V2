@@ -19,6 +19,8 @@ function LandingPage() {
           autoPlay
           loop
           muted
+          playsInline
+          preload="metadata"
           // controls
         >
           
