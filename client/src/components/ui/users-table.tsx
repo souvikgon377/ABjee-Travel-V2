@@ -22,7 +22,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { firestoreDb } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 import { UserActionsDialog } from '@/components/ui/user-actions-dialog';
 
 const USERS_PER_PAGE = 10;

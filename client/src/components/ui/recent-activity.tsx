@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { User, MessageSquare, UserPlus } from 'lucide-react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
-import { firestoreDb, database } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
+import { database } from '@/lib/firebase';
 
 function getTimeAgo(timestamp: Date): string {
   const now = new Date();

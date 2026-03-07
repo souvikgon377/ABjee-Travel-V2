@@ -8,7 +8,8 @@ import { AdminSidebar } from '@/components/ui/admin-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { collection, getCountFromServer, getDocs } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
-import { firestoreDb, database } from '@/lib/firebase';
+import { database } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 // ── Static stat shape (reset between fetches) ──────────────────────────────
 const STAT_DEFAULTS = [

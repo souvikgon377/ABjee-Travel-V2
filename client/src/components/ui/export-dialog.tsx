@@ -29,7 +29,8 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
-import { firestoreDb, database } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
+import { database } from '@/lib/firebase';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface ExportSection {

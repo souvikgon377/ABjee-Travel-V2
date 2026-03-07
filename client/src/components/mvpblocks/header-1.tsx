@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence, animate } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Sparkles, Shield, LogOut } from 'lucide-react';
-import { useTheme } from './theme-provider';
 import { ModeToggle } from './mode-toggle'
-import { animate } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext';
 
 interface NavItem {
@@ -53,27 +51,24 @@ export default function Header1() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const { theme } = useTheme();
   const { currentUser, userProfile, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const isActive = (href: string) =>
+    href !== '#pricing' && (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
     };
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const headerVariants = {
     initial: { y: -100, opacity: 0 },
     animate: { y: 0, opacity: 1 },
-    scrolled: {
-      backdropFilter: 'blur(20px)',
-      backgroundColor:
-        theme === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-    },
   };
 
   const mobileMenuVariants = {
@@ -88,20 +83,17 @@ export default function Header1() {
 
   return (
     <motion.header
-      className="fixed left-0 right-0 top-0 z-50 transition-all duration-300"
+      className={[
+        'fixed left-0 right-0 top-0 z-50',
+        'transition-[backdrop-filter,background-color,box-shadow] duration-300',
+        isScrolled
+          ? 'backdrop-blur-xl bg-white/80 dark:bg-black/80 shadow-[0_8px_32px_rgba(0,0,0,0.1)]'
+          : 'backdrop-blur-none bg-transparent',
+      ].join(' ')}
       variants={headerVariants}
       initial="initial"
-      animate={isScrolled ? 'scrolled' : 'animate'}
+      animate="animate"
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      style={{
-        backdropFilter: isScrolled ? 'blur(20px)' : 'none',
-        backgroundColor: isScrolled
-          ? theme === 'dark'
-            ? 'rgba(0, 0, 0, 0.8)'
-            : 'rgba(255, 255, 255, 0.8)'
-          : 'transparent',
-        boxShadow: isScrolled ? '0 8px 32px rgba(0, 0, 0, 0.1)' : 'none',
-      }}
     >
       <div className="mx-auto max-w-7x2 px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between lg:h-20">
@@ -134,7 +126,7 @@ export default function Header1() {
                   <a
                     href={item.href}
                     className="flex items-center space-x-1 font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
-                    onClick={e => {
+                    onClick={e => {  
                       e.preventDefault();
                       const target = document.getElementById('pricing');
                       if (target) {
@@ -153,7 +145,10 @@ export default function Header1() {
                 ) : (
                   <Link
                     to={item.href}
-                    className="flex items-center space-x-1 font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
+                    className={[
+                      'flex items-center space-x-1 font-medium transition-colors duration-200 hover:text-rose-500',
+                      isActive(item.href) ? 'text-rose-500' : 'text-foreground',
+                    ].join(' ')}
                   >
                     <span>{item.name}</span>
                     {item.hasDropdown && (
@@ -338,7 +333,12 @@ export default function Header1() {
                     <Link
                       key={item.name}
                       to={item.href}
-                      className="block px-4 py-3 font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+                      className={[
+                        'block px-4 py-3 font-medium transition-colors duration-200',
+                        isActive(item.href)
+                          ? 'text-rose-500 bg-rose-500/10 rounded-lg'
+                          : 'text-foreground hover:bg-muted',
+                      ].join(' ')}
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       {item.name}

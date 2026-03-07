@@ -28,7 +28,6 @@
     "@tailwindcss/vite": "^4.1.11",
     "axios": "^1.13.3",
     "class-variance-authority": "^0.7.1",
-    "cloudinary": "^2.9.0",
     "cobe": "^0.6.4",
     "date-fns": "^4.1.0",
     "firebase": "^12.2.1",

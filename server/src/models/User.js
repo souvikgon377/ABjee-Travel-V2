@@ -1,5 +1,4 @@
 import { db, admin } from '../config/database.js';
-import bcrypt from 'bcryptjs';
 
 const COLLECTION_NAME = 'users';
 

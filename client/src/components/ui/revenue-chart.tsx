@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { BarChart3, Calendar } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
-import { firestoreDb } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 export const RevenueChart = memo(() => {
   const [chartData, setChartData] = useState<any[]>([]);
