@@ -72,12 +72,26 @@ router.get('/plans', (req, res) => {
 // @access  Private
 router.get('/current', authenticate, async (req, res) => {
   try {
-    const subscription = await Subscription.findOne({ user: req.user._id });
+    let subscription = await subscriptionService.findByUserId(req.user.id);
 
     if (!subscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No subscription found'
+      // Return a default free subscription shape
+      return res.json({
+        success: true,
+        data: {
+          subscription: {
+            id: null,
+            plan: { type: 'free', name: 'Free Plan', price: { amount: 0, currency: 'USD' } },
+            status: 'active',
+            startDate: null,
+            endDate: null,
+            isActive: true,
+            features: subscriptionService.getFeaturesForPlan('free'),
+            usage: { privateChatsUsed: 0, travelRequestsUsed: 0 },
+            billingHistory: [],
+            autoRenew: false
+          }
+        }
       });
     }
 
@@ -85,19 +99,18 @@ router.get('/current', authenticate, async (req, res) => {
       success: true,
       data: {
         subscription: {
-          id: subscription._id,
+          id: subscription.id,
           plan: subscription.plan,
           status: subscription.status,
           startDate: subscription.startDate,
           endDate: subscription.endDate,
-          isActive: subscription.isActive,
-          isTrial: subscription.isTrial,
-          daysRemaining: subscription.daysRemaining,
+          isActive: subscriptionService.isActive(subscription),
           features: subscription.features,
           usage: subscription.usage,
           nextBillingDate: subscription.nextBillingDate,
           autoRenew: subscription.autoRenew,
-          cancellation: subscription.cancellation
+          cancellation: subscription.cancellation,
+          billingHistory: subscription.billingHistory || []
         }
       }
     });
@@ -150,57 +163,65 @@ router.post('/upgrade', authenticate, [
     }
 
     // Find or create subscription
-    let subscription = await Subscription.findOne({ user: req.user._id });
+    let subscription = await subscriptionService.findByUserId(req.user.id);
+
+    const newPlan = {
+      type: planType,
+      name: selectedPlan.name,
+      price: interval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.price
+    };
+    const features = subscriptionService.getFeaturesForPlan(planType);
 
     if (!subscription) {
-      subscription = new Subscription({
-        user: req.user._id,
-        plan: {
-          type: planType,
-          name: selectedPlan.name,
-          price: interval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.price
-        },
+      subscription = await subscriptionService.create({
+        user: req.user.id,
+        plan: newPlan,
         status: 'active',
-        startDate,
-        endDate
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        features,
+        nextBillingDate: endDate.toISOString(),
+        paymentMethod: paymentMethod || { type: 'card' },
+        billingHistory: [{
+          amount: newPlan.price.amount,
+          currency: newPlan.price.currency,
+          status: 'paid',
+          description: `${selectedPlan.name} - ${interval} subscription`,
+          invoiceId: `INV-${Date.now()}`,
+          paymentDate: new Date().toISOString()
+        }]
       });
     } else {
-      // Upgrade existing subscription
-      subscription.plan = {
-        type: planType,
-        name: selectedPlan.name,
-        price: interval === 'yearly' ? selectedPlan.yearlyPrice : selectedPlan.price
-      };
-      subscription.status = 'active';
-      subscription.startDate = startDate;
-      subscription.endDate = endDate;
+      subscription = await subscriptionService.update(subscription.id, {
+        plan: newPlan,
+        status: 'active',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        features,
+        nextBillingDate: endDate.toISOString(),
+        autoRenew: true,
+        cancellation: null,
+        ...(paymentMethod ? { paymentMethod } : {}),
+        billingHistory: [
+          ...(subscription.billingHistory || []),
+          {
+            amount: newPlan.price.amount,
+            currency: newPlan.price.currency,
+            status: 'paid',
+            description: `${selectedPlan.name} - ${interval} subscription`,
+            invoiceId: `INV-${Date.now()}`,
+            paymentDate: new Date().toISOString()
+          }
+        ]
+      });
     }
 
-    // Set payment method if provided
-    if (paymentMethod) {
-      subscription.paymentMethod = paymentMethod;
-    }
-
-    // Calculate next billing date
-    subscription.nextBillingDate = new Date(endDate);
-
-    await subscription.save();
-
-    // Update user subscription info
-    await User.findByIdAndUpdate(req.user._id, {
+    // Update user's embedded subscription info
+    await userService.update(req.user.id, {
       'subscription.type': planType,
       'subscription.isActive': true,
-      'subscription.startDate': startDate,
-      'subscription.endDate': endDate
-    });
-
-    // Add billing record (mock successful payment)
-    await subscription.addBillingRecord({
-      amount: subscription.plan.price.amount,
-      currency: subscription.plan.price.currency,
-      status: 'paid',
-      description: `${selectedPlan.name} - ${interval} subscription`,
-      invoiceId: `INV-${Date.now()}`
+      'subscription.startDate': startDate.toISOString(),
+      'subscription.endDate': endDate.toISOString()
     });
 
     res.json({
@@ -239,7 +260,7 @@ router.post('/cancel', authenticate, [
   try {
     const { reason, feedback, cancelAtPeriodEnd = true } = req.body;
 
-    const subscription = await Subscription.findOne({ user: req.user._id });
+    const subscription = await subscriptionService.findByUserId(req.user.id);
 
     if (!subscription) {
       return res.status(404).json({
@@ -248,19 +269,19 @@ router.post('/cancel', authenticate, [
       });
     }
 
-    if (subscription.status === 'cancelled') {
+    if (subscription.cancellation && subscription.status === 'cancelled') {
       return res.status(400).json({
         success: false,
         message: 'Subscription is already cancelled'
       });
     }
 
-    // Cancel subscription
-    await subscription.cancel(reason, cancelAtPeriodEnd);
+    // Cancel subscription using service
+    const cancelled = await subscriptionService.cancel(subscription.id, reason, cancelAtPeriodEnd);
 
     // Update user subscription if cancelled immediately
     if (!cancelAtPeriodEnd) {
-      await User.findByIdAndUpdate(req.user._id, {
+      await userService.update(req.user.id, {
         'subscription.type': 'free',
         'subscription.isActive': false
       });
@@ -273,9 +294,9 @@ router.post('/cancel', authenticate, [
         : 'Subscription cancelled immediately',
       data: {
         subscription: {
-          status: subscription.status,
-          cancellation: subscription.cancellation,
-          endDate: subscription.endDate
+          status: cancelled.status,
+          cancellation: cancelled.cancellation,
+          endDate: cancelled.endDate
         }
       }
     });
@@ -294,12 +315,19 @@ router.post('/cancel', authenticate, [
 // @access  Private
 router.get('/usage', authenticate, async (req, res) => {
   try {
-    const subscription = await Subscription.findOne({ user: req.user._id });
+    const subscription = await subscriptionService.findByUserId(req.user.id);
 
     if (!subscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No subscription found'
+      return res.json({
+        success: true,
+        data: {
+          usage: {
+            privateChats: { used: 0, limit: 0, unlimited: false },
+            travelRequests: { used: 0, limit: 1, unlimited: false },
+            fileUpload: { limit: 5 },
+            lastResetDate: null
+          }
+        }
       });
     }
 
@@ -339,12 +367,12 @@ router.get('/usage', authenticate, async (req, res) => {
 // @access  Private
 router.get('/billing-history', authenticate, async (req, res) => {
   try {
-    const subscription = await Subscription.findOne({ user: req.user._id });
+    const subscription = await subscriptionService.findByUserId(req.user.id);
 
     if (!subscription) {
-      return res.status(404).json({
-        success: false,
-        message: 'No subscription found'
+      return res.json({
+        success: true,
+        data: { billingHistory: [] }
       });
     }
 

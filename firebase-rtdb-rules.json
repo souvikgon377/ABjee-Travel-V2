@@ -3,21 +3,9 @@
     "chatrooms": {
       ".read": "auth != null",
       ".write": "auth != null",
-      ".indexOn": ["createdAt", "name", "isPrivate", "memberCount"],
       "$roomId": {
-        "messages": {
-          ".indexOn": ["timestamp", "userId"]
-        },
-        "participants": {
-          ".indexOn": ["joinedAt"]
-        }
-      }
-    },
-    "analytics": {
-      ".read": "auth != null",
-      "pageViews": {
-        ".read": true,
-        ".write": true
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
     "status": {
@@ -36,8 +24,8 @@
     },
     "typing": {
       "$roomId": {
-        ".read": "auth != null",
         "$uid": {
+          ".read": "auth != null",
           ".write": "auth != null && auth.uid == $uid"
         }
       }
