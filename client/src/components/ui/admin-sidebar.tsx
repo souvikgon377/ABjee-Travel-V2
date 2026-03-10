@@ -29,6 +29,8 @@ import {
   Sun,
   Home,
   LogOut,
+  MapPin,
+  MessageSquare,
 } from 'lucide-react';
 
 const menuItems = [
@@ -38,6 +40,8 @@ const menuItems = [
   { title: 'Bookings', icon: FileText, view: 'bookings' },
   { title: 'Activity', icon: Activity, view: 'activity' },
   { title: 'Chat Rooms', icon: Database, view: 'chatrooms' },
+  { title: 'Tourist Places', icon: MapPin, view: 'tourist-places' },
+  { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
   { title: 'Settings', icon: Settings, view: 'settings' },
 ];

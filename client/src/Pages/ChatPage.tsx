@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
-import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, ChevronLeft, ChevronRight, Star, Upload, Image as ImageIcon, Send } from 'lucide-react';
+import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram } from 'lucide-react';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { firestoreDb } from '@/lib/firebaseFirestore';
+import type { TouristPlace, MediaItem } from '@/components/ui/tourist-places';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, EffectFade } from 'swiper/modules';
@@ -16,235 +19,298 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import Header from '@/components/mvpblocks/header-1';
 import ChatRoom from '@/components/chat/ChatRoom';
 
-// Constants - moved outside component for performance
-const COUNTRIES = ['India', 'USA', 'Canada', 'Switzerland', 'Nepal', 'Australia', 'Norway', 'Iceland', 'New Zealand', 'Chile'] as const;
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
+const CLOUDINARY_UPLOAD_PRESET = (import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string) || 'ml_default';
 
-const TIRUMALA_TEMPLE_IMAGES = [
-  '/tirumala-temple_tirupati_1.jpg',
-  '/tirumala-temple_tirupati_2.jpg',
-  '/tirumala-temple_tirupati_3.jpg'
-] as const;
-
-const IMAGE_SHUFFLE_INTERVAL = 3000;
-
-// India tourist data
-const INDIA_DATA: { [key: string]: string[] } = {
-  'Andhra Pradesh': ['Tirupati', 'Visakhapatnam', 'Araku Valley', 'Borra Caves'],
-  'Arunachal Pradesh': ['Tawang', 'Ziro Valley', 'Bomdila', 'Namdapha National Park'],
-  'Assam': ['Kaziranga National Park', 'Kamakhya Temple', 'Majuli Island', 'Sivasagar'],
-  'Bihar': ['Bodh Gaya', 'Nalanda', 'Rajgir', 'Patna'],
-  'Chhattisgarh': ['Chitrakote Falls', 'Tirathgarh Falls', 'Kanger Valley National Park'],
-  'Goa': ['Calangute Beach', 'Baga Beach', 'Dudhsagar Falls', 'Old Goa Churches'],
-  'Gujarat': ['Gir National Park', 'Rann of Kutch', 'Somnath Temple', 'Dwarka'],
-  'Haryana': ['Kurukshetra', 'Sultanpur Bird Sanctuary', 'Morni Hills'],
-  'Himachal Pradesh': ['Manali', 'Shimla', 'Dharamshala', 'Spiti Valley', 'Kullu', 'Kasol', 'Dalhousie'],
-  'Jharkhand': ['Hundru Falls', 'Betla National Park', 'Ranchi Hill', 'Tagore Hill'],
-  'Karnataka': ['Coorg', 'Hampi', 'Mysore Palace', 'Gokarna', 'Chikmagalur', 'Jog Falls'],
-  'Kerala': ['Munnar', 'Alleppey Backwaters', 'Wayanad', 'Thekkady', 'Kovalam', 'Varkala'],
-  'Madhya Pradesh': ['Khajuraho', 'Kanha National Park', 'Pachmarhi', 'Bandhavgarh'],
-  'Maharashtra': ['Lonavala', 'Mahabaleshwar', 'Ajanta Caves', 'Ellora Caves', 'Matheran'],
-  'Manipur': ['Loktak Lake', 'Kangla Fort', 'Keibul Lamjao National Park'],
-  'Meghalaya': ['Cherrapunji', 'Shillong', 'Living Root Bridges', 'Dawki'],
-  'Mizoram': ['Aizawl', 'Champhai', 'Phawngpui Peak'],
-  'Nagaland': ['Kohima', 'Dzukou Valley', 'Hornbill Festival'],
-  'Odisha': ['Puri', 'Konark Sun Temple', 'Chilika Lake', 'Simlipal National Park'],
-  'Punjab': ['Golden Temple Amritsar', 'Wagah Border', 'Jallianwala Bagh'],
-  'Rajasthan': ['Jaipur', 'Udaipur', 'Jaisalmer', 'Jodhpur', 'Mount Abu', 'Pushkar'],
-  'Sikkim': ['Gangtok', 'Nathula Pass', 'Tsomgo Lake', 'Pelling', 'Yumthang Valley'],
-  'Tamil Nadu': ['Ooty', 'Kodaikanal', 'Mahabalipuram', 'Rameswaram', 'Kanyakumari'],
-  'Telangana': ['Hyderabad', 'Warangal Fort', 'Ramoji Film City'],
-  'Tripura': ['Ujjayanta Palace', 'Neermahal', 'Sepahijala Wildlife Sanctuary'],
-  'Uttar Pradesh': ['Taj Mahal Agra', 'Varanasi', 'Nainital', 'Mussoorie', 'Rishikesh'],
-  'Uttarakhand': ['Valley of Flowers', 'Kedarnath', 'Badrinath', 'Jim Corbett', 'Auli', 'Haridwar'],
-  'West Bengal': ['Darjeeling', 'Sundarbans', 'Kalimpong', 'Sandakphu'],
-  'Ladakh': ['Pangong Lake', 'Nubra Valley', 'Leh Palace', 'Magnetic Hill', 'Tso Moriri'],
-  'Jammu & Kashmir': ['Gulmarg', 'Pahalgam', 'Sonamarg', 'Dal Lake', 'Vaishno Devi'],
-};
-
-type AttractionData = {
-  name: string;
-  description: string;
-  icon: string;
-  images?: readonly string[];
-};
-
-const ATTRACTIONS_DATA: { [key: string]: AttractionData[] } = {
-  'Tirupati': [
-    { 
-      name: 'Tirumala Venkateswara Temple', 
-      description: 'Sacred temple dedicated to Lord Venkateswara', 
-      icon: '🛕',
-      images: TIRUMALA_TEMPLE_IMAGES
-    },
-    { name: 'Sri Govindaraja Swamy Temple', description: 'Ancient Vishnu temple in the heart of Tirupati', icon: '🕉️' },
-    { name: 'Sri Padmavathi Ammavari Temple', description: 'Beautiful temple dedicated to Goddess Padmavathi', icon: '🪷' },
-    { name: 'Silathoranam', description: 'Natural rock formation, geological wonder', icon: '🏔️' },
-    { name: 'Talakona Waterfall', description: 'Highest waterfall in Andhra Pradesh', icon: '💧' },
-    { name: 'Chandragiri Fort', description: 'Historic fort with panoramic views', icon: '🏰' },
-  ],
-  'Manali': [
-    { name: 'Rohtang Pass', description: 'High mountain pass with stunning snow views', icon: '🏔️' },
-    { name: 'Solang Valley', description: 'Adventure sports and scenic beauty', icon: '🎿' },
-    { name: 'Hadimba Temple', description: 'Ancient cave temple surrounded by cedar forest', icon: '🛕' },
-    { name: 'Old Manali', description: 'Charming village with cafes and markets', icon: '🏘️' },
-    { name: 'Beas River', description: 'River rafting and riverside camping', icon: '🏞️' },
-    { name: 'Vashisht Hot Springs', description: 'Natural hot water springs and temples', icon: '♨️' },
-  ],
-  'Shimla': [
-    { name: 'The Mall Road', description: 'Popular shopping and dining street', icon: '🛍️' },
-    { name: 'Jakhu Temple', description: 'Hilltop Hanuman temple with city views', icon: '🛕' },
-    { name: 'The Ridge', description: 'Open space with panoramic mountain views', icon: '🏔️' },
-    { name: 'Kufri', description: 'Hill station known for skiing and adventure', icon: '⛷️' },
-    { name: 'Christ Church', description: 'Historic neo-Gothic church', icon: '⛪' },
-    { name: 'Viceregal Lodge', description: 'British-era architectural marvel', icon: '🏛️' },
-  ],
-  'Munnar': [
-    { name: 'Tea Gardens', description: 'Sprawling tea plantations with scenic views', icon: '🍵' },
-    { name: 'Eravikulam National Park', description: 'Home to endangered Nilgiri Tahr', icon: '🦌' },
-    { name: 'Mattupetty Dam', description: 'Beautiful dam surrounded by hills', icon: '🌊' },
-    { name: 'Top Station', description: 'Highest point with breathtaking views', icon: '🏔️' },
-    { name: 'Echo Point', description: 'Natural echo phenomenon spot', icon: '📢' },
-    { name: 'Attukal Waterfalls', description: 'Cascading waterfall in lush greenery', icon: '💧' },
-  ],
-  'Jaipur': [
-    { name: 'Hawa Mahal', description: 'Iconic palace with 953 windows', icon: '🏛️' },
-    { name: 'Amber Fort', description: 'Majestic fort with stunning architecture', icon: '🏰' },
-    { name: 'City Palace', description: 'Royal residence with museums', icon: '👑' },
-    { name: 'Jantar Mantar', description: 'Astronomical observatory UNESCO site', icon: '🔭' },
-    { name: 'Nahargarh Fort', description: 'Fort offering panoramic city views', icon: '🏯' },
-    { name: 'Jal Mahal', description: 'Palace in the middle of Man Sagar Lake', icon: '🏰' },
-  ],
-};
-
-type TempleDetail = {
-  title: string;
-  subtitle: string;
-  description: string;
-  legend: string;
-  history: string;
-  significance: string;
-  architecture: {
-    overview: string;
-    features: string[];
-  };
-  deity: {
-    description: string;
-    features: string[];
-  };
-  festivals: {
-    name: string;
-    description: string;
-  }[];
-  sevenHills: {
-    name: string;
-    description: string;
-  }[];
-  features: string[];
-  images: readonly string[];
-  visitingInfo: {
-    timings: string;
-    entryFee: string;
-    dresscode: string;
-    bestTimeToVisit: string;
-    dailyVisitors: string;
-    specialDays: string;
-  };
-  religiousSignificance: string[];
-};
-
-const TEMPLE_DETAILS: { [key: string]: TempleDetail } = {
-  'Tirumala Venkateswara Temple': {
-    title: 'Sri Venkateswara Swami Temple',
-    subtitle: 'Temple of Seven Hills • Kaliyuga Vaikuntha • One of the Richest Temples in the World',
-    description: 'The Venkateswara Temple of Tirumala is a Hindu temple situated in the hills of Tirumala at Tirupati in Andhra Pradesh, India. Dedicated to Lord Venkateswara, a form of Vishnu, who appeared on earth to save mankind from trials and troubles of Kali Yuga. Also known as Kaliyuga Vaikuntha, the temple attracts over 24 million devotees annually, making it one of the most visited religious sites in the world.',
-    legend: 'During Kali Yuga, sage Bhrigu kicked Lord Vishnu in the chest while testing the Trinity. Goddess Lakshmi, finding this an insult, left Vaikuntha and came to Earth. Vishnu took human form as Srinivasa and searched for her, reaching Tirumala hills. He married Padmavati (reincarnation of Lakshmi) after borrowing 1.14 crore gold coins from Kubera. The Lord chose to remain on the seven hills for the emancipation of mankind, and both deities turned into stone expressing their wish to be there eternally.',
-    history: 'The temple was built by Thondaman king and reformed by Cholas, Pandyas and Vijayanagara Empire. Construction started from 300 CE in Dravidian architecture. The temple gained immense wealth under Vijayanagara Empire (14th-15th centuries). Emperor Krishnadevaraya donated gold and jewels, enabling the Ananda Nilayam roofing to be gilded. Ramanujacharya (11th century) streamlined rituals according to Vaikhanasa Agama tradition. The temple is mentioned in ancient texts including Cilappatikaram. Currently managed by Tirumala Tirupati Devasthanams (TTD) under Andhra Pradesh Government.',
-    significance: 'The temple is one of eight Vishnu Swayambhu (self-manifested) Kshetras and listed as the 75th Divya Desam among 108 temples in Naalayira Divya Prabandham. It is revered as "Nitya-daiva-kalpa" — the eternal deity which shall remain on Venkatachala until the end of present Kalpa. The temple observes 433 festivals in 365 days, earning the title "Nitya Kalyanam Paccha Toranam" (every day is a festival).',
-    architecture: {
-      overview: 'Built in Dravidian style over 300 CE, the temple sits at 853 metres (2,799 ft) above sea level on Venkatadri, the seventh peak of Seshachalam Hills. The complex covers 26.75 km² with three entrances (Mahadvaram, Vendivakili, Bangaruvakili) leading to the Garbhagriha called Ananda Nilayam.',
-      features: [
-        'Mahadvaram (Main Entrance) - 50 feet, five-storied Gopuram with seven kalasams',
-        'Ananda Nilayam Vimanam - Three-storied gopuram covered with gilt copper plates and golden vase',
-        'Garbhagriha (Sanctum) - Houses the deity in standing posture facing east with four hands',
-        'Vimana Venkateswara - Exact replica of main deity carved on the gopuram',
-        'Golden Entrance (Bangaruvakili) - Wooden doors covered with gold plates depicting Dashavatara',
-        'Swami Pushkarini - Holy water tank on whose banks the temple stands'
-      ]
-    },
-    deity: {
-      description: 'Lord Venkateswara stands in sanctum with four hands - one in varada (blessing) posture, one on thigh, and two holding Panchajanya (conch) and Sudarshana Chakra (discus). The deity bears Goddess Lakshmi on the right chest and Goddess Padmavati on the left, adorned with precious ornaments including Vajra Kiritam (diamond crown).',
-      features: [
-        'Pancha Berams - Five deity forms: Dhruva (Moolavirat), Kautuka, Snapana, Malayappa (Utsava), and Bali',
-        'Bhoga Srinivasa - Silver deity receiving daily sevas and SahasraKalasabhisheka on Wednesdays',
-        'Ugra Srinivasa - Fearsome aspect, processes once yearly on Kaishika Dwadasi before sunrise',
-        'Malayappa Swami - Processional deity flanked by Sridevi and Bhudevi for all festivals',
-        'Koluvu Srinivasa - Guardian deity presiding over temple\'s financial affairs'
-      ]
-    },
-    festivals: [
-      {
-        name: 'Sri Venkateswara Brahmotsavams',
-        description: 'Nine-day annual festival in October with lakhs of devotees. Malayappa deity processes on various vahanas including Garuda, Golden Chariot, and Elephant.'
-      },
-      {
-        name: 'Vaikunta Ekadasi',
-        description: 'Most important Vaishnava festival when Vaikunta Dwaram (heaven\'s gate) opens. Up to 150,000 devotees have darshan through the special entrance encircling inner sanctum.'
-      },
-      {
-        name: 'Rathasapthami',
-        description: 'February festival where Malayappa processes on seven different vahanas from early morning to late night, celebrating the sun god.'
-      },
-      {
-        name: 'Other Festivals',
-        description: 'Rama Navami, Janmashtami, Ugadi, Teppotsavam (Float Festival), Vasanthotsavam (Spring Festival), Padmavati Parinayotsavams celebrated with grandeur.'
-      }
-    ],
-    sevenHills: [
-      { name: 'Venkatadri', description: 'Hill of Venkateswara - The seventh peak where the main temple stands' },
-      { name: 'Seshadri (Seshachalam)', description: 'Hill of Adisesha - The divine serpent, dasa of Vishnu' },
-      { name: 'Garudadri (Garudachalam)', description: 'Hill of Garuda - The vahana (vehicle) of Lord Vishnu' },
-      { name: 'Anjanadri', description: 'Hill of Hanuman - The devoted monkey god' },
-      { name: 'Vrushabhadri', description: 'Hill of Vrishabasura - Demon killed by Srinivasa' },
-      { name: 'Neeladri', description: 'Hill of Neela Devi - Gandharva princess who offered her hair' },
-      { name: 'Narayanadri', description: 'Hill of Narayana - Where Srivari Padalu (footprints) are located' }
-    ],
-    features: [
-      'World\'s most visited temple - 24 million annual visitors, 60,000+ daily pilgrims',
-      'Richest temple - Daily hundi collections up to ₹22.5 million, annual income ₹10,000+ million',
-      'Hair tonsuring tradition - Over 1 ton of hair collected daily as offering',
-      'Free meals - Tarigonda Vengamamba Annaprasadam complex serves thousands daily',
-      'Tirupati Laddu - Famous prasadam with Geographical Indication tag',
-      'Vaikuntam Queue Complexes - Modern facilities to manage massive pilgrim crowds',
-      '640 ancient inscriptions in Kannada, Sanskrit, Tamil, Telugu languages',
-      '3000 copper plates with Annamacharya\'s 32,000 Telugu sankirtanas',
-      'Vaikhanasa Agama worship - Six daily pujas as per ancient tradition',
-      'TTD administration - One of the wealthiest religious organizations globally'
-    ],
-    images: TIRUMALA_TEMPLE_IMAGES,
-    visitingInfo: {
-      timings: 'Open 24/7 - Suprabhatam Seva at 3 AM, Main Darshan from 2:30 AM to 1:00 AM (next day)',
-      entryFee: 'Sarva Darshan (Free), Special Entry Darshan (₹300), Divya Darshan, other paid services available',
-      dresscode: 'Traditional attire required - Men: Dhoti/Pyjama, Women: Saree/Salwar, Western wear not permitted',
-      bestTimeToVisit: 'September to February (pleasant weather). Peak rush during festivals like Brahmotsavams and Vaikunta Ekadasi',
-      dailyVisitors: 'Average 60,000-87,000 pilgrims daily. Up to 150,000+ on special occasions and festivals',
-      specialDays: 'Vaikunta Ekadasi, Brahmotsavams (9 days), Rathasapthami, Ugadi, Rama Navami, Janmashtami'
-    },
-    religiousSignificance: [
-      'One of eight Vishnu Swayambhu (self-manifested) Kshetras where deity appeared on its own',
-      '75th Divya Desam among 108 sacred Vishnu temples in Naalayira Divya Prabandham',
-      'Saptagiri (Seven Hills) represent seven hoods of Adisesha, the divine serpent',
-      'Revered by Alvars in Divya Prabandham as supreme pilgrimage destination',
-      'Mentioned in Rig Veda and Asthadasa Puranas as great bestower of boons',
-      'Eternal deity (Nitya-daiva-kalpa) to remain until end of present Kalpa',
-      'Ramanujacharya established worship rituals and Tirupati Jeeyar Mutt (1119 AD)',
-      'Tallapaka Annamacharya composed 32,000 devotional songs praising the deity'
-    ]
+async function uploadVideoToCloudinary(file: File): Promise<{ url: string; publicId: string; thumbnail: string }> {
+  if (!CLOUDINARY_CLOUD_NAME) {
+    throw new Error('Cloudinary cloud name not configured.');
   }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  fd.append('folder', 'tourist-places/user-videos');
+  fd.append('resource_type', 'video');
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`,
+    { method: 'POST', body: fd }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? 'Video upload failed');
+  }
+
+  const data = await res.json() as { secure_url: string; public_id: string };
+  const thumbnail = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_0,w_800,h_450,c_fill,f_jpg/${data.public_id}.jpg`;
+  return { url: data.secure_url, publicId: data.public_id, thumbnail };
+}
+
+type PlaceReview = {
+  id: string;
+  text: string;
+  author: string;
+  userId: string;
+  avatarUrl?: string;
+  rating: number;
+  createdAt: unknown;
+  media: MediaItem[];
+};
+
+type ReviewComment = {
+  id: string;
+  text: string;
+  author: string;
+  userId: string;
+  avatarUrl?: string;
+  createdAt: unknown;
+};
+
+
+
+// ── PlaceCard: video-first or draggable-image carousel card ──────────────────
+const PlaceCard: React.FC<{
+  place: TouristPlace;
+  idx: number;
+  onSelect: () => void;
+}> = ({ place, idx, onSelect }) => {
+  const videos = place.media?.filter(m => m.type === 'video') ?? [];
+  const images = place.media?.filter(m => m.type === 'image') ?? [];
+  const hasVideo = videos.length > 0;
+  const hasImages = images.length > 0;
+
+  const [imgIdx, setImgIdx] = useState(0);
+  const [vidPaused, setVidPaused] = useState(false);
+  const [cardShareMessage, setCardShareMessage] = useState('');
+  const dragRef = useRef(false);
+  const cardVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Auto-advance images when no video
+  useEffect(() => {
+    if (hasVideo || images.length <= 1) return;
+    const t = setInterval(() => setImgIdx(i => (i + 1) % images.length), 3500);
+    return () => clearInterval(t);
+  }, [hasVideo, images.length]);
+
+  const toggleVid = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = cardVideoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play(); setVidPaused(false); }
+    else { v.pause(); setVidPaused(true); }
+  };
+
+  const goPrev = (e: React.MouseEvent) => { e.stopPropagation(); setImgIdx(i => (i - 1 + images.length) % images.length); };
+  const goNext = (e: React.MouseEvent) => { e.stopPropagation(); setImgIdx(i => (i + 1) % images.length); };
+
+  const sharePlaceFromCard = (
+    platform: 'facebook' | 'instagram' | 'whatsapp',
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+
+    const placeLocation = [place.area, place.state, place.country]
+      .filter(Boolean)
+      .join(', ');
+    const targetUrl = place.googleMapsUrl || window.location.href;
+    const shareText = `Check out ${place.name}${placeLocation ? ` (${placeLocation})` : ''} on ABjee Travel. ${targetUrl}`;
+
+    if (platform === 'facebook') {
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(targetUrl)}&quote=${encodeURIComponent(shareText)}`;
+      window.open(fbUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (platform === 'whatsapp') {
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+    void navigator.clipboard
+      .writeText(shareText)
+      .then(() => setCardShareMessage('Copied for Instagram'))
+      .catch(() => setCardShareMessage('Copy failed for Instagram'));
+    setTimeout(() => setCardShareMessage(''), 2500);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 32, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.04 * idx, type: 'spring', stiffness: 260, damping: 24 }}
+      whileHover={{ y: -8, scale: 1.03 }}
+      onClick={onSelect}
+      className="cursor-pointer rounded-2xl overflow-hidden bg-white/10 backdrop-blur-md border border-white/15 shadow-xl hover:shadow-2xl hover:shadow-black/40 hover:border-white/30 transition-all duration-300 group relative"
+    >
+      {/* Shimmer on hover */}
+      <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12"
+          animate={{ x: ['-150%', '250%'] }}
+          transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 1, ease: 'linear' }}
+        />
+      </div>
+
+      {/* Media */}
+      <div className="relative h-44 overflow-hidden">
+        {hasVideo ? (
+          /* Autoplaying video with pause/resume */
+          <>
+            <video
+              ref={cardVideoRef}
+              src={videos[0].url}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+              autoPlay
+              muted
+              loop
+              playsInline
+              controls
+              preload="metadata"
+              onPlay={() => setVidPaused(false)}
+              onPause={() => setVidPaused(true)}
+            />
+            {/* pause / resume button */}
+            <motion.button
+              whileHover={{ scale: 1.12 }}
+              whileTap={{ scale: 0.9 }}
+              animate={vidPaused ? { scale: 1 } : { scale: [1, 1.08, 1] }}
+              transition={vidPaused ? { duration: 0.2 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              onClick={toggleVid}
+              className="absolute bottom-2.5 right-2.5 z-20 h-9 w-9 rounded-full bg-gradient-to-br from-black/70 to-rose-700/55 hover:from-black/80 hover:to-rose-600/70 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-colors"
+            >
+              {vidPaused
+                ? <Play className="h-3.5 w-3.5 ml-0.5" />
+                : <PauseCircle className="h-4 w-4" />}
+            </motion.button>
+            <span className="absolute top-2 left-2 z-20 text-[9px] font-bold bg-rose-600/90 text-white px-2 py-0.5 rounded-full flex items-center gap-1 shadow backdrop-blur-sm pointer-events-none">
+              <Video className="h-2.5 w-2.5" /> VIDEO
+            </span>
+          </>
+        ) : hasImages ? (
+          /* Draggable image carousel */
+          <>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.img
+                key={imgIdx}
+                src={images[imgIdx].url}
+                alt={images[imgIdx].caption ?? place.name}
+                className="absolute inset-0 w-full h-full object-cover select-none"
+                initial={{ opacity: 0, x: 55 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -55 }}
+                transition={{ duration: 0.32, ease: 'easeInOut' }}
+                drag={images.length > 1 ? 'x' : false}
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.18}
+                onDragStart={() => { dragRef.current = false; }}
+                onDragEnd={(_, info) => {
+                  if (images.length > 1) {
+                    if (info.offset.x < -40) setImgIdx(i => (i + 1) % images.length);
+                    else if (info.offset.x > 40) setImgIdx(i => (i - 1 + images.length) % images.length);
+                  }
+                  if (Math.abs(info.offset.x) > 10) {
+                    dragRef.current = true;
+                    setTimeout(() => { dragRef.current = false; }, 80);
+                  }
+                }}
+                onClick={(e) => { if (dragRef.current) e.stopPropagation(); }}
+                loading="lazy"
+                draggable={false}
+              />
+            </AnimatePresence>
+            {images.length > 1 && (
+              <>
+                <button onClick={goPrev} className="absolute left-1.5 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-black/45 hover:bg-black/75 flex items-center justify-center text-white transition-colors backdrop-blur-sm">
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={goNext} className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-black/45 hover:bg-black/75 flex items-center justify-center text-white transition-colors backdrop-blur-sm">
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 z-20 pointer-events-none">
+                  {images.map((_, i) => (
+                    <div key={i} className={`rounded-full transition-all duration-300 ${i === imgIdx ? 'w-3 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'}`} />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        ) : place.coverImage ? (
+          /* Cover image fallback */
+          <img src={place.coverImage} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" draggable={false} />
+        ) : (
+          /* Empty state */
+          <div className="w-full h-full bg-gradient-to-br from-rose-600 to-pink-700 flex items-center justify-center">
+            <Compass className="h-14 w-14 text-white/40" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
+        <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1.5">
+          <span className="text-[10px] font-bold bg-gradient-to-r from-rose-600 to-pink-600 text-white px-2.5 py-1 rounded-full shadow-lg backdrop-blur-sm border border-white/20 pointer-events-none">
+            {place.category}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => void sharePlaceFromCard('facebook', e)}
+              title="Share on Facebook"
+              className="h-7 w-7 rounded-full bg-black/55 hover:bg-blue-600/80 border border-white/30 backdrop-blur-sm text-white flex items-center justify-center transition-colors"
+            >
+              <Facebook className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => void sharePlaceFromCard('instagram', e)}
+              title="Share on Instagram"
+              className="h-7 w-7 rounded-full bg-black/55 hover:bg-pink-600/80 border border-white/30 backdrop-blur-sm text-white flex items-center justify-center transition-colors"
+            >
+              <Instagram className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => void sharePlaceFromCard('whatsapp', e)}
+              title="Share on WhatsApp"
+              className="h-7 w-7 rounded-full bg-black/55 hover:bg-emerald-600/80 border border-white/30 backdrop-blur-sm text-white flex items-center justify-center transition-colors"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {cardShareMessage && (
+            <span className="rounded-md bg-black/70 px-2 py-1 text-[10px] text-white/90 shadow-lg backdrop-blur-sm">
+              {cardShareMessage}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="p-4">
+        <h3 className="font-bold text-white text-base leading-tight mb-1.5 group-hover:text-rose-300 transition-colors duration-300 line-clamp-1">
+          {place.name}
+        </h3>
+        <div className="flex items-center gap-1 text-white/65 text-xs mb-2">
+          <MapPin className="h-3 w-3 shrink-0 text-rose-400" />
+          <span className="line-clamp-1">{[place.area, place.state, place.country].filter(Boolean).join(', ')}</span>
+        </div>
+        {place.description && (
+          <p className="text-white/55 text-xs line-clamp-2 leading-relaxed">{place.description}</p>
+        )}
+        <div className="flex items-center gap-3 mt-3 text-white/45 text-xs">
+          {images.length > 0 && (
+            <span className="flex items-center gap-1"><ImageIcon className="h-3 w-3" />{images.length}</span>
+          )}
+          {videos.length > 0 && (
+            <span className="flex items-center gap-1"><Video className="h-3 w-3" />{videos.length}</span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
 };
 
 /**
@@ -278,71 +344,411 @@ const ChatRoomsList: React.FC = () => {
   const [shareRoom, setShareRoom] = useState<ChatRoomType | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
+  const [socialShareMessage, setSocialShareMessage] = useState('');
   const [userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [selectedState, setSelectedState] = useState<string>('');
-  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
-  const [showStateDropdown, setShowStateDropdown] = useState(false);
-  const [showPlaceDropdown, setShowPlaceDropdown] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
-  const [currentTempleImageIndex, setCurrentTempleImageIndex] = useState(0);
-  const [selectedAttraction, setSelectedAttraction] = useState<string | null>(null);
-  const [gallerySlideIndex, setGallerySlideIndex] = useState(0);
-  const [reviewText, setReviewText] = useState('');
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewImages, setReviewImages] = useState<File[]>([]);
-  const [reviewImagePreviews, setReviewImagePreviews] = useState<string[]>([]);
-  
+  const featureCardHeightClass = 'h-[18rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]';
+  const deferredSearchDestination = useDeferredValue(searchDestination);
+  const normalizedSearchDestination = useMemo(
+    () => deferredSearchDestination.trim().toLowerCase(),
+    [deferredSearchDestination]
+  );
+  const hasSearchQuery = normalizedSearchDestination.length > 0;
+
+  // Firestore tourist places
+  const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<TouristPlace | null>(null);
+  const [selectedPlaceMediaIdx, setSelectedPlaceMediaIdx] = useState(0);
+  const [detailVidIdx, setDetailVidIdx] = useState(0);
+  const [detailVidPaused, setDetailVidPaused] = useState(false);
+  const [detailBannerImgIdx, setDetailBannerImgIdx] = useState(0);
+  const detailBannerDragRef = useRef(false);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
+  const detailBannerVidRef = useRef<HTMLVideoElement>(null);
+
+  // Media comments state
+  const [mediaComments, setMediaComments] = useState<Record<string, { id: string; text: string; author: string; userId: string; createdAt: unknown }[]>>({});
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [openCommentKey, setOpenCommentKey] = useState<string | null>(null);
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [placeReviews, setPlaceReviews] = useState<Record<string, PlaceReview[]>>({});
+  const [reviewInput, setReviewInput] = useState('');
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewComments, setReviewComments] = useState<Record<string, ReviewComment[]>>({});
+  const [reviewCommentInputs, setReviewCommentInputs] = useState<Record<string, string>>({});
+  const [openReviewCommentReviewId, setOpenReviewCommentReviewId] = useState<string | null>(null);
+  const [reviewCommentSubmitting, setReviewCommentSubmitting] = useState(false);
+  const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
+  const [userMediaFiles, setUserMediaFiles] = useState<Array<{ file: File; preview: string }>>([]);
+  const [userMediaUploading, setUserMediaUploading] = useState(false);
+  const [userMediaError, setUserMediaError] = useState('');
+  const [selectedPlaceShareMessage, setSelectedPlaceShareMessage] = useState('');
+
+  const filteredPlaces = useMemo(() => {
+    if (!hasSearchQuery) return [];
+    return firestorePlaces.filter((p) => (
+      p.name.toLowerCase().includes(normalizedSearchDestination) ||
+      (p.area ?? '').toLowerCase().includes(normalizedSearchDestination) ||
+      p.state.toLowerCase().includes(normalizedSearchDestination) ||
+      p.country.toLowerCase().includes(normalizedSearchDestination)
+    ));
+  }, [firestorePlaces, hasSearchQuery, normalizedSearchDestination]);
+
+  const selectedPlaceImages = useMemo(
+    () => selectedPlace?.media?.filter((m) => m.type === 'image') ?? [],
+    [selectedPlace?.media]
+  );
+
+  const selectedPlaceVideos = useMemo(
+    () => selectedPlace?.media?.filter((m) => m.type === 'video') ?? [],
+    [selectedPlace?.media]
+  );
+
+  const selectedPlaceReviewList = useMemo(
+    () => (selectedPlace?.id ? (placeReviews[selectedPlace.id] ?? []) : []),
+    [placeReviews, selectedPlace?.id]
+  );
+
+  const selectedPlaceAverageRating = useMemo(() => {
+    if (selectedPlaceReviewList.length === 0) return 0;
+    return selectedPlaceReviewList.reduce((sum, review) => sum + review.rating, 0) / selectedPlaceReviewList.length;
+  }, [selectedPlaceReviewList]);
+
+  const handleSelectPlace = useCallback((place: TouristPlace) => {
+    setSelectedPlace(place);
+    setSelectedPlaceMediaIdx(0);
+  }, []);
+
   const videoRef = useRef<HTMLVideoElement>(null);
-  const templeDetailsRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const communityRoomsRef = useRef<HTMLDivElement>(null);
-  const exploreOutdoorsRef = useRef<HTMLDivElement>(null);
 
-  // Auto-slide gallery images
+  // Scroll to + reset detail panel when a place is selected
   useEffect(() => {
-    if (!selectedAttraction || !TEMPLE_DETAILS[selectedAttraction]) return;
-    
-    const galleryInterval = setInterval(() => {
-      setGallerySlideIndex((prevIndex) => {
-        const totalImages = TEMPLE_DETAILS[selectedAttraction].images.length;
-        return (prevIndex + 1) % totalImages;
+    if (selectedPlace) {
+      setSelectedPlaceShareMessage('');
+      setDetailVidIdx(0);
+      setDetailVidPaused(false);
+      setDetailBannerImgIdx(0);
+      setTimeout(() => detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    }
+  }, [selectedPlace]);
+
+  useEffect(() => {
+    userMediaFiles.forEach((item) => revokeImagePreview(item.preview));
+    setUserMediaFiles([]);
+    setUserMediaError('');
+    setReviewCommentInputs({});
+    setOpenReviewCommentReviewId(null);
+    setUserAvatarMap({});
+  }, [selectedPlace?.id]);
+
+  // Auto-advance banner images when no video available
+  useEffect(() => {
+    if (!selectedPlace) return;
+    if (selectedPlaceVideos.length > 0 || selectedPlaceImages.length <= 1) return;
+    const t = setInterval(() => setDetailBannerImgIdx((i) => (i + 1) % selectedPlaceImages.length), 3000);
+    return () => clearInterval(t);
+  }, [selectedPlace?.id, selectedPlaceImages.length, selectedPlaceVideos.length]);
+
+  // Subscribe to media comments for selected place
+  useEffect(() => {
+    if (!selectedPlace?.id) { setMediaComments({}); return; }
+    const q = query(
+      collection(firestoreDb, 'touristPlaces', selectedPlace.id, 'mediaComments'),
+      orderBy('createdAt', 'asc')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const grouped: Record<string, { id: string; text: string; author: string; userId: string; createdAt: unknown }[]> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const key = data.mediaKey as string;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push({ id: d.id, text: data.text, author: data.author, userId: data.userId, createdAt: data.createdAt });
       });
-    }, 5000); // Change slide every 5 seconds
+      setMediaComments(grouped);
+    });
+    return () => unsub();
+  }, [selectedPlace?.id]);
 
-    return () => clearInterval(galleryInterval);
-  }, [selectedAttraction]);
-
-  // Auto-shuffle temple images
+  // Subscribe to place-level reviews for selected place
   useEffect(() => {
-    if (searchDestination === 'Tirupati') {
-      const interval = setInterval(() => {
-        setCurrentTempleImageIndex((prev) => (prev + 1) % TIRUMALA_TEMPLE_IMAGES.length);
-      }, IMAGE_SHUFFLE_INTERVAL);
-      
-      return () => clearInterval(interval);
+    if (!selectedPlace?.id) {
+      setReviewInput('');
+      setReviewRating(0);
+      setReviewComments({});
+      return;
     }
-  }, [searchDestination]);
+    const q = query(
+      collection(firestoreDb, 'touristPlaces', selectedPlace.id, 'reviews'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const reviews = snap.docs.map((d) => {
+        const data = d.data();
+        const rawRating = Number(data.rating);
+        const reviewMedia: MediaItem[] = Array.isArray(data.media)
+          ? data.media
+            .map((item) => {
+              if (!item || typeof item !== 'object') return null;
+              const maybeMedia = item as {
+                type?: unknown;
+                url?: unknown;
+                publicId?: unknown;
+                thumbnail?: unknown;
+                caption?: unknown;
+              };
+              const mediaType = maybeMedia.type === 'video' ? 'video' : maybeMedia.type === 'image' ? 'image' : null;
+              if (!mediaType || typeof maybeMedia.url !== 'string' || typeof maybeMedia.publicId !== 'string') return null;
+              return {
+                type: mediaType,
+                url: maybeMedia.url,
+                publicId: maybeMedia.publicId,
+                thumbnail: typeof maybeMedia.thumbnail === 'string' ? maybeMedia.thumbnail : undefined,
+                caption: typeof maybeMedia.caption === 'string' ? maybeMedia.caption : undefined,
+              } as MediaItem;
+            })
+            .filter((item): item is MediaItem => item !== null)
+          : [];
+        return {
+          id: d.id,
+          text: (data.text as string) ?? '',
+          author: (data.author as string) ?? 'Traveller',
+          userId: (data.userId as string) ?? 'anonymous',
+          avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
+          rating: Number.isFinite(rawRating) ? Math.max(1, Math.min(5, rawRating)) : 5,
+          createdAt: data.createdAt,
+          media: reviewMedia,
+        };
+      });
+      setPlaceReviews((prev) => ({ ...prev, [selectedPlace.id!]: reviews }));
+    });
+    return () => unsub();
+  }, [selectedPlace?.id]);
 
-  // Memoized computed values for performance
-  const availableStates = useMemo(() => {
-    if (selectedCountry === 'India') {
-      return Object.keys(INDIA_DATA);
+  useEffect(() => {
+    if (!selectedPlace?.id || selectedPlaceReviewList.length === 0) {
+      setReviewComments({});
+      return;
     }
-    return [];
-  }, [selectedCountry]);
 
-  const touristPlaces = useMemo(() => {
-    if (selectedCountry === 'India' && selectedState) {
-      return INDIA_DATA[selectedState] || [];
+    const unsubscribeReviewComments = selectedPlaceReviewList.map((review) => {
+      const reviewCommentsQuery = query(
+        collection(firestoreDb, 'touristPlaces', selectedPlace.id!, 'reviews', review.id, 'comments'),
+        orderBy('createdAt', 'asc')
+      );
+
+      return onSnapshot(reviewCommentsQuery, (snap) => {
+        const comments: ReviewComment[] = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            text: (data.text as string) ?? '',
+            author: (data.author as string) ?? 'Traveller',
+            userId: (data.userId as string) ?? 'anonymous',
+            avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
+            createdAt: data.createdAt,
+          };
+        });
+
+        setReviewComments((prev) => ({ ...prev, [review.id]: comments }));
+      });
+    });
+
+    return () => {
+      unsubscribeReviewComments.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [selectedPlace?.id, selectedPlaceReviewList]);
+
+  useEffect(() => {
+    const candidateUserIds = new Set<string>();
+
+    selectedPlaceReviewList.forEach((review) => {
+      if (review.userId && review.userId !== 'anonymous') {
+        candidateUserIds.add(review.userId);
+      }
+      (reviewComments[review.id] ?? []).forEach((comment) => {
+        if (comment.userId && comment.userId !== 'anonymous') {
+          candidateUserIds.add(comment.userId);
+        }
+      });
+    });
+
+    const missingUserIds = Array.from(candidateUserIds).filter((userId) => !userAvatarMap[userId]);
+    if (missingUserIds.length === 0) return;
+
+    let cancelled = false;
+
+    void Promise.all(
+      missingUserIds.map(async (userId) => {
+        try {
+          const userSnap = await getDoc(doc(firestoreDb, 'users', userId));
+          if (!userSnap.exists()) return [userId, ''] as const;
+
+          const userData = userSnap.data() as {
+            avatar?: unknown;
+            photoURL?: unknown;
+            profilePicture?: unknown;
+            profileImage?: unknown;
+          };
+
+          const avatar = [userData.avatar, userData.photoURL, userData.profilePicture, userData.profileImage]
+            .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+          return [userId, avatar ?? ''] as const;
+        } catch {
+          return [userId, ''] as const;
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      setUserAvatarMap((prev) => {
+        const next = { ...prev };
+        entries.forEach(([userId, avatarUrl]) => {
+          if (avatarUrl) {
+            next[userId] = avatarUrl;
+          }
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlaceReviewList, reviewComments, userAvatarMap]);
+
+  const submitMediaComment = async (mediaKey: string) => {
+    const text = (commentInputs[mediaKey] ?? '').trim();
+    if (!text || !selectedPlace?.id) return;
+    setCommentSubmitting(true);
+    try {
+      await addDoc(collection(firestoreDb, 'touristPlaces', selectedPlace.id, 'mediaComments'), {
+        mediaKey,
+        text,
+        author: user?.displayName ?? user?.email ?? 'Traveller',
+        userId: user?.uid ?? 'anonymous',
+        createdAt: serverTimestamp(),
+      });
+      setCommentInputs(prev => ({ ...prev, [mediaKey]: '' }));
+    } finally {
+      setCommentSubmitting(false);
     }
-    return [];
-  }, [selectedCountry, selectedState]);
+  };
 
-  const attractions = useMemo(() => {
-    return ATTRACTIONS_DATA[searchDestination] || [];
+  const submitPlaceReview = async () => {
+    if (!selectedPlace?.id || reviewRating < 1 || reviewRating > 5) return;
+    setReviewSubmitting(true);
+    setUserMediaUploading(userMediaFiles.length > 0);
+    setUserMediaError('');
+    try {
+      const reviewText = reviewInput.trim();
+      const reviewMedia: MediaItem[] = [];
+      for (const { file } of userMediaFiles) {
+        const isVideo = file.type.startsWith('video/');
+        const mediaItem = isVideo
+          ? await uploadVideoToCloudinary(file)
+          : await uploadImageToCloudinary(file, { folder: 'tourist-places/user-images' });
+
+        const reviewMediaItem: MediaItem = {
+          type: isVideo ? 'video' : 'image',
+          url: mediaItem.url,
+          publicId: mediaItem.publicId,
+        };
+
+        if ('thumbnail' in mediaItem && mediaItem.thumbnail) {
+          reviewMediaItem.thumbnail = mediaItem.thumbnail;
+        }
+        if (reviewText) {
+          reviewMediaItem.caption = reviewText;
+        }
+
+        reviewMedia.push(reviewMediaItem);
+      }
+
+      await addDoc(collection(firestoreDb, 'touristPlaces', selectedPlace.id, 'reviews'), {
+        text: reviewText,
+        rating: reviewRating,
+        author: user?.displayName ?? user?.email ?? 'Traveller',
+        userId: user?.uid ?? 'anonymous',
+        avatarUrl: user?.photoURL ?? '',
+        media: reviewMedia,
+        createdAt: serverTimestamp(),
+      });
+      setReviewInput('');
+      setReviewRating(0);
+      userMediaFiles.forEach((item) => revokeImagePreview(item.preview));
+      setUserMediaFiles([]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to post review.';
+      setUserMediaError(message);
+    } finally {
+      setReviewSubmitting(false);
+      setUserMediaUploading(false);
+    }
+  };
+
+  const submitReviewComment = async (reviewId: string) => {
+    const text = (reviewCommentInputs[reviewId] ?? '').trim();
+    if (!text || !selectedPlace?.id) return;
+
+    setReviewCommentSubmitting(true);
+    try {
+      await addDoc(collection(firestoreDb, 'touristPlaces', selectedPlace.id, 'reviews', reviewId, 'comments'), {
+        text,
+        author: user?.displayName ?? user?.email ?? 'Traveller',
+        userId: user?.uid ?? 'anonymous',
+        avatarUrl: user?.photoURL ?? '',
+        createdAt: serverTimestamp(),
+      });
+      setReviewCommentInputs((prev) => ({ ...prev, [reviewId]: '' }));
+    } finally {
+      setReviewCommentSubmitting(false);
+    }
+  };
+
+  const handleUserMediaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pickedFiles = Array.from(e.target.files ?? []);
+    if (pickedFiles.length === 0) return;
+
+    const validFiles = pickedFiles.filter((file) => {
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      if (!isImage && !isVideo) return false;
+      if (isVideo && file.size > 100 * 1024 * 1024) return false;
+      return true;
+    });
+
+    if (validFiles.length === 0) {
+      setUserMediaError('Select valid image/video files. Video limit is 100MB per file.');
+      return;
+    }
+
+    userMediaFiles.forEach((item) => revokeImagePreview(item.preview));
+    setUserMediaFiles(validFiles.map((file) => ({ file, preview: createImagePreview(file) })));
+    setUserMediaError(validFiles.length < pickedFiles.length ? 'Some invalid files were skipped.' : '');
+    e.target.value = '';
+  };
+
+  // Fetch tourist places from Firestore when explore section opens
+  useEffect(() => {
+    if (selectedCategory !== 'outdoors') return;
+    const q = query(collection(firestoreDb, 'touristPlaces'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setFirestorePlaces(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TouristPlace)));
+    });
+    return () => unsub();
+  }, [selectedCategory]);
+
+  // When search output changes, close any opened place/detail cards.
+  useEffect(() => {
+    setSelectedPlaceShareMessage('');
+    if (!selectedPlace && !openCommentKey) return;
+    setSelectedPlace(null);
+    setOpenCommentKey(null);
+    setOpenReviewCommentReviewId(null);
   }, [searchDestination]);
 
   // Memoized event handlers
@@ -358,21 +764,6 @@ const ChatRoomsList: React.FC = () => {
     }
   }, [isVideoPlaying]);
 
-  const handleAttractionClick = useCallback((attractionName: string, hasImages: boolean) => {
-    if (hasImages) {
-      setSelectedAttraction(attractionName);
-      setGallerySlideIndex(0); // Reset gallery to first image
-      
-      // Scroll to temple details after a short delay to allow rendering
-      setTimeout(() => {
-        templeDetailsRef.current?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'start' 
-        });
-      }, 100);
-    }
-  }, []);
-
   const scrollToCommunityRooms = useCallback(() => {
     setTimeout(() => {
       communityRoomsRef.current?.scrollIntoView({ 
@@ -384,83 +775,6 @@ const ChatRoomsList: React.FC = () => {
 
   const scrollToExploreOutdoors = useCallback(() => {
     setSelectedCategory('outdoors');
-    setSearchDestination('Tirupati');
-    setTimeout(() => {
-      exploreOutdoorsRef.current?.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
-      });
-    }, 600);
-  }, []);
-
-  const closeAttractionDetails = useCallback(() => {
-    setSelectedAttraction(null);
-  }, []);
-
-  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length + reviewImages.length > 5) {
-      alert('You can upload maximum 5 images');
-      return;
-    }
-    
-    setReviewImages(prev => [...prev, ...files]);
-    
-    // Create preview URLs
-    const newPreviews = files.map(file => URL.createObjectURL(file));
-    setReviewImagePreviews(prev => [...prev, ...newPreviews]);
-  }, [reviewImages.length]);
-
-  const removeReviewImage = useCallback((index: number) => {
-    setReviewImages(prev => prev.filter((_, i) => i !== index));
-    setReviewImagePreviews(prev => {
-      URL.revokeObjectURL(prev[index]); // Clean up memory
-      return prev.filter((_, i) => i !== index);
-    });
-  }, []);
-
-  const handleSubmitReview = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!reviewText.trim()) {
-      alert('Please write your review');
-      return;
-    }
-
-    // TODO: Implement backend API call to save review
-    // const reviewData = {
-    //   rating: reviewRating,
-    //   text: reviewText,
-    //   images: reviewImages,
-    //   attraction: selectedAttraction,
-    //   timestamp: Date.now()
-    // };
-
-    // Clean up image previews
-    reviewImagePreviews.forEach(url => URL.revokeObjectURL(url));
-    
-    // Reset form
-    setReviewText('');
-    setReviewRating(5);
-    setReviewImages([]);
-    setReviewImagePreviews([]);
-    
-    alert('✨ Thank you for your review! It will be published after moderation.');
-  }, [reviewText, reviewRating, reviewImages, reviewImagePreviews, selectedAttraction]);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.dropdown-container')) {
-        setShowCountryDropdown(false);
-        setShowStateDropdown(false);
-        setShowPlaceDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Load chat rooms
@@ -541,8 +855,9 @@ const ChatRoomsList: React.FC = () => {
     return () => {
       if (backgroundImagePreview) revokeImagePreview(backgroundImagePreview);
       if (iconImagePreview) revokeImagePreview(iconImagePreview);
+      userMediaFiles.forEach((item) => revokeImagePreview(item.preview));
     };
-  }, [backgroundImagePreview, iconImagePreview]);
+  }, [backgroundImagePreview, iconImagePreview, userMediaFiles]);
 
   // Create new room
   const handleCreateRoom = async (e: React.FormEvent) => {
@@ -622,6 +937,7 @@ const ChatRoomsList: React.FC = () => {
     setShowShareDialog(true);
     setCopiedInvite(false);
     setCopiedPassword(false);
+    setSocialShareMessage('');
   };
 
   // Copy invite link
@@ -642,6 +958,61 @@ const ChatRoomsList: React.FC = () => {
     navigator.clipboard.writeText(credentials);
     setCopiedPassword(true);
     setTimeout(() => setCopiedPassword(false), 2000);
+  };
+
+  const shareRoomOnSocial = (platform: 'facebook' | 'instagram' | 'whatsapp') => {
+    if (!shareRoom?.id || !shareRoom.inviteToken) return;
+
+    const inviteLink = chatService.getInviteLink(shareRoom.id, shareRoom.inviteToken);
+    const shareText = `Join my room "${shareRoom.name}" on ABjee Travel: ${inviteLink}`;
+
+    if (platform === 'facebook') {
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(inviteLink)}&quote=${encodeURIComponent(shareText)}`;
+      window.open(fbUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (platform === 'whatsapp') {
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+    void navigator.clipboard
+      .writeText(shareText)
+      .then(() => setSocialShareMessage('Invite copied. Paste it on Instagram in DM, bio, or story link.'))
+      .catch(() => setSocialShareMessage('Could not auto-copy invite. Use the Copy button and paste it on Instagram.'));
+    setTimeout(() => setSocialShareMessage(''), 3500);
+  };
+
+  const shareSelectedPlaceOnSocial = (platform: 'facebook' | 'instagram' | 'whatsapp') => {
+    if (!selectedPlace) return;
+
+    const placeLocation = [selectedPlace.area, selectedPlace.state, selectedPlace.country]
+      .filter(Boolean)
+      .join(', ');
+    const targetUrl = selectedPlace.googleMapsUrl || window.location.href;
+    const shareText = `Check out ${selectedPlace.name}${placeLocation ? ` (${placeLocation})` : ''} on ABjee Travel. ${targetUrl}`;
+
+    if (platform === 'facebook') {
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(targetUrl)}&quote=${encodeURIComponent(shareText)}`;
+      window.open(fbUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (platform === 'whatsapp') {
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+    void navigator.clipboard
+      .writeText(shareText)
+      .then(() => setSelectedPlaceShareMessage('Place details copied. Paste it on Instagram in DM, bio, or story link.'))
+      .catch(() => setSelectedPlaceShareMessage('Could not auto-copy place details. Please copy manually for Instagram.'));
+    setTimeout(() => setSelectedPlaceShareMessage(''), 3500);
   };
 
   // Delete room
@@ -670,6 +1041,18 @@ const ChatRoomsList: React.FC = () => {
     if (days === 1) return 'Yesterday';
     if (days < 7) return `${days} days ago`;
     return date.toLocaleDateString();
+  };
+
+  const formatReviewDate = (createdAt: unknown) => {
+    if (!createdAt) return 'Just now';
+    const maybeTimestamp = createdAt as { toDate?: () => Date; seconds?: number };
+    if (typeof maybeTimestamp.toDate === 'function') {
+      return maybeTimestamp.toDate().toLocaleDateString();
+    }
+    if (typeof maybeTimestamp.seconds === 'number') {
+      return new Date(maybeTimestamp.seconds * 1000).toLocaleDateString();
+    }
+    return 'Just now';
   };
 
   if (loading) {
@@ -724,7 +1107,7 @@ const ChatRoomsList: React.FC = () => {
               className="group cursor-pointer"
               onClick={scrollToExploreOutdoors}
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -767,7 +1150,7 @@ const ChatRoomsList: React.FC = () => {
               onClick={scrollToCommunityRooms}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -820,7 +1203,7 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-8 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -850,7 +1233,7 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-8 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 <div className="absolute inset-0 bg-gradient-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -884,7 +1267,7 @@ const ChatRoomsList: React.FC = () => {
               className="group cursor-pointer"
               onClick={scrollToExploreOutdoors}
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -927,7 +1310,7 @@ const ChatRoomsList: React.FC = () => {
               onClick={scrollToCommunityRooms}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -980,7 +1363,7 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-8 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -1010,7 +1393,7 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className="relative h-90 rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-8 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 <div className="absolute inset-0 bg-gradient-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -1038,1132 +1421,919 @@ const ChatRoomsList: React.FC = () => {
         <AnimatePresence>
           {selectedCategory === 'outdoors' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
+              initial={{ opacity: 0, scale: 1.04 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.04 }}
+              transition={{ duration: 0.5, ease: 'easeInOut' }}
               className="fixed inset-0 z-50 bg-black"
             >
-              {/* Close Button */}
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="absolute top-6 right-6 z-50 p-3 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all duration-300 group"
-              >
-                <X className="h-6 w-6 text-white" />
-              </button>
-
               {/* Background Video */}
               <div className="relative w-full h-full">
-                <video 
+                <video
                   ref={videoRef}
-                  autoPlay 
-                  loop 
-                  muted 
+                  autoPlay
+                  loop
+                  muted
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
                   <source src="/v1.mp4" type="video/mp4" />
                 </video>
-                {/* Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
-                
+
+                {/* Multi-layer gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/70" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+
+                {/* Animated vignette */}
+                <motion.div
+                  className="absolute inset-0 pointer-events-none"
+                  animate={{ opacity: [0.4, 0.65, 0.4] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 100%)' }}
+                />
+
                 {/* Content - Scrollable */}
-                <div 
+                <div
                   className="relative z-10 h-full overflow-y-auto overflow-x-hidden hide-scrollbar"
-                  style={{
-                    scrollbarWidth: 'none',
-                    msOverflowStyle: 'none'
-                  } as React.CSSProperties}
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
                 >
-                  <style>{`
-                    .hide-scrollbar::-webkit-scrollbar {
-                      display: none;
-                      width: 0;
-                      height: 0;
-                    }
-                  `}</style>
-                  <div className="min-h-full flex flex-col items-center justify-between px-4 py-12">
-                    {/* Search Bar */}
+                  <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }`}</style>
+                  <div className="min-h-full flex flex-col items-center justify-start px-4 pt-6 pb-20 gap-8">
+                    {/* ── Top bar: Search + Pause + Close ── */}
                     <motion.div
-                      initial={{ y: 20, opacity: 0 }}
+                      initial={{ y: -30, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.2 }}
-                      className="w-full max-w-2xl"
+                      transition={{ delay: 0.15, type: 'spring', stiffness: 260, damping: 24 }}
+                      className="w-full max-w-3xl flex items-center gap-2 sm:gap-3"
                     >
-                      <div className="relative">
-                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-400 z-10" />
-                        <input
-                          type="text"
-                          placeholder="Try: Tirupati, Manali, Shimla, Goa, Kerala..."
-                          value={searchDestination}
-                          onChange={(e) => setSearchDestination(e.target.value)}
-                          className="w-full pl-16 pr-6 py-5 rounded-full bg-white text-gray-900 placeholder-gray-500 text-lg focus:outline-none focus:ring-4 focus:ring-white/30 shadow-2xl transition-all"
+                      {/* Glassmorphic Search bar */}
+                      <div className="relative flex-1 min-w-0 group">
+                        <motion.div
+                          className="absolute -inset-0.5 rounded-full bg-gradient-to-r from-rose-500/40 via-pink-500/40 to-purple-500/40 blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"
                         />
+                        <div className="relative">
+                          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 z-10 group-focus-within:text-rose-400 transition-colors duration-300" />
+                          <input
+                            type="text"
+                            placeholder="Search by place, area, state or country…"
+                            value={searchDestination}
+                            onChange={(e) => setSearchDestination(e.target.value)}
+                            className="w-full pl-12 pr-10 sm:pl-14 sm:pr-12 py-3.5 sm:py-4 rounded-full bg-white/95 backdrop-blur-xl text-gray-900 placeholder-gray-400 text-sm sm:text-base focus:outline-none shadow-2xl shadow-black/40 transition-all duration-300 focus:bg-white"
+                          />
+                          {searchDestination && (
+                            <motion.button
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              whileTap={{ scale: 0.85 }}
+                              type="button"
+                              onClick={() => setSearchDestination('')}
+                              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-full bg-gray-200 hover:bg-rose-100 text-gray-500 hover:text-rose-500 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </motion.button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Pause/Play button */}
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => {
+                          if (videoRef.current) {
+                            if (isVideoPlaying) { videoRef.current.pause(); setIsVideoPlaying(false); }
+                            else { videoRef.current.play(); setIsVideoPlaying(true); }
+                          }
+                        }}
+                        className="p-2.5 sm:p-3 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-lg transition-all duration-200 shrink-0"
+                      >
+                        {isVideoPlaying
+                          ? <PauseCircle className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                          : <PlayCircle className="h-6 w-6 sm:h-7 sm:w-7 text-white" />}
+                      </motion.button>
+
+                      {/* Close button */}
+                      <motion.button
+                        whileHover={{ scale: 1.1, rotate: 90 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setSelectedCategory(null)}
+                        className="p-2.5 sm:p-3 rounded-full bg-white/15 hover:bg-red-500/40 backdrop-blur-md border border-white/20 shadow-lg transition-all duration-200 shrink-0"
+                      >
+                        <X className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                      </motion.button>
                     </motion.div>
 
-                  {/* Popular Attractions Cards - Centered */}
-                  {searchDestination && attractions.length > 0 ? (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.5, delay: 0.2 }}
-                      className="w-full max-w-7xl flex-1 flex flex-col items-center justify-center my-12"
-                    >
-                      <motion.h2 
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="text-4xl md:text-5xl font-bold text-white mb-10 drop-shadow-2xl text-center"
-                      >
-                        Popular Attractions in {searchDestination}
-                      </motion.h2>
-
-                      {/* Mobile Layout - Show details inline */}
-                      <div className="md:hidden w-full px-4 space-y-6">
-                        {attractions.map((attraction, index) => (
-                          <React.Fragment key={index}>
+                  {/* ── Tourist Places Grid ── */}
+                  {(() => {
+                    if (!hasSearchQuery) {
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.3 }}
+                          className="flex flex-col items-center gap-5 py-28 text-center"
+                        >
+                          {/* Pulsing animated search icon */}
+                          <div className="relative">
                             <motion.div
-                              initial={{ opacity: 0, y: 40, scale: 0.8 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              transition={{ 
-                                delay: 0.4 + (0.1 * index),
-                                duration: 0.5,
-                                type: "spring",
-                                stiffness: 100
-                              }}
-                              whileHover={{ 
-                                scale: 1.08, 
-                                y: -10,
-                                rotateY: 5,
-                                transition: { duration: 0.3 }
-                              }}
-                              onClick={() => handleAttractionClick(attraction.name, !!attraction.images)}
-                              className="bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-2xl hover:shadow-3xl transition-all duration-300 cursor-pointer group relative overflow-hidden"
+                              animate={{ scale: [1, 1.3, 1], opacity: [0.2, 0.5, 0.2] }}
+                              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                              className="absolute inset-0 rounded-full bg-white/20 blur-xl"
+                            />
+                            <motion.div
+                              animate={{ rotate: [0, 10, -10, 0] }}
+                              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                              className="relative w-20 h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl"
                             >
-                              {/* Background Image for Tirumala Temple with Shuffle Animation */}
-                              {attraction.images && (
-                                <div className="absolute inset-0 rounded-3xl overflow-hidden">
-                                  <AnimatePresence mode="wait">
-                                    <motion.img
-                                      key={currentTempleImageIndex}
-                                      src={attraction.images[currentTempleImageIndex]}
-                                      alt={attraction.name}
-                                      initial={{ opacity: 0, scale: 1.1 }}
-                                      animate={{ opacity: 1, scale: 1 }}
-                                      exit={{ opacity: 0, scale: 0.9 }}
-                                      transition={{ duration: 1 }}
-                                      className="absolute inset-0 w-full h-full object-cover"
-                                    />
-                                  </AnimatePresence>
-                                  {/* Dark overlay for better text readability */}
-                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-                                </div>
-                              )}
-                              
-                              <div className="flex flex-col items-center text-center gap-4 relative z-10">
-                                {attraction.images ? (
+                              <Search className="h-9 w-9 text-white/80" />
+                            </motion.div>
+                          </div>
+                          <div className="space-y-2">
+                            <motion.p
+                              animate={{ opacity: [0.7, 1, 0.7] }}
+                              transition={{ duration: 3, repeat: Infinity }}
+                              className="text-white text-xl font-bold drop-shadow-lg"
+                            >
+                              Where do you want to go?
+                            </motion.p>
+                            <p className="text-white/50 text-sm">Search by place, area, state or country</p>
+                          </div>
+                          {/* Quick suggestion chips */}
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="flex flex-wrap justify-center gap-2 max-w-sm"
+                          >
+                            {['Tirupati', 'Manali', 'Goa', 'Kerala', 'Shimla', 'Ladakh'].map((chip, i) => (
+                              <motion.button
+                                key={chip}
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.5 + i * 0.07 }}
+                                whileHover={{ scale: 1.08, y: -2 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setSearchDestination(chip)}
+                                className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 hover:border-white/40 text-white text-sm font-medium transition-all duration-200 shadow-md"
+                              >
+                                {chip}
+                              </motion.button>
+                            ))}
+                          </motion.div>
+                        </motion.div>
+                      );
+                    }
+
+                    if (filteredPlaces.length === 0) {
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="flex flex-col items-center gap-4 py-24 text-center"
+                        >
+                          <div className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center">
+                            <MapPin className="h-8 w-8 text-white/50" />
+                          </div>
+                          <div>
+                            <p className="text-white text-lg font-bold">No places found</p>
+                            <p className="text-white/50 text-sm mt-1">Try a different search term</p>
+                          </div>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                            onClick={() => setSearchDestination('')}
+                            className="px-5 py-2.5 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 text-white text-sm font-medium transition-all backdrop-blur-sm"
+                          >
+                            Clear search
+                          </motion.button>
+                        </motion.div>
+                      );
+                    }
+
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="w-full max-w-7xl px-2"
+                      >
+                        {/* Results count badge */}
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-center mb-6"
+                        >
+                          <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-semibold shadow-lg">
+                            <MapPin className="h-4 w-4 text-rose-400" />
+                            {filteredPlaces.length} place{filteredPlaces.length !== 1 ? 's' : ''} for &ldquo;{deferredSearchDestination.trim()}&rdquo;
+                          </span>
+                        </motion.div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                          {filteredPlaces.map((place, idx) => (
+                            <PlaceCard
+                              key={place.id ?? idx}
+                              place={place}
+                              idx={idx}
+                              onSelect={() => handleSelectPlace(place)}
+                            />
+                          ))}
+                        </div>
+                      </motion.div>
+                    );
+                  })()}
+                  {/* ── Firestore Place Detail Panel ── */}
+                  <AnimatePresence>
+                    {selectedPlace && (
+                      <motion.div
+                        ref={detailPanelRef}
+                        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 40, scale: 0.98 }}
+                        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                        className="w-full max-w-5xl px-2 my-6"
+                      >
+                        {(() => {
+                          const dpVideos = selectedPlaceVideos;
+                          const dpImages = selectedPlaceImages;
+                          const dpHasVideo = dpVideos.length > 0;
+                          const dpHasImages = dpImages.length > 0;
+                          return (
+                        <div className="bg-white/95 backdrop-blur-xl rounded-3xl overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.6)] border border-white/30">
+                          {/* Banner: video-first, then draggable image carousel */}
+                          <div className="relative h-56 sm:h-64 md:h-72 overflow-hidden bg-black">
+                            {dpHasVideo ? (
+                              <>
+                                <video
+                                  ref={detailBannerVidRef}
+                                  key={dpVideos[detailVidIdx]?.url}
+                                  src={dpVideos[detailVidIdx]?.url}
+                                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 hover:scale-[1.015]"
+                                  autoPlay
+                                  muted
+                                  loop
+                                  playsInline
+                                  controls
+                                  preload="metadata"
+                                  onPlay={() => setDetailVidPaused(false)}
+                                  onPause={() => setDetailVidPaused(true)}
+                                />
+                                {/* Pause / Resume */}
+                                <motion.button
+                                  whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                                  animate={detailVidPaused ? { scale: 1 } : { scale: [1, 1.08, 1] }}
+                                  transition={detailVidPaused ? { duration: 0.2 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                                  onClick={() => {
+                                    const v = detailBannerVidRef.current;
+                                    if (!v) return;
+                                    if (v.paused) { v.play(); setDetailVidPaused(false); }
+                                    else { v.pause(); setDetailVidPaused(true); }
+                                  }}
+                                  className="absolute bottom-14 right-4 z-20 h-10 w-10 rounded-full bg-gradient-to-br from-black/75 to-rose-700/60 hover:from-black/85 hover:to-rose-600/75 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] transition-colors"
+                                >
+                                  {detailVidPaused ? <Play className="h-4 w-4 ml-0.5" /> : <PauseCircle className="h-4 w-4" />}
+                                </motion.button>
+                                {/* Prev / Next video */}
+                                {dpVideos.length > 1 && (
                                   <>
-                                    <motion.div 
-                                      className="text-6xl mb-2 drop-shadow-2xl"
-                                      animate={{ 
-                                        scale: [1, 1.1, 1],
-                                        rotate: [0, 5, -5, 0]
-                                      }}
-                                      transition={{ 
-                                        duration: 2,
-                                        repeat: Infinity,
-                                        repeatDelay: 3
-                                      }}
+                                    <motion.button
+                                      whileHover={{ scale: 1.08, x: -1 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => setDetailVidIdx(i => (i - 1 + dpVideos.length) % dpVideos.length)}
+                                      className="absolute left-3 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-black/55 hover:bg-rose-600/75 backdrop-blur-md border border-white/25 flex items-center justify-center text-white transition-colors"
                                     >
-                                      {attraction.icon}
-                                    </motion.div>
-                                    <div>
-                                      <h3 className="font-bold text-white text-2xl mb-3 group-hover:text-yellow-300 transition-colors drop-shadow-lg">
-                                        {attraction.name}
-                                      </h3>
-                                      <p className="text-base text-gray-100 leading-relaxed drop-shadow-md">
-                                        {attraction.description}
-                                      </p>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <motion.div 
-                                      className="text-6xl mb-2"
-                                      animate={{ 
-                                        scale: [1, 1.1, 1],
-                                        rotate: [0, 5, -5, 0]
-                                      }}
-                                      transition={{ 
-                                        duration: 2,
-                                        repeat: Infinity,
-                                        repeatDelay: 3
-                                      }}
+                                      <ChevronLeft className="h-4 w-4" />
+                                    </motion.button>
+                                    <motion.button
+                                      whileHover={{ scale: 1.08, x: 1 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => setDetailVidIdx(i => (i + 1) % dpVideos.length)}
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-black/55 hover:bg-rose-600/75 backdrop-blur-md border border-white/25 flex items-center justify-center text-white transition-colors"
                                     >
-                                      {attraction.icon}
-                                    </motion.div>
-                                    <div>
-                                      <h3 className="font-bold text-gray-900 text-2xl mb-3 group-hover:text-blue-600 transition-colors">
-                                        {attraction.name}
-                                      </h3>
-                                      <p className="text-base text-gray-600 leading-relaxed">
-                                        {attraction.description}
-                                      </p>
+                                      <ChevronRight className="h-4 w-4" />
+                                    </motion.button>
+                                    <div className="absolute bottom-14 left-0 right-0 flex justify-center gap-1.5 z-20 pointer-events-none">
+                                      {dpVideos.map((_, i) => (
+                                        <div key={i} className={`rounded-full transition-all duration-200 ${i === detailVidIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'}`} />
+                                      ))}
                                     </div>
                                   </>
                                 )}
-                              </div>
-                            </motion.div>
-
-                            {/* Temple Details - Shows immediately after clicked card on mobile */}
-                            {selectedAttraction === attraction.name && TEMPLE_DETAILS[selectedAttraction] && (
-                              <motion.div
-                                ref={templeDetailsRef}
-                                initial={{ opacity: 0, y: 40 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 40 }}
-                                transition={{ duration: 0.5 }}
-                                className="w-full"
-                              >
-                                <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-2xl">
-                                  {/* Header with Close Button */}
-                                  <div className="flex items-start justify-between mb-6 gap-4">
-                                    <motion.h2 
-                                      initial={{ x: -20, opacity: 0 }}
-                                      animate={{ x: 0, opacity: 1 }}
-                                      className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent"
-                                    >
-                                      {TEMPLE_DETAILS[selectedAttraction].title}
-                                    </motion.h2>
-                                    <button
-                                      onClick={closeAttractionDetails}
-                                      className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors shrink-0"
-                                    >
-                                      <X className="h-5 w-5 text-gray-700" />
+                                <span className="absolute top-3 left-4 z-20 text-[9px] font-bold bg-rose-600/90 text-white px-2.5 py-1 rounded-full flex items-center gap-1 shadow backdrop-blur-sm pointer-events-none">
+                                  <Video className="h-2.5 w-2.5" /> VIDEO {dpVideos.length > 1 ? `${detailVidIdx + 1}/${dpVideos.length}` : ''}
+                                </span>
+                              </>
+                            ) : dpHasImages ? (
+                              <>
+                                <AnimatePresence mode="popLayout" initial={false}>
+                                  <motion.img
+                                    key={detailBannerImgIdx}
+                                    src={dpImages[detailBannerImgIdx].url}
+                                    alt={dpImages[detailBannerImgIdx].caption ?? selectedPlace.name}
+                                    className="absolute inset-0 w-full h-full object-cover select-none"
+                                    initial={{ opacity: 0, x: 60 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -60 }}
+                                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                                    drag={dpImages.length > 1 ? 'x' : false}
+                                    dragConstraints={{ left: 0, right: 0 }}
+                                    dragElastic={0.15}
+                                    onDragEnd={(_, info) => {
+                                      if (dpImages.length > 1) {
+                                        if (info.offset.x < -40) setDetailBannerImgIdx(i => (i + 1) % dpImages.length);
+                                        else if (info.offset.x > 40) setDetailBannerImgIdx(i => (i - 1 + dpImages.length) % dpImages.length);
+                                      }
+                                      detailBannerDragRef.current = Math.abs(info.offset.x) > 10;
+                                      setTimeout(() => { detailBannerDragRef.current = false; }, 80);
+                                    }}
+                                    draggable={false}
+                                  />
+                                </AnimatePresence>
+                                {dpImages.length > 1 && (
+                                  <>
+                                    <button onClick={() => setDetailBannerImgIdx(i => (i - 1 + dpImages.length) % dpImages.length)}
+                                      className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur-sm flex items-center justify-center text-white transition-colors">
+                                      <ChevronLeft className="h-4 w-4" />
                                     </button>
-                                  </div>
-
-                                  {/* Main Description */}
-                                  <motion.p 
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.2 }}
-                                    className="text-base text-gray-700 mb-4 leading-relaxed"
-                                  >
-                                    {TEMPLE_DETAILS[selectedAttraction].description}
-                                  </motion.p>
-
-                                  {/* History Section */}
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.3 }}
-                                    className="mb-4"
-                                  >
-                                    <h3 className="text-xl font-bold text-gray-900 mb-2">History</h3>
-                                    <p className="text-sm text-gray-700 leading-relaxed">
-                                      {TEMPLE_DETAILS[selectedAttraction].history}
-                                    </p>
-                                  </motion.div>
-
-                                  {/* Significance */}
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.4 }}
-                                    className="mb-4"
-                                  >
-                                    <h3 className="text-xl font-bold text-gray-900 mb-2">Significance</h3>
-                                    <p className="text-sm text-gray-700 leading-relaxed">
-                                      {TEMPLE_DETAILS[selectedAttraction].significance}
-                                    </p>
-                                  </motion.div>
-
-                                  {/* Key Features */}
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.5 }}
-                                    className="mb-6"
-                                  >
-                                    <h3 className="text-xl font-bold text-gray-900 mb-3">Key Features</h3>
-                                    <ul className="space-y-2">
-                                      {TEMPLE_DETAILS[selectedAttraction].features.map((feature: string, idx: number) => (
-                                        <motion.li
-                                          key={idx}
-                                          initial={{ x: -20, opacity: 0 }}
-                                          animate={{ x: 0, opacity: 1 }}
-                                          transition={{ delay: 0.6 + (idx * 0.1) }}
-                                          className="flex items-start gap-2"
-                                        >
-                                          <span className="text-orange-600 text-lg mt-1 shrink-0">•</span>
-                                          <span className="text-sm text-gray-700">{feature}</span>
-                                        </motion.li>
+                                    <button onClick={() => setDetailBannerImgIdx(i => (i + 1) % dpImages.length)}
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur-sm flex items-center justify-center text-white transition-colors">
+                                      <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                    <div className="absolute bottom-14 left-0 right-0 flex justify-center gap-1.5 z-20 pointer-events-none">
+                                      {dpImages.map((_, i) => (
+                                        <div key={i} className={`rounded-full transition-all duration-200 ${i === detailBannerImgIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/40'}`} />
                                       ))}
-                                    </ul>
-                                  </motion.div>
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            ) : selectedPlace.coverImage ? (
+                              <img src={selectedPlace.coverImage} alt={selectedPlace.name} className="w-full h-full object-cover" loading="lazy" />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-rose-600 to-pink-700" />
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+                            <div className="absolute bottom-5 left-6 right-16">
+                              <span className="text-[11px] font-bold bg-gradient-to-r from-rose-600 to-pink-600 text-white px-3 py-1 rounded-full shadow-lg">
+                                {selectedPlace.category}
+                              </span>
+                              <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-2 drop-shadow-2xl tracking-tight">
+                                {selectedPlace.name}
+                              </h2>
+                              <div className="flex items-center gap-1.5 text-white/75 text-sm mt-1">
+                                <MapPin className="h-4 w-4 text-rose-400" />
+                                {[selectedPlace.area, selectedPlace.state, selectedPlace.country].filter(Boolean).join(', ')}
+                              </div>
+                            </div>
+                            <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
+                              <motion.button
+                                whileHover={{ scale: 1.08 }}
+                                whileTap={{ scale: 0.92 }}
+                                onClick={() => shareSelectedPlaceOnSocial('facebook')}
+                                className="p-2 rounded-full bg-black/50 hover:bg-blue-600/80 text-white transition-colors shadow-lg backdrop-blur-sm"
+                                title="Share this place on Facebook"
+                              >
+                                <Facebook className="h-4 w-4" />
+                              </motion.button>
+                              <motion.button
+                                whileHover={{ scale: 1.08 }}
+                                whileTap={{ scale: 0.92 }}
+                                onClick={() => shareSelectedPlaceOnSocial('instagram')}
+                                className="p-2 rounded-full bg-black/50 hover:bg-pink-600/80 text-white transition-colors shadow-lg backdrop-blur-sm"
+                                title="Share this place on Instagram"
+                              >
+                                <Instagram className="h-4 w-4" />
+                              </motion.button>
+                              <motion.button
+                                whileHover={{ scale: 1.08 }}
+                                whileTap={{ scale: 0.92 }}
+                                onClick={() => shareSelectedPlaceOnSocial('whatsapp')}
+                                className="p-2 rounded-full bg-black/50 hover:bg-emerald-600/80 text-white transition-colors shadow-lg backdrop-blur-sm"
+                                title="Share this place on WhatsApp"
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                              </motion.button>
+                              <motion.button
+                                whileHover={{ scale: 1.1, rotate: 90 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => setSelectedPlace(null)}
+                                className="p-2.5 rounded-full bg-black/50 hover:bg-rose-600/80 text-white transition-colors shadow-lg backdrop-blur-sm"
+                                title="Close details"
+                              >
+                                <X className="h-5 w-5" />
+                              </motion.button>
+                            </div>
+                            {selectedPlaceShareMessage && (
+                              <div className="absolute top-16 right-4 z-30 max-w-xs rounded-lg bg-black/65 px-3 py-2 text-[11px] text-white shadow-lg backdrop-blur-sm">
+                                {selectedPlaceShareMessage}
+                              </div>
+                            )}
+                          </div>
 
-                                  {/* Temple Images Gallery - Auto Slider */}
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.8 }}
-                                    className="mb-4"
-                                  >
-                                    <h3 className="text-xl font-bold text-gray-900 mb-4">Temple Gallery</h3>
-                                    <div className="relative group">
-                                      {/* Main Image Slider */}
-                                      <div className="relative rounded-xl overflow-hidden shadow-2xl h-64">
-                                        <AnimatePresence mode="wait">
-                                          <motion.img
-                                            key={gallerySlideIndex}
-                                            src={TEMPLE_DETAILS[selectedAttraction].images[gallerySlideIndex]}
-                                            alt={`${TEMPLE_DETAILS[selectedAttraction].title} - View ${gallerySlideIndex + 1}`}
-                                            initial={{ opacity: 0, x: 100 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: -100 }}
-                                            transition={{ duration: 0.5 }}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </AnimatePresence>
-                                        
-                                        {/* Previous Button */}
-                                        <button
-                                          onClick={() => {
-                                            setGallerySlideIndex((prev) => 
-                                              prev === 0 
-                                                ? TEMPLE_DETAILS[selectedAttraction].images.length - 1 
-                                                : prev - 1
-                                            );
-                                          }}
-                                          className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-2 shadow-lg opacity-60 transition-all duration-300 hover:scale-110"
-                                        >
-                                          <ChevronLeft className="h-5 w-5" />
-                                        </button>
-                                        
-                                        {/* Next Button */}
-                                        <button
-                                          onClick={() => {
-                                            setGallerySlideIndex((prev) => 
-                                              (prev + 1) % TEMPLE_DETAILS[selectedAttraction].images.length
-                                            );
-                                          }}
-                                          className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-2 shadow-lg opacity-60 transition-all duration-300 hover:scale-110"
-                                        >
-                                          <ChevronRight className="h-5 w-5" />
-                                        </button>
-                                        
-                                        {/* Slide Counter */}
-                                        <div className="absolute bottom-3 left-3 bg-black/60 text-white px-3 py-1.5 rounded-full text-sm font-semibold">
-                                          {gallerySlideIndex + 1} / {TEMPLE_DETAILS[selectedAttraction].images.length}
-                                        </div>
-                                      </div>
-                                      
-                                      {/* Thumbnail Indicators */}
-                                      <div className="flex justify-start gap-2 mt-4 overflow-x-auto pb-2">
-                                        {TEMPLE_DETAILS[selectedAttraction].images.map((image: string, idx: number) => (
-                                          <motion.button
-                                            key={idx}
-                                            onClick={() => setGallerySlideIndex(idx)}
-                                            whileHover={{ scale: 1.1 }}
-                                            whileTap={{ scale: 0.95 }}
-                                            className={`relative rounded-lg overflow-hidden transition-all duration-300 shrink-0 w-20 h-15 ${
-                                              gallerySlideIndex === idx 
-                                                ? 'ring-3 ring-orange-500 shadow-xl' 
-                                                : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
-                                            }`}
-                                          >
-                                            <img
-                                              src={image}
-                                              alt={`Thumbnail ${idx + 1}`}
-                                              className="w-full h-full object-cover"
-                                            />
-                                            {gallerySlideIndex === idx && (
-                                              <motion.div
-                                                layoutId="activeSlide"
-                                                className="absolute inset-0 border-2 border-orange-500 bg-orange-500/20"
+                          <div className="p-6 space-y-6">
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.06 }}
+                              className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-pink-50 p-4 sm:p-5"
+                            >
+                              {(() => {
+                                return (
+                                  <>
+                                    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-rose-50 p-4 sm:p-5">
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                          <span className="p-1.5 rounded-lg bg-amber-100"><Star className="h-4 w-4 text-amber-600" /></span>
+                                          Ratings & Reviews
+                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-0.5">
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                              <Star
+                                                key={star}
+                                                className={`h-4 w-4 ${star <= Math.round(selectedPlaceAverageRating) ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`}
                                               />
-                                            )}
-                                          </motion.button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  </motion.div>
-
-                                  {/* Visiting Information */}
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 1.2 }}
-                                    className="bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-4"
-                                  >
-                                    <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                      <Calendar className="h-4 w-4 text-orange-600" />
-                                      Visiting Information
-                                    </h3>
-                                    <div className="space-y-2 text-gray-700 text-sm">
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-semibold">Timings:</span>
-                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.timings}</span>
-                                      </div>
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-semibold">Entry Fee:</span>
-                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.entryFee}</span>
-                                      </div>
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-semibold">Dress Code:</span>
-                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dresscode}</span>
-                                      </div>
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-semibold">Best Time:</span>
-                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.bestTimeToVisit}</span>
-                                      </div>
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-semibold">Daily Visitors:</span>
-                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dailyVisitors}</span>
-                                      </div>
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-semibold">Special Days:</span>
-                                        <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.specialDays}</span>
-                                      </div>
-                                    </div>
-                                  </motion.div>
-
-                                  {/* Reviews Section - Mobile */}
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 1.4 }}
-                                    className="mt-4"
-                                  >
-                                    <div className="bg-white rounded-xl p-4 shadow-lg">
-                                      <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                        <Star className="h-4 w-4 text-orange-600 fill-orange-600" />
-                                        Visitor Reviews
-                                      </h3>
-                                      
-                                      {/* Overall Rating */}
-                                      <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-3 mb-4">
-                                        <div className="flex items-center gap-3">
-                                          <div className="text-center">
-                                            <div className="text-3xl font-bold text-orange-600">4.8</div>
-                                            <div className="text-xs text-gray-600">out of 5</div>
+                                            ))}
                                           </div>
-                                          <div className="flex-1">
-                                            <div className="flex gap-1 mb-1">
-                                              {[1, 2, 3, 4, 5].map((star) => (
-                                                <Star key={star} className={`h-4 w-4 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
-                                              ))}
-                                            </div>
-                                            <p className="text-xs text-gray-600">Based on 12,450+ reviews</p>
-                                          </div>
+                                          <span className="text-sm font-semibold text-gray-700">
+                                            {selectedPlaceAverageRating > 0 ? selectedPlaceAverageRating.toFixed(1) : 'No rating'}
+                                          </span>
+                                          <span className="text-xs text-gray-500">
+                                            ({selectedPlaceReviewList.length} review{selectedPlaceReviewList.length !== 1 ? 's' : ''})
+                                          </span>
                                         </div>
                                       </div>
 
-                                      {/* Individual Reviews */}
-                                      <div className="space-y-3">
-                                        {/* Review 1 */}
-                                        <div className="border-b border-gray-200 pb-3">
-                                          <div className="flex items-start gap-2 mb-1">
-                                            <div className="flex gap-0.5">
-                                              {[1, 2, 3, 4, 5].map((star) => (
-                                                <Star key={star} className="h-3 w-3 text-orange-500 fill-orange-500" />
-                                              ))}
-                                            </div>
-                                            <span className="text-xs font-semibold text-gray-900">Rajesh Kumar</span>
-                                          </div>
-                                          <p className="text-xs text-gray-700 leading-relaxed">
-                                            "Divine experience! The spiritual atmosphere is beyond words. The darshan was well-organized despite huge crowds. A must-visit for devotees."
-                                          </p>
-                                          <span className="text-xs text-gray-500 mt-1 inline-block">2 weeks ago</span>
+                                      <div className="mt-4 rounded-xl border border-white/70 bg-white/80 p-3 sm:p-4 space-y-3">
+                                        <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
+                                        <div className="flex items-center gap-1">
+                                          {[1, 2, 3, 4, 5].map((star) => (
+                                            <button
+                                              key={star}
+                                              type="button"
+                                              onClick={() => setReviewRating(star)}
+                                              className="p-1 rounded hover:bg-amber-100 transition-colors"
+                                              aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                                            >
+                                              <Star className={`h-5 w-5 ${star <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
+                                            </button>
+                                          ))}
+                                          <span className="text-xs text-gray-500 ml-2">
+                                            {reviewRating > 0 ? `${reviewRating}/5 selected` : 'Tap stars to rate'}
+                                          </span>
                                         </div>
-
-                                        {/* Review 2 */}
-                                        <div className="border-b border-gray-200 pb-3">
-                                          <div className="flex items-start gap-2 mb-1">
-                                            <div className="flex gap-0.5">
-                                              {[1, 2, 3, 4, 5].map((star) => (
-                                                <Star key={star} className={`h-3 w-3 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
-                                              ))}
-                                            </div>
-                                            <span className="text-xs font-semibold text-gray-900">Priya Sharma</span>
-                                          </div>
-                                          <p className="text-xs text-gray-700 leading-relaxed">
-                                            "Amazing temple architecture and peaceful surroundings. The prasadam is delicious. Online booking made the visit hassle-free."
-                                          </p>
-                                          <span className="text-xs text-gray-500 mt-1 inline-block">1 month ago</span>
-                                        </div>
-
-                                        {/* Review 3 */}
-                                        <div>
-                                          <div className="flex items-start gap-2 mb-1">
-                                            <div className="flex gap-0.5">
-                                              {[1, 2, 3, 4, 5].map((star) => (
-                                                <Star key={star} className="h-3 w-3 text-orange-500 fill-orange-500" />
-                                              ))}
-                                            </div>
-                                            <span className="text-xs font-semibold text-gray-900">Anand Reddy</span>
-                                          </div>
-                                          <p className="text-xs text-gray-700 leading-relaxed">
-                                            "Blessed to visit Lord Venkateswara! The temple management is excellent. The journey up the seven hills was memorable. Highly recommended!"
-                                          </p>
-                                          <span className="text-xs text-gray-500 mt-1 inline-block">3 weeks ago</span>
-                                        </div>
-                                      </div>
-
-                                      {/* Write Your Review Section - Mobile */}
-                                      <div className="mt-6 pt-6 border-t-2 border-gray-200">
-                                        <h4 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                          <Send className="h-4 w-4 text-orange-600" />
-                                          Share Your Experience
-                                        </h4>
-                                        
-                                        <form onSubmit={handleSubmitReview} className="space-y-4">
-                                          {/* Rating Selection */}
-                                          <div>
-                                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Your Rating</label>
-                                            <div className="flex gap-2">
-                                              {[1, 2, 3, 4, 5].map((star) => (
-                                                <button
-                                                  key={star}
-                                                  type="button"
-                                                  onClick={() => setReviewRating(star)}
-                                                  className="transition-transform hover:scale-110"
-                                                >
-                                                  <Star 
-                                                    className={`h-7 w-7 ${star <= reviewRating ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} 
-                                                  />
-                                                </button>
-                                              ))}
-                                            </div>
-                                          </div>
-
-                                          {/* Review Text */}
-                                          <div>
-                                            <label className="text-sm font-semibold text-gray-700 mb-2 block">Your Review</label>
-                                            <Textarea
-                                              value={reviewText}
-                                              onChange={(e) => setReviewText(e.target.value)}
-                                              placeholder="Share your experience about this temple..."
-                                              className="min-h-25 text-sm resize-none"
-                                              required
-                                            />
-                                          </div>
-
-                                          {/* Image Upload */}
-                                          <div>
-                                            <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                                              <ImageIcon className="h-4 w-4" />
-                                              Add Photos (Optional, Max 5)
-                                            </label>
+                                        <input
+                                          type="text"
+                                          value={reviewInput}
+                                          onChange={(e) => setReviewInput(e.target.value)}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') submitPlaceReview(); }}
+                                          placeholder="Write your review (optional)..."
+                                          className="w-full min-w-0 text-sm text-gray-900 placeholder:text-gray-500 border border-gray-200 rounded-full px-3 py-2 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                                        />
+                                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                                          <label className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-rose-200 text-sm font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors">
+                                            <Upload className="h-4 w-4 mr-1.5" />
+                                            Choose Files
                                             <input
-                                              ref={fileInputRef}
                                               type="file"
-                                              accept="image/*"
+                                              accept="image/*,video/*"
                                               multiple
-                                              onChange={handleImageUpload}
+                                              onChange={handleUserMediaFileChange}
                                               className="hidden"
                                             />
-                                            <button
-                                              type="button"
-                                              onClick={() => fileInputRef.current?.click()}
-                                              className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-orange-600"
-                                            >
-                                              <Upload className="h-4 w-4" />
-                                              Click to upload photos
-                                            </button>
-                                            
-                                            {/* Image Previews */}
-                                            {reviewImagePreviews.length > 0 && (
-                                              <div className="grid grid-cols-3 gap-2 mt-3">
-                                                {reviewImagePreviews.map((preview, idx) => (
-                                                  <div key={idx} className="relative group">
-                                                    <img 
-                                                      src={preview} 
-                                                      alt={`Preview ${idx + 1}`}
-                                                      className="w-full h-20 object-cover rounded-lg"
-                                                    />
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => removeReviewImage(idx)}
-                                                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                          </label>
+                                        </div>
+                                        <p className="text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
+
+                                        {userMediaFiles.length > 0 && (
+                                          <div>
+                                            <p className="text-xs text-gray-600 mb-2">{userMediaFiles.length} file{userMediaFiles.length > 1 ? 's' : ''} selected</p>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                              {userMediaFiles.map((item, index) => (
+                                                <motion.div
+                                                  key={`${item.file.name}-${index}`}
+                                                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                  whileHover={{ y: -2, scale: 1.02 }}
+                                                  transition={{ duration: 0.25, delay: index * 0.04 }}
+                                                  className="group rounded-xl overflow-hidden border border-rose-100 bg-white shadow-sm transition-shadow hover:shadow-md"
+                                                >
+                                                  {item.file.type.startsWith('video/') ? (
+                                                    <video src={item.preview} className="h-24 w-full object-cover bg-black transition-transform duration-500 group-hover:scale-[1.03]" controls playsInline preload="metadata" />
+                                                  ) : (
+                                                    <img src={item.preview} alt="Selected media preview" className="w-full h-24 object-cover" />
+                                                  )}
+                                                </motion.div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {userMediaError && <p className="text-xs text-red-600">{userMediaError}</p>}
+
+                                        <div className="pt-1">
+                                          <button
+                                            type="button"
+                                            onClick={submitPlaceReview}
+                                            disabled={reviewSubmitting || userMediaUploading || reviewRating === 0}
+                                            className="w-full sm:w-auto px-4 py-2 rounded-full bg-rose-500 hover:bg-rose-600 disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+                                          >
+                                            {reviewSubmitting || userMediaUploading ? 'Posting...' : 'Post Review + Media'}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-4 space-y-2 max-h-52 overflow-y-auto pr-1">
+                                        {selectedPlaceReviewList.length === 0 && (
+                                          <p className="text-xs text-gray-500 text-center py-2">No reviews yet. Be the first to rate this place.</p>
+                                        )}
+                                        {selectedPlaceReviewList.map((review) => {
+                                          const reviewCommentList = reviewComments[review.id] ?? [];
+                                          const reviewCommentsOpen = openReviewCommentReviewId === review.id;
+                                          const reviewAvatarUrl = review.avatarUrl || userAvatarMap[review.userId] || '';
+
+                                          return (
+                                            <div key={review.id} className="rounded-xl border border-white/80 bg-white/90 p-3">
+                                              <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                  <Avatar className="h-6 w-6 border border-rose-100">
+                                                    <AvatarImage src={reviewAvatarUrl} alt={review.author} />
+                                                    <AvatarFallback className="bg-rose-100 text-rose-600 text-[10px] font-bold uppercase">
+                                                      {review.author?.[0] ?? '?'}
+                                                    </AvatarFallback>
+                                                  </Avatar>
+                                                  <span className="text-xs font-semibold text-gray-700">{review.author}</span>
+                                                </div>
+                                                <span className="text-[10px] text-gray-500">{formatReviewDate(review.createdAt)}</span>
+                                              </div>
+                                              <div className="flex items-center gap-0.5 mt-2">
+                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                  <Star
+                                                    key={star}
+                                                    className={`h-3.5 w-3.5 ${star <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`}
+                                                  />
+                                                ))}
+                                              </div>
+                                              {review.text && <p className="text-xs text-gray-600 mt-2 leading-relaxed">{review.text}</p>}
+                                              {review.media.length > 0 && (
+                                                <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                  {review.media.map((media, mediaIdx) => (
+                                                    <motion.div
+                                                      key={`${review.id}-media-${mediaIdx}`}
+                                                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                      whileHover={{ y: -2, scale: 1.02 }}
+                                                      transition={{ duration: 0.25, delay: mediaIdx * 0.03 }}
+                                                      className="group rounded-lg overflow-hidden border border-rose-100 bg-white shadow-sm transition-shadow hover:shadow-md"
                                                     >
-                                                      <X className="h-3 w-3" />
-                                                    </button>
+                                                      {media.type === 'video' ? (
+                                                        <video
+                                                          src={media.url}
+                                                          poster={media.thumbnail}
+                                                          controls
+                                                          playsInline
+                                                          preload="metadata"
+                                                          className="h-24 w-full object-cover bg-black transition-transform duration-500 group-hover:scale-[1.03]"
+                                                        />
+                                                      ) : (
+                                                        <img src={media.url} alt={media.caption ?? 'Review media'} className="w-full h-24 object-cover" loading="lazy" />
+                                                      )}
+                                                    </motion.div>
+                                                  ))}
+                                                </div>
+                                              )}
+
+                                              <button
+                                                type="button"
+                                                onClick={() => setOpenReviewCommentReviewId(reviewCommentsOpen ? null : review.id)}
+                                                className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-rose-600 transition-colors"
+                                              >
+                                                <MessageCircle className="h-3.5 w-3.5" />
+                                                {reviewCommentList.length > 0
+                                                  ? `${reviewCommentList.length} comment${reviewCommentList.length > 1 ? 's' : ''}`
+                                                  : 'Add comment'}
+                                              </button>
+
+                                              <AnimatePresence>
+                                                {reviewCommentsOpen && (
+                                                  <motion.div
+                                                    key={`${review.id}-comments`}
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.2 }}
+                                                    className="overflow-hidden"
+                                                  >
+                                                    <div className="mt-2 rounded-xl border border-rose-100 bg-rose-50/40 p-2.5">
+                                                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                                        {reviewCommentList.length === 0 && (
+                                                          <p className="text-[11px] text-gray-500 text-center py-1">No comments yet. Start the discussion.</p>
+                                                        )}
+                                                        {reviewCommentList.map((comment) => {
+                                                          const commentAvatarUrl = comment.avatarUrl || userAvatarMap[comment.userId] || '';
+
+                                                          return (
+                                                          <div key={comment.id} className="rounded-lg border border-white bg-white/90 px-2.5 py-2">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                              <span className="flex items-center gap-1.5 min-w-0">
+                                                                <Avatar className="h-5 w-5 border border-rose-100">
+                                                                  <AvatarImage src={commentAvatarUrl} alt={comment.author} />
+                                                                  <AvatarFallback className="bg-rose-100 text-rose-600 text-[9px] font-bold uppercase">
+                                                                    {comment.author?.[0] ?? '?'}
+                                                                  </AvatarFallback>
+                                                                </Avatar>
+                                                                <span className="text-[10px] font-semibold text-gray-700 truncate">{comment.author}</span>
+                                                              </span>
+                                                              <span className="text-[10px] text-gray-500">{formatReviewDate(comment.createdAt)}</span>
+                                                            </div>
+                                                            <p className="mt-1 text-xs text-gray-600 leading-relaxed">{comment.text}</p>
+                                                          </div>
+                                                          );
+                                                        })}
+                                                      </div>
+
+                                                      <div className="mt-2 flex items-center gap-1.5">
+                                                        <input
+                                                          type="text"
+                                                          value={reviewCommentInputs[review.id] ?? ''}
+                                                          onChange={(e) => setReviewCommentInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
+                                                          onKeyDown={(e) => { if (e.key === 'Enter') submitReviewComment(review.id); }}
+                                                          placeholder="Write a comment on this review..."
+                                                          className="flex-1 min-w-0 text-[11px] text-gray-900 placeholder:text-gray-400 border border-rose-200 rounded-full px-2.5 py-1.5 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                                                        />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => submitReviewComment(review.id)}
+                                                          disabled={reviewCommentSubmitting || !(reviewCommentInputs[review.id] ?? '').trim()}
+                                                          className="px-3 py-1.5 rounded-full bg-rose-500 hover:bg-rose-600 disabled:opacity-40 text-white text-[11px] font-semibold transition-colors"
+                                                        >
+                                                          {reviewCommentSubmitting ? 'Posting...' : 'Post'}
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  </motion.div>
+                                                )}
+                                              </AnimatePresence>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                            </motion.div>
+
+                            {selectedPlace.description && (
+                              <motion.p
+                                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                                className="text-gray-700 leading-relaxed text-base"
+                              >
+                                {selectedPlace.description}
+                              </motion.p>
+                            )}
+
+                            {selectedPlace.googleMapsUrl && (
+                              <div className="flex flex-col gap-3">
+                                <a href={selectedPlace.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                                  className="self-start inline-flex items-center gap-2 text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-4 py-2 rounded-full transition-all">
+                                  <MapPin className="h-4 w-4" /> View on Google Maps
+                                </a>
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: 0.12 }}
+                                  className="rounded-2xl overflow-hidden shadow-md border border-gray-100"
+                                >
+                                  <iframe
+                                    title={`Map of ${selectedPlace.name}`}
+                                    src={`https://maps.google.com/maps?q=${encodeURIComponent(`${selectedPlace.name}, ${selectedPlace.area}, ${selectedPlace.state}`)}&output=embed`}
+                                    width="100%"
+                                    height="300"
+                                    style={{ border: 0 }}
+                                    allowFullScreen
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer-when-downgrade"
+                                    className="w-full"
+                                  />
+                                </motion.div>
+                              </div>
+                            )}
+
+                            {/* Photos */}
+                            {selectedPlaceImages.length > 0 && (
+                              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                                <h3 className="text-base font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                  <span className="p-1.5 rounded-lg bg-rose-100"><ImageIcon className="h-4 w-4 text-rose-600" /></span> Photos
+                                </h3>
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                  {selectedPlaceImages.map((img, i) => {
+                                    const ck = `image_${i}`;
+                                    const cList = mediaComments[ck] ?? [];
+                                    const isOpen = openCommentKey === ck;
+                                    return (
+                                      <div key={i} className={`flex flex-col rounded-xl overflow-hidden shadow-md bg-white border transition-all ${!dpHasVideo && i === detailBannerImgIdx ? 'border-rose-400 ring-1 ring-rose-400' : 'border-gray-100'}`}>
+                                        <motion.div
+                                          initial={{ opacity: 0, scale: 0.85 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: 0.05 * i }}
+                                          className="group relative aspect-square overflow-hidden cursor-pointer"
+                                          onClick={() => { setSelectedPlaceMediaIdx(i); if (!dpHasVideo) setDetailBannerImgIdx(i); }}
+                                        >
+                                          <img src={img.url} alt={img.caption ?? ''} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+                                          {img.caption && (
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1.5 py-1 truncate">{img.caption}</div>
+                                          )}
+                                          {!dpHasVideo && i === detailBannerImgIdx && (
+                                            <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 flex items-center justify-center shadow">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                            </div>
+                                          )}
+                                        </motion.div>
+                                        <button
+                                          onClick={() => setOpenCommentKey(isOpen ? null : ck)}
+                                          className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-500 hover:text-rose-500 transition-colors border-t border-gray-50"
+                                        >
+                                          <MessageCircle className="h-3.5 w-3.5" />
+                                          {cList.length > 0 ? `${cList.length} comment${cList.length > 1 ? 's' : ''}` : 'Add comment'}
+                                        </button>
+                                        <AnimatePresence>
+                                          {isOpen && (
+                                            <motion.div
+                                              key="comments"
+                                              initial={{ height: 0, opacity: 0 }}
+                                              animate={{ height: 'auto', opacity: 1 }}
+                                              exit={{ height: 0, opacity: 0 }}
+                                              transition={{ duration: 0.22 }}
+                                              className="overflow-hidden border-t border-gray-100"
+                                            >
+                                              <div className="p-2 space-y-1.5 max-h-36 overflow-y-auto">
+                                                {cList.length === 0 && <p className="text-[10px] text-gray-400 text-center py-1">No comments yet</p>}
+                                                {cList.map(c => (
+                                                  <div key={c.id} className="flex gap-1.5">
+                                                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 text-[9px] font-bold flex items-center justify-center shrink-0 uppercase">{c.author?.[0] ?? '?'}</span>
+                                                    <div>
+                                                      <span className="text-[9px] font-semibold text-gray-700">{c.author} </span>
+                                                      <span className="text-[10px] text-gray-600">{c.text}</span>
+                                                    </div>
                                                   </div>
                                                 ))}
                                               </div>
-                                            )}
-                                          </div>
-
-                                          {/* Submit Button */}
-                                          <button
-                                            type="submit"
-                                            className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
-                                          >
-                                            <Send className="h-4 w-4" />
-                                            Submit Review
-                                          </button>
-                                        </form>
+                                              <div className="flex gap-1.5 p-2 border-t border-gray-50 items-center">
+                                                <input
+                                                  type="text"
+                                                  value={commentInputs[ck] ?? ''}
+                                                  onChange={e => setCommentInputs(prev => ({ ...prev, [ck]: e.target.value }))}
+                                                  onKeyDown={e => { if (e.key === 'Enter') submitMediaComment(ck); }}
+                                                  placeholder="Write a comment..."
+                                                  className="flex-1 min-w-0 text-[11px] text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-full px-2.5 py-1 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                                                />
+                                                <button
+                                                  onClick={() => submitMediaComment(ck)}
+                                                  disabled={commentSubmitting || !(commentInputs[ck]?.trim())}
+                                                  className="w-7 h-7 rounded-full bg-rose-500 hover:bg-rose-600 disabled:opacity-40 flex items-center justify-center text-white shrink-0 transition-colors"
+                                                >
+                                                  <ChevronRight className="h-3.5 w-3.5" />
+                                                </button>
+                                              </div>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
                                       </div>
-                                    </div>
-                                  </motion.div>
+                                    );
+                                  })}
                                 </div>
                               </motion.div>
                             )}
-                          </React.Fragment>
-                        ))}
-                      </div>
 
-                      {/* Desktop/Tablet Layout - Original grid */}
-                      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full px-8">
-                        {attractions.map((attraction, index) => (
-                          <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 40, scale: 0.8 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            transition={{ 
-                              delay: 0.4 + (0.1 * index),
-                              duration: 0.5,
-                              type: "spring",
-                              stiffness: 100
-                            }}
-                            whileHover={{ 
-                              scale: 1.08, 
-                              y: -10,
-                              rotateY: 5,
-                              transition: { duration: 0.3 }
-                            }}
-                            onClick={() => handleAttractionClick(attraction.name, !!attraction.images)}
-                            className="bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-2xl hover:shadow-3xl transition-all duration-300 cursor-pointer group relative overflow-hidden"
-                          >
-                            {/* Background Image for Tirumala Temple with Shuffle Animation */}
-                            {attraction.images && (
-                              <div className="absolute inset-0 rounded-3xl overflow-hidden">
-                                <AnimatePresence mode="wait">
-                                  <motion.img
-                                    key={currentTempleImageIndex}
-                                    src={attraction.images[currentTempleImageIndex]}
-                                    alt={attraction.name}
-                                    initial={{ opacity: 0, scale: 1.1 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    transition={{ duration: 1 }}
-                                    className="absolute inset-0 w-full h-full object-cover"
-                                  />
-                                </AnimatePresence>
-                                {/* Dark overlay for better text readability */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-                              </div>
-                            )}
-                            
-                            <div className="flex flex-col items-center text-center gap-4 relative z-10">{attraction.images ? (
-                                <>
-                                  <motion.div 
-                                    className="text-6xl mb-2 drop-shadow-2xl"
-                                    animate={{ 
-                                      scale: [1, 1.1, 1],
-                                      rotate: [0, 5, -5, 0]
-                                    }}
-                                    transition={{ 
-                                      duration: 2,
-                                      repeat: Infinity,
-                                      repeatDelay: 3
-                                    }}
-                                  >
-                                    {attraction.icon}
-                                  </motion.div>
-                                  <div>
-                                    <h3 className="font-bold text-white text-2xl mb-3 group-hover:text-yellow-300 transition-colors drop-shadow-lg">
-                                      {attraction.name}
-                                    </h3>
-                                    <p className="text-base text-gray-100 leading-relaxed drop-shadow-md">
-                                      {attraction.description}
-                                    </p>
-                                  </div>
-                                </>
-                              ) : (
-                                <>
-                                  <motion.div 
-                                    className="text-6xl mb-2"
-                                    animate={{ 
-                                      scale: [1, 1.1, 1],
-                                      rotate: [0, 5, -5, 0]
-                                    }}
-                                    transition={{ 
-                                      duration: 2,
-                                      repeat: Infinity,
-                                      repeatDelay: 3
-                                    }}
-                                  >
-                                    {attraction.icon}
-                                  </motion.div>
-                                  <div>
-                                    <h3 className="font-bold text-gray-900 text-2xl mb-3 group-hover:text-blue-600 transition-colors">
-                                      {attraction.name}
-                                    </h3>
-                                    <p className="text-base text-gray-600 leading-relaxed">
-                                      {attraction.description}
-                                    </p>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <div className="flex-1"></div>
-                  )}
-
-                  {/* Temple Detailed Information Section - Desktop Only */}
-                  {selectedAttraction && TEMPLE_DETAILS[selectedAttraction] && (
-                    <motion.div
-                      ref={templeDetailsRef}
-                      initial={{ opacity: 0, y: 40 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 40 }}
-                      transition={{ duration: 0.5 }}
-                      className="hidden md:block w-full max-w-7xl px-8 my-12"
-                    >
-                      <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-10 shadow-2xl">
-                        {/* Header with Close Button */}
-                        <div className="flex items-start justify-between mb-8 gap-4">
-                          <motion.h2 
-                            initial={{ x: -20, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent"
-                          >
-                            {TEMPLE_DETAILS[selectedAttraction].title}
-                          </motion.h2>
-                          <button
-                            onClick={closeAttractionDetails}
-                            className="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors shrink-0"
-                          >
-                            <X className="h-6 w-6 text-gray-700" />
-                          </button>
-                        </div>
-
-                        {/* Main Description */}
-                        <motion.p 
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.2 }}
-                          className="text-lg text-gray-700 mb-6 leading-relaxed"
-                        >
-                          {TEMPLE_DETAILS[selectedAttraction].description}
-                        </motion.p>
-
-                        {/* History Section */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.3 }}
-                          className="mb-6"
-                        >
-                          <h3 className="text-2xl font-bold text-gray-900 mb-3">History</h3>
-                          <p className="text-base text-gray-700 leading-relaxed">
-                            {TEMPLE_DETAILS[selectedAttraction].history}
-                          </p>
-                        </motion.div>
-
-                        {/* Significance */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.4 }}
-                          className="mb-6"
-                        >
-                          <h3 className="text-2xl font-bold text-gray-900 mb-3">Significance</h3>
-                          <p className="text-base text-gray-700 leading-relaxed">
-                            {TEMPLE_DETAILS[selectedAttraction].significance}
-                          </p>
-                        </motion.div>
-
-                        {/* Key Features */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.5 }}
-                          className="mb-8"
-                        >
-                          <h3 className="text-2xl font-bold text-gray-900 mb-4">Key Features</h3>
-                          <ul className="space-y-2">
-                            {TEMPLE_DETAILS[selectedAttraction].features.map((feature: string, idx: number) => (
-                              <motion.li
-                                key={idx}
-                                initial={{ x: -20, opacity: 0 }}
-                                animate={{ x: 0, opacity: 1 }}
-                                transition={{ delay: 0.6 + (idx * 0.1) }}
-                                className="flex items-start gap-3"
-                              >
-                                <span className="text-orange-600 text-xl mt-1 shrink-0">•</span>
-                                <span className="text-base text-gray-700">{feature}</span>
-                              </motion.li>
-                            ))}
-                          </ul>
-                        </motion.div>
-
-                        {/* Temple Images Gallery - Auto Slider */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.8 }}
-                          className="mb-6"
-                        >
-                          <h3 className="text-2xl font-bold text-gray-900 mb-6">Temple Gallery</h3>
-                          <div className="relative group">
-                            {/* Main Image Slider */}
-                            <div className="relative rounded-2xl overflow-hidden shadow-2xl h-[550px]">
-                              <AnimatePresence mode="wait">
-                                <motion.img
-                                  key={gallerySlideIndex}
-                                  src={TEMPLE_DETAILS[selectedAttraction].images[gallerySlideIndex]}
-                                  alt={`${TEMPLE_DETAILS[selectedAttraction].title} - View ${gallerySlideIndex + 1}`}
-                                  initial={{ opacity: 0, x: 100 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  exit={{ opacity: 0, x: -100 }}
-                                  transition={{ duration: 0.5 }}
-                                  className="w-full h-full object-cover"
-                                />
-                              </AnimatePresence>
-                              
-                              {/* Previous Button */}
-                              <button
-                                onClick={() => {
-                                  setGallerySlideIndex((prev) => 
-                                    prev === 0 
-                                      ? TEMPLE_DETAILS[selectedAttraction].images.length - 1 
-                                      : prev - 1
-                                  );
-                                }}
-                                className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-4 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-                              >
-                                <ChevronLeft className="h-7 w-7" />
-                              </button>
-                              
-                              {/* Next Button */}
-                              <button
-                                onClick={() => {
-                                  setGallerySlideIndex((prev) => 
-                                    (prev + 1) % TEMPLE_DETAILS[selectedAttraction].images.length
-                                  );
-                                }}
-                                className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-800 rounded-full p-4 shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-                              >
-                                <ChevronRight className="h-7 w-7" />
-                              </button>
-                              
-                              {/* Slide Counter */}
-                              <div className="absolute bottom-6 left-6 bg-black/60 text-white px-5 py-2.5 rounded-full text-base font-semibold">
-                                {gallerySlideIndex + 1} / {TEMPLE_DETAILS[selectedAttraction].images.length}
-                              </div>
-                            </div>
-                            
-                            {/* Thumbnail Indicators */}
-                            <div className="flex justify-center gap-4 mt-8">
-                              {TEMPLE_DETAILS[selectedAttraction].images.map((image: string, idx: number) => (
-                                <motion.button
-                                  key={idx}
-                                  onClick={() => setGallerySlideIndex(idx)}
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className={`relative rounded-lg overflow-hidden transition-all duration-300 w-30 h-22.5 ${
-                                    gallerySlideIndex === idx 
-                                      ? 'ring-4 ring-orange-500 shadow-xl' 
-                                      : 'ring-2 ring-gray-300 opacity-60 hover:opacity-100'
-                                  }`}
-                                >
-                                  <img
-                                    src={image}
-                                    alt={`Thumbnail ${idx + 1}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                  {gallerySlideIndex === idx && (
-                                    <motion.div
-                                      layoutId="activeSlide"
-                                      className="absolute inset-0 border-2 border-orange-500 bg-orange-500/20"
-                                    />
-                                  )}
-                                </motion.button>
-                              ))}
-                            </div>
-                          </div>
-                        </motion.div>
-
-                        {/* Visiting Information */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 1.2 }}
-                          className="bg-gradient-to-r from-orange-50 to-red-50 rounded-2xl p-6"
-                        >
-                          <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-                            <Calendar className="h-5 w-5 text-orange-600" />
-                            Visiting Information
-                          </h3>
-                          <div className="space-y-3 text-gray-700">
-                            <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-35">Timings:</span>
-                              <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.timings}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-35">Entry Fee:</span>
-                              <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.entryFee}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-35">Dress Code:</span>
-                              <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dresscode}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-35">Best Time:</span>
-                              <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.bestTimeToVisit}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-35">Daily Visitors:</span>
-                              <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.dailyVisitors}</span>
-                            </div>
-                            <div className="flex items-start gap-2">
-                              <span className="font-semibold min-w-35">Special Days:</span>
-                              <span>{TEMPLE_DETAILS[selectedAttraction].visitingInfo.specialDays}</span>
-                            </div>
-                          </div>
-                        </motion.div>
-
-                        {/* Reviews Section - Desktop */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 1.4 }}
-                          className="mt-8"
-                        >
-                          <div className="bg-white rounded-2xl p-6 shadow-lg">
-                            <h3 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                              <Star className="h-6 w-6 text-orange-600 fill-orange-600" />
-                              Visitor Reviews
-                            </h3>
-                            
-                            {/* Overall Rating */}
-                            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-6 mb-6">
-                              <div className="flex items-center gap-6">
-                                <div className="text-center">
-                                  <div className="text-5xl font-bold text-orange-600">4.8</div>
-                                  <div className="text-sm text-gray-600 mt-1">out of 5</div>
-                                </div>
-                                <div className="flex-1">
-                                  <div className="flex gap-2 mb-2">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                      <Star key={star} className={`h-6 w-6 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
-                                    ))}
-                                  </div>
-                                  <p className="text-gray-600">Based on 12,450+ reviews</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Individual Reviews */}
-                            <div className="space-y-4">
-                              {/* Review 1 */}
-                              <div className="border-b border-gray-200 pb-4">
-                                <div className="flex items-start justify-between mb-2">
-                                  <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                      <span className="font-semibold text-gray-900">Rajesh Kumar</span>
-                                      <div className="flex gap-1">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                          <Star key={star} className="h-4 w-4 text-orange-500 fill-orange-500" />
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <span className="text-sm text-gray-500">2 weeks ago</span>
-                                  </div>
-                                </div>
-                                <p className="text-gray-700 leading-relaxed">
-                                  "Divine experience! The spiritual atmosphere is beyond words. The darshan was well-organized despite huge crowds. A must-visit for devotees."
-                                </p>
-                              </div>
-
-                              {/* Review 2 */}
-                              <div className="border-b border-gray-200 pb-4">
-                                <div className="flex items-start justify-between mb-2">
-                                  <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                      <span className="font-semibold text-gray-900">Priya Sharma</span>
-                                      <div className="flex gap-1">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                          <Star key={star} className={`h-4 w-4 ${star <= 4 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <span className="text-sm text-gray-500">1 month ago</span>
-                                  </div>
-                                </div>
-                                <p className="text-gray-700 leading-relaxed">
-                                  "Amazing temple architecture and peaceful surroundings. The prasadam is delicious. Online booking made the visit hassle-free."
-                                </p>
-                              </div>
-
-                              {/* Review 3 */}
-                              <div>
-                                <div className="flex items-start justify-between mb-2">
-                                  <div>
-                                    <div className="flex items-center gap-3 mb-1">
-                                      <span className="font-semibold text-gray-900">Anand Reddy</span>
-                                      <div className="flex gap-1">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                          <Star key={star} className="h-4 w-4 text-orange-500 fill-orange-500" />
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <span className="text-sm text-gray-500">3 weeks ago</span>
-                                  </div>
-                                </div>
-                                <p className="text-gray-700 leading-relaxed">
-                                  "Blessed to visit Lord Venkateswara! The temple management is excellent. The journey up the seven hills was memorable. Highly recommended!"
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Write Your Review Section - Desktop */}
-                            <div className="mt-8 pt-8 border-t-2 border-gray-200">
-                              <h4 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                                <Send className="h-5 w-5 text-orange-600" />
-                                Share Your Experience
-                              </h4>
-                              
-                              <form onSubmit={handleSubmitReview} className="space-y-6">
-                                {/* Rating Selection */}
-                                <div>
-                                  <label className="text-sm font-semibold text-gray-700 mb-3 block">Your Rating</label>
-                                  <div className="flex gap-3">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                      <button
-                                        key={star}
-                                        type="button"
-                                        onClick={() => setReviewRating(star)}
-                                        className="transition-transform hover:scale-110"
-                                      >
-                                        <Star 
-                                          className={`h-8 w-8 ${star <= reviewRating ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} 
-                                        />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                {/* Review Text */}
-                                <div>
-                                  <label className="text-sm font-semibold text-gray-700 mb-3 block">Your Review</label>
-                                  <Textarea
-                                    value={reviewText}
-                                    onChange={(e) => setReviewText(e.target.value)}
-                                    placeholder="Share your experience about this temple..."
-                                    className="min-h-30 resize-none"
-                                    required
-                                  />
-                                </div>
-
-                                {/* Image Upload */}
-                                <div>
-                                  <label className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                                    <ImageIcon className="h-5 w-5" />
-                                    Add Photos (Optional, Maximum 5 photos)
-                                  </label>
-                                  <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={handleImageUpload}
-                                    className="hidden"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="w-full px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-orange-500 transition-colors flex items-center justify-center gap-3 text-gray-600 hover:text-orange-600"
-                                  >
-                                    <Upload className="h-6 w-6" />
-                                    <span className="font-medium">Click to upload photos from your visit</span>
-                                  </button>
-                                  
-                                  {/* Image Previews */}
-                                  {reviewImagePreviews.length > 0 && (
-                                    <div className="grid grid-cols-5 gap-3 mt-4">
-                                      {reviewImagePreviews.map((preview, idx) => (
-                                        <div key={idx} className="relative group">
-                                          <img 
-                                            src={preview} 
-                                            alt={`Preview ${idx + 1}`}
-                                            className="w-full h-24 object-cover rounded-lg shadow-md"
+                            {/* Videos */}
+                            {selectedPlaceVideos.length > 0 && (
+                              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                                <h3 className="text-base font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                  <span className="p-1.5 rounded-lg bg-rose-100"><Video className="h-4 w-4 text-rose-600" /></span> Videos
+                                </h3>
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                  {selectedPlaceVideos.map((vid, i) => {
+                                    const ck = `video_${i}`;
+                                    const cList = mediaComments[ck] ?? [];
+                                    const isOpen = openCommentKey === ck;
+                                    return (
+                                      <div key={i} className={`group flex flex-col rounded-2xl overflow-hidden bg-zinc-900/95 border transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.35)] hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(244,63,94,0.25)] ${dpHasVideo && i === detailVidIdx ? 'border-rose-400 ring-1 ring-rose-400' : 'border-transparent'}`}>
+                                        <motion.div
+                                          initial={{ opacity: 0, scale: 0.9 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          transition={{ delay: 0.05 * i }}
+                                          whileHover={{ scale: 1.015 }}
+                                          className="relative aspect-video bg-black cursor-pointer overflow-hidden"
+                                          onClick={() => {
+                                            setDetailVidIdx(i);
+                                            setDetailVidPaused(false);
+                                            setTimeout(() => detailBannerVidRef.current?.play(), 80);
+                                          }}
+                                        >
+                                          <video
+                                            src={vid.url}
+                                            poster={vid.thumbnail}
+                                            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                                            controls
+                                            playsInline
+                                            preload="metadata"
                                           />
-                                          <button
-                                            type="button"
-                                            onClick={() => removeReviewImage(idx)}
-                                            className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                                          >
-                                            <X className="h-4 w-4" />
-                                          </button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                                          <motion.div
+                                            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent"
+                                            animate={{ opacity: [0.45, 0.22, 0.45] }}
+                                            transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                                          />
+                                          {dpHasVideo && i === detailVidIdx && (
+                                            <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-rose-500 flex items-center justify-center shadow">
+                                              <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                            </div>
+                                          )}
+                                          {vid.caption && (
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[9px] px-2 py-1 truncate">{vid.caption}</div>
+                                          )}
+                                        </motion.div>
+                                        <button
+                                          onClick={() => setOpenCommentKey(isOpen ? null : ck)}
+                                          className="flex items-center gap-1.5 px-3 py-2 text-xs text-zinc-300 hover:text-rose-400 transition-colors border-t border-zinc-700"
+                                        >
+                                          <MessageCircle className="h-3.5 w-3.5" />
+                                          {cList.length > 0 ? `${cList.length} comment${cList.length > 1 ? 's' : ''}` : 'Add comment'}
+                                        </button>
+                                        <AnimatePresence>
+                                          {isOpen && (
+                                            <motion.div
+                                              key="comments"
+                                              initial={{ height: 0, opacity: 0 }}
+                                              animate={{ height: 'auto', opacity: 1 }}
+                                              exit={{ height: 0, opacity: 0 }}
+                                              transition={{ duration: 0.22 }}
+                                              className="overflow-hidden border-t border-zinc-700"
+                                            >
+                                              <div className="p-2 space-y-1.5 max-h-36 overflow-y-auto">
+                                                {cList.length === 0 && <p className="text-[10px] text-zinc-500 text-center py-1">No comments yet</p>}
+                                                {cList.map(c => (
+                                                  <div key={c.id} className="flex gap-1.5">
+                                                    <span className="w-5 h-5 rounded-full bg-rose-900/60 text-rose-400 text-[9px] font-bold flex items-center justify-center shrink-0 uppercase">{c.author?.[0] ?? '?'}</span>
+                                                    <div>
+                                                      <span className="text-[9px] font-semibold text-zinc-300">{c.author} </span>
+                                                      <span className="text-[10px] text-zinc-400">{c.text}</span>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              <div className="flex gap-1.5 p-2 border-t border-zinc-700 items-center">
+                                                <input
+                                                  type="text"
+                                                  value={commentInputs[ck] ?? ''}
+                                                  onChange={e => setCommentInputs(prev => ({ ...prev, [ck]: e.target.value }))}
+                                                  onKeyDown={e => { if (e.key === 'Enter') submitMediaComment(ck); }}
+                                                  placeholder="Write a comment..."
+                                                  className="flex-1 min-w-0 text-[11px] bg-white border border-zinc-300 rounded-full px-2.5 py-1 text-gray-900 placeholder:text-gray-400 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                                                />
+                                                <button
+                                                  onClick={() => submitMediaComment(ck)}
+                                                  disabled={commentSubmitting || !(commentInputs[ck]?.trim())}
+                                                  className="w-7 h-7 rounded-full bg-rose-500 hover:bg-rose-600 disabled:opacity-40 flex items-center justify-center text-white shrink-0 transition-colors"
+                                                >
+                                                  <ChevronRight className="h-3.5 w-3.5" />
+                                                </button>
+                                              </div>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
+                              </motion.div>
+                            )}
 
-                                {/* Submit Button */}
-                                <button
-                                  type="submit"
-                                  className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl"
-                                >
-                                  <Send className="h-5 w-5" />
-                                  Submit Your Review
-                                </button>
-                              </form>
-                            </div>
+                            {/* Extra Info */}
+                            {selectedPlace.extraInfo?.length > 0 && (
+                              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="space-y-3">
+                                {selectedPlace.extraInfo.map((info, i) => (
+                                  <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: 0.08 * i }}
+                                    className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-5 border border-rose-100"
+                                  >
+                                    {info.heading && <h4 className="font-bold text-rose-700 text-sm mb-1.5">{info.heading}</h4>}
+                                    {info.description && <p className="text-gray-700 text-sm leading-relaxed">{info.description}</p>}
+                                  </motion.div>
+                                ))}
+                              </motion.div>
+                            )}
                           </div>
-                        </motion.div>
-                      </div>
-                    </motion.div>
-                  )}
+                        </div>
+                          );
+                        })()}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
-                  {/* Bottom Content */}
-                  <div className="w-full px-8">
-                    {/* Title and Video Control */}
-                    <motion.div
-                      ref={exploreOutdoorsRef}
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.4 }}
-                      className="flex items-center justify-between"
-                    >
-                      <h1 className="text-5xl md:text-6xl font-bold text-white drop-shadow-2xl">
-                        Explore Your Interest...
-                      </h1>
 
-                      {/* Video Control */}
-                      <button 
-                        onClick={() => {
-                          if (videoRef.current) {
-                            if (isVideoPlaying) {
-                              videoRef.current.pause();
-                              setIsVideoPlaying(false);
-                            } else {
-                              videoRef.current.play();
-                              setIsVideoPlaying(true);
-                            }
-                          }
-                        }}
-                        className="p-3 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all duration-300"
-                      >
-                        {isVideoPlaying ? (
-                          <PauseCircle className="h-8 w-8 text-white" />
-                        ) : (
-                          <PlayCircle className="h-8 w-8 text-white" />
-                        )}
-                      </button>
-                    </motion.div>
-                  </div>
                   </div>
                 </div>
               </div>
@@ -2181,17 +2351,17 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="mb-12"
             >
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 p-8 rounded-3xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 p-5 sm:p-8 rounded-3xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg">
                       <MessageCircle className="h-8 w-8 text-white" />
                     </div>
-                    <h1 className="text-4xl font-extrabold bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
                       Community Rooms
                 </h1>
               </div>
-              <p className="text-lg text-gray-600 dark:text-gray-300 ml-1">
+              <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 ml-1">
                 Connect, share, and explore with fellow travelers 🌍
               </p>
               {user && (
@@ -2211,14 +2381,14 @@ const ChatRoomsList: React.FC = () => {
                 <Button 
                   size="lg" 
                   disabled={userCreatedRoomsCount >= 5}
-                  className="bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-8 py-6 text-lg font-semibold"
+                  className="w-full sm:w-auto bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
                 >
                   <Plus className="h-6 w-6 mr-2" />
                   Create New Room
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-137.5 max-h-[90vh] overflow-y-auto">
+              <DialogContent className="w-[95vw] sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
                     Create New Chat Room
@@ -2567,8 +2737,8 @@ const ChatRoomsList: React.FC = () => {
                               </div>
                             </div>
                             
-                            {/* Action buttons for room creator */}
-                            {user && room.createdBy === user.uid && (
+                            {/* Action buttons */}
+                            {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
                                 <Button
                                   variant="outline"
@@ -2579,14 +2749,16 @@ const ChatRoomsList: React.FC = () => {
                                   <Share2 className="h-4 w-4 mr-1.5" />
                                   Share
                                 </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="rounded-xl border-2 border-red-400 dark:border-red-400/50 bg-red-200 dark:bg-red-500/30 backdrop-blur-sm text-gray-900 dark:text-white hover:bg-red-300 dark:hover:bg-red-500/50 hover:border-red-500 dark:hover:border-red-300 transition-all font-semibold"
-                                  onClick={(e) => handleDeleteRoom(room.id!, e)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {room.createdBy === user.uid && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-xl border-2 border-red-400 dark:border-red-400/50 bg-red-200 dark:bg-red-500/30 backdrop-blur-sm text-gray-900 dark:text-white hover:bg-red-300 dark:hover:bg-red-500/50 hover:border-red-500 dark:hover:border-red-300 transition-all font-semibold"
+                                    onClick={(e) => handleDeleteRoom(room.id!, e)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </CardContent>
@@ -2718,8 +2890,8 @@ const ChatRoomsList: React.FC = () => {
                               </div>
                             </div>
                             
-                            {/* Action buttons for room creator */}
-                            {user && room.createdBy === user.uid && (
+                            {/* Action buttons */}
+                            {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
                                 <Button
                                   variant="outline"
@@ -2730,14 +2902,16 @@ const ChatRoomsList: React.FC = () => {
                                   <Share2 className="h-4 w-4 mr-1.5" />
                                   Share
                                 </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="rounded-xl border-2 border-red-400 dark:border-red-400/50 bg-red-200 dark:bg-red-500/30 backdrop-blur-sm text-gray-900 dark:text-white hover:bg-red-300 dark:hover:bg-red-500/50 hover:border-red-500 dark:hover:border-red-300 transition-all font-semibold"
-                                  onClick={(e) => handleDeleteRoom(room.id!, e)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {room.createdBy === user.uid && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-xl border-2 border-red-400 dark:border-red-400/50 bg-red-200 dark:bg-red-500/30 backdrop-blur-sm text-gray-900 dark:text-white hover:bg-red-300 dark:hover:bg-red-500/50 hover:border-red-500 dark:hover:border-red-300 transition-all font-semibold"
+                                    onClick={(e) => handleDeleteRoom(room.id!, e)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </CardContent>
@@ -2752,7 +2926,17 @@ const ChatRoomsList: React.FC = () => {
         )}
         
         {/* Share Dialog */}
-        <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <Dialog
+          open={showShareDialog}
+          onOpenChange={(open) => {
+            setShowShareDialog(open);
+            if (!open) {
+              setSocialShareMessage('');
+              setCopiedInvite(false);
+              setCopiedPassword(false);
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-[550px]">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -2789,6 +2973,45 @@ const ChatRoomsList: React.FC = () => {
                 <p className="text-xs text-muted-foreground bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-800">
                   💡 Anyone with this link can join directly without a password
                 </p>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-gray-600 dark:text-gray-300">Share via social</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => shareRoomOnSocial('facebook')}
+                      disabled={!shareRoom?.inviteToken}
+                      className="rounded-xl border-2 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:text-blue-300"
+                    >
+                      <Facebook className="h-4 w-4 mr-1.5" />
+                      Facebook
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => shareRoomOnSocial('instagram')}
+                      disabled={!shareRoom?.inviteToken}
+                      className="rounded-xl border-2 border-pink-200 text-pink-700 hover:bg-pink-50 dark:border-pink-500/40 dark:text-pink-300"
+                    >
+                      <Instagram className="h-4 w-4 mr-1.5" />
+                      Instagram
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => shareRoomOnSocial('whatsapp')}
+                      disabled={!shareRoom?.inviteToken}
+                      className="rounded-xl border-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-300"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-1.5" />
+                      WhatsApp
+                    </Button>
+                  </div>
+                  {socialShareMessage && (
+                    <p className="text-xs text-gray-600 dark:text-gray-300">{socialShareMessage}</p>
+                  )}
+                </div>
               </div>
               
               {/* Room Credentials */}

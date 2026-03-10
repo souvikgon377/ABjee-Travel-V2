@@ -27,6 +27,8 @@ const RecentActivity = lazy(() => import('@/components/ui/recent-activity').then
 const AddUserDialog = lazy(() => import('@/components/ui/add-user-dialog').then((module) => ({ default: module.AddUserDialog })));
 const SettingsDialog = lazy(() => import('@/components/ui/settings-dialog').then((module) => ({ default: module.SettingsDialog })));
 const ExportDialog  = lazy(() => import('@/components/ui/export-dialog').then((module) => ({ default: module.ExportDialog })));
+const TouristPlacesManager = lazy(() => import('@/components/ui/tourist-places').then((module) => ({ default: module.TouristPlacesManager })));
+const PlaceFeedbackTable = lazy(() => import('@/components/ui/place-feedback-table').then((module) => ({ default: module.PlaceFeedbackTable })));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -299,6 +301,30 @@ export default function AdminDashboard() {
           </div>
         );
 
+      case 'tourist-places':
+        return (
+          <Suspense fallback={<SectionLoader />}>
+            <TouristPlacesManager />
+          </Suspense>
+        );
+
+      case 'place-feedback':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Reviews & Comments
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                View all tourist-place feedback with user details
+              </p>
+            </div>
+            <Suspense fallback={<SectionLoader />}>
+              <PlaceFeedbackTable externalSearchQuery={searchQuery} />
+            </Suspense>
+          </div>
+        );
+
       default:
         return (
           <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
@@ -314,7 +340,7 @@ export default function AdminDashboard() {
         );
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView, stats, userProfile, handleAddUser, handleExport, handleSettings, activeFilters, usersTableRefresh]);
+  }, [currentView, stats, userProfile, handleAddUser, handleExport, handleSettings, activeFilters, usersTableRefresh, searchQuery]);
 
   return (
     <SidebarProvider>
