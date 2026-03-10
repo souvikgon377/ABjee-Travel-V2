@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
@@ -72,7 +72,7 @@ type ReviewComment = {
 
 
 
-// ── PlaceCard: video-first or draggable-image carousel card ──────────────────
+// -- PlaceCard: video-first or draggable-image carousel card ------------------
 const PlaceCard: React.FC<{
   place: TouristPlace;
   idx: number;
@@ -151,7 +151,7 @@ const PlaceCard: React.FC<{
       {/* Shimmer on hover */}
       <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
         <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12"
+          className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent skew-x-12"
           animate={{ x: ['-150%', '250%'] }}
           transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 1, ease: 'linear' }}
         />
@@ -182,7 +182,7 @@ const PlaceCard: React.FC<{
               animate={vidPaused ? { scale: 1 } : { scale: [1, 1.08, 1] }}
               transition={vidPaused ? { duration: 0.2 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
               onClick={toggleVid}
-              className="absolute bottom-2.5 right-2.5 z-20 h-9 w-9 rounded-full bg-gradient-to-br from-black/70 to-rose-700/55 hover:from-black/80 hover:to-rose-600/70 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-colors"
+              className="absolute bottom-2.5 right-2.5 z-20 h-9 w-9 rounded-full bg-linear-to-br from-black/70 to-rose-700/55 hover:from-black/80 hover:to-rose-600/70 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-colors"
             >
               {vidPaused
                 ? <Play className="h-3.5 w-3.5 ml-0.5" />
@@ -245,13 +245,13 @@ const PlaceCard: React.FC<{
           <img src={place.coverImage} alt={place.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" draggable={false} />
         ) : (
           /* Empty state */
-          <div className="w-full h-full bg-gradient-to-br from-rose-600 to-pink-700 flex items-center justify-center">
+          <div className="w-full h-full bg-linear-to-br from-rose-600 to-pink-700 flex items-center justify-center">
             <Compass className="h-14 w-14 text-white/40" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
         <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1.5">
-          <span className="text-[10px] font-bold bg-gradient-to-r from-rose-600 to-pink-600 text-white px-2.5 py-1 rounded-full shadow-lg backdrop-blur-sm border border-white/20 pointer-events-none">
+          <span className="text-[10px] font-bold bg-linear-to-r from-rose-600 to-pink-600 text-white px-2.5 py-1 rounded-full shadow-lg backdrop-blur-sm border border-white/20 pointer-events-none">
             {place.category}
           </span>
           <div className="flex items-center gap-1">
@@ -1057,7 +1057,7 @@ const ChatRoomsList: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
+      <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -1067,7 +1067,7 @@ const ChatRoomsList: React.FC = () => {
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/30 border-t-primary mx-auto"></div>
             <Sparkles className="h-6 w-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
           </div>
-          <p className="mt-6 text-lg font-medium bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
+          <p className="mt-6 text-lg font-medium bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
             Loading chat rooms...
           </p>
         </motion.div>
@@ -1076,7 +1076,7 @@ const ChatRoomsList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
+    <div className="min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Inspirational Header */}
         <motion.div
@@ -1084,7 +1084,7 @@ const ChatRoomsList: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 text-center"
         >
-          <h2 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
+          <h2 className="text-3xl md:text-5xl font-bold bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
             How do you like to spend your time...?
           </h2>
         </motion.div>
@@ -1107,7 +1107,7 @@ const ChatRoomsList: React.FC = () => {
               className="group cursor-pointer"
               onClick={scrollToExploreOutdoors}
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -1119,8 +1119,8 @@ const ChatRoomsList: React.FC = () => {
                   <source src="/v1.mp4" type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-linear-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
+                <div className="absolute inset-0 bg-linear-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ rotate: [0, 10, -10, 0] }}
@@ -1150,7 +1150,7 @@ const ChatRoomsList: React.FC = () => {
               onClick={scrollToCommunityRooms}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -1162,10 +1162,10 @@ const ChatRoomsList: React.FC = () => {
                   <source src="/v2.mp4" type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
+                <div className="absolute inset-0 bg-linear-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <motion.div 
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
                   animate={{ x: ['-100%', '100%'] }}
                   transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
                 />
@@ -1188,7 +1188,7 @@ const ChatRoomsList: React.FC = () => {
                       Communicate with Fellow Travellers
                     </motion.h3>
                     <p className="text-gray-300 dark:text-white/95 text-base drop-shadow-lg font-medium">
-                      Connect and share experiences with travelers worldwide 🌍✨
+                      Connect and share experiences with travelers worldwide ???
                     </p>
                   </div>
                 </div>
@@ -1203,8 +1203,8 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                <div className="absolute inset-0 bg-linear-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ y: [0, -5, 0] }}
@@ -1233,8 +1233,8 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
-                <div className="absolute inset-0 bg-gradient-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ rotate: [0, 5, -5, 0] }}
@@ -1267,7 +1267,7 @@ const ChatRoomsList: React.FC = () => {
               className="group cursor-pointer"
               onClick={scrollToExploreOutdoors}
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -1279,8 +1279,8 @@ const ChatRoomsList: React.FC = () => {
                   <source src="/v1.mp4" type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 bg-linear-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
+                <div className="absolute inset-0 bg-linear-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ rotate: [0, 10, -10, 0] }}
@@ -1310,7 +1310,7 @@ const ChatRoomsList: React.FC = () => {
               onClick={scrollToCommunityRooms}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video 
                   autoPlay 
@@ -1322,10 +1322,10 @@ const ChatRoomsList: React.FC = () => {
                   <source src="/v2.mp4" type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
+                <div className="absolute inset-0 bg-linear-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <motion.div 
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
                   animate={{ x: ['-100%', '100%'] }}
                   transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
                 />
@@ -1348,7 +1348,7 @@ const ChatRoomsList: React.FC = () => {
                       Communicate with Fellow Travellers
                     </motion.h3>
                     <p className="text-gray-300 dark:text-white/95 text-base drop-shadow-lg font-medium">
-                      Connect and share experiences with travelers worldwide 🌍✨
+                      Connect and share experiences with travelers worldwide ???
                     </p>
                   </div>
                 </div>
@@ -1363,8 +1363,8 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                <div className="absolute inset-0 bg-linear-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ y: [0, -5, 0] }}
@@ -1393,8 +1393,8 @@ const ChatRoomsList: React.FC = () => {
               whileHover={{ scale: 1.05, y: -5 }}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
-                <div className="absolute inset-0 bg-gradient-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ rotate: [0, 5, -5, 0] }}
@@ -1441,8 +1441,8 @@ const ChatRoomsList: React.FC = () => {
                 </video>
 
                 {/* Multi-layer gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/70" />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-transparent to-black/30" />
+                <div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/20 to-black/70" />
+                <div className="absolute inset-0 bg-linear-to-r from-black/30 via-transparent to-black/30" />
 
                 {/* Animated vignette */}
                 <motion.div
@@ -1459,7 +1459,7 @@ const ChatRoomsList: React.FC = () => {
                 >
                   <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }`}</style>
                   <div className="min-h-full flex flex-col items-center justify-start px-4 pt-6 pb-20 gap-8">
-                    {/* ── Top bar: Search + Pause + Close ── */}
+                    {/* -- Top bar: Search + Pause + Close -- */}
                     <motion.div
                       initial={{ y: -30, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
@@ -1469,13 +1469,13 @@ const ChatRoomsList: React.FC = () => {
                       {/* Glassmorphic Search bar */}
                       <div className="relative flex-1 min-w-0 group">
                         <motion.div
-                          className="absolute -inset-0.5 rounded-full bg-gradient-to-r from-rose-500/40 via-pink-500/40 to-purple-500/40 blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"
+                          className="absolute -inset-0.5 rounded-full bg-linear-to-r from-rose-500/40 via-pink-500/40 to-purple-500/40 blur opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"
                         />
                         <div className="relative">
                           <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 z-10 group-focus-within:text-rose-400 transition-colors duration-300" />
                           <input
                             type="text"
-                            placeholder="Search by place, area, state or country…"
+                            placeholder="Search by place, area, state or country�"
                             value={searchDestination}
                             onChange={(e) => setSearchDestination(e.target.value)}
                             className="w-full pl-12 pr-10 sm:pl-14 sm:pr-12 py-3.5 sm:py-4 rounded-full bg-white/95 backdrop-blur-xl text-gray-900 placeholder-gray-400 text-sm sm:text-base focus:outline-none shadow-2xl shadow-black/40 transition-all duration-300 focus:bg-white"
@@ -1523,7 +1523,7 @@ const ChatRoomsList: React.FC = () => {
                       </motion.button>
                     </motion.div>
 
-                  {/* ── Tourist Places Grid ── */}
+                  {/* -- Tourist Places Grid -- */}
                   {(() => {
                     if (!hasSearchQuery) {
                       return (
@@ -1641,7 +1641,7 @@ const ChatRoomsList: React.FC = () => {
                       </motion.div>
                     );
                   })()}
-                  {/* ── Firestore Place Detail Panel ── */}
+                  {/* -- Firestore Place Detail Panel -- */}
                   <AnimatePresence>
                     {selectedPlace && (
                       <motion.div
@@ -1688,7 +1688,7 @@ const ChatRoomsList: React.FC = () => {
                                     if (v.paused) { v.play(); setDetailVidPaused(false); }
                                     else { v.pause(); setDetailVidPaused(true); }
                                   }}
-                                  className="absolute bottom-14 right-4 z-20 h-10 w-10 rounded-full bg-gradient-to-br from-black/75 to-rose-700/60 hover:from-black/85 hover:to-rose-600/75 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] transition-colors"
+                                  className="absolute bottom-14 right-4 z-20 h-10 w-10 rounded-full bg-linear-to-br from-black/75 to-rose-700/60 hover:from-black/85 hover:to-rose-600/75 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] transition-colors"
                                 >
                                   {detailVidPaused ? <Play className="h-4 w-4 ml-0.5" /> : <PauseCircle className="h-4 w-4" />}
                                 </motion.button>
@@ -1769,11 +1769,11 @@ const ChatRoomsList: React.FC = () => {
                             ) : selectedPlace.coverImage ? (
                               <img src={selectedPlace.coverImage} alt={selectedPlace.name} className="w-full h-full object-cover" loading="lazy" />
                             ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-rose-600 to-pink-700" />
+                              <div className="w-full h-full bg-linear-to-br from-rose-600 to-pink-700" />
                             )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+                            <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
                             <div className="absolute bottom-5 left-6 right-16">
-                              <span className="text-[11px] font-bold bg-gradient-to-r from-rose-600 to-pink-600 text-white px-3 py-1 rounded-full shadow-lg">
+                              <span className="text-[11px] font-bold bg-linear-to-r from-rose-600 to-pink-600 text-white px-3 py-1 rounded-full shadow-lg">
                                 {selectedPlace.category}
                               </span>
                               <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-2 drop-shadow-2xl tracking-tight">
@@ -1834,12 +1834,12 @@ const ChatRoomsList: React.FC = () => {
                               initial={{ opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.06 }}
-                              className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-pink-50 p-4 sm:p-5"
+                              className="rounded-2xl border border-rose-100 bg-linear-to-br from-rose-50 to-pink-50 p-4 sm:p-5"
                             >
                               {(() => {
                                 return (
                                   <>
-                                    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-rose-50 p-4 sm:p-5">
+                                    <div className="rounded-2xl border border-amber-100 bg-linear-to-br from-amber-50 to-rose-50 p-4 sm:p-5">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
                                           <span className="p-1.5 rounded-lg bg-amber-100"><Star className="h-4 w-4 text-amber-600" /></span>
@@ -2239,7 +2239,7 @@ const ChatRoomsList: React.FC = () => {
                                             preload="metadata"
                                           />
                                           <motion.div
-                                            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent"
+                                            className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent"
                                             animate={{ opacity: [0.45, 0.22, 0.45] }}
                                             transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                                           />
@@ -2317,7 +2317,7 @@ const ChatRoomsList: React.FC = () => {
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: 0.08 * i }}
-                                    className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl p-5 border border-rose-100"
+                                    className="bg-linear-to-br from-rose-50 to-pink-50 rounded-2xl p-5 border border-rose-100"
                                   >
                                     {info.heading && <h4 className="font-bold text-rose-700 text-sm mb-1.5">{info.heading}</h4>}
                                     {info.description && <p className="text-gray-700 text-sm leading-relaxed">{info.description}</p>}
@@ -2354,19 +2354,19 @@ const ChatRoomsList: React.FC = () => {
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 p-5 sm:p-8 rounded-3xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg">
+                    <div className="p-3 rounded-2xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg">
                       <MessageCircle className="h-8 w-8 text-white" />
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-extrabold bg-gradient-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
                       Community Rooms
                 </h1>
               </div>
               <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 ml-1">
-                Connect, share, and explore with fellow travelers 🌍
+                Connect, share, and explore with fellow travelers ??
               </p>
               {user && (
                 <div className="flex items-center gap-2 mt-3 ml-1">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-rose-500/10 to-pink-500/10 dark:from-rose-400/10 dark:to-pink-400/10 border border-rose-500/20 dark:border-rose-400/20">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-linear-to-r from-rose-500/10 to-pink-500/10 dark:from-rose-400/10 dark:to-pink-400/10 border border-rose-500/20 dark:border-rose-400/20">
                     <Crown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
                       {userCreatedRoomsCount}/5 Rooms Created
@@ -2381,7 +2381,7 @@ const ChatRoomsList: React.FC = () => {
                 <Button 
                   size="lg" 
                   disabled={userCreatedRoomsCount >= 5}
-                  className="w-full sm:w-auto bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
+                  className="w-full sm:w-auto bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
                 >
                   <Plus className="h-6 w-6 mr-2" />
                   Create New Room
@@ -2390,7 +2390,7 @@ const ChatRoomsList: React.FC = () => {
               </DialogTrigger>
               <DialogContent className="w-[95vw] sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
+                  <DialogTitle className="text-2xl font-bold bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
                     Create New Chat Room
                   </DialogTitle>
                   <DialogDescription className="text-base">
@@ -2420,7 +2420,7 @@ const ChatRoomsList: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 border border-rose-200 dark:border-rose-800">
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-linear-to-r from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 border border-rose-200 dark:border-rose-800">
                       <div className="flex items-center gap-2">
                         <Compass className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                         <div>
@@ -2560,7 +2560,7 @@ const ChatRoomsList: React.FC = () => {
 
                   <Button 
                     type="submit" 
-                    className="w-full h-12 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white font-semibold shadow-lg" 
+                    className="w-full h-12 rounded-xl bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white font-semibold shadow-lg" 
                     disabled={creating}
                   >
                     {creating ? (
@@ -2597,21 +2597,21 @@ const ChatRoomsList: React.FC = () => {
                   className="mb-6"
                 >
                   <div className="relative inline-block">
-                    <div className="absolute inset-0 bg-gradient-to-r from-rose-400 to-pink-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
-                    <div className="relative p-6 rounded-full bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/40 dark:to-pink-900/40">
+                    <div className="absolute inset-0 bg-linear-to-r from-rose-400 to-pink-400 rounded-full blur-2xl opacity-30 animate-pulse"></div>
+                    <div className="relative p-6 rounded-full bg-linear-to-br from-rose-100 to-pink-100 dark:from-rose-900/40 dark:to-pink-900/40">
                       <MessageCircle className="h-16 w-16 text-rose-600 dark:text-rose-400" />
                     </div>
                   </div>
                 </motion.div>
-                <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
+                <h3 className="text-2xl font-bold mb-3 bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
                   No Chat Rooms Yet
                 </h3>
                 <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg">
-                  Be the first to create a chat room and start connecting! ✨
+                  Be the first to create a chat room and start connecting! ?
                 </p>
                 <Button 
                   onClick={() => setShowCreateDialog(true)}
-                  className="bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-8 py-6 text-lg font-semibold"
+                  className="bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-8 py-6 text-lg font-semibold"
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   Create First Room
@@ -2626,10 +2626,10 @@ const ChatRoomsList: React.FC = () => {
             {publicRooms.length > 0 && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg">
+                  <div className="p-2 rounded-xl bg-linear-to-br from-green-500 to-emerald-600 shadow-lg">
                     <Compass className="h-6 w-6 text-white" />
                   </div>
-                  <h2 className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
+                  <h2 className="text-2xl font-bold bg-linear-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
                     Public Rooms
                   </h2>
                   <span className="text-sm text-muted-foreground">
@@ -2698,7 +2698,7 @@ const ChatRoomsList: React.FC = () => {
                           })()}
                           
                           {/* Gradient overlay on hover */}
-                          <div className="absolute inset-0 bg-gradient-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-[2] pointer-events-none"></div>
+                          <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-[2] pointer-events-none"></div>
                           
                           <CardHeader className="relative z-10">
                             <CardTitle className="flex items-center gap-2.5 text-xl text-gray-900 dark:text-white font-bold" style={{ textShadow: 'none' }}>
@@ -2709,7 +2709,7 @@ const ChatRoomsList: React.FC = () => {
                                   <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                 </Avatar>
                               ) : (
-                                <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
+                                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
                                   <MessageCircle className="h-5 w-5 text-white" />
                                 </div>
                               )}
@@ -2774,10 +2774,10 @@ const ChatRoomsList: React.FC = () => {
             {privateRooms.length > 0 && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg">
+                  <div className="p-2 rounded-xl bg-linear-to-br from-amber-500 to-orange-600 shadow-lg">
                     <Lock className="h-6 w-6 text-white" />
                   </div>
-                  <h2 className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-500 bg-clip-text text-transparent">
+                  <h2 className="text-2xl font-bold bg-linear-to-r from-amber-600 to-orange-500 bg-clip-text text-transparent">
                     Private Rooms
                   </h2>
                   <span className="text-sm text-muted-foreground">
@@ -2846,7 +2846,7 @@ const ChatRoomsList: React.FC = () => {
                           })()}
                           
                           {/* Gradient overlay on hover */}
-                          <div className="absolute inset-0 bg-gradient-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-[2] pointer-events-none"></div>
+                          <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-[2] pointer-events-none"></div>
                           
                           <CardHeader className="relative z-10">
                             <CardTitle className="flex items-center gap-2.5 text-xl text-gray-900 dark:text-white font-bold" style={{ textShadow: 'none' }}>
@@ -2857,7 +2857,7 @@ const ChatRoomsList: React.FC = () => {
                                   <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                 </Avatar>
                               ) : (
-                                <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
+                                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
                                   <MessageCircle className="h-5 w-5 text-white" />
                                 </div>
                               )}
@@ -2967,11 +2967,11 @@ const ChatRoomsList: React.FC = () => {
                     className="rounded-xl border-2 hover:border-primary hover:bg-primary/5 transition-all"
                   >
                     <Copy className="h-4 w-4 mr-2" />
-                    {copiedInvite ? '✓ Copied!' : 'Copy'}
+                    {copiedInvite ? '? Copied!' : 'Copy'}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-800">
-                  💡 Anyone with this link can join directly without a password
+                  ?? Anyone with this link can join directly without a password
                 </p>
 
                 <div className="space-y-2">
@@ -3020,7 +3020,7 @@ const ChatRoomsList: React.FC = () => {
                   <Shield className="h-4 w-4 text-primary" />
                   Room Credentials
                 </Label>
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-5 rounded-xl border-2 border-gray-200 dark:border-gray-700 space-y-3">
+                <div className="bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-5 rounded-xl border-2 border-gray-200 dark:border-gray-700 space-y-3">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 flex items-center gap-1">
                       <MessageCircle className="h-3 w-3" />
@@ -3046,10 +3046,10 @@ const ChatRoomsList: React.FC = () => {
                   className="w-full h-12 rounded-xl border-2 hover:border-primary hover:bg-primary/5 font-semibold transition-all"
                 >
                   <Copy className="h-4 w-4 mr-2" />
-                  {copiedPassword ? '✓ Copied!' : 'Copy ID & Password'}
+                  {copiedPassword ? '? Copied!' : 'Copy ID & Password'}
                 </Button>
                 <p className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
-                  🔐 Share these credentials for manual room access
+                  ?? Share these credentials for manual room access
                 </p>
               </div>
             </div>
@@ -3070,7 +3070,7 @@ const ChatPage: React.FC = () => {
   const isInChatRoom = location.pathname.includes('/room/');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
+    <div className="min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
       {!isInChatRoom && <Header />}
       <Routes>
         <Route index element={<ChatRoomsList />} />
