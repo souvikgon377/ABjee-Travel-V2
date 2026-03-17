@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+"use client";
+
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -7,9 +9,24 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendPasswordResetEmail,
-  signInWithCustomToken,
 } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider } from '../lib/firebase';
+import { firestoreDb } from '../lib/firebaseFirestore';
+import { resolveAvatarUrl } from '../lib/avatar';
+
+const REQUEST_TIMEOUT_MS = 15000;
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 interface AuthContextType {
   currentUser: any | null;
@@ -18,7 +35,7 @@ interface AuthContextType {
   loading: boolean;
   signup: (email: string, password: string, additionalData?: any) => Promise<{ success: boolean; user: any }>;
   login: (email: string, password: string) => Promise<void>;
-  adminLogin: (email: string, password: string) => Promise<void>;
+  adminLogin: (email: string, password: string, requiredRole?: 'admin' | 'owner') => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -32,6 +49,9 @@ interface UserProfile {
   firstName?: string;
   lastName?: string;
   photoURL?: string;
+  avatar?: string;
+  profilePicture?: string;
+  profileImage?: string;
   address?: string;
   city?: string;
   zipCode?: string;
@@ -55,23 +75,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
+
+  const normalizeUserProfile = useCallback((profile: any): UserProfile | null => {
+    if (!profile) return null;
+
+    const mergedPhotoURL = resolveAvatarUrl(profile) || '';
+
+    return {
+      uid: profile.uid || profile.id || '',
+      email: profile.email || '',
+      displayName: profile.displayName || profile.username || profile.email || '',
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      photoURL: mergedPhotoURL,
+      avatar: typeof profile.avatar === 'string' ? profile.avatar : mergedPhotoURL,
+      profilePicture: typeof profile.profilePicture === 'string' ? profile.profilePicture : undefined,
+      profileImage: typeof profile.profileImage === 'string' ? profile.profileImage : mergedPhotoURL,
+      address: profile.address,
+      city: profile.city,
+      zipCode: profile.zipCode,
+      username: profile.username,
+      role: profile.role,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+    } as UserProfile;
+  }, []);
+
+  useEffect(() => {
+    const failSafeTimer = setTimeout(() => {
+      setLoading(false);
+    }, 8000);
+
+    return () => clearTimeout(failSafeTimer);
+  }, []);
 
   // Helper to get fresh token
   const refreshToken = useCallback(async (user = currentUser) => {
     if (!user) throw new Error('No authenticated user');
     try {
-      setIsRefreshing(true);
+      isRefreshingRef.current = true;
       const token = await user.getIdToken(true);
       localStorage.setItem('token', token);
       return token;
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Token refresh failed:', error);
       }
       throw error;
     } finally {
-      setIsRefreshing(false);
+      isRefreshingRef.current = false;
     }
   }, [currentUser]);
 
@@ -83,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await refreshToken(user);
       
       // Check if profile exists
-      const checkResponse = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+      const checkResponse = await fetchWithTimeout('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -92,13 +145,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (checkResponse.ok) {
         const { data } = await checkResponse.json();
-        setUserProfile(data.user);
+        setUserProfile(normalizeUserProfile(data.user));
         return;
       }
 
       // Set basic profile data from Firebase user
       const { displayName, email, photoURL } = user;
-      const newProfile = {
+      const newProfile = normalizeUserProfile({
         uid: user.uid,
         email,
         displayName: displayName || '',
@@ -106,12 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date(),
         updatedAt: new Date(),
         ...additionalData,
-      };
+      });
 
       setUserProfile(newProfile);
 
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Error creating user profile:', error);
       }
       throw error;
@@ -137,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: true, user };
 
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Signup error:', error);
       }
       const errorMessages: Record<string, string> = {
@@ -156,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Login error:', error);
       }
       const errorMessages: Record<string, string> = {
@@ -169,53 +222,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Admin login with Firebase email/password + role verification
-  const adminLogin = async (email: string, password: string) => {
+  const adminLogin = async (email: string, password: string, requiredRole: 'admin' | 'owner' = 'admin') => {
     try {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Initiating admin login...');
       }
 
-      let user: any;
-
-      try {
-        const signInResult = await signInWithEmailAndPassword(auth, email, password);
-        user = signInResult.user;
-      } catch (firebaseLoginError: any) {
-        // Fallback for legacy admins that are not yet present in Firebase Email/Password Auth
-        if (firebaseLoginError?.code !== 'auth/invalid-credential' && firebaseLoginError?.code !== 'auth/user-not-found') {
-          throw firebaseLoginError;
-        }
-
-        if (import.meta.env.DEV) {
-          console.log('[Auth] Firebase email/password failed, attempting admin custom-token fallback...');
-        }
-
-        const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/admin-login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result?.message || 'Invalid email or password.');
-        }
-
-        const customToken = result?.data?.customToken || result?.data?.token;
-        if (!customToken) {
-          throw new Error('Admin login succeeded but no Firebase custom token was returned.');
-        }
-
-        const signInResult = await signInWithCustomToken(auth, customToken);
-        user = signInResult.user;
-      }
+      const signInResult = await signInWithEmailAndPassword(auth, email, password);
+      const user = signInResult.user;
 
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
 
-      const profileResponse = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+      const profileResponse = await fetchWithTimeout('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -227,20 +246,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const role = profileResult?.data?.user?.role;
-      if (role !== 'admin' && role !== 'owner') {
+      const hasRequiredAccess = requiredRole === 'owner'
+        ? role === 'owner'
+        : role === 'admin' || role === 'owner';
+
+      if (!hasRequiredAccess) {
         await signOut(auth);
         localStorage.removeItem('token');
-        throw new Error('This account does not have admin access.');
+        throw new Error(`You are not ${requiredRole}. Please login as a user.`);
       }
 
-      setUserProfile(profileResult.data.user);
+      setUserProfile(normalizeUserProfile(profileResult.data.user));
       
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Admin login complete');
       }
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('[Auth] Admin login error:', error);
+      }
+      if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/user-not-found' || error?.code === 'auth/wrong-password') {
+        throw new Error('Invalid email or password.');
       }
       throw new Error(error.message || 'Failed to log in as admin. Please try again.');
     }
@@ -249,28 +275,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign in with Google
   const loginWithGoogle = async () => {
     try {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Initiating Google Sign-In...');
       }
       const result = await signInWithPopup(auth, googleProvider);
       const { user } = result;
       
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Google Sign-In successful, getting token...');
       }
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
       
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Creating/updating user profile...');
       }
       await createUserProfile(user);
       
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Google Sign-In complete');
       }
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('[Auth] Google login error:', error);
         console.error('[Auth] Error code:', error.code);
         console.error('[Auth] Error message:', error.message);
@@ -294,7 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(null);
       localStorage.removeItem('token');
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Logout error:', error);
       }
       throw error;
@@ -306,7 +332,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error: any) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Password reset error:', error);
       }
       const errorMessages: Record<string, string> = {
@@ -324,7 +350,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const token = await refreshToken();
-      const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/users/profile`, {
+      const response = await fetchWithTimeout('/api/users/profile', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -338,9 +364,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const { data: updatedUser } = await response.json();
-      setUserProfile(updatedUser);
+      setUserProfile(normalizeUserProfile(updatedUser));
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Error updating user profile:', error);
       }
       throw error;
@@ -363,12 +389,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // Set up periodic token refresh (30 minutes)
           refreshInterval = setInterval(async () => {
-            if (!isActive || isRefreshing) return;
+            if (!isActive || isRefreshingRef.current) return;
             try {
               const freshToken = await refreshToken(user);
               localStorage.setItem('token', freshToken);
             } catch (error) {
-              if (import.meta.env.DEV) {
+              if ((process.env.NODE_ENV === "development")) {
                 console.error('Periodic token refresh failed:', error);
               }
             }
@@ -376,7 +402,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // Load user profile
           try {
-            const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+            const response = await fetchWithTimeout('/api/auth/me', {
               headers: {
                 'Authorization': `Bearer ${token}`,
               },
@@ -384,12 +410,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (response.ok) {
               const { data } = await response.json();
-              if (isActive) setUserProfile(data.user);
+              if (isActive) setUserProfile(normalizeUserProfile(data.user));
             } else {
               await createUserProfile(user);
             }
           } catch (error) {
-            console.error('Error loading user profile:', error);
+            if ((process.env.NODE_ENV === "development")) {
+              console.error('Error loading user profile:', error);
+            }
             await createUserProfile(user);
           }
         } else {
@@ -399,7 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (error) {
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.error('Auth state change error:', error);
         }
       } finally {
@@ -414,7 +442,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearInterval(refreshInterval);
       }
     };
-  }, [refreshToken, isRefreshing]);
+  }, [createUserProfile, normalizeUserProfile, refreshToken]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+
+    const userDocRef = doc(firestoreDb, 'users', currentUser.uid);
+    const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+
+      const snapshotProfile = normalizeUserProfile({
+        id: snapshot.id,
+        uid: snapshot.id,
+        ...snapshot.data(),
+      });
+
+      if (!snapshotProfile) return;
+
+      setUserProfile((prev) => {
+        const merged = {
+          ...(prev || {}),
+          ...snapshotProfile,
+        };
+
+        return normalizeUserProfile(merged);
+      });
+    });
+
+    return () => unsubscribe();
+  }, [currentUser?.uid, normalizeUserProfile]);
 
   const value: AuthContextType = useMemo(() => ({
     currentUser,
@@ -443,7 +499,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }

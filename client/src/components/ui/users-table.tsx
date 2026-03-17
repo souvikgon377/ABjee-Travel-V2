@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useCallback } from 'react';
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  TrendingUp,
   Plus,
   Calendar,
   Mail,
@@ -22,15 +21,23 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
-import { adminAPI } from '@/lib/api';
+import { collection, query, orderBy, deleteDoc, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 import { UserActionsDialog } from '@/components/ui/user-actions-dialog';
+import { resolveAvatarUrl } from '@/lib/avatar';
+
+const USERS_PER_PAGE = 10;
 
 interface UsersTableProps {
   onAddUser: () => void;
-  refreshTrigger?: number; // Add a prop to trigger refresh from parent
+  refreshTrigger?: number;
+  /** Role filter driven externally from the header Filter button */
+  externalRoleFilter?: string;
+  /** Status filter driven externally from the header Filter button */
+  externalStatusFilter?: string;
 }
 
-export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) => {
+export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter, externalStatusFilter }: UsersTableProps) => {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUserActions, setShowUserActions] = useState(false);
@@ -39,35 +46,113 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const usersPerPage = 10;
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const usersListenerRef = useRef<Unsubscribe | null>(null);
 
-  const fetchUsers = useCallback(async () => {
+  // Load all users from Firestore (same collection the Overview card reads)
+  const fetchUsers = useCallback(() => {
     setLoading(true);
-    try {
-      const response = await adminAPI.getUsers({
-        limit: usersPerPage,
-        page: currentPage,
-        search: searchQuery || undefined,
-        role: roleFilter !== 'all' ? roleFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-      });
-      setUsers(response.data.data.users);
-      setTotalPages(response.data.data.pagination.pages);
-      setTotalUsers(response.data.data.pagination.total);
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.error('Failed to fetch users:', error);
-      }
-    } finally {
+    setFetchError(null);
+    usersListenerRef.current?.();
+
+    const applyUsers = (docs: any[]) => {
+      setAllUsers(docs);
       setLoading(false);
-    }
-  }, [currentPage, searchQuery, roleFilter, statusFilter, usersPerPage]);
+    };
+
+    const attachFallbackListener = () => {
+      usersListenerRef.current = onSnapshot(
+        collection(firestoreDb, 'users'),
+        (snap) => {
+          const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          docs.sort((a: any, b: any) => {
+            const ta = a.createdAt?.toDate?.()?.getTime() ?? a.createdAt ?? 0;
+            const tb = b.createdAt?.toDate?.()?.getTime() ?? b.createdAt ?? 0;
+            return tb - ta;
+          });
+          applyUsers(docs);
+        },
+        (err: any) => {
+          if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
+          setFetchError(
+            err?.code === 'permission-denied'
+              ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
+              : `Failed to load users: ${err?.message ?? err}`
+          );
+          setLoading(false);
+        }
+      );
+    };
+
+    usersListenerRef.current = onSnapshot(
+      query(collection(firestoreDb, 'users'), orderBy('createdAt', 'desc')),
+      (snap) => {
+        const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        applyUsers(docs);
+      },
+      (err: any) => {
+        if (err?.code === 'failed-precondition') {
+          attachFallbackListener();
+          return;
+        }
+
+        if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
+        setFetchError(
+          err?.code === 'permission-denied'
+            ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
+            : `Failed to load users: ${err?.message ?? err}`
+        );
+        setLoading(false);
+      }
+    );
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers, refreshTrigger]); // Add refreshTrigger to dependencies
+
+    return () => {
+      usersListenerRef.current?.();
+      usersListenerRef.current = null;
+    };
+  }, [fetchUsers, refreshTrigger]);
+
+  // Sync both external filters in a single effect
+  useEffect(() => {
+    let changed = false;
+    if (externalRoleFilter !== undefined && externalRoleFilter !== roleFilter) {
+      setRoleFilter(externalRoleFilter);
+      changed = true;
+    }
+    if (externalStatusFilter !== undefined && externalStatusFilter !== statusFilter) {
+      setStatusFilter(externalStatusFilter);
+      changed = true;
+    }
+    if (changed) setCurrentPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalRoleFilter, externalStatusFilter]);
+
+  // Client-side filter + paginate — derived state via useMemo (no setState cascade)
+  const { users: filteredUsers, totalUsers: filteredTotal, totalPages: filteredPages } = useMemo(() => {
+    let filtered = allUsers;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (u) => u.displayName?.toLowerCase().includes(q) ||
+               u.email?.toLowerCase().includes(q) ||
+               u.username?.toLowerCase().includes(q)
+      );
+    }
+    if (roleFilter !== 'all') filtered = filtered.filter((u) => u.role === roleFilter);
+    if (statusFilter !== 'all')
+      filtered = filtered.filter((u) =>
+        statusFilter === 'active' ? u.isActive !== false : u.isActive === false
+      );
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / USERS_PER_PAGE));
+    const page = filtered.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
+    return { users: page, totalUsers: total, totalPages: pages };
+  }, [allUsers, searchQuery, roleFilter, statusFilter, currentPage]);
 
   const handleUserClick = useCallback((user: any) => {
     setSelectedUser(user);
@@ -79,19 +164,15 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
   }, [fetchUsers]);
 
   const handleDeleteUser = useCallback(async (user: any) => {
-    if (!confirm(`Are you sure you want to delete user "${user.displayName || user.email}"? This action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete user "${user.displayName || user.email}"? This action cannot be undone.`))
       return;
-    }
-
     try {
-      await adminAPI.deleteUser(user.id);
+      await deleteDoc(doc(firestoreDb, 'users', user.id));
       await fetchUsers();
-      if (import.meta.env.DEV) {
-        console.log('User deleted:', user.id);
-      }
-    } catch (error: any) {
-      console.error('Failed to delete user:', error);
-      alert(error.response?.data?.message || 'Failed to delete user. Please try again.');
+      if ((process.env.NODE_ENV === "development")) console.log('User deleted:', user.id);
+    } catch (err: any) {
+      console.error('Failed to delete user:', err);
+      alert('Failed to delete user. Please try again.');
     }
   }, [fetchUsers]);
 
@@ -121,7 +202,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
           <div>
             <h3 className="text-lg font-semibold sm:text-xl">Users Management</h3>
             <p className="text-muted-foreground text-sm">
-              {totalUsers} total users
+              {filteredTotal} total users
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -178,11 +259,19 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
           <p className="text-muted-foreground text-sm mt-3">Loading users...</p>
         </div>
+      ) : fetchError ? (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+          <p className="font-medium mb-1">Could not load users</p>
+          <p className="text-xs opacity-80">{fetchError}</p>
+          <button onClick={fetchUsers} className="mt-3 text-xs underline hover:no-underline">
+            Try again
+          </button>
+        </div>
       ) : (
         <>
           <div className="space-y-2">
             <AnimatePresence mode="popLayout">
-              {users.map((user, index) => (
+              {filteredUsers.map((user, index) => (
                 <motion.div
                   key={user.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -194,7 +283,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
                   <div className="flex w-full items-center gap-4 sm:w-auto">
                     <div className="relative">
                       <img
-                        src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}`}
+                        src={resolveAvatarUrl(user as Record<string, unknown>) || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}`}
                         alt={user.displayName || user.email}
                         width={40}
                         height={40}
@@ -265,7 +354,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
             </AnimatePresence>
           </div>
 
-          {users.length === 0 && (
+          {filteredUsers.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-lg font-medium">No users found</p>
               <p className="text-sm mt-1">Try adjusting your filters</p>
@@ -273,10 +362,10 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
           )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {filteredPages > 1 && (
             <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
               <p className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
+                Page {currentPage} of {filteredPages}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -290,8 +379,8 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages || loading}
+                  onClick={() => setCurrentPage((p) => Math.min(filteredPages, p + 1))}
+                  disabled={currentPage === filteredPages || loading}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -312,3 +401,4 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger }: UsersTableProps) 
 });
 
 UsersTable.displayName = 'UsersTable';
+

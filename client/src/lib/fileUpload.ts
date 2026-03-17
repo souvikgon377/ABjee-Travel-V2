@@ -18,8 +18,8 @@ export interface FileUploadOptions {
 
 // ==================== CONFIGURATION ====================
 
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default';
 
 const DEFAULT_OPTIONS: FileUploadOptions = {
   folder: 'chat-attachments',
@@ -236,3 +236,4 @@ export function getFileIcon(mimeType: string): string {
   if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('compressed')) return '📦';
   return '📎';
 }
+

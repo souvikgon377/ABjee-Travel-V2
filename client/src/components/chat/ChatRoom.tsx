@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { chatService, type MessageAttachment } from '../../lib/chatService';
 import { type ChatMessage, type ChatRoom as RoomType } from '../../lib/chatService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,7 +12,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, Image as ImageIcon, File, XCircle, Play, Pause, Download } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, Image as ImageIcon, File, XCircle, Play, Pause, Download, UserPlus, Search, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,10 @@ import {
   PopoverTrigger,
 } from '../ui/popover';
 import { ModeToggle } from '../mvpblocks/mode-toggle';
+import { usersAPI } from '../../lib/api';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { firestoreDb } from '../../lib/firebaseFirestore';
+import { resolveAvatarUrl } from '../../lib/avatar';
 
 // Emoji list constant (moved outside component for performance)
 const EMOJI_LIST = [
@@ -95,12 +99,14 @@ const isEmojiOnly = (text: string): boolean => {
 };
 
 const ChatRoom = () => {
-  const { roomId } = useParams<{ roomId: string }>();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const params = useParams();
+  const roomId = params.roomId as string;
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useAuth();
   const [room, setRoom] = useState<RoomType | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
   const [typingUsers, setTypingUsers] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
@@ -130,13 +136,25 @@ const ChatRoom = () => {
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [processingJoinRequestUserId, setProcessingJoinRequestUserId] = useState<string | null>(null);
   const [voiceRecorder] = useState(() => new VoiceRecorder());
+
+  // Add Members dialog state
+  const [addMembersDialogOpen, setAddMembersDialogOpen] = useState(false);
+  const [addMemberSearchQuery, setAddMemberSearchQuery] = useState('');
+  const [addMemberAllUsers, setAddMemberAllUsers] = useState<any[]>([]);
+  const [addMemberSearchResults, setAddMemberSearchResults] = useState<any[]>([]);
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
+  const [addingMemberId, setAddingMemberId] = useState<string | null>(null);
+  const [addMemberSuccess, setAddMemberSuccess] = useState<string | null>(null);
+  const [invitedMemberIds, setInvitedMemberIds] = useState<Set<string>>(new Set());
+  const [existingMemberIds, setExistingMemberIds] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   // Extract colors from background image - memoized for performance
   const extractColorsFromImage = useCallback((imageUrl: string) => {
@@ -207,7 +225,7 @@ const ChatRoom = () => {
 
   useEffect(() => {
     if (!roomId || !user) {
-      navigate('/chat');
+      router.push('/chat');
       return;
     }
 
@@ -216,7 +234,7 @@ const ChatRoom = () => {
         // Get room details
         const roomData = await chatService.getRoom(roomId);
         if (!roomData) {
-          navigate('/chat');
+          router.push('/chat');
           return;
         }
         
@@ -236,7 +254,7 @@ const ChatRoom = () => {
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Invalid invite link');
-              navigate('/chat');
+              router.push('/chat');
               return;
             }
           } else if (roomData.isPublic) {
@@ -246,7 +264,7 @@ const ChatRoom = () => {
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Failed to join room');
-              navigate('/chat');
+              router.push('/chat');
               return;
             }
           } else {
@@ -308,7 +326,7 @@ const ChatRoom = () => {
           unsubTyping();
         };
       } catch (error) {
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.error('Error initializing chat room:', error);
         }
         setLoading(false);
@@ -316,7 +334,7 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, navigate, searchParams]);
+  }, [roomId, user, router, searchParams]);
 
   // Handle password submission
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -413,8 +431,8 @@ const ChatRoom = () => {
     }
     await chatService.stopTyping(roomId).catch(() => {});
     
-    navigate('/chat');
-  }, [roomId, navigate]);
+    router.push('/chat');
+  }, [roomId, router]);
 
   const handleDeleteForMe = useCallback(async (message: ChatMessage) => {
     if (!roomId || !message.id) return;
@@ -736,7 +754,7 @@ const ChatRoom = () => {
         });
       }
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Error loading more messages:', error);
       }
       alert('Failed to load previous messages');
@@ -744,6 +762,133 @@ const ChatRoom = () => {
       setLoadingMore(false);
     }
   }, [roomId, loadingMore, hasMoreMessages, messages]);
+
+  const handleApproveJoinRequest = useCallback(async (requestUserId: string) => {
+    if (!roomId || !user || !room || room.createdBy !== user.uid) return;
+
+    setProcessingJoinRequestUserId(requestUserId);
+    try {
+      await (chatService as any).acceptJoinRequest(roomId, requestUserId, user.uid);
+      setRoom(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          joinRequests: (prev.joinRequests || []).filter(uid => uid !== requestUserId),
+          participants: Array.from(new Set([...(prev.participants || []), requestUserId]))
+        };
+      });
+    } catch (error: any) {
+      alert(error.message || 'Failed to approve join request');
+    } finally {
+      setProcessingJoinRequestUserId(null);
+    }
+  }, [roomId, user, room]);
+
+  const handleRejectJoinRequest = useCallback(async (requestUserId: string) => {
+    if (!roomId || !user || !room || room.createdBy !== user.uid) return;
+
+    setProcessingJoinRequestUserId(requestUserId);
+    try {
+      await (chatService as any).rejectJoinRequest(roomId, requestUserId, user.uid);
+      setRoom(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          joinRequests: (prev.joinRequests || []).filter(uid => uid !== requestUserId)
+        };
+      });
+    } catch (error: any) {
+      alert(error.message || 'Failed to reject join request');
+    } finally {
+      setProcessingJoinRequestUserId(null);
+    }
+  }, [roomId, user, room]);
+
+  // Load all users when Add Members dialog opens
+  const loadAllUsersForRoom = useCallback(async () => {
+    setAddMemberLoading(true);
+    try {
+      const response = await usersAPI.searchUsers({ q: '' });
+      const users = (response.data?.data?.users || []).map((u: any) => ({
+        ...u,
+        id: u._id || u.id
+      }));
+
+      // Safely normalize participants: RTDB may return an object {0:'uid',1:'uid'} or an array
+      const rawParticipants = room?.participants;
+      const participantIds: string[] = Array.isArray(rawParticipants)
+        ? rawParticipants
+        : rawParticipants && typeof rawParticipants === 'object'
+          ? Object.values(rawParticipants as Record<string, string>)
+          : [];
+
+      // Track existing members for badge display (do NOT hide them)
+      setExistingMemberIds(new Set(participantIds));
+
+      // Show ALL users except the current user themselves
+      const allOtherUsers = users.filter((u: any) => u.id !== user?.uid);
+      setAddMemberAllUsers(allOtherUsers);
+    } catch (err) {
+      console.error('[AddMembers] Failed to load users:', err);
+      setAddMemberAllUsers([]);
+    } finally {
+      setAddMemberLoading(false);
+    }
+  }, [room?.participants, user?.uid]);
+
+  // Auto-load all users when dialog opens
+  useEffect(() => {
+    if (addMembersDialogOpen) {
+      loadAllUsersForRoom();
+    }
+  }, [addMembersDialogOpen, loadAllUsersForRoom]);
+
+  // Client-side filter as user types
+  const searchUsersForRoom = useCallback((query: string) => {
+    if (!query.trim()) {
+      setAddMemberSearchResults([]);
+      return;
+    }
+    const q = query.toLowerCase();
+    const filtered = addMemberAllUsers.filter((u: any) =>
+      `${u.firstName} ${u.lastName}`.toLowerCase().includes(q) ||
+      (u.username || '').toLowerCase().includes(q)
+    );
+    setAddMemberSearchResults(filtered);
+  }, [addMemberAllUsers]);
+
+  // Invite a user to the room
+  const handleInviteMember = useCallback(async (member: any) => {
+    if (!roomId || !room || !user) return;
+    setAddingMemberId(member.id);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/notifications/send-invitations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          roomId,
+          roomName: room.name,
+          memberIds: [member.id]
+        })
+      });
+      setInvitedMemberIds(prev => new Set([...prev, member.id]));
+      setAddMemberSuccess(`Invitation sent to ${member.firstName} ${member.lastName}`);
+      setTimeout(() => setAddMemberSuccess(null), 3000);
+    } catch (error: any) {
+      alert(error.message || 'Failed to send invitation');
+    } finally {
+      setAddingMemberId(null);
+    }
+  }, [roomId, room, user]);
+
+  // Filter on search query change (client-side, instant)
+  useEffect(() => {
+    searchUsersForRoom(addMemberSearchQuery);
+  }, [addMemberSearchQuery, searchUsersForRoom]);
 
   // Filter messages (memoized)
   const filteredMessages = useMemo(() => {
@@ -755,6 +900,44 @@ const ChatRoom = () => {
       return true;
     });
   }, [messages, user]);
+
+  useEffect(() => {
+    const candidateUserIds = Array.from(
+      new Set(
+        messages
+          .map((message) => message.userId)
+          .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+      )
+    );
+
+    if (candidateUserIds.length === 0) return;
+
+    const unsubscribers = candidateUserIds.map((userId) => {
+      const userRef = doc(firestoreDb, 'users', userId);
+
+      return onSnapshot(userRef, (snapshot) => {
+        const avatarUrl = snapshot.exists() ? resolveAvatarUrl(snapshot.data() as Record<string, unknown>) : '';
+
+        setUserAvatarMap((prev) => {
+          if (avatarUrl && prev[userId] === avatarUrl) return prev;
+          if (!avatarUrl && !prev[userId]) return prev;
+
+          const next = { ...prev };
+          if (avatarUrl) {
+            next[userId] = avatarUrl;
+          } else {
+            delete next[userId];
+          }
+
+          return next;
+        });
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [messages]);
 
   if (loading) {
     return (
@@ -772,7 +955,7 @@ const ChatRoom = () => {
       <div className="flex items-center justify-center h-screen">
         <Card className="p-6">
           <p className="text-muted-foreground">Room not found</p>
-          <Button onClick={() => navigate('/chat')} className="mt-4">
+          <Button onClick={() => router.push('/chat')} className="mt-4">
             Back to Chat
           </Button>
         </Card>
@@ -784,7 +967,7 @@ const ChatRoom = () => {
     <>
       {/* Password Dialog */}
       <Dialog open={showPasswordDialog} onOpenChange={(open) => {
-        if (!open) navigate('/chat'); // Go back if dialog is closed
+        if (!open) router.push('/chat'); // Go back if dialog is closed
         setShowPasswordDialog(open);
       }}>
         <DialogContent>
@@ -819,7 +1002,7 @@ const ChatRoom = () => {
                 type="button" 
                 variant="outline" 
                 className="flex-1"
-                onClick={() => navigate('/chat')}
+                onClick={() => router.push('/chat')}
               >
                 Cancel
               </Button>
@@ -863,6 +1046,134 @@ const ChatRoom = () => {
             >
               Delete for Everyone
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Members Dialog */}
+      <Dialog open={addMembersDialogOpen} onOpenChange={(open) => {
+        setAddMembersDialogOpen(open);
+        if (!open) {
+          setAddMemberSearchQuery('');
+          setAddMemberSearchResults([]);
+          setAddMemberAllUsers([]);
+          setAddMemberSuccess(null);
+          setInvitedMemberIds(new Set());
+          setExistingMemberIds(new Set());
+        }
+      }}>
+        <DialogContent className="sm:max-w-md w-[95vw] sm:w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-blue-600" />
+              Add Members
+            </DialogTitle>
+            <DialogDescription>
+              Invite users to join <strong>{room.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-2">
+            {/* Search input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Filter by name or username..."
+                value={addMemberSearchQuery}
+                onChange={(e) => setAddMemberSearchQuery(e.target.value)}
+                className="pl-9 h-10"
+                autoFocus
+              />
+              {addMemberSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setAddMemberSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* User list */}
+            {addMemberLoading ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading users...
+              </div>
+            ) : (() => {
+              const displayList = addMemberSearchQuery.trim() ? addMemberSearchResults : addMemberAllUsers;
+              return displayList.length > 0 ? (
+                <div className="border rounded-xl divide-y max-h-72 overflow-y-auto">
+                  {addMemberSearchQuery.trim() && (
+                    <div className="px-3 py-1.5 bg-muted/40 text-xs text-muted-foreground">
+                      {displayList.length} result{displayList.length !== 1 ? 's' : ''} for "{addMemberSearchQuery}"
+                    </div>
+                  )}
+                  {!addMemberSearchQuery.trim() && (
+                    <div className="px-3 py-1.5 bg-muted/40 text-xs text-muted-foreground">
+                      {displayList.length} user{displayList.length !== 1 ? 's' : ''} available
+                    </div>
+                  )}
+                  {displayList.map((result) => {
+                    const isInvited = invitedMemberIds.has(result.id);
+                    const isInviting = addingMemberId === result.id;
+                    const isAlreadyMember = existingMemberIds.has(result.id);
+                    return (
+                      <div
+                        key={result.id}
+                        className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-8 w-8 rounded-full bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                            {(result.firstName?.[0] || '?').toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{result.firstName} {result.lastName}</p>
+                            <p className="text-xs text-muted-foreground truncate">@{result.username}</p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={isAlreadyMember || isInvited ? 'ghost' : 'outline'}
+                          className={`h-8 px-3 text-xs shrink-0 ml-2 ${
+                            isAlreadyMember
+                              ? 'text-slate-500 border-slate-200 bg-slate-50 cursor-default'
+                              : isInvited
+                              ? 'text-green-600 border-green-200 bg-green-50 cursor-default'
+                              : 'text-blue-600 border-blue-300 hover:bg-blue-50'
+                          }`}
+                          onClick={() => !isAlreadyMember && !isInvited && handleInviteMember(result)}
+                          disabled={isInviting || isInvited || isAlreadyMember}
+                        >
+                          {isInviting ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : isAlreadyMember ? (
+                            'In Room'
+                          ) : isInvited ? (
+                            <><Check className="h-3.5 w-3.5 mr-1" />Invited</>
+                          ) : (
+                            'Invite'
+                          )}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : addMemberSearchQuery.trim() ? (
+                <p className="text-center text-sm text-muted-foreground py-8">No users match "{addMemberSearchQuery}"</p>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground py-8">No users available to add</p>
+              );
+            })()}
+
+            {/* Success banner */}
+            {addMemberSuccess && (
+              <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-700">
+                <Check className="h-4 w-4 shrink-0" />
+                {addMemberSuccess}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -1053,6 +1364,56 @@ const ChatRoom = () => {
                 </TabsContent>
               </Tabs>
             </div>
+
+            {/* Join Requests Section (Admin only for exposed private rooms) */}
+            {user && room.createdBy === user.uid && !room.isPublic && room.visibility === 'exposed' && (
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Join Requests ({room.joinRequests?.length || 0})</Label>
+
+                {room.joinRequests && room.joinRequests.length > 0 ? (
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {room.joinRequests.map((requestUserId) => (
+                      <div
+                        key={requestUserId}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">User ID: {requestUserId}</p>
+                          <p className="text-xs text-muted-foreground">Requested access to this room</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={processingJoinRequestUserId === requestUserId}
+                            onClick={() => handleRejectJoinRequest(requestUserId)}
+                            className="h-8"
+                          >
+                            <X className="h-3.5 w-3.5 mr-1" />
+                            Reject
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={processingJoinRequestUserId === requestUserId}
+                            onClick={() => handleApproveJoinRequest(requestUserId)}
+                            className="h-8"
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Approve
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+                    No pending join requests.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 mt-6">
@@ -1074,7 +1435,7 @@ const ChatRoom = () => {
         <div className="flex-1 flex flex-col min-h-0">
           {/* Header */}
           <div 
-            className="border-b p-2 sm:p-3 md:p-4 flex items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm flex-shrink-0"
+            className="border-b p-2 sm:p-3 md:p-4 flex items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderBottomColor: `${imageColors.primary}40`
@@ -1084,7 +1445,7 @@ const ChatRoom = () => {
               {/* Room Icon */}
               {room.iconImage ? (
                 <Avatar 
-                  className="h-8 w-8 sm:h-10 md:h-12 sm:w-10 md:w-12 border-2 flex-shrink-0"
+                  className="h-8 w-8 sm:h-10 md:h-12 sm:w-10 md:w-12 border-2 shrink-0"
                   style={imageColors ? {
                     borderColor: `${imageColors.primary}60`
                   } : { borderColor: 'hsl(var(--primary) / 0.2)' }}
@@ -1094,7 +1455,7 @@ const ChatRoom = () => {
                 </Avatar>
               ) : (
                 <div 
-                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow-md flex-shrink-0"
+                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow-md shrink-0"
                   style={imageColors ? {
                     background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`
                   } : undefined}
@@ -1109,25 +1470,36 @@ const ChatRoom = () => {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 flex-shrink-0">
-              <div className="flex-shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+              <div className="shrink-0">
                 <ModeToggle />
               </div>
               {user && room.createdBy === user.uid && (
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => setSettingsDialogOpen(true)}
-                  title="Room Settings"
-                  className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
-                >
-                  <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setAddMembersDialogOpen(true)}
+                    title="Add Members"
+                    className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
+                  >
+                    <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setSettingsDialogOpen(true)}
+                    title="Room Settings"
+                    className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
+                  >
+                    <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </Button>
+                </>
               )}
               <Button 
                 variant="outline" 
                 onClick={handleLeaveRoom}
-                className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 flex-shrink-0"
+                className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 shrink-0"
               >
                 <span className="text-[10px] sm:text-xs md:text-sm font-medium">
                   <span className="hidden sm:inline">Leave Room</span>
@@ -1185,15 +1557,16 @@ const ChatRoom = () => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
+                const messageAvatarUrl = userAvatarMap[message.userId] || message.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`;
                 
                 return (
                   <div
                     key={message.id}
                     className={`flex items-start gap-2 sm:gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
                   >
-                    <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 flex-shrink-0">
+                    <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 shrink-0">
                       <AvatarImage 
-                        src={message.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`}
+                        src={messageAvatarUrl}
                         alt={message.username}
                       />
                       <AvatarFallback className="bg-primary text-primary-foreground">
@@ -1220,7 +1593,7 @@ const ChatRoom = () => {
                                   cancelEditing();
                                 }
                               }}
-                              className="min-w-[150px] sm:min-w-[200px] bg-card/90 backdrop-blur-sm text-sm"
+                              className="min-w-37.5 sm:min-w-50 bg-card/90 backdrop-blur-sm text-sm"
                               autoFocus
                             />
                             <Button
@@ -1274,13 +1647,13 @@ const ChatRoom = () => {
                                         <img 
                                           src={message.attachment.url} 
                                           alt={message.attachment.name}
-                                          className="max-w-[200px] sm:max-w-[280px] md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity w-full object-cover"
+                                          className="max-w-50 sm:max-w-70 md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity w-full object-cover"
                                           onClick={() => window.open(message.attachment!.url, '_blank')}
                                           loading="lazy"
                                         />
                                       ) : message.attachment.type === 'voice' ? (
-                                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-[180px] sm:min-w-[220px] md:min-w-[250px]">
-                                          <Mic className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-45 sm:min-w-55 md:min-w-62.5">
+                                          <Mic className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                                           <audio 
                                             controls 
                                             className="flex-1" 
@@ -1292,7 +1665,7 @@ const ChatRoom = () => {
                                           <a 
                                             href={message.attachment.url} 
                                             download={message.attachment.name}
-                                            className="flex-shrink-0 hover:opacity-70 transition-opacity p-1"
+                                            className="shrink-0 hover:opacity-70 transition-opacity p-1"
                                           >
                                             <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                           </a>
@@ -1300,7 +1673,7 @@ const ChatRoom = () => {
                                       ) : message.attachment.type === 'video' ? (
                                         <video 
                                           controls 
-                                          className="max-w-[200px] sm:max-w-[280px] md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg w-full"
+                                          className="max-w-50 sm:max-w-70 md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg w-full"
                                           src={message.attachment.url}
                                           controlsList="nodownload"
                                           playsInline
@@ -1308,9 +1681,9 @@ const ChatRoom = () => {
                                           Your browser does not support the video element.
                                         </video>
                                       ) : message.attachment.type === 'audio' ? (
-                                        <div className="flex flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-[180px] sm:min-w-[220px] md:min-w-[250px]">
+                                        <div className="flex flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-45 sm:min-w-55 md:min-w-62.5">
                                           <div className="flex items-center gap-1.5 sm:gap-2">
-                                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                                             <div className="flex-1 min-w-0">
                                               <div className="text-xs sm:text-sm font-medium truncate">{message.attachment.name}</div>
                                               <div className="text-[10px] sm:text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
@@ -1318,7 +1691,7 @@ const ChatRoom = () => {
                                             <a 
                                               href={message.attachment.url} 
                                               download={message.attachment.name}
-                                              className="flex-shrink-0 hover:opacity-70 transition-opacity p-1"
+                                              className="shrink-0 hover:opacity-70 transition-opacity p-1"
                                             >
                                               <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                             </a>
@@ -1334,21 +1707,21 @@ const ChatRoom = () => {
                                         <a 
                                           href={message.attachment.url} 
                                           download={message.attachment.name}
-                                          className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors min-w-[180px] sm:min-w-[220px] md:min-w-[250px]"
+                                          className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors min-w-45 sm:min-w-55 md:min-w-62.5"
                                         >
-                                          <span className="text-xl sm:text-2xl flex-shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
+                                          <span className="text-xl sm:text-2xl shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
                                           <div className="flex-1 min-w-0">
                                             <div className="text-xs sm:text-sm font-medium truncate">{message.attachment.name}</div>
                                             <div className="text-[10px] sm:text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
                                           </div>
-                                          <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                          <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                                         </a>
                                       )}
                                     </div>
                                   )}
 
                                   {message.text && (
-                                    <span className={isOnlyEmoji ? 'inline-block hover:animate-wiggle' : 'text-xs sm:text-sm break-words'}>
+                                    <span className={isOnlyEmoji ? 'inline-block hover:animate-wiggle' : 'text-xs sm:text-sm wrap-break-word'}>
                                       {message.text}
                                     </span>
                                   )}
@@ -1463,7 +1836,7 @@ const ChatRoom = () => {
           {/* Message Input */}
           <form 
             onSubmit={handleSendMessage} 
-            className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm flex-shrink-0"
+            className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderTopColor: `${imageColors.primary}40`
@@ -1511,7 +1884,7 @@ const ChatRoom = () => {
                         <span className="text-[10px] sm:text-xs opacity-70">{formatFileSize(attachmentFile.size)}</span>
                       </div>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment} className="flex-shrink-0">
+                    <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment} className="shrink-0">
                       <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
@@ -1522,7 +1895,7 @@ const ChatRoom = () => {
             <div className="flex items-center gap-1.5 sm:gap-2">
               <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
                 <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0">
+                  <Button type="button" variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
                     <SmilePlus className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </PopoverTrigger>
@@ -1559,7 +1932,7 @@ const ChatRoom = () => {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isRecording || uploadingAttachment}
-                className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
+                className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
               >
                 <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
@@ -1571,7 +1944,7 @@ const ChatRoom = () => {
                 size="icon"
                 onClick={isRecording ? handleStopRecording : handleStartRecording}
                 disabled={!!attachmentFile || uploadingAttachment}
-                className={`h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
+                className={`h-8 w-8 sm:h-9 sm:w-9 shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
               >
                 <Mic className={`h-4 w-4 sm:h-5 sm:w-5 ${isRecording ? 'text-red-500' : ''}`} />
               </Button>
@@ -1588,7 +1961,7 @@ const ChatRoom = () => {
               <Button 
                 type="submit" 
                 disabled={(!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
-                className="hover:shadow-lg transition-all text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9 flex-shrink-0"
+                className="hover:shadow-lg transition-all text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9 shrink-0"
                 style={imageColors ? {
                   background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
                   color: 'white'
@@ -1606,3 +1979,6 @@ const ChatRoom = () => {
 };
 
 export default memo(ChatRoom);
+
+
+

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
+import { motion, AnimatePresence, animate } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Sparkles, Shield, LogOut } from 'lucide-react';
-import { useTheme } from './theme-provider';
 import { ModeToggle } from './mode-toggle'
-import { animate } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext';
+import { resolveAvatarUrl } from '@/lib/avatar';
 
 interface NavItem {
   name: string;
@@ -53,27 +53,26 @@ export default function Header1() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const { theme } = useTheme();
   const { currentUser, userProfile, logout } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const pathname = usePathname();
+  const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
+  const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
+
+  const isActive = (href: string) =>
+    href !== '#pricing' && (href === '/' ? pathname === '/' : pathname?.startsWith(href));
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
     };
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const headerVariants = {
     initial: { y: -100, opacity: 0 },
     animate: { y: 0, opacity: 1 },
-    scrolled: {
-      backdropFilter: 'blur(20px)',
-      backgroundColor:
-        theme === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-    },
   };
 
   const mobileMenuVariants = {
@@ -88,20 +87,17 @@ export default function Header1() {
 
   return (
     <motion.header
-      className="fixed left-0 right-0 top-0 z-50 transition-all duration-300"
+      className={[
+        'fixed left-0 right-0 top-0 z-50',
+        'transition-[backdrop-filter,background-color,box-shadow] duration-300',
+        isScrolled
+          ? 'backdrop-blur-xl bg-white/80 dark:bg-black/80 shadow-[0_8px_32px_rgba(0,0,0,0.1)]'
+          : 'backdrop-blur-none bg-transparent',
+      ].join(' ')}
       variants={headerVariants}
       initial="initial"
-      animate={isScrolled ? 'scrolled' : 'animate'}
+      animate="animate"
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      style={{
-        backdropFilter: isScrolled ? 'blur(20px)' : 'none',
-        backgroundColor: isScrolled
-          ? theme === 'dark'
-            ? 'rgba(0, 0, 0, 0.8)'
-            : 'rgba(255, 255, 255, 0.8)'
-          : 'transparent',
-        boxShadow: isScrolled ? '0 8px 32px rgba(0, 0, 0, 0.1)' : 'none',
-      }}
     >
       <div className="mx-auto max-w-7x2 px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between lg:h-20">
@@ -110,11 +106,11 @@ export default function Header1() {
             whileHover={{ scale: 1.05 }}
             transition={{ type: 'spring', stiffness: 400, damping: 10 }}
           >
-            <Link to="/" className="flex items-center space-x-2">
+            <Link href="/" className="flex items-center space-x-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
                 <img src="/logo.jpg" alt="ABjee Travel" className="h-8 w-8 object-cover" />
               </div>
-              <span className="bg-gradient-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent">
+              <span className="bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent">
                 ABjee Travel
               </span>
             </Link>
@@ -134,7 +130,7 @@ export default function Header1() {
                   <a
                     href={item.href}
                     className="flex items-center space-x-1 font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
-                    onClick={e => {
+                    onClick={e => {  
                       e.preventDefault();
                       const target = document.getElementById('pricing');
                       if (target) {
@@ -151,9 +147,11 @@ export default function Header1() {
                   </a>
                 
                 ) : (
-                  <Link
-                    to={item.href}
-                    className="flex items-center space-x-1 font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
+                  <Link href={item.href!}
+                    className={[
+                      'flex items-center space-x-1 font-medium transition-colors duration-200 hover:text-rose-500',
+                      isActive(item.href) ? 'text-rose-500' : 'text-foreground',
+                    ].join(' ')}
                   >
                     <span>{item.name}</span>
                     {item.hasDropdown && (
@@ -177,7 +175,7 @@ export default function Header1() {
                         {item.dropdownItems?.map((dropdownItem) => (
                           <Link
                             key={dropdownItem.name}
-                            to={dropdownItem.href}
+                            href={dropdownItem.href}
                             className="block px-4 py-3 transition-colors duration-200 hover:bg-muted"
                             onClick={() => setActiveDropdown(null)}
                           >
@@ -205,8 +203,8 @@ export default function Header1() {
                 {userProfile?.role === 'admin' && (
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                     <Link
-                      to="/admin"
-                      className="inline-flex items-center space-x-2 rounded-full bg-gradient-to-r from-purple-500 to-purple-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                      href="/admin"
+                      className="inline-flex items-center space-x-2 rounded-full bg-linear-to-r from-purple-500 to-purple-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
                     >
                       <Shield className="h-4 w-4" />
                       <span>Admin Dashboard</span>
@@ -216,27 +214,27 @@ export default function Header1() {
                 <div className="flex items-center space-x-3">
                   <div className="text-right">
                     <p className="text-sm font-medium text-foreground">
-                      {currentUser.displayName || currentUser.email}
+                      {userDisplayName}
                     </p>
                     <p className="text-xs text-muted-foreground">Welcome back!</p>
                   </div>
-                  {currentUser.photoURL ? (
+                  {profileAvatar ? (
                     <img
-                      src={currentUser.photoURL}
+                      src={profileAvatar}
                       alt="Profile"
                       className="w-8 h-8 rounded-full border-2 border-rose-500"
                       loading="lazy"
                     />
                   ) : (
                     <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                      {(currentUser.displayName || currentUser.email || 'U').charAt(0).toUpperCase()}
+                      {userDisplayName.charAt(0).toUpperCase()}
                     </div>
                   )}
                 </div>
                 <motion.button
                   onClick={() => {
                     logout();
-                    navigate('/');
+                    router.push('/');
                   }}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -249,15 +247,15 @@ export default function Header1() {
             ) : (
               <>
                 <Link
-                  to="/auth"
+                  href="/auth"
                   className="font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
                 >
                   Sign In
                 </Link>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Link
-                    to="/auth"
-                    className="inline-flex items-center space-x-2 rounded-full bg-gradient-to-r from-rose-500 to-rose-700 px-6 py-2.5 font-medium text-white transition-all duration-200 hover:shadow-lg"
+                    href="/auth"
+                    className="inline-flex items-center space-x-2 rounded-full bg-linear-to-r from-rose-500 to-rose-700 px-6 py-2.5 font-medium text-white transition-all duration-200 hover:shadow-lg"
                   >
                     <span>Get Started</span>
                     <ArrowRight className="h-4 w-4" />
@@ -325,7 +323,7 @@ export default function Header1() {
                         {item.dropdownItems?.map((dropdownItem) => (
                           <Link
                             key={dropdownItem.name}
-                            to={dropdownItem.href}
+                            href={dropdownItem.href}
                             className="block py-2 text-sm text-muted-foreground transition-colors duration-200 hover:text-rose-500"
                             onClick={() => setIsMobileMenuOpen(false)}
                           >
@@ -337,8 +335,13 @@ export default function Header1() {
                   ) : (
                     <Link
                       key={item.name}
-                      to={item.href}
-                      className="block px-4 py-3 font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+                      href={item.href}
+                      className={[
+                        'block px-4 py-3 font-medium transition-colors duration-200',
+                        isActive(item.href)
+                          ? 'text-rose-500 bg-rose-500/10 rounded-lg'
+                          : 'text-foreground hover:bg-muted',
+                      ].join(' ')}
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       {item.name}
@@ -349,28 +352,28 @@ export default function Header1() {
                   {currentUser ? (
                     <>
                       <div className="flex items-center space-x-3 px-4 py-3 bg-muted rounded-lg">
-                        {currentUser.photoURL ? (
+                        {profileAvatar ? (
                           <img
-                            src={currentUser.photoURL}
+                            src={profileAvatar}
                             alt="Profile"
                             className="w-10 h-10 rounded-full border-2 border-rose-500"
                           />
                         ) : (
                           <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white font-bold">
-                            {(currentUser.displayName || currentUser.email || 'U').charAt(0).toUpperCase()}
+                            {userDisplayName.charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div>
                           <p className="font-medium text-foreground">
-                            {currentUser.displayName || currentUser.email}
+                            {userDisplayName}
                           </p>
                           <p className="text-xs text-muted-foreground">Welcome back!</p>
                         </div>
                       </div>
                       {userProfile?.role === 'admin' && (
                         <Link
-                          to="/admin"
-                          className="flex items-center justify-center space-x-2 w-full rounded-lg bg-gradient-to-r from-purple-500 to-purple-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
+                          href="/admin"
+                          className="flex items-center justify-center space-x-2 w-full rounded-lg bg-linear-to-r from-purple-500 to-purple-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
                           onClick={() => setIsMobileMenuOpen(false)}
                         >
                           <Shield className="h-4 w-4" />
@@ -381,7 +384,7 @@ export default function Header1() {
                         onClick={() => {
                           setIsMobileMenuOpen(false);
                           logout();
-                          navigate('/');
+                          router.push('/');
                         }}
                         className="flex items-center justify-center space-x-2 w-full rounded-lg border-2 border-rose-500 py-2.5 text-center font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white"
                       >
@@ -392,15 +395,15 @@ export default function Header1() {
                   ) : (
                     <>
                       <Link
-                        to="/auth"
+                        href="/auth"
                         className="block w-full rounded-lg py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         Sign In
                       </Link>
                       <Link
-                        to="/auth"
-                        className="block w-full rounded-lg bg-gradient-to-r from-rose-500 to-rose-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
+                        href="/auth"
+                        className="block w-full rounded-lg bg-linear-to-r from-rose-500 to-rose-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         Get Started
@@ -416,3 +419,5 @@ export default function Header1() {
     </motion.header>
   );
 }
+
+

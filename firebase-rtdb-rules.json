@@ -2,9 +2,15 @@
   "rules": {
     "chatrooms": {
       ".read": "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null",
+      "$roomId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     },
     "status": {
+      ".read": "auth != null",
+      ".indexOn": ["isOnline", "lastSeen"],
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null && auth.uid == $uid"
@@ -18,8 +24,8 @@
     },
     "typing": {
       "$roomId": {
-        ".read": "auth != null",
         "$uid": {
+          ".read": "auth != null",
           ".write": "auth != null && auth.uid == $uid"
         }
       }
@@ -28,3 +34,4 @@
     ".write": false
   }
 }
+

@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTheme } from '../mvpblocks/theme-provider';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   LayoutDashboard,
@@ -28,6 +29,8 @@ import {
   Sun,
   Home,
   LogOut,
+  MapPin,
+  MessageSquare,
 } from 'lucide-react';
 
 const menuItems = [
@@ -37,6 +40,8 @@ const menuItems = [
   { title: 'Bookings', icon: FileText, view: 'bookings' },
   { title: 'Activity', icon: Activity, view: 'activity' },
   { title: 'Chat Rooms', icon: Database, view: 'chatrooms' },
+  { title: 'Tourist Places', icon: MapPin, view: 'tourist-places' },
+  { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
   { title: 'Settings', icon: Settings, view: 'settings' },
 ];
@@ -49,19 +54,38 @@ interface AdminSidebarProps {
 export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarProps) => {
   const { theme, setTheme } = useTheme();
   const { userProfile, logout } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const { isMobile, setOpenMobile, setOpen } = useSidebar();
+
+  const closeSidebarOnSmallScreens = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+      return;
+    }
+
+    if (window.innerWidth < 1024) {
+      setOpen(false);
+    }
+  };
+
+  const handleViewChange = (view: string) => {
+    onViewChange(view);
+    closeSidebarOnSmallScreens();
+  };
 
   const handleLogout = async () => {
     try {
+      closeSidebarOnSmallScreens();
       await logout();
-      navigate('/auth');
+      router.push('/auth');
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
   const handleBackToWebsite = () => {
-    navigate('/');
+    closeSidebarOnSmallScreens();
+    router.push('/');
   };
 
   return (
@@ -69,9 +93,9 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" onClick={() => onViewChange('dashboard')}>
-              <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                <LayoutDashboard className="h-5 w-5" />
+            <SidebarMenuButton size="lg" onClick={() => handleViewChange('dashboard')}>
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
+                <img src="/logo.jpg" alt="ABjee Travel" className="h-8 w-8 object-cover" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">ABjee Travel</span>
@@ -93,7 +117,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
                 return (
                   <SidebarMenuItem key={item.view}>
                     <SidebarMenuButton 
-                      onClick={() => onViewChange(item.view)}
+                      onClick={() => handleViewChange(item.view)}
                       isActive={isActive}
                       className={isActive ? 'bg-accent' : ''}
                     >
@@ -112,7 +136,10 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              onClick={() => {
+                setTheme(theme === 'dark' ? 'light' : 'dark');
+                closeSidebarOnSmallScreens();
+              }}
               className="w-full"
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

@@ -57,7 +57,7 @@ export const AddUserDialog = memo(
         onOpenChange(false);
         onUserAdded?.();
         
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.log('User created successfully:', formData);
         }
       } catch (error: any) {
@@ -196,3 +196,4 @@ export const AddUserDialog = memo(
 );
 
 AddUserDialog.displayName = 'AddUserDialog';
+

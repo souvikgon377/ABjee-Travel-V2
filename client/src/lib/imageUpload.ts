@@ -27,9 +27,9 @@ export interface ImageUploadOptions {
 
 // ==================== CONFIGURATION ====================
 
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const CLOUDINARY_API_KEY = import.meta.env.VITE_CLOUDINARY_API_KEY;
-const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'ml_default'; // Fallback to default
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY;
+const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default'; // Fallback to default
 
 const DEFAULT_OPTIONS: ImageUploadOptions = {
   folder: 'chat-rooms',
@@ -157,7 +157,7 @@ export async function uploadImageToCloudinary(
     if (!response.ok) {
       const error = await response.json();
       
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Cloudinary upload error:', error);
       }
       
@@ -203,7 +203,7 @@ export async function checkImageDuplicate(hash: string): Promise<boolean> {
     // return response.ok;
     return false;
   } catch (error) {
-    if (import.meta.env.DEV) {
+    if ((process.env.NODE_ENV === "development")) {
       console.error('Duplicate check error:', error);
     }
     return false;
@@ -242,8 +242,9 @@ export async function deleteImageFromCloudinary(publicId: string): Promise<void>
   // TODO: Implement backend API call to delete image
   // This requires API secret and must be done server-side
   // const response = await fetch(`/api/images/delete/${publicId}`, { method: 'DELETE' });
-  if (import.meta.env.DEV) {
+  if ((process.env.NODE_ENV === "development")) {
     console.warn('Image deletion must be implemented on backend');
   }
   throw new Error('Image deletion is not yet implemented');
 }
+

@@ -60,7 +60,7 @@ export const QuickActions = memo(
               analyticsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
           }
-          if (import.meta.env.DEV) {
+          if ((process.env.NODE_ENV === "development")) {
             console.log('Navigating to analytics section');
           }
           break;
@@ -83,7 +83,7 @@ export const QuickActions = memo(
               alert('Settings: Configure dashboard preferences, notifications, and system options.');
             }
           }
-          if (import.meta.env.DEV) {
+          if ((process.env.NODE_ENV === "development")) {
             console.log('Navigating to settings');
           }
           break;
@@ -123,3 +123,4 @@ export const QuickActions = memo(
 );
 
 QuickActions.displayName = 'QuickActions';
+

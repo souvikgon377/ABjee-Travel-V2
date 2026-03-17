@@ -74,7 +74,7 @@ export function FeatureBlock3() {
           {features.map((feature, index) => (
             <Card
               key={index}
-              className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/20"
+              className="group hover:-translate-y-1 transition-transform duration-300 border-2 shadow-sm hover:shadow-md hover:border-primary/20"
             >
               <CardHeader className="space-y-4">
                 <div className="flex items-center justify-between">

@@ -1,50 +1,63 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { BarChart3, Calendar } from 'lucide-react';
-import { adminAPI } from '@/lib/api';
+import { collection, getDocs } from 'firebase/firestore';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 export const RevenueChart = memo(() => {
   const [chartData, setChartData] = useState<any[]>([]);
-  const [totalRevenue, setTotalRevenue] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchRevenueData = async () => {
-      try {
-        const response = await adminAPI.getRevenue({ period: 'month' });
-        const data = response.data.data.revenue;
-        
-        // Get last 6 months
-        const lastSixMonths = data.slice(-6);
-        const maxValue = Math.max(...lastSixMonths.map((d: any) => d.revenue), 1);
-        
-        const chartDataWithColors = lastSixMonths.map((item: any, index: number) => {
-          const prevRevenue = index > 0 ? lastSixMonths[index - 1].revenue : item.revenue;
-          const growth = prevRevenue > 0 ? ((item.revenue - prevRevenue) / prevRevenue) * 100 : 0;
-          
-          return {
-            month: item.month,
-            value: item.revenue,
-            growth: Math.round(growth),
-            color: growth >= 0 ? 'bg-green-500' : 'bg-red-500',
-            maxValue
-          };
-        });
+  const fetchRevenueData = useCallback(async () => {
+    try {
+      const subsSnap = await getDocs(collection(firestoreDb, 'subscriptions'));
+      const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
 
-        setChartData(chartDataWithColors);
-        setTotalRevenue(response.data.data.total);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error('Failed to fetch revenue data:', error);
-        }
-      } finally {
-        setLoading(false);
+      const revenueByMonth: Record<string, number> = {};
+      subsSnap.forEach((doc) => {
+        const sub = doc.data();
+        const createdAt: Date = sub.createdAt?.toDate?.() ?? (sub.createdAt ? new Date(sub.createdAt) : new Date());
+        const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+        revenueByMonth[key] = (revenueByMonth[key] || 0) + (prices[sub.type] || 0);
+      });
+
+      const lastSix: { month: string; value: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-US', { month: 'short' });
+        lastSix.push({ month: label, value: parseFloat((revenueByMonth[key] || 0).toFixed(2)) });
       }
-    };
 
-    fetchRevenueData();
+      const maxValue = Math.max(...lastSix.map(x => x.value), 1);
+      const withMeta = lastSix.map((item, index) => {
+        const prev = index > 0 ? lastSix[index - 1].value : item.value;
+        const growth = prev > 0 ? Math.round(((item.value - prev) / prev) * 100) : 0;
+        return { ...item, growth, color: growth >= 0 ? 'bg-green-500' : 'bg-red-500', maxValue };
+      });
+
+      setChartData(withMeta);
+    } catch (error) {
+      if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch revenue data:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { fetchRevenueData(); }, [fetchRevenueData]);
+
+  // Derive summary stats without extra state
+  const { totalRevenue, maxValue, avgRevenue, totalGrowth } = useMemo(() => {
+    const total = parseFloat(chartData.reduce((s, x) => s + x.value, 0).toFixed(2));
+    const max = Math.max(...chartData.map(d => d.value), 1);
+    const avg = chartData.length > 0 ? total / chartData.length : 0;
+    const growth = chartData.length > 1
+      ? ((chartData[chartData.length - 1].value - chartData[0].value) / (chartData[0].value || 1)) * 100
+      : 0;
+    return { totalRevenue: total, maxValue: max, avgRevenue: avg, totalGrowth: growth };
+  }, [chartData]);
 
   if (loading) {
     return (
@@ -57,10 +70,6 @@ export const RevenueChart = memo(() => {
     );
   }
 
-  const maxValue = Math.max(...chartData.map(d => d.value), 1);
-  const avgRevenue = chartData.length > 0 ? totalRevenue / chartData.length : 0;
-  const totalGrowth = chartData.length > 1 ? 
-    ((chartData[chartData.length - 1].value - chartData[0].value) / chartData[0].value) * 100 : 0;
   return (
     <div className="border-border bg-card/40 rounded-xl border p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -140,3 +149,4 @@ export const RevenueChart = memo(() => {
 });
 
 RevenueChart.displayName = 'RevenueChart';
+
