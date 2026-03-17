@@ -86,11 +86,11 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
       const fetchedUsers = response.data.data?.users || [];
       // Filter out already selected members
       const filteredUsers = fetchedUsers.filter(
-        user => !selectedMembers.find(m => m.id === user.id)
+        (user: User) => !selectedMembers.find(m => m.id === user.id)
       );
       setUsers(filteredUsers);
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Failed to search users:', error);
       }
       setUsers([]);
@@ -134,7 +134,7 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
       await onSubmit(submitData);
       handleClose();
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Failed to create room:', error);
       }
       // TODO: Show error message to user
@@ -391,3 +391,4 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
 };
 
 export default CreateRoomDialog;
+

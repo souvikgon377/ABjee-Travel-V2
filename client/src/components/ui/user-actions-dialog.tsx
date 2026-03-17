@@ -61,7 +61,7 @@ export const UserActionsDialog = memo(
         const response = await adminAPI.getUserActivity(user.id);
         setActivityLog(response.data.data.activities || []);
       } catch (error) {
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.error('Failed to fetch user activity:', error);
         }
       }
@@ -91,7 +91,7 @@ export const UserActionsDialog = memo(
         onOpenChange(false);
         onUserUpdated?.();
         
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.log('User updated successfully:', formData);
         }
       } catch (error: any) {
@@ -112,7 +112,7 @@ export const UserActionsDialog = memo(
         setFormData((prev) => ({ ...prev, isActive: !prev.isActive }));
         onUserUpdated?.();
         
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.log('User status toggled:', !formData.isActive);
         }
       } catch (error: any) {
@@ -324,3 +324,4 @@ export const UserActionsDialog = memo(
 );
 
 UserActionsDialog.displayName = 'UserActionsDialog';
+

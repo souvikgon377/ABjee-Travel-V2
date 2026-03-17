@@ -4,7 +4,7 @@
  * WHEN: Use throughout the app instead of direct console.* calls
  */
 
-const isDev = import.meta.env.DEV;
+const isDev = (process.env.NODE_ENV === "development");
 
 export const logger = {
   /**
@@ -76,3 +76,4 @@ export const logger = {
 };
 
 export default logger;
+

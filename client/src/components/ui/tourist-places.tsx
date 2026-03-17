@@ -80,8 +80,8 @@ const CATEGORIES = [
   'Other',
 ];
 
-const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
-const CLOUDINARY_UPLOAD_PRESET = (import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string) || 'ml_default';
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME as string;
+const CLOUDINARY_UPLOAD_PRESET = (process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string) || 'ml_default';
 
 const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '',
@@ -1371,3 +1371,4 @@ export function TouristPlacesManager() {
     </div>
   );
 }
+

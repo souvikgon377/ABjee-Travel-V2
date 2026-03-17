@@ -251,7 +251,7 @@ export default function AuthMultiStepForm({
           throw new Error('Authentication token not found. Please try again.');
         }
 
-        const response = await fetch(`${import.meta.env.VITE_SERVER_URL || 'http://localhost:5000'}/api/auth/me`, {
+        const response = await fetch('/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -341,7 +341,7 @@ const handleNextStep = async (data: any) => {
     if (errorMessage.includes('Please login as a user.')) {
       alert(errorMessage);
     }
-    if (import.meta.env.DEV) {
+    if ((process.env.NODE_ENV === "development")) {
       console.error('Authentication error:', error);
     }
   } finally {
@@ -624,3 +624,4 @@ const handleNextStep = async (data: any) => {
     </div>
   );
 }
+

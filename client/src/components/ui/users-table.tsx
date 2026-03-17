@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useCallback, useMemo } from 'react';
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,9 +21,10 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
-import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, deleteDoc, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { UserActionsDialog } from '@/components/ui/user-actions-dialog';
+import { resolveAvatarUrl } from '@/lib/avatar';
 
 const USERS_PER_PAGE = 10;
 
@@ -47,43 +48,74 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
   const [currentPage, setCurrentPage] = useState(1);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const usersListenerRef = useRef<Unsubscribe | null>(null);
 
   // Load all users from Firestore (same collection the Overview card reads)
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(() => {
     setLoading(true);
     setFetchError(null);
-    let docs: any[] = [];
-    try {
-      // Try with ordering first; falls back if index missing
-      const snap = await getDocs(
-        query(collection(firestoreDb, 'users'), orderBy('createdAt', 'desc'))
+    usersListenerRef.current?.();
+
+    const applyUsers = (docs: any[]) => {
+      setAllUsers(docs);
+      setLoading(false);
+    };
+
+    const attachFallbackListener = () => {
+      usersListenerRef.current = onSnapshot(
+        collection(firestoreDb, 'users'),
+        (snap) => {
+          const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          docs.sort((a: any, b: any) => {
+            const ta = a.createdAt?.toDate?.()?.getTime() ?? a.createdAt ?? 0;
+            const tb = b.createdAt?.toDate?.()?.getTime() ?? b.createdAt ?? 0;
+            return tb - ta;
+          });
+          applyUsers(docs);
+        },
+        (err: any) => {
+          if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
+          setFetchError(
+            err?.code === 'permission-denied'
+              ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
+              : `Failed to load users: ${err?.message ?? err}`
+          );
+          setLoading(false);
+        }
       );
-      docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    } catch {
-      try {
-        // Fallback: plain collection read without ordering
-        const snap = await getDocs(collection(firestoreDb, 'users'));
-        docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        // Sort client-side
-        docs.sort((a, b) => {
-          const ta = a.createdAt?.toDate?.()?.getTime() ?? a.createdAt ?? 0;
-          const tb = b.createdAt?.toDate?.()?.getTime() ?? b.createdAt ?? 0;
-          return tb - ta;
-        });
-      } catch (err: any) {
-        if (import.meta.env.DEV) console.error('Failed to fetch users:', err);
+    };
+
+    usersListenerRef.current = onSnapshot(
+      query(collection(firestoreDb, 'users'), orderBy('createdAt', 'desc')),
+      (snap) => {
+        const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        applyUsers(docs);
+      },
+      (err: any) => {
+        if (err?.code === 'failed-precondition') {
+          attachFallbackListener();
+          return;
+        }
+
+        if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
         setFetchError(
           err?.code === 'permission-denied'
-            ? 'Access denied — update Firestore security rules to allow admin reads on the users collection.'
+            ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
             : `Failed to load users: ${err?.message ?? err}`
         );
+        setLoading(false);
       }
-    }
-    setAllUsers(docs);
-    setLoading(false);
+    );
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers, refreshTrigger]);
+  useEffect(() => {
+    fetchUsers();
+
+    return () => {
+      usersListenerRef.current?.();
+      usersListenerRef.current = null;
+    };
+  }, [fetchUsers, refreshTrigger]);
 
   // Sync both external filters in a single effect
   useEffect(() => {
@@ -137,7 +169,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
     try {
       await deleteDoc(doc(firestoreDb, 'users', user.id));
       await fetchUsers();
-      if (import.meta.env.DEV) console.log('User deleted:', user.id);
+      if ((process.env.NODE_ENV === "development")) console.log('User deleted:', user.id);
     } catch (err: any) {
       console.error('Failed to delete user:', err);
       alert('Failed to delete user. Please try again.');
@@ -251,7 +283,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
                   <div className="flex w-full items-center gap-4 sm:w-auto">
                     <div className="relative">
                       <img
-                        src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}`}
+                        src={resolveAvatarUrl(user as Record<string, unknown>) || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}`}
                         alt={user.displayName || user.email}
                         width={40}
                         height={40}
@@ -369,3 +401,4 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
 });
 
 UsersTable.displayName = 'UsersTable';
+

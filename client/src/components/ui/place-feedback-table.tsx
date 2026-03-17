@@ -172,7 +172,7 @@ export const PlaceFeedbackTable = memo(({ externalSearchQuery = '' }: PlaceFeedb
       setItems(merged);
       setPage(1);
     } catch (err: unknown) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Failed to load place feedback:', err);
       }
       const msg = err instanceof Error ? err.message : 'Failed to load reviews/comments.';
@@ -422,3 +422,4 @@ export const PlaceFeedbackTable = memo(({ externalSearchQuery = '' }: PlaceFeedb
 });
 
 PlaceFeedbackTable.displayName = 'PlaceFeedbackTable';
+

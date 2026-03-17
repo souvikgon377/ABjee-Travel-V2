@@ -290,7 +290,7 @@ class ChatService {
       
       callback(rooms);
     }, (error) => {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Error listening to chat rooms:', error);
         console.error('Make sure Firebase Realtime Database rules are deployed!');
       }
@@ -333,7 +333,7 @@ class ChatService {
       
       callback(room);
     }, (error) => {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Error listening to room:', error);
       }
       callback(null);
@@ -633,7 +633,7 @@ class ChatService {
       };
       callback(message);
     }, (error) => {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('PERMISSION_DENIED: Check Firebase RTDB rules are deployed');
       }
     });
@@ -841,3 +841,4 @@ class ChatService {
 
 // Export singleton instance
 export const chatService = new ChatService();
+

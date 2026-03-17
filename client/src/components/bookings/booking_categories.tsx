@@ -326,7 +326,7 @@ export default function BookingCategories() {
   };
 
   const handleSearch = () => {
-    if (import.meta.env.DEV) {
+    if ((process.env.NODE_ENV === "development")) {
       console.log('Searching with:', { location, checkIn, checkOut, rooms, adults, priceRange });
     }
     // Implement search functionality
@@ -503,4 +503,5 @@ export default function BookingCategories() {
     </div>
   );
 }
+
 

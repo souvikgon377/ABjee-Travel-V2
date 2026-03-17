@@ -104,7 +104,7 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-125">
         <DialogHeader>
           <DialogTitle>Create New Chat Room</DialogTitle>
           <DialogDescription>Add a new chat room for users to join and communicate.</DialogDescription>

@@ -92,7 +92,7 @@ export const RecentActivity = memo(() => {
         combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         setActivities(combined.slice(0, 8).map(a => ({ ...a, time: getTimeAgo(a.timestamp) })));
       } catch (error) {
-        if (import.meta.env.DEV) console.error('Failed to fetch activity:', error);
+        if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch activity:', error);
       } finally {
         setLoading(false);
       }
@@ -145,3 +145,4 @@ export const RecentActivity = memo(() => {
 });
 
 RecentActivity.displayName = 'RecentActivity';
+

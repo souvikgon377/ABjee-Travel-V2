@@ -68,7 +68,7 @@ export default function AdminDashboard() {
 
     // 1. Total Users
     const totalUsers = usersResult.status === 'fulfilled' ? usersResult.value.data().count : 0;
-    if (usersResult.status === 'rejected' && import.meta.env.DEV)
+    if (usersResult.status === 'rejected' && (process.env.NODE_ENV === "development"))
       console.warn('Total users fetch failed:', usersResult.reason);
 
     // 2. Active Sessions
@@ -81,7 +81,7 @@ export default function AdminDashboard() {
           (s: any) => s?.isOnline || (s?.lastSeen && s.lastSeen > fiveMinAgo)
         ).length;
       }
-    } else if (import.meta.env.DEV) {
+    } else if ((process.env.NODE_ENV === "development")) {
       console.warn('Active sessions fetch failed:', statusResult.reason);
     }
 
@@ -99,13 +99,13 @@ export default function AdminDashboard() {
           activeSubCount++;
         }
       });
-    } else if (import.meta.env.DEV) {
+    } else if ((process.env.NODE_ENV === "development")) {
       console.warn('Revenue fetch failed:', subsResult.reason);
     }
 
     // 4. Page Views
     const pageViews = pvResult.status === 'fulfilled' ? (pvResult.value.val() || 0) : 0;
-    if (pvResult.status === 'rejected' && import.meta.env.DEV)
+    if (pvResult.status === 'rejected' && (process.env.NODE_ENV === "development"))
       console.warn('Page views fetch failed:', pvResult.reason);
 
     setStats([
@@ -391,3 +391,4 @@ export default function AdminDashboard() {
     </SidebarProvider>
   );
 }
+

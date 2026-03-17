@@ -75,7 +75,7 @@ export const SettingsDialog = memo(
         
         onOpenChange(false);
         
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.log('Settings saved:', settings);
         }
         
@@ -359,3 +359,4 @@ export const SettingsDialog = memo(
 );
 
 SettingsDialog.displayName = 'SettingsDialog';
+

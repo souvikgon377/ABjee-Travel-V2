@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { auth } from './firebase';
 
-const API_BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
+const API_BASE_URL = '';
 
 // Create axios instance
 const api = axios.create({
@@ -103,3 +103,4 @@ export const adminAPI = {
 };
 
 export default api;
+

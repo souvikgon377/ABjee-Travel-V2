@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTheme } from '../mvpblocks/theme-provider';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import {
   Sidebar,
   SidebarContent,
@@ -54,7 +54,7 @@ interface AdminSidebarProps {
 export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarProps) => {
   const { theme, setTheme } = useTheme();
   const { userProfile, logout } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const { isMobile, setOpenMobile, setOpen } = useSidebar();
 
   const closeSidebarOnSmallScreens = () => {
@@ -77,7 +77,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
     try {
       closeSidebarOnSmallScreens();
       await logout();
-      navigate('/auth');
+      router.push('/auth');
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -85,7 +85,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
 
   const handleBackToWebsite = () => {
     closeSidebarOnSmallScreens();
-    navigate('/');
+    router.push('/');
   };
 
   return (

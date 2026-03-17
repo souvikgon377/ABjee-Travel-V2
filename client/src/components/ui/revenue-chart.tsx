@@ -40,7 +40,7 @@ export const RevenueChart = memo(() => {
 
       setChartData(withMeta);
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Failed to fetch revenue data:', error);
+      if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch revenue data:', error);
     } finally {
       setLoading(false);
     }
@@ -149,3 +149,4 @@ export const RevenueChart = memo(() => {
 });
 
 RevenueChart.displayName = 'RevenueChart';
+

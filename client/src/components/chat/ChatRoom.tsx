@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { chatService, type MessageAttachment } from '../../lib/chatService';
 import { type ChatMessage, type ChatRoom as RoomType } from '../../lib/chatService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,6 +26,9 @@ import {
 } from '../ui/popover';
 import { ModeToggle } from '../mvpblocks/mode-toggle';
 import { usersAPI } from '../../lib/api';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { firestoreDb } from '../../lib/firebaseFirestore';
+import { resolveAvatarUrl } from '../../lib/avatar';
 
 // Emoji list constant (moved outside component for performance)
 const EMOJI_LIST = [
@@ -96,12 +99,14 @@ const isEmojiOnly = (text: string): boolean => {
 };
 
 const ChatRoom = () => {
-  const { roomId } = useParams<{ roomId: string }>();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const params = useParams();
+  const roomId = params.roomId as string;
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useAuth();
   const [room, setRoom] = useState<RoomType | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
   const [typingUsers, setTypingUsers] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
@@ -220,7 +225,7 @@ const ChatRoom = () => {
 
   useEffect(() => {
     if (!roomId || !user) {
-      navigate('/chat');
+      router.push('/chat');
       return;
     }
 
@@ -229,7 +234,7 @@ const ChatRoom = () => {
         // Get room details
         const roomData = await chatService.getRoom(roomId);
         if (!roomData) {
-          navigate('/chat');
+          router.push('/chat');
           return;
         }
         
@@ -249,7 +254,7 @@ const ChatRoom = () => {
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Invalid invite link');
-              navigate('/chat');
+              router.push('/chat');
               return;
             }
           } else if (roomData.isPublic) {
@@ -259,7 +264,7 @@ const ChatRoom = () => {
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Failed to join room');
-              navigate('/chat');
+              router.push('/chat');
               return;
             }
           } else {
@@ -321,7 +326,7 @@ const ChatRoom = () => {
           unsubTyping();
         };
       } catch (error) {
-        if (import.meta.env.DEV) {
+        if ((process.env.NODE_ENV === "development")) {
           console.error('Error initializing chat room:', error);
         }
         setLoading(false);
@@ -329,7 +334,7 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, navigate, searchParams]);
+  }, [roomId, user, router, searchParams]);
 
   // Handle password submission
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -426,8 +431,8 @@ const ChatRoom = () => {
     }
     await chatService.stopTyping(roomId).catch(() => {});
     
-    navigate('/chat');
-  }, [roomId, navigate]);
+    router.push('/chat');
+  }, [roomId, router]);
 
   const handleDeleteForMe = useCallback(async (message: ChatMessage) => {
     if (!roomId || !message.id) return;
@@ -749,7 +754,7 @@ const ChatRoom = () => {
         });
       }
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if ((process.env.NODE_ENV === "development")) {
         console.error('Error loading more messages:', error);
       }
       alert('Failed to load previous messages');
@@ -896,6 +901,44 @@ const ChatRoom = () => {
     });
   }, [messages, user]);
 
+  useEffect(() => {
+    const candidateUserIds = Array.from(
+      new Set(
+        messages
+          .map((message) => message.userId)
+          .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+      )
+    );
+
+    if (candidateUserIds.length === 0) return;
+
+    const unsubscribers = candidateUserIds.map((userId) => {
+      const userRef = doc(firestoreDb, 'users', userId);
+
+      return onSnapshot(userRef, (snapshot) => {
+        const avatarUrl = snapshot.exists() ? resolveAvatarUrl(snapshot.data() as Record<string, unknown>) : '';
+
+        setUserAvatarMap((prev) => {
+          if (avatarUrl && prev[userId] === avatarUrl) return prev;
+          if (!avatarUrl && !prev[userId]) return prev;
+
+          const next = { ...prev };
+          if (avatarUrl) {
+            next[userId] = avatarUrl;
+          } else {
+            delete next[userId];
+          }
+
+          return next;
+        });
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [messages]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -912,7 +955,7 @@ const ChatRoom = () => {
       <div className="flex items-center justify-center h-screen">
         <Card className="p-6">
           <p className="text-muted-foreground">Room not found</p>
-          <Button onClick={() => navigate('/chat')} className="mt-4">
+          <Button onClick={() => router.push('/chat')} className="mt-4">
             Back to Chat
           </Button>
         </Card>
@@ -924,7 +967,7 @@ const ChatRoom = () => {
     <>
       {/* Password Dialog */}
       <Dialog open={showPasswordDialog} onOpenChange={(open) => {
-        if (!open) navigate('/chat'); // Go back if dialog is closed
+        if (!open) router.push('/chat'); // Go back if dialog is closed
         setShowPasswordDialog(open);
       }}>
         <DialogContent>
@@ -959,7 +1002,7 @@ const ChatRoom = () => {
                 type="button" 
                 variant="outline" 
                 className="flex-1"
-                onClick={() => navigate('/chat')}
+                onClick={() => router.push('/chat')}
               >
                 Cancel
               </Button>
@@ -1392,7 +1435,7 @@ const ChatRoom = () => {
         <div className="flex-1 flex flex-col min-h-0">
           {/* Header */}
           <div 
-            className="border-b p-2 sm:p-3 md:p-4 flex items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm flex-shrink-0"
+            className="border-b p-2 sm:p-3 md:p-4 flex items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderBottomColor: `${imageColors.primary}40`
@@ -1402,7 +1445,7 @@ const ChatRoom = () => {
               {/* Room Icon */}
               {room.iconImage ? (
                 <Avatar 
-                  className="h-8 w-8 sm:h-10 md:h-12 sm:w-10 md:w-12 border-2 flex-shrink-0"
+                  className="h-8 w-8 sm:h-10 md:h-12 sm:w-10 md:w-12 border-2 shrink-0"
                   style={imageColors ? {
                     borderColor: `${imageColors.primary}60`
                   } : { borderColor: 'hsl(var(--primary) / 0.2)' }}
@@ -1412,7 +1455,7 @@ const ChatRoom = () => {
                 </Avatar>
               ) : (
                 <div 
-                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow-md flex-shrink-0"
+                  className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl shadow-md shrink-0"
                   style={imageColors ? {
                     background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`
                   } : undefined}
@@ -1427,8 +1470,8 @@ const ChatRoom = () => {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 flex-shrink-0">
-              <div className="flex-shrink-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+              <div className="shrink-0">
                 <ModeToggle />
               </div>
               {user && room.createdBy === user.uid && (
@@ -1438,7 +1481,7 @@ const ChatRoom = () => {
                     size="icon"
                     onClick={() => setAddMembersDialogOpen(true)}
                     title="Add Members"
-                    className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
+                    className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
                   >
                     <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
@@ -1447,7 +1490,7 @@ const ChatRoom = () => {
                     size="icon"
                     onClick={() => setSettingsDialogOpen(true)}
                     title="Room Settings"
-                    className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
+                    className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
                   >
                     <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
@@ -1456,7 +1499,7 @@ const ChatRoom = () => {
               <Button 
                 variant="outline" 
                 onClick={handleLeaveRoom}
-                className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 flex-shrink-0"
+                className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 shrink-0"
               >
                 <span className="text-[10px] sm:text-xs md:text-sm font-medium">
                   <span className="hidden sm:inline">Leave Room</span>
@@ -1514,15 +1557,16 @@ const ChatRoom = () => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
+                const messageAvatarUrl = userAvatarMap[message.userId] || message.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`;
                 
                 return (
                   <div
                     key={message.id}
                     className={`flex items-start gap-2 sm:gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
                   >
-                    <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 flex-shrink-0">
+                    <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 shrink-0">
                       <AvatarImage 
-                        src={message.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`}
+                        src={messageAvatarUrl}
                         alt={message.username}
                       />
                       <AvatarFallback className="bg-primary text-primary-foreground">
@@ -1549,7 +1593,7 @@ const ChatRoom = () => {
                                   cancelEditing();
                                 }
                               }}
-                              className="min-w-[150px] sm:min-w-[200px] bg-card/90 backdrop-blur-sm text-sm"
+                              className="min-w-37.5 sm:min-w-50 bg-card/90 backdrop-blur-sm text-sm"
                               autoFocus
                             />
                             <Button
@@ -1603,13 +1647,13 @@ const ChatRoom = () => {
                                         <img 
                                           src={message.attachment.url} 
                                           alt={message.attachment.name}
-                                          className="max-w-[200px] sm:max-w-[280px] md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity w-full object-cover"
+                                          className="max-w-50 sm:max-w-70 md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity w-full object-cover"
                                           onClick={() => window.open(message.attachment!.url, '_blank')}
                                           loading="lazy"
                                         />
                                       ) : message.attachment.type === 'voice' ? (
-                                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-[180px] sm:min-w-[220px] md:min-w-[250px]">
-                                          <Mic className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-45 sm:min-w-55 md:min-w-62.5">
+                                          <Mic className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                                           <audio 
                                             controls 
                                             className="flex-1" 
@@ -1621,7 +1665,7 @@ const ChatRoom = () => {
                                           <a 
                                             href={message.attachment.url} 
                                             download={message.attachment.name}
-                                            className="flex-shrink-0 hover:opacity-70 transition-opacity p-1"
+                                            className="shrink-0 hover:opacity-70 transition-opacity p-1"
                                           >
                                             <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                           </a>
@@ -1629,7 +1673,7 @@ const ChatRoom = () => {
                                       ) : message.attachment.type === 'video' ? (
                                         <video 
                                           controls 
-                                          className="max-w-[200px] sm:max-w-[280px] md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg w-full"
+                                          className="max-w-50 sm:max-w-70 md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg w-full"
                                           src={message.attachment.url}
                                           controlsList="nodownload"
                                           playsInline
@@ -1637,9 +1681,9 @@ const ChatRoom = () => {
                                           Your browser does not support the video element.
                                         </video>
                                       ) : message.attachment.type === 'audio' ? (
-                                        <div className="flex flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-[180px] sm:min-w-[220px] md:min-w-[250px]">
+                                        <div className="flex flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-45 sm:min-w-55 md:min-w-62.5">
                                           <div className="flex items-center gap-1.5 sm:gap-2">
-                                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                                            <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                                             <div className="flex-1 min-w-0">
                                               <div className="text-xs sm:text-sm font-medium truncate">{message.attachment.name}</div>
                                               <div className="text-[10px] sm:text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
@@ -1647,7 +1691,7 @@ const ChatRoom = () => {
                                             <a 
                                               href={message.attachment.url} 
                                               download={message.attachment.name}
-                                              className="flex-shrink-0 hover:opacity-70 transition-opacity p-1"
+                                              className="shrink-0 hover:opacity-70 transition-opacity p-1"
                                             >
                                               <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                             </a>
@@ -1663,21 +1707,21 @@ const ChatRoom = () => {
                                         <a 
                                           href={message.attachment.url} 
                                           download={message.attachment.name}
-                                          className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors min-w-[180px] sm:min-w-[220px] md:min-w-[250px]"
+                                          className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors min-w-45 sm:min-w-55 md:min-w-62.5"
                                         >
-                                          <span className="text-xl sm:text-2xl flex-shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
+                                          <span className="text-xl sm:text-2xl shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
                                           <div className="flex-1 min-w-0">
                                             <div className="text-xs sm:text-sm font-medium truncate">{message.attachment.name}</div>
                                             <div className="text-[10px] sm:text-xs opacity-70">{formatFileSize(message.attachment.size)}</div>
                                           </div>
-                                          <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" />
+                                          <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                                         </a>
                                       )}
                                     </div>
                                   )}
 
                                   {message.text && (
-                                    <span className={isOnlyEmoji ? 'inline-block hover:animate-wiggle' : 'text-xs sm:text-sm break-words'}>
+                                    <span className={isOnlyEmoji ? 'inline-block hover:animate-wiggle' : 'text-xs sm:text-sm wrap-break-word'}>
                                       {message.text}
                                     </span>
                                   )}
@@ -1792,7 +1836,7 @@ const ChatRoom = () => {
           {/* Message Input */}
           <form 
             onSubmit={handleSendMessage} 
-            className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm flex-shrink-0"
+            className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderTopColor: `${imageColors.primary}40`
@@ -1840,7 +1884,7 @@ const ChatRoom = () => {
                         <span className="text-[10px] sm:text-xs opacity-70">{formatFileSize(attachmentFile.size)}</span>
                       </div>
                     </div>
-                    <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment} className="flex-shrink-0">
+                    <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment} className="shrink-0">
                       <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
@@ -1851,7 +1895,7 @@ const ChatRoom = () => {
             <div className="flex items-center gap-1.5 sm:gap-2">
               <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
                 <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0">
+                  <Button type="button" variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
                     <SmilePlus className="h-4 w-4 sm:h-5 sm:w-5" />
                   </Button>
                 </PopoverTrigger>
@@ -1888,7 +1932,7 @@ const ChatRoom = () => {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isRecording || uploadingAttachment}
-                className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0"
+                className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
               >
                 <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
@@ -1900,7 +1944,7 @@ const ChatRoom = () => {
                 size="icon"
                 onClick={isRecording ? handleStopRecording : handleStartRecording}
                 disabled={!!attachmentFile || uploadingAttachment}
-                className={`h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
+                className={`h-8 w-8 sm:h-9 sm:w-9 shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
               >
                 <Mic className={`h-4 w-4 sm:h-5 sm:w-5 ${isRecording ? 'text-red-500' : ''}`} />
               </Button>
@@ -1917,7 +1961,7 @@ const ChatRoom = () => {
               <Button 
                 type="submit" 
                 disabled={(!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
-                className="hover:shadow-lg transition-all text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9 flex-shrink-0"
+                className="hover:shadow-lg transition-all text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9 shrink-0"
                 style={imageColors ? {
                   background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
                   color: 'white'
@@ -1935,3 +1979,6 @@ const ChatRoom = () => {
 };
 
 export default memo(ChatRoom);
+
+
+

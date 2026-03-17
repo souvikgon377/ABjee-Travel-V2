@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, LayoutGroup } from 'framer-motion';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 
 interface NavItem {
     id: string;
@@ -12,8 +12,8 @@ interface NavItem {
 
 const Header2: React.FC = () => {
     const [activeTab, setActiveTab] = useState('packages');
-    const navigate = useNavigate();
-    const location = useLocation();
+    const router = useRouter();
+    const pathname = usePathname();
 
     const navItems: NavItem[] = [
          {
@@ -125,14 +125,13 @@ const Header2: React.FC = () => {
 
     // Sync activeTab with current route
     useEffect(() => {
-        const currentPath = location.pathname;
-        const matchingItem = navItems.find(item => item.href === currentPath);
+        const matchingItem = navItems.find(item => item.href === pathname);
         if (matchingItem) {
             setActiveTab(matchingItem.id);
-        } else if (currentPath === '/' || currentPath === '/booking-categories') {
+        } else if (pathname === '/' || pathname === '/booking-categories') {
             setActiveTab('packages');
         }
-    }, [location.pathname]);
+    }, [pathname]);
 
     return (
         <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700">
@@ -145,10 +144,10 @@ const Header2: React.FC = () => {
                             onClick={() => {
                                 setActiveTab(item.id);
                                 if (item.href) {
-                                    navigate(item.href);
+                                    router.push(item.href!);
                                 }
                             }}
-                            className={`relative flex flex-col items-center justify-center px-6 py-4 min-w-[100px] transition-all duration-200 group ${
+                            className={`relative flex flex-col items-center justify-center px-6 py-4 min-w-25 transition-all duration-200 group ${
                                 activeTab === item.id
                                     ? 'text-red-600'
                                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
