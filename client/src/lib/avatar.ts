@@ -1,8 +1,13 @@
 type AvatarCandidate = {
   photoURL?: unknown;
+  photoUrl?: unknown;
   avatar?: unknown;
+  avatarUrl?: unknown;
   profilePicture?: unknown;
   profileImage?: unknown;
+  imageUrl?: unknown;
+  image?: unknown;
+  picture?: unknown;
 };
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -13,10 +18,15 @@ export const resolveAvatarUrl = (...candidates: Array<AvatarCandidate | null | u
     if (!candidate) continue;
 
     const avatar = [
-      candidate.photoURL,
-      candidate.avatar,
       candidate.profilePicture,
+      candidate.photoURL,
+      candidate.photoUrl,
+      candidate.avatar,
+      candidate.avatarUrl,
       candidate.profileImage,
+      candidate.imageUrl,
+      candidate.image,
+      candidate.picture,
     ].find(isNonEmptyString);
 
     if (avatar) {

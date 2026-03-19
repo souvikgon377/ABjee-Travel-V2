@@ -1,32 +1,40 @@
-import { initializeApp } from 'firebase/app';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
-const env = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId:
-    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL,
+const firebaseEnv = {
+  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  NEXT_PUBLIC_FIREBASE_DATABASE_URL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
-// Your web app's Firebase configuration
-// You'll need to replace these with your actual Firebase config values
+const missingFirebaseEnv = Object.entries(firebaseEnv)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingFirebaseEnv.length > 0) {
+  throw new Error(
+    `Missing Firebase env vars: ${missingFirebaseEnv.join(', ')}. ` +
+      'Set them in client/.env or client/.env.local.'
+  );
+}
+
 const firebaseConfig = {
-  apiKey: env.apiKey || "your-api-key",
-  authDomain: env.authDomain || "your-project.firebaseapp.com",
-  projectId: env.projectId || "your-project-id",
-  storageBucket: env.storageBucket || "your-project.appspot.com",
-  messagingSenderId: env.messagingSenderId || "123456789",
-  appId: env.appId || "your-app-id",
-  databaseURL: env.databaseURL || "https://abjee-travel-4fc38-default-rtdb.asia-southeast1.firebasedatabase.app"
+  apiKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_API_KEY as string,
+  authDomain: firebaseEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as string,
+  projectId: firebaseEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID as string,
+  storageBucket: firebaseEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
+  messagingSenderId: firebaseEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
+  appId: firebaseEnv.NEXT_PUBLIC_FIREBASE_APP_ID as string,
+  databaseURL: firebaseEnv.NEXT_PUBLIC_FIREBASE_DATABASE_URL as string,
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Firebase Authentication and get a reference to the service
 export const auth = getAuth(app);
