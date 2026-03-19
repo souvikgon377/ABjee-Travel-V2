@@ -100,6 +100,35 @@ export interface TypingIndicator {
 // ==================== CHAT SERVICE CLASS ====================
 
 class ChatService {
+  private readonly emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+  private readonly urlRegex = /\b((https?:\/\/|www\.)[^\s]+|[a-z0-9-]+\.(com|net|org|in|co|io|app|dev|me|ly|ai|info|biz|edu|gov)(\/[^\s]*)?)\b/i;
+  private readonly phoneRegex = /(?:\+?\d[\d\s().-]{8,}\d)/;
+
+  private hasRestrictedPublicContent(text: string): boolean {
+    if (!text) return false;
+    return (
+      this.emailRegex.test(text) ||
+      this.urlRegex.test(text) ||
+      this.phoneRegex.test(text)
+    );
+  }
+
+  private async enforcePublicRoomContentPolicy(roomId: string, text: string): Promise<void> {
+    if (!text.trim()) return;
+
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const snapshot = await get(roomRef);
+    if (!snapshot.exists()) {
+      throw new Error('Room not found');
+    }
+
+    const room = snapshot.val() as ChatRoom;
+    if (!room.isPublic) return;
+
+    if (this.hasRestrictedPublicContent(text)) {
+      throw new Error('In public rooms, phone numbers, email addresses, and links are not allowed.');
+    }
+  }
   
   /**
    * WHY: Get current authenticated user or throw error
@@ -574,6 +603,9 @@ class ChatService {
    */
   async sendMessage(roomId: string, text: string, attachment?: MessageAttachment) {
     const user = this.getCurrentUser();
+    const trimmedText = text.trim();
+    await this.enforcePublicRoomContentPolicy(roomId, trimmedText);
+
     const messagesRef = ref(database, `chatrooms/${roomId}/messages`);
     const newMessageRef = push(messagesRef);
     
@@ -582,7 +614,7 @@ class ChatService {
       userId: user.uid,
       username: user.displayName || 'Anonymous',
       photoURL: user.photoURL || undefined,
-      text,
+      text: trimmedText,
       timestamp: Date.now(),
       ...(attachment && { attachment })
     };
@@ -594,7 +626,7 @@ class ChatService {
     const roomRef = ref(database, `chatrooms/${roomId}/lastMessage`);
     const lastMessageText = attachment 
       ? `📎 ${attachment.type === 'voice' ? 'Voice message' : attachment.name}`
-      : text.substring(0, 100);
+      : trimmedText.substring(0, 100);
     
     await set(roomRef, {
       text: lastMessageText,
@@ -715,6 +747,9 @@ class ChatService {
    */
   async editMessage(roomId: string, messageId: string, newText: string) {
     const user = this.getCurrentUser();
+    const trimmedText = newText.trim();
+    await this.enforcePublicRoomContentPolicy(roomId, trimmedText);
+
     const messageRef = ref(database, `chatrooms/${roomId}/messages/${messageId}`);
     
     // Verify ownership
@@ -724,7 +759,7 @@ class ChatService {
     }
     
     await update(messageRef, {
-      text: newText,
+      text: trimmedText,
       edited: true,
       editedAt: Date.now()
     });

@@ -22,7 +22,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import Header from '@/components/mvpblocks/header-1';
-import ChatRoom from '@/components/chat/ChatRoom';
 
 const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME as string;
 const CLOUDINARY_UPLOAD_PRESET = (process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string) || 'ml_default';
@@ -69,6 +68,44 @@ type ReviewComment = {
   userId: string;
   avatarUrl?: string;
   createdAt: unknown;
+};
+
+type CountryUserHighlight = {
+  id: string;
+  name: string;
+  username: string;
+  country: string;
+  profilePictureUrl?: string;
+  avatarUrl?: string;
+};
+
+const getCountryFromUserData = (data: Record<string, unknown>): string => {
+  const location = data.location && typeof data.location === 'object'
+    ? (data.location as Record<string, unknown>)
+    : undefined;
+
+  const address = data.address && typeof data.address === 'object'
+    ? (data.address as Record<string, unknown>)
+    : undefined;
+
+  const preferredDestinations = Array.isArray(data.preferredDestinations)
+    ? data.preferredDestinations
+    : [];
+
+  const fromPreferredDestination = preferredDestinations.find(
+    (item): item is string => typeof item === 'string' && item.trim().length > 0
+  );
+
+  const candidate = [
+    data.country,
+    data.nationality,
+    data.currentCountry,
+    location?.country,
+    address?.country,
+    fromPreferredDestination,
+  ].find((item): item is string => typeof item === 'string' && item.trim().length > 0);
+
+  return candidate ? candidate.trim() : '';
 };
 
 
@@ -383,6 +420,7 @@ const ChatRoomsList: React.FC = () => {
   const [openReviewCommentReviewId, setOpenReviewCommentReviewId] = useState<string | null>(null);
   const [reviewCommentSubmitting, setReviewCommentSubmitting] = useState(false);
   const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
+  const [countryUsers, setCountryUsers] = useState<CountryUserHighlight[]>([]);
   const [userMediaFiles, setUserMediaFiles] = useState<Array<{ file: File; preview: string }>>([]);
   const [userMediaUploading, setUserMediaUploading] = useState(false);
   const [userMediaError, setUserMediaError] = useState('');
@@ -391,6 +429,46 @@ const ChatRoomsList: React.FC = () => {
     () => resolveAvatarUrl(userProfile, user),
     [user, userProfile]
   );
+
+  useEffect(() => {
+    const usersRef = collection(firestoreDb, 'users');
+
+    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+      const usersFromDb: CountryUserHighlight[] = [];
+
+      snapshot.forEach((userDoc) => {
+        const data = userDoc.data() as Record<string, unknown>;
+        const country = getCountryFromUserData(data) || 'Not specified';
+
+        const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
+        const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
+        const displayName = typeof data.displayName === 'string' ? data.displayName.trim() : '';
+        const username = typeof data.username === 'string' ? data.username.trim() : '';
+        const email = typeof data.email === 'string' ? data.email.trim() : '';
+        const emailHandle = email.includes('@') ? email.split('@')[0] : email;
+        const profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture.trim() : '';
+        const resolvedAvatar = profilePicture || resolveAvatarUrl(data);
+
+        const name = displayName || `${firstName} ${lastName}`.trim() || username || emailHandle || 'Traveller';
+        const handle = username || emailHandle || 'traveller';
+
+        usersFromDb.push({
+          id: userDoc.id,
+          name,
+          username: handle,
+          country,
+          profilePictureUrl: resolvedAvatar,
+          avatarUrl: resolvedAvatar,
+        });
+      });
+
+      const nextCountryUsers = usersFromDb.sort((a, b) => a.name.localeCompare(b.name));
+
+      setCountryUsers(nextCountryUsers);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const filteredPlaces = useMemo(() => {
     if (!hasSearchQuery) return [];
@@ -1187,24 +1265,47 @@ const ChatRoomsList: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              whileHover={{ scale: 1.05, y: -5 }}
+              whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
-                <div className="absolute inset-0 bg-linear-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
+                {/* Video Background */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v3.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-linear-to-br from-yellow-700/60 via-amber-700/50 to-yellow-700/60" />
+                <div className="absolute inset-0 bg-linear-to-br from-yellow-400/30 via-amber-400/20 to-yellow-300/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <motion.div
+                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
+                  animate={{ x: ['-100%', '100%'] }}
+                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ y: [0, -5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 0.5 }}
-                    className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                    animate={{
+                      scale: [1, 1.15, 1],
+                      rotate: [0, 5, -5, 0]
+                    }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
-                    <Eye className="h-8 w-8 text-white" />
+                    <Eye className="h-9 w-9 text-white drop-shadow-lg" />
                   </motion.div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-3">
+                    <motion.h3
+                      className="text-2xl font-bold text-white dark:text-white mb-2 drop-shadow-2xl"
+                      whileHover={{ scale: 1.05 }}
+                    >
                       Trip Stories
-                    </h3>
-                    <p className="text-white/90 text-base">
+                    </motion.h3>
+                    <p className="text-gray-200 dark:text-white/95 text-base drop-shadow-lg font-medium">
                       Get inspired by photos and stories from real travelers
                     </p>
                   </div>
@@ -1347,24 +1448,47 @@ const ChatRoomsList: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              whileHover={{ scale: 1.05, y: -5 }}
+              whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
               className="group cursor-pointer"
             >
-              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-orange-500 via-amber-500 to-yellow-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
-                <div className="absolute inset-0 bg-linear-to-br from-orange-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
+                {/* Video Background */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v3.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-linear-to-br from-yellow-700/60 via-amber-700/50 to-yellow-700/60" />
+                <div className="absolute inset-0 bg-linear-to-br from-yellow-400/30 via-amber-400/20 to-yellow-300/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <motion.div
+                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
+                  animate={{ x: ['-100%', '100%'] }}
+                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ y: [0, -5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 0.5 }}
-                    className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                    animate={{
+                      scale: [1, 1.15, 1],
+                      rotate: [0, 5, -5, 0]
+                    }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
-                    <Eye className="h-8 w-8 text-white" />
+                    <Eye className="h-9 w-9 text-white drop-shadow-lg" />
                   </motion.div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-3">
+                    <motion.h3
+                      className="text-2xl font-bold text-white dark:text-white mb-2 drop-shadow-2xl"
+                      whileHover={{ scale: 1.05 }}
+                    >
                       Trip Stories
-                    </h3>
-                    <p className="text-gray-300 dark:text-white/90 text-base">
+                    </motion.h3>
+                    <p className="text-gray-200 dark:text-white/95 text-base drop-shadow-lg font-medium">
                       Get inspired by photos and stories from real travelers
                     </p>
                   </div>
@@ -2755,6 +2879,111 @@ const ChatRoomsList: React.FC = () => {
                   </AnimatePresence>
                 </motion.div>
               </div>
+            )}
+
+            {publicRooms.length > 0 && privateRooms.length > 0 && countryUsers.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45 }}
+                className="rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
+              >
+                <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
+                  <div className="flex items-center gap-3">
+                    <motion.div
+                      className="p-2.5 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 shadow-lg"
+                      animate={{ rotate: [-3, 3, -3] }}
+                      transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <Users className="h-5 w-5 text-white" />
+                    </motion.div>
+                    <div>
+                      <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight bg-linear-to-r from-cyan-700 via-sky-600 to-blue-600 bg-clip-text text-transparent">
+                        Travelers From Different Countries
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                        Live user highlights pulled from database profiles
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Live carousel
+                  </div>
+                </div>
+
+                <div className="relative overflow-hidden px-3 sm:px-4 pb-5">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-linear-to-r from-white dark:from-gray-900 to-transparent" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-linear-to-l from-white dark:from-gray-900 to-transparent" />
+
+                  <motion.div
+                    className="flex w-max items-center gap-4 px-2"
+                    animate={{ x: ['0%', '-50%'] }}
+                    transition={{
+                      duration: Math.max(26, countryUsers.length * 2),
+                      repeat: Infinity,
+                      ease: 'linear',
+                    }}
+                  >
+                    {[...countryUsers, ...countryUsers].map((countryUser, index) => {
+                      const fallbackLetter = (countryUser.name[0] || countryUser.username[0] || 'U').toUpperCase();
+                      const avatarSrc = countryUser.profilePictureUrl || countryUser.avatarUrl || undefined;
+                      return (
+                        <motion.div
+                          key={`${countryUser.id}-${countryUser.country}-${index}`}
+                          className="relative flex min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
+                          initial={{ opacity: 0.85, y: 4 }}
+                          animate={{ opacity: 1, y: [0, -4, 0] }}
+                          transition={{
+                            opacity: { duration: 0.35 },
+                            y: {
+                              duration: 3.2,
+                              repeat: Infinity,
+                              ease: 'easeInOut',
+                              delay: (index % Math.max(1, countryUsers.length)) * 0.08,
+                            },
+                          }}
+                          whileHover={{ y: -8, scale: 1.02, transition: { duration: 0.2 } }}
+                        >
+                          <div className="absolute inset-0 rounded-2xl bg-linear-to-r from-cyan-500/0 via-cyan-500/5 to-blue-500/10 pointer-events-none" />
+
+                          <Avatar className="h-14 w-14 border-2 border-cyan-300/80 dark:border-cyan-600/70 shadow-md shrink-0">
+                            <AvatarImage src={avatarSrc} alt={countryUser.name} className="object-cover" />
+                            <AvatarFallback className="bg-linear-to-br from-cyan-500 to-blue-600 text-white text-sm font-bold">
+                              {fallbackLetter}
+                            </AvatarFallback>
+                          </Avatar>
+
+                          <div className="min-w-0 relative z-10">
+                            <p className="text-base font-bold text-slate-800 dark:text-slate-100 truncate">
+                              {countryUser.name}
+                            </p>
+                            <p className="text-sm text-slate-500 dark:text-slate-300 truncate">
+                              @{countryUser.username}
+                            </p>
+                            <p className="text-sm text-yellow-700 dark:text-yellow-300 inline-flex items-center gap-1.5 truncate font-semibold mt-0.5">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-300" />
+                              <motion.span
+                                className="truncate"
+                                animate={{ opacity: [1, 0.45, 1], scale: [1, 1.03, 1] }}
+                                transition={{
+                                  duration: 0.95,
+                                  repeat: Infinity,
+                                  ease: 'easeInOut',
+                                  delay: (index % Math.max(1, countryUsers.length)) * 0.04,
+                                }}
+                              >
+                                {countryUser.country}
+                              </motion.span>
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                </div>
+              </motion.div>
             )}
 
             {/* Private Rooms Section */}

@@ -1,11 +1,13 @@
 //import './App.css'
+import dynamic from 'next/dynamic'
 import Header1 from '@/components/mvpblocks/header-1'
-import SimplePricing from '@/components/mvpblocks/simple-pricing'
-import CardCarousel from "@/components/ui/card-carousel"
-import { FeatureBlock3 } from '@/components/mvpblocks/feature'
 import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
-import Faq3 from '@/components/mvpblocks/faq-3'
-import Footer4Col from '@/components/mvpblocks/footer-4col'
+
+const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'))
+const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3))
+const SimplePricing = dynamic(() => import('@/components/mvpblocks/simple-pricing'))
+const Faq3 = dynamic(() => import('@/components/mvpblocks/faq-3'))
+const Footer4Col = dynamic(() => import('@/components/mvpblocks/footer-4col'))
 
 function LandingPage() {
   return (

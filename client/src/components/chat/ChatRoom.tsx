@@ -476,8 +476,8 @@ const ChatRoom = () => {
     try {
       await chatService.editMessage(roomId, editingMessageId, editText.trim());
       cancelEditing();
-    } catch (error) {
-      alert('Failed to edit message');
+    } catch (error: any) {
+      alert(error?.message || 'Failed to edit message');
     }
   }, [roomId, editingMessageId, editText, cancelEditing]);
 
@@ -1119,15 +1119,23 @@ const ChatRoom = () => {
                     const isInvited = invitedMemberIds.has(result.id);
                     const isInviting = addingMemberId === result.id;
                     const isAlreadyMember = existingMemberIds.has(result.id);
+                    const avatarSrc =
+                      resolveAvatarUrl(result as Record<string, unknown>) ||
+                      userAvatarMap[result.id] ||
+                      '';
+                    const fallbackInitial = (result.firstName?.[0] || result.username?.[0] || '?').toUpperCase();
                     return (
                       <div
                         key={result.id}
                         className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/40 transition-colors"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="h-8 w-8 rounded-full bg-linear-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
-                            {(result.firstName?.[0] || '?').toUpperCase()}
-                          </div>
+                          <Avatar className="h-8 w-8 shrink-0">
+                            <AvatarImage src={avatarSrc || undefined} alt={`${result.firstName || ''} ${result.lastName || ''}`.trim() || result.username || 'User'} />
+                            <AvatarFallback className="bg-linear-to-br from-blue-400 to-indigo-500 text-white text-xs font-semibold">
+                              {fallbackInitial}
+                            </AvatarFallback>
+                          </Avatar>
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{result.firstName} {result.lastName}</p>
                             <p className="text-xs text-muted-foreground truncate">@{result.username}</p>
@@ -1971,6 +1979,12 @@ const ChatRoom = () => {
                 <span className="sm:hidden">{uploadingAttachment ? '...' : 'Send'}</span>
               </Button>
             </div>
+
+            {room.isPublic && (
+              <p className="mt-2 text-[11px] sm:text-xs text-amber-700 dark:text-amber-400">
+                Public room rules: phone numbers, email addresses, and links are not allowed.
+              </p>
+            )}
           </form>
         </div>
       </div>
