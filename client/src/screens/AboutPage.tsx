@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { motion, useInView, type Variants } from 'framer-motion';
 import {
   Facebook,
@@ -18,8 +18,10 @@ import {
 } from 'lucide-react';
 import Header1 from '@/components/mvpblocks/header-1';
 import Footer4Col from '@/components/mvpblocks/footer-4col';
+import { DEFAULT_ABOUT_PAGE_CONTENT, loadAboutPageContent } from '@/lib/aboutContent';
+import type { AboutFounderContent, AboutPageContent, AboutSocialIconName } from '@/types/about';
 
-// ─── Animation Variants ───────────────────────────────────────────────────────
+// â”€â”€â”€ Animation Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 50 },
@@ -39,7 +41,19 @@ const scaleIn: Variants = {
   }),
 };
 
-// ─── Scroll-triggered section wrapper ─────────────────────────────────────────
+const socialIconMap: Record<AboutSocialIconName, React.ComponentType<{ className?: string }>> = {
+  Facebook,
+  Instagram,
+  Youtube,
+  MessageCircle,
+  Twitter,
+  Github,
+  Globe,
+};
+
+const founderStatIcons = [Globe, Heart, Camera];
+
+// â”€â”€â”€ Scroll-triggered section wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function AnimatedSection({
   children,
@@ -62,27 +76,11 @@ function AnimatedSection({
   );
 }
 
-// ─── Founder Section ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Founder Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function FounderSection() {
-  const [photo, setPhoto] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  function handleFile(file: File) {
-    if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => setPhoto(e.target?.result as string);
-    reader.readAsDataURL(file);
-  }
-
+function FounderSection({ founder }: { founder: AboutFounderContent }) {
   const founderRef = useRef(null);
   const isInView = useInView(founderRef, { once: true, margin: '-80px' });
-
-  const stats = [
-    { icon: Globe, label: 'Countries Visited', value: '20+' },
-    { icon: Heart,  label: 'Souls Inspired',   value: '50K+' },
-    { icon: Camera, label: 'Stories Shared',   value: '500+' },
-  ];
 
   return (
     <section className="py-14 px-4 relative overflow-hidden bg-muted/25">
@@ -105,154 +103,87 @@ function FounderSection() {
           </span>
           <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight mt-3 mb-5 leading-none">
             Meet the
-            <span className="block bg-gradient-to-r from-primary via-rose-500 to-orange-400 bg-clip-text text-transparent">
+            <span className="block bg-linear-to-r from-primary via-rose-500 to-orange-400 bg-clip-text text-transparent">
               Founder
             </span>
           </h2>
-          <div className="w-20 h-1.5 bg-gradient-to-r from-primary to-rose-400 rounded-full mx-auto" />
+          <div className="w-20 h-1.5 bg-linear-to-r from-primary to-rose-400 rounded-full mx-auto" />
         </motion.div>
 
-        {/* Two-column layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-
-          {/* ── Left: Photo upload card ── */}
           <motion.div variants={scaleIn} custom={0} className="flex flex-col items-center gap-6">
-            {/* Photo frame */}
             <div className="relative group">
-              {/* Spinning gradient ring */}
               <motion.div
-                className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-primary via-rose-400 to-orange-400 opacity-70"
+                className="absolute -inset-1.5 rounded-full bg-linear-to-tr from-primary via-rose-400 to-orange-400 opacity-70"
                 animate={{ rotate: 360 }}
                 transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
               />
-              <div
-                className="relative w-56 h-56 sm:w-72 sm:h-72 rounded-full overflow-hidden border-4 border-background bg-secondary cursor-pointer"
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const file = e.dataTransfer.files[0];
-                  if (file) handleFile(file);
-                }}
-              >
-                {photo ? (
-                  <img
-                    src={photo}
-                    alt="Anupam Banerjee – Founder"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center w-full h-full gap-3 text-muted-foreground group-hover:text-primary transition-colors">
-                    <Camera className="w-12 h-12" />
-                    <span className="text-sm font-medium text-center px-4 leading-snug">
-                      Click or drag &amp; drop<br />to upload photo
-                    </span>
-                  </div>
-                )}
+              <div className="relative w-56 h-56 sm:w-72 sm:h-72 rounded-full overflow-hidden border-4 border-background bg-secondary">
+                <img
+                  src={founder.photoUrl || '/logo.jpg'}
+                  alt={`${founder.name} - Founder`}
+                  className="w-full h-full object-cover"
+                />
               </div>
-
-              {/* Camera badge */}
-              <button
-                onClick={() => inputRef.current?.click()}
-                title="Upload founder photo"
-                className="absolute bottom-2 right-2 p-2.5 bg-primary text-white rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 transition-all"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
             </div>
-
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
-              }}
-            />
 
             <div className="text-center">
-              <h3 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight">Anupam Banerjee</h3>
-              <p className="bg-gradient-to-r from-primary to-rose-500 bg-clip-text text-transparent font-bold text-sm sm:text-base mt-2 tracking-widest uppercase">
-                Founder &amp; Soul Traveller
+              <h3 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight">{founder.name}</h3>
+              <p className="bg-linear-to-r from-primary to-rose-500 bg-clip-text text-transparent font-bold text-sm sm:text-base mt-2 tracking-widest uppercase">
+                {founder.title}
               </p>
               <p className="text-muted-foreground text-xs sm:text-sm mt-2 flex items-center justify-center gap-1">
-                <MapPin className="w-3.5 h-3.5" /> Kolkata, West Bengal, India
+                <MapPin className="w-3.5 h-3.5" /> {founder.location}
               </p>
             </div>
 
-            {/* Stats row */}
             <div className="flex gap-6 sm:gap-10">
-              {stats.map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex flex-col items-center gap-1.5">
-                  <div className="p-2.5 rounded-2xl bg-primary/10">
-                    <Icon className="w-5 h-5 text-primary" />
+              {founder.stats.map((stat, index) => {
+                const Icon = founderStatIcons[index % founderStatIcons.length];
+                return (
+                  <div key={`${stat.label}-${index}`} className="flex flex-col items-center gap-1.5">
+                    <div className="p-2.5 rounded-2xl bg-primary/10">
+                      <Icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <span className="text-xl sm:text-2xl font-black leading-none">{stat.value}</span>
+                    <span className="text-[10px] sm:text-xs text-muted-foreground text-center leading-tight max-w-16">{stat.label}</span>
                   </div>
-                  <span className="text-xl sm:text-2xl font-black leading-none">{value}</span>
-                  <span className="text-[10px] sm:text-xs text-muted-foreground text-center leading-tight max-w-[64px]">{label}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </motion.div>
 
-          {/* ── Right: Story ── */}
           <motion.div variants={fadeUp} custom={1} className="flex flex-col gap-8">
-            {/* Pull quote */}
             <div className="relative pl-6 sm:pl-8 border-l-4 border-primary rounded-r-xl py-2">
               <Quote className="absolute -top-2 -left-3.5 w-7 h-7 text-primary bg-background" />
-              <p className="text-xl sm:text-2xl md:text-3xl font-black italic leading-snug bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">
-                &ldquo;The more I travel,<br className="hidden sm:block" /> the more my Soul became rich.&rdquo;
+              <p className="text-xl sm:text-2xl md:text-3xl font-black italic leading-snug bg-linear-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">
+                &ldquo;{founder.quote}&rdquo;
               </p>
             </div>
 
-            {/* Bio paragraphs */}
             <div className="flex flex-col gap-5 sm:gap-6 text-sm sm:text-base md:text-lg text-muted-foreground leading-relaxed">
-              <p>
-                Hi, I&apos;m{' '}
-                <span className="font-black text-foreground text-base sm:text-lg md:text-xl">Anupam Banerjee</span>
-                {' '}— a passionate world traveller with an insatiable curiosity for cultures,
-                landscapes, and the stories hidden in every corner of this beautiful planet.
-              </p>
-              <p>
-                My love for travel goes far beyond sightseeing. Every new destination teaches me something
-                profound — a new language, a new flavour, a new perspective on life.
-                <span className="font-semibold text-foreground"> The richer my journeys, the richer my soul.</span>
-              </p>
-              <p>
-                I created{' '}
-                <span className="font-black text-foreground">Abjee Travel</span>{' '}as a
-                <em className="text-primary font-semibold not-italic"> digital diary of my travel experiences</em>
-                {' '}— a place where I document every adventure, every hidden gem, and every life lesson the road has
-                given me, so that <em className="font-bold text-foreground not-italic">you</em> too can experience the same
-                joy without leaving your screen.
-              </p>
-              <p>
-                My mission is simple:{' '}
-                <span className="font-black text-foreground text-base sm:text-lg">inspire more people to travel</span>.
-                {' '}I will try to give you as much information as possible — from budget tips and packing guides
-                to cultural etiquette and off-beat trails.
-              </p>
+              {founder.paragraphs.map((paragraph, index) => (
+                <p key={`founder-paragraph-${index}`}>{paragraph}</p>
+              ))}
               <p className="text-base sm:text-lg md:text-xl font-black text-foreground">
-                🌍 Pack your bags, open your mind, and let&apos;s explore the world together!
+                {founder.finalMessage}
               </p>
             </div>
 
-            {/* CTAs */}
             <div className="flex gap-3 flex-wrap">
               <a
-                href="http://www.youtube.com/@ABjeeTravel"
+                href={founder.primaryCtaHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-pink-500 to-orange-400 text-white rounded-full text-sm font-semibold hover:opacity-90 hover:scale-105 transition-all shadow-lg shadow-pink-500/25"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-linear-to-r from-pink-500 to-orange-400 text-white rounded-full text-sm font-semibold hover:opacity-90 hover:scale-105 transition-all shadow-lg shadow-pink-500/25"
               >
-                <Instagram className="w-4 h-4" /> Follow the Journey
+                <Instagram className="w-4 h-4" /> {founder.primaryCtaLabel}
               </a>
               <a
-                href="mailto:hello@abjectravels.com"
+                href={founder.secondaryCtaHref}
                 className="inline-flex items-center gap-2 px-5 py-2.5 border border-border bg-secondary text-foreground rounded-full text-sm font-semibold hover:border-primary/40 hover:scale-105 transition-all"
               >
-                <Mail className="w-4 h-4" /> Say Hello
+                <Mail className="w-4 h-4" /> {founder.secondaryCtaLabel}
               </a>
             </div>
           </motion.div>
@@ -262,149 +193,64 @@ function FounderSection() {
   );
 }
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-
-const socialLinks = [
-  {
-    name: 'Facebook',
-    icon: Facebook,
-    href: 'https://www.facebook.com/profile.php?id=61551098648104',
-    gradient: 'from-blue-600 to-blue-700',
-    shadowColor: 'shadow-blue-600/30',
-    followers: '12K+',
-    description: 'Follow for travel updates',
-  },
-  {
-    name: 'Instagram',
-    icon: Instagram,
-    href: 'https://www.instagram.com/abjeetravel.youtuber/',
-    gradient: 'from-pink-500 via-red-500 to-yellow-500',
-    shadowColor: 'shadow-pink-500/30',
-    followers: '25K+',
-    description: 'See our travel photos',
-  },
-  {
-    name: 'YouTube',
-    icon: Youtube,
-    href: 'http://www.youtube.com/@ABjeeTravel',
-    gradient: 'from-red-600 to-red-700',
-    shadowColor: 'shadow-red-600/30',
-    followers: '8K+',
-    description: 'Watch travel videos',
-  },
-  // {
-  //   name: 'Twitter / X',
-  //   icon: Twitter,
-  //   href: 'https://twitter.com/AbjeeTravels',
-  //   gradient: 'from-sky-500 to-sky-600',
-  //   shadowColor: 'shadow-sky-500/30',
-  //   followers: '5K+',
-  //   description: 'Join the conversation',
-  // },
-  {
-    name: 'WhatsApp',
-    icon: MessageCircle,
-    href: 'https://wa.me/919800247262',
-    gradient: 'from-green-500 to-green-600',
-    shadowColor: 'shadow-green-500/30',
-    followers: 'Chat Now',
-    description: 'Get in touch directly',
-  },
-  // {
-  //   name: 'GitHub',
-  //   icon: Github,
-  //   href: 'https://github.com/AbjeeTravels',
-  //   gradient: 'from-gray-700 to-gray-900',
-  //   shadowColor: 'shadow-gray-700/30',
-  //   followers: 'Open Source',
-  //   description: 'Explore the code',
-  // },
-];
-
-const youtubeVideos = [
-  { id: 'Yf_gy4Xzv8c' },
-  { id: 'otwdSd57Q7s' },
-  { id: 'GnsXt_B5DMc' },
-  { id: 'djzoKT74DN0' },
-];
-
-const developers = [
-  {
-    name: 'Rajesh Kumar',
-    role: 'Full Stack Developer',
-    avatar: 'https://api.dicebear.com/9.x/lorelei/svg?seed=Rajesh',
-    bio: 'Crafts seamless full-stack experiences with React and Node.js. Passionate about building products that make travel accessible.',
-    skills: ['React', 'Node.js', 'Firebase'],
-    github: 'https://github.com',
-    email: 'mailto:rajesh@abjectravels.com',
-  },
-  {
-    name: 'Priya Sharma',
-    role: 'Frontend Developer',
-    avatar: 'https://api.dicebear.com/9.x/lorelei/svg?seed=Priya',
-    bio: 'UI/UX enthusiast who transforms complex design systems into beautiful, responsive interfaces with pixel-perfect attention.',
-    skills: ['TypeScript', 'Tailwind', 'Framer Motion'],
-    github: 'https://github.com',
-    email: 'mailto:priya@abjectravels.com',
-  },
-  {
-    name: 'Arjun Das',
-    role: 'Backend Developer',
-    avatar: 'https://api.dicebear.com/9.x/lorelei/svg?seed=Arjun',
-    bio: 'Database architect and API specialist ensuring Abjee Travel runs fast, secure, and reliably at scale.',
-    skills: ['MongoDB', 'Express.js', 'Socket.io'],
-    github: 'https://github.com',
-    email: 'mailto:arjun@abjectravels.com',
-  },
-  {
-    name: 'Sneha Roy',
-    role: 'DevOps & Cloud Engineer',
-    avatar: 'https://api.dicebear.com/9.x/lorelei/svg?seed=Sneha',
-    bio: 'Keeps the infrastructure rock-solid. Expert in CI/CD pipelines, cloud deployments and performance optimization.',
-    skills: ['Docker', 'Netlify', 'Render'],
-    github: 'https://github.com',
-    email: 'mailto:sneha@abjectravels.com',
-  },
-];
-
-// ─── Component ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function AboutPage() {
+  const [content, setContent] = useState<AboutPageContent>(DEFAULT_ABOUT_PAGE_CONTENT);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      const fetchedContent = await loadAboutPageContent();
+      if (!mounted) return;
+      setContent(fetchedContent);
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const socialLinks = content.socialLinks;
+  const youtubeVideos = content.youtubeVideos;
+  const developers = content.developers;
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <Header1 />
 
-      {/* ══════════════════════════════════════════
-          HERO  –  Dynamic animated background
-         ══════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+          HERO  â€“  Dynamic animated background
+         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <section className="relative w-full h-screen flex items-center justify-center overflow-hidden">
 
-        {/* ── Base gradient — light: warm rose/violet, dark: deep slate/rose ── */}
-        <div className="absolute inset-0 bg-gradient-to-br from-rose-50 via-violet-50/70 to-orange-50 dark:from-slate-950 dark:via-rose-950/60 dark:to-slate-900" />
+        {/* â”€â”€ Base gradient â€” light: warm rose/violet, dark: deep slate/rose â”€â”€ */}
+        <div className="absolute inset-0 bg-linear-to-br from-rose-50 via-violet-50/70 to-orange-50 dark:from-slate-950 dark:via-rose-950/60 dark:to-slate-900" />
 
-        {/* ── Aurora blobs ── */}
+        {/* â”€â”€ Aurora blobs â”€â”€ */}
         <motion.div
-          className="absolute -top-48 -left-48 w-[700px] h-[700px] rounded-full bg-rose-400/30 dark:bg-rose-500/25 blur-[130px] pointer-events-none"
+          className="absolute -top-48 -left-48 w-175 h-175 rounded-full bg-rose-400/30 dark:bg-rose-500/25 blur-[130px] pointer-events-none"
           animate={{ x: [0, 70, 20, 0], y: [0, 50, -20, 0], scale: [1, 1.12, 0.96, 1] }}
           transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
-          className="absolute top-1/4 -right-40 w-[600px] h-[600px] rounded-full bg-violet-400/25 dark:bg-violet-600/20 blur-[110px] pointer-events-none"
+          className="absolute top-1/4 -right-40 w-150 h-150 rounded-full bg-violet-400/25 dark:bg-violet-600/20 blur-[110px] pointer-events-none"
           animate={{ x: [0, -55, 10, 0], y: [0, 65, -25, 0], scale: [1, 1.15, 0.92, 1] }}
           transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
         />
         <motion.div
-          className="absolute -bottom-24 left-1/4 w-[520px] h-[520px] rounded-full bg-orange-400/25 dark:bg-orange-500/20 blur-[110px] pointer-events-none"
+          className="absolute -bottom-24 left-1/4 w-130 h-130 rounded-full bg-orange-400/25 dark:bg-orange-500/20 blur-[110px] pointer-events-none"
           animate={{ x: [0, 45, -15, 0], y: [0, -35, 15, 0], scale: [1, 1.08, 1.04, 1] }}
           transition={{ duration: 17, repeat: Infinity, ease: 'easeInOut', delay: 6 }}
         />
         <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full bg-pink-400/20 dark:bg-pink-600/15 blur-[90px] pointer-events-none"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-95 h-95 rounded-full bg-pink-400/20 dark:bg-pink-600/15 blur-[90px] pointer-events-none"
           animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0.9, 0.5] }}
           transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
         />
 
-        {/* ── Subtle dot-mesh texture ── */}
+        {/* â”€â”€ Subtle dot-mesh texture â”€â”€ */}
         <div
           className="absolute inset-0 pointer-events-none opacity-[0.035] dark:opacity-[0.055]"
           style={{
@@ -414,11 +260,11 @@ export default function AboutPage() {
           }}
         />
 
-        {/* ══════════════════════════════════════════
-             ── Travel-themed background animations ──
-            ══════════════════════════════════════════ */}
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+             â”€â”€ Travel-themed background animations â”€â”€
+            â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
 
-        {/* ── Flying planes (left → right) ── */}
+        {/* â”€â”€ Flying planes (left â†’ right) â”€â”€ */}
         {[
           { top: '10%', duration: 24, delay: 0,  size: 30, color: 'rgba(244,63,94,0.30)',  tilt: '-12deg' },
           { top: '38%', duration: 34, delay: 11, size: 22, color: 'rgba(168,85,247,0.25)', tilt: '-8deg'  },
@@ -439,7 +285,7 @@ export default function AboutPage() {
           </motion.div>
         ))}
 
-        {/* ── Drifting clouds (right → left, very slow) ── */}
+        {/* â”€â”€ Drifting clouds (right â†’ left, very slow) â”€â”€ */}
         {[
           { top: '6%',  duration: 60, delay: 0,  scale: 1.1,  opacity: 0.13 },
           { top: '23%', duration: 75, delay: 18, scale: 0.75, opacity: 0.10 },
@@ -465,7 +311,7 @@ export default function AboutPage() {
           </motion.div>
         ))}
 
-        {/* ── Floating hot air balloon ── */}
+        {/* â”€â”€ Floating hot air balloon â”€â”€ */}
         <motion.div
           className="absolute pointer-events-none"
           style={{ top: '12%', right: '10%', opacity: 0.22 }}
@@ -489,7 +335,7 @@ export default function AboutPage() {
           </svg>
         </motion.div>
 
-        {/* ── Rotating compass ── */}
+        {/* â”€â”€ Rotating compass â”€â”€ */}
         <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '28%', left: '7%', opacity: 0.18 }}
@@ -510,7 +356,7 @@ export default function AboutPage() {
           </svg>
         </motion.div>
 
-        {/* ── Bouncing map pins ── */}
+        {/* â”€â”€ Bouncing map pins â”€â”€ */}
         {[
           { top: '18%', left: '72%', delay: 0,   size: 18, color: 'rgba(244,63,94,0.38)'  },
           { top: '52%', left: '16%', delay: 2.5, size: 15, color: 'rgba(168,85,247,0.32)' },
@@ -530,7 +376,7 @@ export default function AboutPage() {
           </motion.div>
         ))}
 
-        {/* ── Rolling suitcase / luggage (left → right, ground level) ── */}
+        {/* â”€â”€ Rolling suitcase / luggage (left â†’ right, ground level) â”€â”€ */}
         <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '15%', left: 0, opacity: 0.18 }}
@@ -542,10 +388,10 @@ export default function AboutPage() {
           </svg>
         </motion.div>
 
-        {/* ── Bottom page blend ── */}
-        <div className="absolute bottom-0 left-0 right-0 h-72 bg-gradient-to-t from-background via-background/60 to-transparent pointer-events-none" />
+        {/* â”€â”€ Bottom page blend â”€â”€ */}
+        <div className="absolute bottom-0 left-0 right-0 h-72 bg-linear-to-t from-background via-background/60 to-transparent pointer-events-none" />
 
-        {/* ── Floating micro-particles (layer 1 — slow drifters) ── */}
+        {/* â”€â”€ Floating micro-particles (layer 1 â€” slow drifters) â”€â”€ */}
         {[...Array(80)].map((_, i) => (
           <motion.div
             key={`slow-${i}`}
@@ -577,7 +423,7 @@ export default function AboutPage() {
           />
         ))}
 
-        {/* ── Floating micro-particles (layer 2 — fast twinklers) ── */}
+        {/* â”€â”€ Floating micro-particles (layer 2 â€” fast twinklers) â”€â”€ */}
         {[...Array(70)].map((_, i) => (
           <motion.div
             key={`fast-${i}`}
@@ -606,7 +452,7 @@ export default function AboutPage() {
           />
         ))}
 
-        {/* ── Floating micro-particles (layer 3 — large glows) ── */}
+        {/* â”€â”€ Floating micro-particles (layer 3 â€” large glows) â”€â”€ */}
         {[...Array(20)].map((_, i) => (
           <motion.div
             key={`glow-${i}`}
@@ -636,7 +482,7 @@ export default function AboutPage() {
           />
         ))}
 
-        {/* ── Hero copy ── */}
+        {/* â”€â”€ Hero copy â”€â”€ */}
         <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -645,7 +491,7 @@ export default function AboutPage() {
             className="mb-5"
           >
             <span className="inline-block px-4 py-1.5 rounded-full bg-rose-500/10 dark:bg-primary/20 border border-rose-400/40 dark:border-primary/40 text-rose-600 dark:text-primary text-sm font-semibold tracking-widest uppercase backdrop-blur-sm">
-              About Us
+              {content.hero.badge}
             </span>
           </motion.div>
 
@@ -655,9 +501,9 @@ export default function AboutPage() {
             transition={{ duration: 0.9, delay: 0.4 }}
             className="text-5xl md:text-7xl font-black leading-tight tracking-tight mb-6 text-foreground"
           >
-            Discover the World
+            {content.hero.titleLine1}
             <br />
-            <span className="text-primary">with Abjee Travel</span>
+            <span className="text-primary">{content.hero.titleHighlight}</span>
           </motion.h1>
 
           <motion.p
@@ -666,8 +512,7 @@ export default function AboutPage() {
             transition={{ duration: 0.8, delay: 0.65 }}
             className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
           >
-            From the misty mountains of Darjeeling to the serene valleys of
-            Sikkim — we craft journeys that leave you breathless.
+            {content.hero.subtitle}
           </motion.p>
 
           <motion.div
@@ -680,39 +525,39 @@ export default function AboutPage() {
               href="#videos"
               className="px-7 py-3.5 bg-primary text-white rounded-full font-semibold hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-primary/30"
             >
-              Watch Videos
+              {content.hero.primaryButtonLabel}
             </a>
             <a
               href="#team"
-              className="px-7 py-3.5 bg-foreground/8 dark:bg-white/10 border border-border dark:border-white/30 text-foreground rounded-full font-semibold hover:bg-foreground/[0.12] dark:hover:bg-white/20 transition-all hover:scale-105 active:scale-95 backdrop-blur-sm"
+              className="px-7 py-3.5 bg-foreground/8 dark:bg-white/10 border border-border dark:border-white/30 text-foreground rounded-full font-semibold hover:bg-foreground/12 dark:hover:bg-white/20 transition-all hover:scale-105 active:scale-95 backdrop-blur-sm"
             >
-              Meet the Team
+              {content.hero.secondaryButtonLabel}
             </a>
           </motion.div>
         </div>
 
-        {/* ── Scroll indicator ── */}
+        {/* â”€â”€ Scroll indicator â”€â”€ */}
         <motion.div
           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-foreground/40 text-xs"
           animate={{ y: [0, 8, 0] }}
           transition={{ duration: 1.6, repeat: Infinity }}
         >
           <span className="tracking-widest uppercase text-[10px]">Scroll</span>
-          <div className="w-px h-8 bg-gradient-to-b from-foreground/40 to-transparent" />
+          <div className="w-px h-8 bg-linear-to-b from-foreground/40 to-transparent" />
         </motion.div>
       </section>
 
-      {/* ══════════════════════════════════════════
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           FOUNDER SECTION
-         ══════════════════════════════════════════ */}
-      <FounderSection />
+         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      <FounderSection founder={content.founder} />
 
-      {/* ══════════════════════════════════════════
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           SOCIAL MEDIA LINKS
-         ══════════════════════════════════════════ */}
+         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <section className="py-16 px-4 relative overflow-hidden">
         {/* subtle background glow */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-rose-500/10" />
+        <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/10 via-transparent to-rose-500/10" />
         <AnimatedSection className="relative">
           <motion.div variants={fadeUp} className="text-center mb-10">
             <span className="inline-flex items-center gap-2 text-primary text-xs sm:text-sm font-bold tracking-[0.2em] uppercase mb-4">
@@ -722,55 +567,58 @@ export default function AboutPage() {
             </span>
             <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight mt-3 mb-5 leading-none">
               Follow Our
-              <span className="block bg-gradient-to-r from-primary via-rose-500 to-orange-400 bg-clip-text text-transparent">
+              <span className="block bg-linear-to-r from-primary via-rose-500 to-orange-400 bg-clip-text text-transparent">
                 Journey
               </span>
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed font-medium">
-              Connect with us across every platform — from breathtaking reels
+              Connect with us across every platform â€” from breathtaking reels
               to behind-the-scenes travel tales. Your next adventure starts here.
             </p>
           </motion.div>
 
-          {/* 4 cards — centred, 2 cols on mobile, 4 on sm+ */}
+          {/* 4 cards â€” centred, 2 cols on mobile, 4 on sm+ */}
           <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-5">
-            {socialLinks.map((link, i) => (
-              <motion.a
-                key={link.name}
-                href={link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                variants={scaleIn}
-                custom={i}
-                whileHover={{ y: -10, scale: 1.06 }}
-                whileTap={{ scale: 0.94 }}
-                className="group flex flex-col items-center gap-4 p-5 sm:p-6 rounded-3xl border border-border bg-card shadow-sm hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer"
-              >
-                {/* Icon bubble */}
-                <div
-                  className={`p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br ${link.gradient} shadow-xl ${link.shadowColor} group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}
+            {socialLinks.map((link, i) => {
+              const Icon = socialIconMap[link.icon] ?? Globe;
+              return (
+                <motion.a
+                  key={`${link.name}-${i}`}
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variants={scaleIn}
+                  custom={i}
+                  whileHover={{ y: -10, scale: 1.06 }}
+                  whileTap={{ scale: 0.94 }}
+                  className="group flex flex-col items-center gap-4 p-5 sm:p-6 rounded-3xl border border-border bg-card shadow-sm hover:border-primary/40 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300 cursor-pointer"
                 >
-                  <link.icon className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
-                </div>
+                  {/* Icon bubble */}
+                  <div
+                    className={`p-3.5 sm:p-4 rounded-2xl bg-linear-to-br ${link.gradient} shadow-xl ${link.shadowColor} group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}
+                  >
+                    <Icon className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+                  </div>
 
-                <div className="text-center">
-                  <p className="font-bold text-sm sm:text-base">{link.name}</p>
-                  <p className="text-primary text-base sm:text-lg font-black mt-0.5">
-                    {link.followers}
-                  </p>
-                  <p className="text-muted-foreground text-[11px] sm:text-xs mt-1 leading-tight">
-                    {link.description}
-                  </p>
-                </div>
-              </motion.a>
-            ))}
+                  <div className="text-center">
+                    <p className="font-bold text-sm sm:text-base">{link.name}</p>
+                    <p className="text-primary text-base sm:text-lg font-black mt-0.5">
+                      {link.followers}
+                    </p>
+                    <p className="text-muted-foreground text-[11px] sm:text-xs mt-1 leading-tight">
+                      {link.description}
+                    </p>
+                  </div>
+                </motion.a>
+              );
+            })}
           </div>
         </AnimatedSection>
       </section>
 
-      {/* ══════════════════════════════════════════
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           YOUTUBE VIDEOS
-         ══════════════════════════════════════════ */}
+         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <section id="videos" className="py-14 px-4 bg-muted/40">
         <AnimatedSection>
           <motion.div variants={fadeUp} className="text-center mb-10">
@@ -826,9 +674,9 @@ export default function AboutPage() {
         </AnimatedSection>
       </section>
 
-      {/* ══════════════════════════════════════════
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           DEVELOPERS
-         ══════════════════════════════════════════ */}
+         â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <section id="team" className="py-14 px-4">
         <AnimatedSection>
           <motion.div variants={fadeUp} className="text-center mb-10">
@@ -918,28 +766,27 @@ export default function AboutPage() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-4">
                 <Mail className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Want to reach the team?</h3>
+              <h3 className="text-xl font-bold mb-2">{content.contact.heading}</h3>
               <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto">
-                Have feedback, a collaboration idea, or a bug to report? We'd love
-                to hear from you — we reply within 24 hours.
+                {content.contact.description}
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <a
-                  href="mailto:hello@abjectravels.com"
+                  href={content.contact.emailHref}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white rounded-full font-semibold text-sm hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/30"
                 >
                   <Mail className="w-4 h-4" />
-                  Email the Team
+                  {content.contact.primaryButtonLabel}
                 </a>
                 <a
-                  href="https://github.com/AbjeeTravels"
+                  href={content.contact.githubHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-border bg-secondary text-foreground rounded-full font-semibold text-sm hover:border-primary/40 transition-all hover:scale-105 active:scale-95"
                 >
                   <Github className="w-4 h-4" />
-                  View on GitHub
+                  {content.contact.secondaryButtonLabel}
                 </a>
               </div>
 
@@ -947,15 +794,15 @@ export default function AboutPage() {
               <div className="mt-6 pt-6 border-t border-border flex flex-col sm:flex-row gap-4 justify-center text-xs text-muted-foreground">
                 <span className="flex items-center justify-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-primary" />
-                  +91 98002 47262
+                  {content.contact.phone}
                 </span>
                 <span className="flex items-center justify-center gap-1.5">
                   <Mail className="w-3.5 h-3.5 text-primary" />
-                  hello@abjectravels.com
+                  {content.contact.emailText}
                 </span>
                 <span className="flex items-center justify-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-primary" />
-                  Kolkata, West Bengal
+                  {content.contact.location}
                 </span>
               </div>
             </div>
@@ -967,3 +814,4 @@ export default function AboutPage() {
     </div>
   );
 }
+
