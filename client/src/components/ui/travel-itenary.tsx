@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
 interface FormState {
+	id?: string;
 	place: string;
 	country: string;
 	itinerary: string;
@@ -31,7 +32,21 @@ interface UploadState {
 	success: string | null;
 }
 
+interface TravelItem {
+	id: string;
+	place: string;
+	country: string;
+	budget: string;
+	createdAt: string;
+	updatedAt: string;
+	images?: string[];
+	places?: string[];
+}
+
 export default function AdminTravelItenary() {
+	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
+	const [loadingItineraries, setLoadingItineraries] = useState(true);
+	const [isEditing, setIsEditing] = useState(false);
 	const [form, setForm] = useState<FormState>({
 		place: '',
 		country: '',
@@ -80,6 +95,82 @@ export default function AdminTravelItenary() {
 			form.videoPreviews.forEach(url => URL.revokeObjectURL(url));
 		};
 	}, [form.imagePreviews, form.videoPreviews]);
+
+	// Fetch existing itineraries on mount
+	useEffect(() => {
+		fetchItineraries();
+	}, []);
+
+	// Fetch existing itineraries from API
+	const fetchItineraries = async () => {
+		try {
+			setLoadingItineraries(true);
+			const res = await fetch('/api/travel');
+			if (!res.ok) throw new Error('Failed to fetch itineraries');
+			const data = await res.json();
+			setExistingItineraries(data.results || data.data?.results || []);
+		} catch (error: any) {
+			setUploadState(prev => ({
+				...prev,
+				error: error.message || 'Failed to load itineraries',
+			}));
+		} finally {
+			setLoadingItineraries(false);
+		}
+	};
+
+	// Load itinerary for editing
+	const loadForEditing = useCallback((itinerary: TravelItem) => {
+		setForm({
+			id: itinerary.id,
+			place: itinerary.place,
+			country: itinerary.country,
+			itinerary: '',
+			places: itinerary.places || [''],
+			restaurants: [''],
+			hotels: [''],
+			budget: itinerary.budget,
+			imageFiles: [],
+			videoFiles: [],
+			mapFile: null,
+			imagePreviews: itinerary.images || [],
+			videoPreviews: [],
+		});
+		setIsEditing(true);
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+	}, []);
+
+	// Delete itinerary
+	const deleteItinerary = async (id: string) => {
+		if (!confirm('Are you sure you want to delete this itinerary? This action cannot be undone.')) {
+			return;
+		}
+
+		try {
+			setUploadState(prev => ({
+				...prev,
+				uploading: true,
+				error: null,
+				success: null,
+			}));
+
+			const res = await fetch(`/api/travel/${id}`, { method: 'DELETE' });
+			if (!res.ok) throw new Error('Failed to delete itinerary');
+
+			setExistingItineraries(prev => prev.filter(item => item.id !== id));
+			setUploadState(prev => ({
+				...prev,
+				uploading: false,
+				success: 'Itinerary deleted successfully!',
+			}));
+		} catch (error: any) {
+			setUploadState(prev => ({
+				...prev,
+				uploading: false,
+				error: error.message || 'Failed to delete itinerary',
+			}));
+		}
+	};
 
 	// Handle text input changes
 	const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -309,8 +400,8 @@ export default function AdminTravelItenary() {
 		}));
 
 		try {
-			// Upload images
-			const uploadedImages: string[] = [];
+			// Upload only new images (skip existing URLs)
+			const uploadedImages: string[] = [...form.imagePreviews.filter(p => p.startsWith('data:') || !p.startsWith('http'))];
 			for (let i = 0; i < form.imageFiles.length; i++) {
 				const formData = new FormData();
 				formData.append('file', form.imageFiles[i]);
@@ -357,7 +448,7 @@ export default function AdminTravelItenary() {
 
 			// Upload map
 			let uploadedMap: string | null = null;
-			if (form.mapFile) {
+			if (form.mapFile && form.mapFile instanceof File) {
 				const formData = new FormData();
 				formData.append('file', form.mapFile);
 				formData.append('folder', 'travel-content/maps');
@@ -378,7 +469,7 @@ export default function AdminTravelItenary() {
 				progress: 66,
 			}));
 
-			// Save travel data
+			// Prepare travel data
 			const travelData = {
 				place: form.place.trim(),
 				country: form.country.trim(),
@@ -387,24 +478,31 @@ export default function AdminTravelItenary() {
 				restaurants: form.restaurants.filter(r => r.trim()),
 				hotels: form.hotels.filter(h => h.trim()),
 				budget: form.budget.trim(),
-				images: uploadedImages,
+				images: uploadedImages.length > 0 ? uploadedImages : form.imagePreviews,
 				videos: uploadedVideos,
-				map: uploadedMap,
+				map: uploadedMap || form.mapFile || null,
 			};
 
-			const res = await fetch('/api/travel', {
-				method: 'POST',
+			// Use PUT for update or POST for create
+			const method = form.id ? 'PUT' : 'POST';
+			const url = form.id ? `/api/travel/${form.id}` : '/api/travel';
+
+			const res = await fetch(url, {
+				method,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(travelData),
 			});
 
-			if (!res.ok) throw new Error((await res.json()).message || 'Failed to save travel data');
+			if (!res.ok) throw new Error((await res.json()).message || `Failed to ${form.id ? 'update' : 'save'} travel data`);
 
 			setUploadState(prev => ({
 				...prev,
 				progress: 100,
-				success: 'Travel content added successfully!',
+				success: `Travel content ${form.id ? 'updated' : 'added'} successfully!`,
 			}));
+
+			// Refresh itineraries list
+			await fetchItineraries();
 
 			// Reset form
 			setTimeout(() => {
@@ -422,6 +520,7 @@ export default function AdminTravelItenary() {
 					imagePreviews: [],
 					videoPreviews: [],
 				});
+				setIsEditing(false);
 				setUploadState(prev => ({
 					...prev,
 					uploading: false,
@@ -455,6 +554,7 @@ export default function AdminTravelItenary() {
 			imagePreviews: [],
 			videoPreviews: [],
 		});
+		setIsEditing(false);
 	}, [form]);
 
 	return (
@@ -467,12 +567,81 @@ export default function AdminTravelItenary() {
 					className="mb-8"
 				>
 					<h1 className="text-4xl font-bold bg-linear-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent mb-2">
-						Travel Content Admin
+						Travel Itenary Details
 					</h1>
 					<p className="text-slate-600 dark:text-slate-400">
 						Manage and upload travel destination data
 					</p>
 				</motion.div>
+
+				{/* Existing Itineraries Section */}
+				{!loadingItineraries && existingItineraries.length > 0 && (
+					<motion.div
+						initial={{ opacity: 0, y: 20 }}
+						animate={{ opacity: 1, y: 0 }}
+						className="mb-12"
+					>
+						<Card className="p-6 border-0 shadow-lg dark:shadow-2xl">
+							<h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white flex items-center gap-2">
+								<span className="text-rose-500">📋</span>
+								Existing Itineraries ({existingItineraries.length})
+							</h2>
+							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+								{existingItineraries.map((item) => (
+									<motion.div
+										key={item.id}
+										initial={{ opacity: 0, y: 10 }}
+										animate={{ opacity: 1, y: 0 }}
+										whileHover={{ scale: 1.02 }}
+										className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:shadow-lg transition-all cursor-pointer"
+									>
+										{item.images && item.images[0] && (
+											<img
+												src={item.images[0]}
+												alt={item.place}
+												className="w-full h-40 object-cover rounded-md mb-3"
+											/>
+										)}
+										<h3 className="text-lg font-semibold text-slate-900 dark:text-white">{item.place}</h3>
+										<p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{item.country}</p>
+										<p className="text-sm font-medium text-rose-600 dark:text-rose-400 mb-3">{item.budget}</p>
+										<div className="flex gap-2">
+											<Button
+												onClick={() => loadForEditing(item)}
+												size="sm"
+												className="flex-1 bg-blue-500 hover:bg-blue-600 text-white gap-1"
+											>
+												<Edit2 className="w-4 h-4" />
+												Edit
+											</Button>
+											<Button
+												onClick={() => deleteItinerary(item.id)}
+												size="sm"
+												variant="destructive"
+												disabled={uploadState.uploading}
+												className="flex-1 gap-1"
+											>
+												<Trash2 className="w-4 h-4" />
+												Delete
+											</Button>
+										</div>
+									</motion.div>
+								))}
+							</div>
+						</Card>
+					</motion.div>
+				)}
+
+				{loadingItineraries && (
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						className="mb-12 p-8 text-center"
+					>
+						<Loader className="w-8 h-8 animate-spin mx-auto text-rose-500 mb-3" />
+						<p className="text-slate-600 dark:text-slate-400">Loading itineraries...</p>
+					</motion.div>
+				)}
 
 				{/* Status Messages */}
 				{uploadState.error && (
@@ -515,6 +684,33 @@ export default function AdminTravelItenary() {
 								transition={{ duration: 0.3 }}
 							/>
 						</div>
+					</motion.div>
+				)}
+
+				{/* Edit Mode Banner */}
+				{isEditing && (
+					<motion.div
+						initial={{ opacity: 0, y: -10 }}
+						animate={{ opacity: 1, y: 0 }}
+						className="mb-8 p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg flex items-center justify-between"
+					>
+						<div className="flex items-center gap-3">
+							<Edit2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+							<span className="font-medium text-blue-800 dark:text-blue-200">
+								Editing: <strong>{form.place}</strong> ({form.country})
+							</span>
+						</div>
+						<Button
+							onClick={() => {
+								handleReset();
+								setIsEditing(false);
+							}}
+							size="sm"
+							variant="outline"
+							className="text-blue-600 dark:text-blue-400"
+						>
+							Cancel Edit
+						</Button>
 					</motion.div>
 				)}
 
@@ -872,7 +1068,7 @@ export default function AdminTravelItenary() {
 								className="flex-1 gap-2 bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
 							>
 								<Save className="w-4 h-4" />
-								Save
+								{isEditing ? 'Update' : 'Create'}
 							</Button>
 							<Button
 								onClick={handleReset}
@@ -880,7 +1076,7 @@ export default function AdminTravelItenary() {
 								disabled={uploadState.uploading}
 								className="flex-1"
 							>
-								Reset
+								{isEditing ? 'Discard Changes' : 'Reset'}
 							</Button>
 						</div>
 					</div>

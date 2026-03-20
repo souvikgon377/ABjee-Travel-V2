@@ -1322,7 +1322,7 @@ const ChatRoomsList: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Card 4: Make a perfect plan */}
+            {/* Card 4: Make a Perfect Travel Itenary */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1332,6 +1332,18 @@ const ChatRoomsList: React.FC = () => {
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                {/* Video Background */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v4.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -1343,7 +1355,7 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2">
-                      Make a Perfect Plan
+                      Make a Perfect Travel Itenary
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
                       Collaborate with others to create unforgettable journeys
@@ -1507,7 +1519,7 @@ const ChatRoomsList: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Card 4: Make a perfect plan */}
+            {/* Card 4: Make a Perfect Travel Itenary */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1517,6 +1529,18 @@ const ChatRoomsList: React.FC = () => {
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                {/* Video Background */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v4.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -1528,7 +1552,7 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2">
-                      Make a Perfect Plan
+                      Make a Perfect Travel Itenary
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
                       Collaborate with others to create unforgettable journeys

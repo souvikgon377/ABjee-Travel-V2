@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, animate } from 'framer-motion';
-import { Menu, X, ChevronDown, ArrowRight, Sparkles, Shield, LogOut } from 'lucide-react';
+import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut } from 'lucide-react';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -102,7 +102,7 @@ export default function Header1() {
       animate="animate"
       transition={{ duration: 0.3, ease: 'easeInOut' }}
     >
-      <div className="mx-auto max-w-7x2 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between lg:h-20">
           <motion.div
             className="flex items-center space-x-2"
@@ -120,7 +120,7 @@ export default function Header1() {
                   className="h-8 w-8 object-cover"
                 />
               </div>
-              <span className="bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent">
+              <span className="hidden bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent sm:inline">
                 ABjee Travel
               </span>
             </Link>

@@ -1,8 +1,7 @@
 'use client'
 
-//import './App.css'
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MessageCircle, Users, Camera, Map, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -47,31 +46,40 @@ const landingHighlights = [
 ]
 
 function LandingPage() {
-  const [showCommunityPopup, setShowCommunityPopup] = useState(true)
+  const [showCommunityPopup, setShowCommunityPopup] = useState(false)
   const [showFeaturesOverlay, setShowFeaturesOverlay] = useState(false)
 
+  useEffect(() => {
+    const dismissed = window.sessionStorage.getItem('abjee-community-popup-dismissed')
+    if (dismissed === '1') return
+
+    const timer = window.setTimeout(() => {
+      setShowCommunityPopup(true)
+    }, 1200)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const closeCommunityPopup = () => {
+    window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
     setShowCommunityPopup(false)
     setShowFeaturesOverlay(true)
   }
 
   return (
-    <>
+    <main className="overflow-x-clip">
       <Header1 />
       <GradientTypewriter/>
-      <section className="w-full">
+      <section className="w-full" aria-label="Featured travel video">
         <video
-          src="/video1.mp4" //add video link here..
-          className="w-full h-[60vw] max-h-150 object-cover pt-2"
+          src="/video1.mp4"
+          className="h-[58vw] max-h-170 min-h-55 w-full object-cover pt-2 sm:h-[52vw]"
           autoPlay
           loop
           muted
           playsInline
           preload="metadata"
-          // controls
-        >
-          
-        </video>
+        />
       </section>
 
       <AnimatePresence>
@@ -80,14 +88,14 @@ function LandingPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm p-4 flex items-center justify-center"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm sm:items-center sm:p-4"
           >
             <motion.div
               initial={{ opacity: 0, y: 24, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 18, scale: 0.96 }}
               transition={{ duration: 0.28 }}
-              className="w-full max-w-6xl rounded-3xl border border-border bg-background/95 backdrop-blur-xl shadow-2xl p-6 md:p-8 relative"
+              className="relative my-4 max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur-xl sm:my-6 sm:rounded-3xl sm:p-6 md:p-8"
             >
               <button
                 onClick={closeCommunityPopup}
@@ -97,7 +105,7 @@ function LandingPage() {
                 <X className="h-4 w-4" />
               </button>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+              <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-3 lg:items-center">
                 <div className="lg:col-span-2">
                   <p className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-rose-600 bg-rose-500/10 border border-rose-500/20 mb-3">
                     Most Loved Feature
@@ -111,14 +119,20 @@ function LandingPage() {
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
                       href="/chat"
-                      onClick={() => setShowCommunityPopup(false)}
+                      onClick={() => {
+                        window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
+                        setShowCommunityPopup(false)
+                      }}
                       className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 transition-colors"
                     >
                       Enter Community
                     </Link>
                     <Link
                       href="/chat"
-                      onClick={() => setShowCommunityPopup(false)}
+                      onClick={() => {
+                        window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
+                        setShowCommunityPopup(false)
+                      }}
                       className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold border border-border text-foreground hover:bg-muted transition-colors"
                     >
                       Browse Chat Rooms
@@ -140,7 +154,7 @@ function LandingPage() {
         )}
       </AnimatePresence>
 
-      <section className="py-14 px-4 md:px-8 bg-linear-to-b from-background to-muted/30">
+      <section className="bg-linear-to-b from-background to-muted/30 px-4 py-12 md:px-8 md:py-14">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10">
             <h2 className="text-3xl md:text-5xl font-bold bg-linear-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent">
@@ -151,7 +165,7 @@ function LandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">
             {landingHighlights.map((item) => {
               const Icon = item.icon
               return (
@@ -163,10 +177,10 @@ function LandingPage() {
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="text-xl font-bold text-foreground mb-2">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-5 min-h-20">{item.description}</p>
+                  <p className="mb-5 min-h-20 text-sm text-muted-foreground">{item.description}</p>
                   <Link
                     href={item.href}
-                    className="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 transition-colors"
+                    className="inline-flex items-center justify-center rounded-xl bg-linear-to-r from-rose-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:from-rose-600 hover:to-orange-600"
                   >
                     {item.cta}
                   </Link>
@@ -176,9 +190,7 @@ function LandingPage() {
           </div>
         </div>
       </section>
- 
-      {/* <Globe1/> */}
-      
+
       <CardCarousel
         images={[
           { src: "/img1.png", alt: "Image 1" },
@@ -203,7 +215,7 @@ function LandingPage() {
 
       <button
         onClick={() => setShowFeaturesOverlay(true)}
-        className="fixed bottom-6 right-6 z-40 rounded-full px-5 py-3 text-sm font-semibold text-white bg-linear-to-r from-rose-500 to-orange-500 shadow-xl hover:from-rose-600 hover:to-orange-600 transition-all duration-300"
+        className="fixed bottom-4 right-4 z-40 rounded-full bg-linear-to-r from-rose-500 to-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-xl transition-all duration-300 hover:from-rose-600 hover:to-orange-600 sm:bottom-6 sm:right-6 sm:px-5 sm:py-3"
       >
         Explore Features
       </button>
@@ -214,14 +226,14 @@ function LandingPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm p-4 flex items-center justify-center"
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm sm:items-center sm:p-4"
           >
             <motion.div
               initial={{ opacity: 0, y: 22, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.96 }}
               transition={{ duration: 0.28 }}
-              className="w-full max-w-6xl rounded-3xl border border-border bg-background/95 backdrop-blur-xl shadow-2xl p-6 md:p-7 relative"
+              className="relative my-4 max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur-xl sm:my-6 sm:rounded-3xl sm:p-6 md:p-7"
             >
               <button
                 onClick={() => setShowFeaturesOverlay(false)}
@@ -235,7 +247,7 @@ function LandingPage() {
                 ABJEE Travel Features
               </h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+              <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {landingHighlights.map((item, index) => {
                   const Icon = item.icon
                   return (
@@ -254,7 +266,7 @@ function LandingPage() {
                       <Link
                         href={item.href}
                         onClick={() => setShowFeaturesOverlay(false)}
-                        className="inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold text-white bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 transition-colors"
+                        className="inline-flex w-full items-center justify-center rounded-lg bg-linear-to-r from-rose-500 to-orange-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:from-rose-600 hover:to-orange-600 sm:w-auto"
                       >
                         {item.cta}
                       </Link>
@@ -266,7 +278,7 @@ function LandingPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </main>
   );
 }
 
