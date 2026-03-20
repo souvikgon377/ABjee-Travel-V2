@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
   //        description: 'Book Your Personal Bike' },
   //   ],
   // },
-  { name: 'About', href: '/' },
+  { name: 'About', href: '/about' },
   { name: 'Pricing', href: '#pricing' },
 ];
 

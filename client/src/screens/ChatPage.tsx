@@ -842,6 +842,10 @@ const ChatRoomsList: React.FC = () => {
     setSelectedCategory('outdoors');
   }, []);
 
+  const openTripStories = useCallback(() => {
+    router.push('/trip-stories');
+  }, [router]);
+
   // Load chat rooms
   useEffect(() => {
     if (!user) {
