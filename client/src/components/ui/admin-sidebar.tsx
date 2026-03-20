@@ -31,15 +31,18 @@ import {
   LogOut,
   MapPin,
   MessageSquare,
+  BookOpen,
 } from 'lucide-react';
 
 const menuItems = [
   { title: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
   { title: 'Users', icon: Users, view: 'users' },
+  { title: 'About Page', icon: FileText, view: 'about-page' },
   { title: 'Analytics', icon: BarChart3, view: 'analytics' },
   { title: 'Bookings', icon: FileText, view: 'bookings' },
   { title: 'Activity', icon: Activity, view: 'activity' },
   { title: 'Chat Rooms', icon: Database, view: 'chatrooms' },
+  { title: 'Trip Stories', icon: BookOpen, view: 'trip-stories' },
   { title: 'Tourist Places', icon: MapPin, view: 'tourist-places' },
   { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
