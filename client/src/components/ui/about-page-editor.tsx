@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Plus, Save, Trash2, Upload } from 'lucide-react';
+import { Loader2, Plus, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -51,7 +51,7 @@ const EMPTY_DEVELOPER: AboutDeveloper = {
 };
 
 const CMS_CARD_CLASS =
-  'border-primary/15 bg-card/85 backdrop-blur-sm shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl';
+  'overflow-hidden border-border/70 bg-card/90 backdrop-blur-sm shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl';
 
 export function AboutPageEditor() {
   const [draft, setDraft] = useState<AboutPageContent>(DEFAULT_ABOUT_PAGE_CONTENT);
@@ -366,7 +366,7 @@ export function AboutPageEditor() {
   }
 
   return (
-    <div className="relative mx-auto max-w-6xl space-y-6 overflow-hidden rounded-3xl px-2 py-2 sm:px-0">
+    <div className="relative mx-auto max-w-7xl space-y-6 overflow-x-clip rounded-3xl px-2 py-2 sm:px-0">
       <motion.div
         className="pointer-events-none absolute -top-20 -left-20 h-56 w-56 rounded-full bg-rose-500/15 blur-3xl"
         animate={{ x: [0, 25, 0], y: [0, 18, 0], scale: [1, 1.08, 1] }}
@@ -377,13 +377,22 @@ export function AboutPageEditor() {
         animate={{ x: [0, -20, 0], y: [0, -24, 0], scale: [1, 1.1, 1] }}
         transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
       />
+      <motion.div
+        className="pointer-events-none absolute left-1/3 -bottom-16 h-56 w-56 rounded-full bg-cyan-500/15 blur-3xl"
+        animate={{ x: [0, 16, 0], y: [0, -22, 0], scale: [1, 1.09, 1] }}
+        transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
+      />
 
       <motion.div
-        className="relative rounded-2xl border border-primary/20 bg-linear-to-r from-rose-500/10 via-orange-500/10 to-amber-500/10 p-5 shadow-lg"
+        className="relative rounded-2xl border border-border/70 bg-linear-to-r from-rose-500/15 via-orange-500/12 to-amber-500/15 p-5 shadow-lg"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          Design Studio Mode
+        </div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">About Page CMS</h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
           Update About page content with live styling controls and save it directly to Firestore.
@@ -397,7 +406,11 @@ export function AboutPageEditor() {
 
       <div className="relative flex flex-wrap gap-3 px-2 sm:px-0">
         <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-          <Button onClick={saveChanges} disabled={saving} className="shadow-lg shadow-primary/20">
+          <Button
+            onClick={saveChanges}
+            disabled={saving}
+            className="bg-linear-to-r from-rose-600 via-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25 hover:from-rose-500 hover:to-amber-400"
+          >
             {saving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -412,12 +425,22 @@ export function AboutPageEditor() {
           </Button>
         </motion.div>
         <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-          <Button variant="outline" onClick={reloadFromDatabase} disabled={saving} className="shadow-sm">
+          <Button
+            variant="outline"
+            onClick={reloadFromDatabase}
+            disabled={saving}
+            className="border-sky-500/30 bg-sky-500/5 shadow-sm hover:bg-sky-500/10"
+          >
             Reload From Database
           </Button>
         </motion.div>
         <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-          <Button variant="secondary" onClick={resetToDefaults} disabled={saving} className="shadow-sm">
+          <Button
+            variant="secondary"
+            onClick={resetToDefaults}
+            disabled={saving}
+            className="bg-amber-500/15 text-amber-700 shadow-sm hover:bg-amber-500/25 dark:text-amber-300"
+          >
             Use Default Values
           </Button>
         </motion.div>
@@ -425,7 +448,7 @@ export function AboutPageEditor() {
 
       {message ? (
         <motion.div
-          className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300"
+          className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 shadow-sm dark:text-green-300"
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -435,7 +458,7 @@ export function AboutPageEditor() {
 
       {error ? (
         <motion.div
-          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-sm"
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -445,7 +468,7 @@ export function AboutPageEditor() {
 
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.02 }}>
       <Card className={CMS_CARD_CLASS}>
-        <CardHeader>
+        <CardHeader className="border-b border-border/60 bg-linear-to-r from-sky-500/10 to-indigo-500/5">
           <CardTitle>Hero Section</CardTitle>
           <CardDescription>Top section text and CTA labels.</CardDescription>
         </CardHeader>
@@ -490,7 +513,7 @@ export function AboutPageEditor() {
 
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.06 }}>
       <Card className={CMS_CARD_CLASS}>
-        <CardHeader>
+        <CardHeader className="border-b border-border/60 bg-linear-to-r from-orange-500/10 to-rose-500/5">
           <CardTitle>Founder Section</CardTitle>
           <CardDescription>Founder profile, story and CTA content.</CardDescription>
         </CardHeader>
@@ -588,7 +611,7 @@ export function AboutPageEditor() {
               </Button>
             </div>
             {draft.founder.stats.map((stat, index) => (
-              <div key={`founder-stat-${index}`} className="grid grid-cols-1 gap-3 rounded-lg border p-3 md:grid-cols-[1fr_220px_auto]">
+              <div key={`founder-stat-${index}`} className="grid grid-cols-1 gap-3 rounded-xl border border-border/70 bg-background/55 p-3 md:grid-cols-[1fr_220px_auto]">
                 <Input
                   placeholder="Label"
                   value={stat.label}
@@ -611,7 +634,7 @@ export function AboutPageEditor() {
 
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.1 }}>
       <Card className={CMS_CARD_CLASS}>
-        <CardHeader>
+        <CardHeader className="border-b border-border/60 bg-linear-to-r from-emerald-500/10 to-cyan-500/5">
           <CardTitle>Social Links</CardTitle>
           <CardDescription>Cards shown in the Follow Our Journey section.</CardDescription>
         </CardHeader>
@@ -624,7 +647,7 @@ export function AboutPageEditor() {
           </div>
 
           {draft.socialLinks.map((link, index) => (
-            <div key={`social-${index}`} className="space-y-3 rounded-lg border p-3">
+            <div key={`social-${index}`} className="space-y-3 rounded-xl border border-border/70 bg-background/55 p-3">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Input
                   placeholder="Name"
@@ -651,7 +674,7 @@ export function AboutPageEditor() {
                   <select
                     value={link.icon}
                     onChange={(e) => updateSocialLink(index, 'icon', e.target.value)}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm transition-colors focus:border-primary focus:outline-none"
                   >
                     {SOCIAL_ICONS.map((iconName) => (
                       <option key={iconName} value={iconName}>
@@ -685,7 +708,7 @@ export function AboutPageEditor() {
 
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.14 }}>
       <Card className={CMS_CARD_CLASS}>
-        <CardHeader>
+        <CardHeader className="border-b border-border/60 bg-linear-to-r from-red-500/10 to-pink-500/5">
           <CardTitle>YouTube Videos</CardTitle>
           <CardDescription>Manage embedded YouTube video IDs.</CardDescription>
         </CardHeader>
@@ -698,7 +721,7 @@ export function AboutPageEditor() {
           </div>
 
           {draft.youtubeVideos.map((video, index) => (
-            <div key={`video-${index}`} className="grid grid-cols-1 gap-3 rounded-lg border p-3 md:grid-cols-[1fr_auto]">
+            <div key={`video-${index}`} className="grid grid-cols-1 gap-3 rounded-xl border border-border/70 bg-background/55 p-3 md:grid-cols-[1fr_auto]">
               <Input
                 placeholder="YouTube video ID"
                 value={video.id}
@@ -715,7 +738,7 @@ export function AboutPageEditor() {
 
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.18 }}>
       <Card className={CMS_CARD_CLASS}>
-        <CardHeader>
+        <CardHeader className="border-b border-border/60 bg-linear-to-r from-blue-500/10 to-violet-500/5">
           <CardTitle>Developers Section</CardTitle>
           <CardDescription>Control team cards shown on About page.</CardDescription>
         </CardHeader>
@@ -728,7 +751,7 @@ export function AboutPageEditor() {
           </div>
 
           {draft.developers.map((developer, index) => (
-            <div key={`developer-${index}`} className="space-y-3 rounded-lg border p-3">
+            <div key={`developer-${index}`} className="space-y-3 rounded-xl border border-border/70 bg-background/55 p-3">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Input
                   placeholder="Name"
@@ -801,7 +824,7 @@ export function AboutPageEditor() {
 
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.22 }}>
       <Card className={CMS_CARD_CLASS}>
-        <CardHeader>
+        <CardHeader className="border-b border-border/60 bg-linear-to-r from-teal-500/10 to-emerald-500/5">
           <CardTitle>Contact CTA Section</CardTitle>
           <CardDescription>Bottom call-to-action card details.</CardDescription>
         </CardHeader>
