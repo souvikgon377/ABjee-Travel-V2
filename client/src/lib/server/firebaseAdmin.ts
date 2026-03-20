@@ -6,13 +6,31 @@ type ServiceAccountShape = {
   private_key: string;
 };
 
+const isValidServiceAccount = (value: Partial<ServiceAccountShape> | null | undefined): value is ServiceAccountShape => {
+  return Boolean(
+    value &&
+      typeof value.project_id === "string" && value.project_id.trim() &&
+      typeof value.client_email === "string" && value.client_email.trim() &&
+      typeof value.private_key === "string" && value.private_key.trim()
+  );
+};
+
 const getServiceAccount = (): ServiceAccountShape | null => {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) as ServiceAccountShape;
-    return {
-      ...parsed,
-      private_key: parsed.private_key?.replace(/\\n/g, "\n"),
-    };
+    try {
+      const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) as Partial<ServiceAccountShape>;
+      if (!isValidServiceAccount(parsed)) {
+        return null;
+      }
+
+      return {
+        project_id: parsed.project_id,
+        client_email: parsed.client_email,
+        private_key: parsed.private_key.replace(/\\n/g, "\n"),
+      };
+    } catch {
+      return null;
+    }
   }
 
   const project_id = process.env.FIREBASE_PROJECT_ID;
