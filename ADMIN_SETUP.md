@@ -1,6 +1,6 @@
 # Admin Setup (Current)
 
-ABjee Travel now runs as a single full-stack Next.js app.
+ABjee Travel now runs as a single full-stack Next.js New app.
 
 ## Requirements
 - Configure Firebase Admin env vars in `client/.env.local` (see `client/.env.local.example`).
