@@ -36,6 +36,7 @@ import {
 const menuItems = [
   { title: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
   { title: 'Users', icon: Users, view: 'users' },
+  { title: 'About Page', icon: FileText, view: 'about-page' },
   { title: 'Analytics', icon: BarChart3, view: 'analytics' },
   { title: 'Bookings', icon: FileText, view: 'bookings' },
   { title: 'Activity', icon: Activity, view: 'activity' },

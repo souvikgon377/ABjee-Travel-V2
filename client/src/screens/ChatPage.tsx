@@ -1270,6 +1270,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
+              onClick={openTripStories}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
@@ -1453,6 +1454,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
+              onClick={openTripStories}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>

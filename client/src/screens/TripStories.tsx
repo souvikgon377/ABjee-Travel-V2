@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -16,7 +16,7 @@ import {
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
 
-// ─────────────────────────── Types ────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface VideoEmbed {
   url: string;
@@ -67,7 +67,7 @@ interface TripStory {
   lng?: number;
 }
 
-// ─────────────────────────── Utility helpers ────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Utility helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function parseVideoEmbed(url: string): VideoEmbed {
   const trimmed = url.trim();
@@ -111,7 +111,7 @@ function PlatformIcon({ platform }: { platform: string }) {
 }
 
 // Facebook videos cannot be reliably embedded via iframe (requires registered app domain,
-// public video, and canonical URL — share/v/ shortlinks are unsupported by the plugin).
+// public video, and canonical URL â€” share/v/ shortlinks are unsupported by the plugin).
 // Show a branded card that opens the video on Facebook instead.
 function FacebookCard({ url, title }: { url: string; title: string }) {
   return (
@@ -119,7 +119,7 @@ function FacebookCard({ url, title }: { url: string; title: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="relative aspect-video flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1877f2]/20 via-neutral-900 to-neutral-900 group overflow-hidden cursor-pointer no-underline"
+      className="relative aspect-video flex flex-col items-center justify-center gap-3 bg-linear-to-br from-[#1877f2]/20 via-neutral-900 to-neutral-900 group overflow-hidden cursor-pointer no-underline"
     >
       <div className="w-16 h-16 rounded-full bg-[#1877f2] flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
         <Facebook className="w-8 h-8 text-white" fill="white" />
@@ -181,14 +181,14 @@ function YouTubeFacade({ embedUrl, title }: { embedUrl: string; title: string })
           onError={() => setThumbError(true)}
         />
       ) : (
-        <div className="w-full h-full bg-gradient-to-br from-neutral-900 via-red-950/40 to-neutral-900 flex flex-col items-center justify-center gap-2">
+        <div className="w-full h-full bg-linear-to-br from-neutral-900 via-red-950/40 to-neutral-900 flex flex-col items-center justify-center gap-2">
           <Youtube className="w-14 h-14 text-red-500" />
           <p className="text-xs text-white/60 text-center px-4 line-clamp-2">{title}</p>
         </div>
       )}
-      {/* Subtle dark overlay — lighter so play button stays visible */}
+      {/* Subtle dark overlay â€” lighter so play button stays visible */}
       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-      {/* Play button — always on top */}
+      {/* Play button â€” always on top */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
           <Play className="w-7 h-7 text-white ml-1" fill="white" />
@@ -231,12 +231,12 @@ const SAMPLE_STORIES: TripStory[] = [
     tripHighlights: 'Pangong Lake, Nubra Valley, Magnetic Hill, Hemis Monastery',
     dayByDay: 'Day 1: Leh Acclimatization\nDay 2: Local sightseeing\nDay 3-4: Nubra Valley via Khardung La\nDay 5-7: Pangong Tso\nDay 8-9: Tso Moriri\nDay 10: Departure',
     bestPlaces: 'Pangong Lake, Nubra Valley sand dunes, Hemis National Park',
-    localFood: 'Thukpa, Momos, Skyu, Butter Tea – must-try dishes that warmed our souls at 11,500 ft',
+    localFood: 'Thukpa, Momos, Skyu, Butter Tea â€“ must-try dishes that warmed our souls at 11,500 ft',
     travelTips: 'Acclimatize for at least 2 days. Carry altitude sickness medicine. Book accommodation in advance during summer.',
     startDate: '2025-08-01',
     endDate: '2025-08-10',
     duration: '10 Days',
-    budget: '₹45,000',
+    budget: 'â‚¹45,000',
     travelType: 'Solo',
     photos: [
       { url: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=600&q=80', caption: 'Pangong Lake at sunrise' },
@@ -259,7 +259,7 @@ const SAMPLE_STORIES: TripStory[] = [
     coverImage: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&q=80',
     description: 'Drifting through emerald canals, savoring fish curry, and watching the golden sunset from our private houseboat.',
     duration: '5 Days',
-    budget: '₹22,000',
+    budget: 'â‚¹22,000',
     travelType: 'Couple',
     photos: [],
     videos: [],
@@ -274,12 +274,12 @@ const SAMPLE_STORIES: TripStory[] = [
   {
     id: 'sample-3',
     title: 'Rajasthan Royal Road Trip',
-    destination: 'Jaipur – Udaipur – Jodhpur',
+    destination: 'Jaipur â€“ Udaipur â€“ Jodhpur',
     authorName: 'Rohit Meena',
     coverImage: 'https://images.unsplash.com/photo-1599408572904-e0cf8dd6ada6?w=800&q=80',
-    description: 'An epic family road trip through the Land of Kings — palaces, deserts, camels, and colours you can\'t believe.',
+    description: 'An epic family road trip through the Land of Kings â€” palaces, deserts, camels, and colours you can\'t believe.',
     duration: '8 Days',
-    budget: '₹60,000',
+    budget: 'â‚¹60,000',
     travelType: 'Family',
     photos: [],
     videos: [],
@@ -297,9 +297,9 @@ const SAMPLE_STORIES: TripStory[] = [
     destination: 'Coorg, Karnataka',
     authorName: 'Sneha Doshi',
     coverImage: 'https://images.unsplash.com/photo-1619963647249-9b32b36ad40c?w=800&q=80',
-    description: 'Misty mornings, cascading waterfalls, and the intoxicating aroma of fresh coffee — Coorg is a quiet paradise.',
+    description: 'Misty mornings, cascading waterfalls, and the intoxicating aroma of fresh coffee â€” Coorg is a quiet paradise.',
     duration: '3 Days',
-    budget: '₹12,000',
+    budget: 'â‚¹12,000',
     travelType: 'Group',
     photos: [],
     videos: [],
@@ -317,9 +317,9 @@ const SAMPLE_STORIES: TripStory[] = [
     destination: 'Spiti, Himachal Pradesh',
     authorName: 'Vikram Singh',
     coverImage: 'https://images.unsplash.com/photo-1585123388867-3bfe6dd4bdbf?w=800&q=80',
-    description: 'The cold desert of Spiti Valley is where time stands still — ancient forts, vibrant monasteries, and starry nights.',
+    description: 'The cold desert of Spiti Valley is where time stands still â€” ancient forts, vibrant monasteries, and starry nights.',
     duration: '7 Days',
-    budget: '₹35,000',
+    budget: 'â‚¹35,000',
     travelType: 'Group',
     photos: [],
     videos: [],
@@ -333,7 +333,7 @@ const SAMPLE_STORIES: TripStory[] = [
   },
 ];
 
-// ─────────────────────────── Sub-components ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Story Card
 function StoryCard({
@@ -414,7 +414,7 @@ function StoryCard({
             ))}
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
         <span className={`absolute top-3 right-3 text-xs font-semibold px-2 py-1 rounded-full ${TRAVEL_TYPE_COLORS[story.travelType]}`}>
           {story.travelType}
         </span>
@@ -441,7 +441,7 @@ function StoryCard({
         </div>
 
         <div className="flex items-center gap-2 mt-auto pt-3 border-t border-border/40">
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-orange-400 flex items-center justify-center text-white text-xs font-bold">
+          <div className="w-6 h-6 rounded-full bg-linear-to-br from-rose-500 to-orange-400 flex items-center justify-center text-white text-xs font-bold">
             {story.authorName[0]}
           </div>
           <span className="text-xs text-muted-foreground flex-1 truncate">{story.authorName}</span>
@@ -462,7 +462,7 @@ function StoryCard({
 
         <button
           onClick={(e) => { e.stopPropagation(); onOpen(story); }}
-          className="mt-2 w-full py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-rose-500 to-orange-500 text-white hover:opacity-90 transition-opacity"
+          className="mt-2 w-full py-2 rounded-xl text-xs font-semibold bg-linear-to-r from-rose-500 to-orange-500 text-white hover:opacity-90 transition-opacity"
         >
           Read More
         </button>
@@ -495,16 +495,16 @@ function FeaturedStoryCard({
       whileHover={{ scale: 1.005 }}
       onClick={() => onOpen(story)}
     >
-      <div className="relative h-[420px] md:h-[500px]">
+      <div className="relative h-105 md:h-125">
         <img
           src={imgError ? PLACEHOLDER_IMAGES[0] : story.coverImage}
           alt={story.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
           onError={() => setImgError(true)}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-transparent" />
 
-        <div className="absolute top-5 left-5 bg-gradient-to-r from-rose-500 to-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+        <div className="absolute top-5 left-5 bg-linear-to-r from-rose-500 to-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
           <Star className="w-3 h-3 fill-white" /> Featured Story
         </div>
 
@@ -518,7 +518,7 @@ function FeaturedStoryCard({
 
           <div className="flex flex-wrap items-center gap-4 mb-5">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-orange-400 flex items-center justify-center text-white text-sm font-bold">
+              <div className="w-8 h-8 rounded-full bg-linear-to-br from-rose-500 to-orange-400 flex items-center justify-center text-white text-sm font-bold">
                 {story.authorName[0]}
               </div>
               <span className="text-gray-200 text-sm">{story.authorName}</span>
@@ -530,7 +530,7 @@ function FeaturedStoryCard({
 
           <div className="flex items-center gap-3">
             <motion.button
-              className="px-6 py-2.5 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-xl text-sm hover:opacity-90 transition-opacity shadow-lg"
+              className="px-6 py-2.5 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-xl text-sm hover:opacity-90 transition-opacity shadow-lg"
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.97 }}
               onClick={(e) => { e.stopPropagation(); onOpen(story); }}
@@ -576,7 +576,7 @@ function Lightbox({ photos, startIndex, onClose }: { photos: StoryPhoto[]; start
   return createPortal(
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-sm"
+        className="fixed inset-0 z-200 flex items-center justify-center bg-black/95 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -803,7 +803,7 @@ function StoryModal({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Hero Banner — auto-advancing slideshow */}
+            {/* Hero Banner â€” auto-advancing slideshow */}
             <div className="relative h-72 md:h-96 overflow-hidden">
               <AnimatePresence initial={false} custom={heroDir}>
                 <motion.img
@@ -838,7 +838,7 @@ function StoryModal({
                   ))}
                 </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
               <button
                 onClick={onClose}
                 className="absolute top-4 left-4 bg-black/40 backdrop-blur text-white rounded-full p-2 hover:bg-black/60 transition-colors"
@@ -855,7 +855,7 @@ function StoryModal({
                         disabled={deleting}
                         className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                       >
-                        {deleting ? 'Deleting…' : 'Yes, delete'}
+                        {deleting ? 'Deletingâ€¦' : 'Yes, delete'}
                       </button>
                       <button
                         onClick={() => setConfirmDelete(false)}
@@ -891,7 +891,7 @@ function StoryModal({
                 </div>
                 <h1 className="text-white text-2xl md:text-3xl font-bold leading-tight mb-2">{story.title}</h1>
                 <div className="flex flex-wrap items-center gap-4 text-gray-300 text-sm">
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{story.startDate} → {story.endDate}</span>
+                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{story.startDate} â†’ {story.endDate}</span>
                   <span>by <strong className="text-white">{story.authorName}</strong></span>
                 </div>
               </div>
@@ -941,14 +941,14 @@ function StoryModal({
 
                 {story.localFood && (
                   <section>
-                    <h2 className="text-xl font-bold text-foreground mb-3">🍜 Local Food Experience</h2>
+                    <h2 className="text-xl font-bold text-foreground mb-3">ðŸœ Local Food Experience</h2>
                     <p className="text-muted-foreground leading-relaxed">{story.localFood}</p>
                   </section>
                 )}
 
                 {story.travelTips && (
                   <section className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
-                    <h2 className="text-xl font-bold text-foreground mb-3">💡 Travel Tips</h2>
+                    <h2 className="text-xl font-bold text-foreground mb-3">ðŸ’¡ Travel Tips</h2>
                     <p className="text-muted-foreground leading-relaxed text-sm">{story.travelTips}</p>
                   </section>
                 )}
@@ -996,7 +996,7 @@ function StoryModal({
                       {story.videos.map((video, i) => (
                         <div key={i} className="rounded-2xl overflow-hidden bg-black">
                           {video.platform === 'instagram' ? (
-                            <div className="aspect-[9/16] max-w-sm mx-auto">
+                            <div className="aspect-9/16 max-w-sm mx-auto">
                               <iframe
                                 src={video.embedUrl}
                                 className="w-full h-full"
@@ -1012,7 +1012,7 @@ function StoryModal({
                           ) : video.embedUrl ? (
                             <YouTubeFacade embedUrl={video.embedUrl} title={`Video ${i + 1}`} />
                           ) : (
-                            <div className="aspect-video flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-neutral-900 to-neutral-800">
+                            <div className="aspect-video flex flex-col items-center justify-center gap-2 bg-linear-to-br from-neutral-900 to-neutral-800">
                               <Globe className="w-10 h-10 text-muted-foreground" />
                               <p className="text-sm text-muted-foreground">Unsupported video link</p>
                               <a href={video.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
@@ -1092,7 +1092,7 @@ function StoryModal({
                     >
                       <Heart className={`w-5 h-5 ${liked ? 'fill-rose-500' : ''}`} />
                     </motion.div>
-                    {liked ? 'Liked' : 'Like'} · {story.likes.length}
+                    {liked ? 'Liked' : 'Like'} Â· {story.likes.length}
                   </motion.button>
                 </div>
 
@@ -1122,7 +1122,7 @@ function StoryModal({
                     <button
                       onClick={submitComment}
                       disabled={submittingComment || !commentName.trim() || !newComment.trim()}
-                      className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-2 px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-opacity"
                     >
                       <Send className="w-4 h-4" />
                       {submittingComment ? 'Posting...' : 'Post Comment'}
@@ -1137,7 +1137,7 @@ function StoryModal({
                     {comments.map(comment => (
                       <div key={comment.id} className="bg-card rounded-xl p-4 border border-border/40">
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                          <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
                             {comment.userName[0]?.toUpperCase()}
                           </div>
                           <span className="font-semibold text-sm text-foreground">{comment.userName}</span>
@@ -1152,9 +1152,9 @@ function StoryModal({
                 </section>
               </div>
 
-              {/* Sidebar – Trip Info */}
+              {/* Sidebar â€“ Trip Info */}
               <div className="space-y-4">
-                <div className="bg-gradient-to-br from-rose-50 dark:from-rose-500/10 to-orange-50 dark:to-orange-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl p-5 sticky top-4">
+                <div className="bg-linear-to-br from-rose-50 dark:from-rose-500/10 to-orange-50 dark:to-orange-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl p-5 sticky top-4">
                   <h3 className="font-bold text-foreground mb-4 text-base">Trip Information</h3>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
@@ -1168,7 +1168,7 @@ function StoryModal({
                       <Calendar className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
                       <div>
                         <p className="text-xs text-muted-foreground">Travel Dates</p>
-                        <p className="text-sm font-semibold text-foreground">{story.startDate} – {story.endDate}</p>
+                        <p className="text-sm font-semibold text-foreground">{story.startDate} â€“ {story.endDate}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
@@ -1316,20 +1316,20 @@ function SubmitStoryForm({
       return;
     }
     setSubmitError('');
-    // Close the modal immediately — upload continues in background
+    // Close the modal immediately â€” upload continues in background
     onClose();
-    onProgress(0, 'Preparing upload…', false);
+    onProgress(0, 'Preparing uploadâ€¦', false);
     try {
       // Upload images to Cloudinary
-      const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'trip_stories';
+      const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+      const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'trip_stories';
       const photos: StoryPhoto[] = [];
       const errors: string[] = [];
       const total = imageFiles.length;
 
       for (let fi = 0; fi < imageFiles.length; fi++) {
         const file = imageFiles[fi];
-        onProgress(Math.round((fi / Math.max(total, 1)) * 80), `Uploading photo ${fi + 1} of ${total}…`, false);
+        onProgress(Math.round((fi / Math.max(total, 1)) * 80), `Uploading photo ${fi + 1} of ${total}â€¦`, false);
         const fd = new FormData();
         fd.append('file', file);
         fd.append('upload_preset', UPLOAD_PRESET);
@@ -1348,13 +1348,13 @@ function SubmitStoryForm({
         if (fi < imageFiles.length - 1) await new Promise(r => setTimeout(r, 200));
       }
 
-      if (total === 0) onProgress(80, 'Saving story…', false);
+      if (total === 0) onProgress(80, 'Saving storyâ€¦', false);
 
       const videos = videoLinks.filter(v => v.trim()).map(v => parseVideoEmbed(v));
       const allPhotos: StoryPhoto[] = [...existingPhotos, ...photos];
       const coverImage = allPhotos.length > 0 ? allPhotos[0].url : (initialData?.coverImage ?? '');
 
-      onProgress(90, 'Saving story…', false);
+      onProgress(90, 'Saving storyâ€¦', false);
 
       await onSubmit({
         ...form,
@@ -1368,7 +1368,7 @@ function SubmitStoryForm({
       onProgress(
         100,
         errors.length > 0
-          ? `Saved! ${photos.length} photo(s) uploaded — ${errors.length} failed`
+          ? `Saved! ${photos.length} photo(s) uploaded â€” ${errors.length} failed`
           : 'Story published!',
         false
       );
@@ -1396,7 +1396,7 @@ function SubmitStoryForm({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 50, opacity: 0 }}
         >
-          <div className="bg-gradient-to-r from-rose-500 to-orange-500 p-6 rounded-t-3xl relative">
+          <div className="bg-linear-to-r from-rose-500 to-orange-500 p-6 rounded-t-3xl relative">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-white text-xl font-bold">
@@ -1421,7 +1421,7 @@ function SubmitStoryForm({
                 { name: 'destination', label: 'Destination *', placeholder: 'Ladakh, India', type: 'text' },
                 { name: 'title', label: 'Story Title *', placeholder: 'My Unforgettable Trek...', type: 'text' },
                 { name: 'duration', label: 'Trip Duration', placeholder: '7 Days', type: 'text' },
-                { name: 'budget', label: 'Approx Budget', placeholder: '₹30,000', type: 'text' },
+                { name: 'budget', label: 'Approx Budget', placeholder: 'â‚¹30,000', type: 'text' },
                 { name: 'startDate', label: 'Start Date', placeholder: '', type: 'date' },
                 { name: 'endDate', label: 'End Date', placeholder: '', type: 'date' },
               ].map(field => (
@@ -1486,7 +1486,7 @@ function SubmitStoryForm({
               {/* Existing photos in edit mode */}
               {isEdit && existingPhotos.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-2">Current photos (click × to remove):</p>
+                  <p className="text-xs text-muted-foreground mb-2">Current photos (click Ã— to remove):</p>
                   <div className="grid grid-cols-3 gap-2">
                     {existingPhotos.map((photo, i) => (
                       <div key={i} className="relative aspect-square">
@@ -1514,7 +1514,7 @@ function SubmitStoryForm({
                 {isCompressing ? (
                   <>
                     <div className="w-8 h-8 mx-auto mb-2 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-muted-foreground">Compressing photos…</p>
+                    <p className="text-sm text-muted-foreground">Compressing photosâ€¦</p>
                   </>
                 ) : (
                   <>
@@ -1522,7 +1522,7 @@ function SubmitStoryForm({
                     <p className="text-sm text-muted-foreground">
                       {imageFiles.length >= 5 ? 'Maximum 5 photos reached' : `Click to upload photos (${5 - imageFiles.length} remaining)`}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">Any size — auto-compressed before upload</p>
+                    <p className="text-xs text-muted-foreground mt-1">Any size â€” auto-compressed before upload</p>
                   </>
                 )}
               </div>
@@ -1594,7 +1594,7 @@ function SubmitStoryForm({
               </button>
               <button
                 type="submit"
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                className="flex-1 py-3 rounded-xl bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 {isEdit ? (
                   <><Pencil className="w-4 h-4" /> Save Changes</>
@@ -1610,7 +1610,7 @@ function SubmitStoryForm({
   );
 }
 
-// ─────────────────────────── Main Page ───────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function TripStoriesPage() {
   const { currentUser } = useAuth();
@@ -1755,25 +1755,25 @@ export default function TripStoriesPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <Header1 transparentMode />
+      <Header1 />
 
       {/* Hero Section */}
-      <section ref={heroRef} className="relative pt-16 h-[85vh] min-h-[550px] flex items-center justify-center overflow-hidden">
+      <section ref={heroRef} className="relative pt-16 h-[85vh] min-h-137.5 flex items-center justify-center overflow-hidden">
 
-        {/* ── Background image — both modes ── */}
+        {/* â”€â”€ Background image â€” both modes â”€â”€ */}
         <div className="absolute inset-0">
           <img
             src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1600&q=80"
             alt="Travel hero"
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/30" />
+          <div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/40 to-black/30" />
         </div>
 
-        {/* ── Bottom page blend ── */}
-        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-background via-background/55 to-transparent pointer-events-none" />
+        {/* â”€â”€ Bottom page blend â”€â”€ */}
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-background via-background/55 to-transparent pointer-events-none" />
 
-        {/* ── Floating particles ── */}
+        {/* â”€â”€ Floating particles â”€â”€ */}
         {[...Array(60)].map((_, i) => (
           <motion.div
             key={`p-${i}`}
@@ -1799,7 +1799,7 @@ export default function TripStoriesPage() {
           />
         ))}
 
-        {/* ── Hero copy ── */}
+        {/* â”€â”€ Hero copy â”€â”€ */}
         <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -1810,10 +1810,10 @@ export default function TripStoriesPage() {
               Real Travel Experiences
             </span>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white mb-5 leading-tight">
-              Travel <span className="bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Stories</span>
+              Travel <span className="bg-linear-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Stories</span>
             </h1>
             <p className="text-gray-300 text-lg md:text-xl mb-10 max-w-2xl mx-auto">
-              Real travel experiences from our travelers — discover, explore & get inspired for your next adventure
+              Real travel experiences from our travelers discover, explore & get inspired for your next adventure
             </p>
 
             {/* Search bar */}
@@ -1830,7 +1830,7 @@ export default function TripStoriesPage() {
               </div>
               <motion.button
                 onClick={() => heroRef.current?.nextElementSibling?.scrollIntoView({ behavior: 'smooth' })}
-                className="px-6 py-3 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25"
+                className="px-6 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
               >
@@ -1841,7 +1841,7 @@ export default function TripStoriesPage() {
             {/* Share Story button */}
             <motion.button
               onClick={() => setShowSubmitForm(true)}
-              className="mt-5 flex items-center gap-2 mx-auto px-7 py-3 bg-gradient-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-2xl hover:opacity-90 transition-opacity shadow-lg shadow-rose-500/25"
+              className="mt-5 flex items-center gap-2 mx-auto px-7 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-2xl hover:opacity-90 transition-opacity shadow-lg shadow-rose-500/25"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
@@ -1934,8 +1934,8 @@ export default function TripStoriesPage() {
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30"
                     >
                       <option value="">Any Duration</option>
-                      <option value="short">Short (1–3 days)</option>
-                      <option value="medium">Medium (4–7 days)</option>
+                      <option value="short">Short (1â€“3 days)</option>
+                      <option value="medium">Medium (4â€“7 days)</option>
                       <option value="long">Long (8+ days)</option>
                     </select>
                   </div>
@@ -1990,7 +1990,7 @@ export default function TripStoriesPage() {
         </section>
 
         {/* Share Your Story CTA */}
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 p-8 md:p-12 text-center mb-14">
+        <section className="relative overflow-hidden rounded-3xl bg-linear-to-r from-rose-500 via-orange-500 to-amber-500 p-8 md:p-12 text-center mb-14">
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1501854140801-50d01698950b?w=1200&q=80)', backgroundSize: 'cover', backgroundPosition: 'center' }} />
           <div className="relative z-10">
             <h2 className="text-white text-3xl md:text-4xl font-black mb-3">Have a Travel Story to Share?</h2>
@@ -2022,7 +2022,7 @@ export default function TripStoriesPage() {
         )}
       </AnimatePresence>
 
-      {/* Related Stories inside modal (appended to modal via portal approach is complex – shown inline) */}
+      {/* Related Stories inside modal (appended to modal via portal approach is complex â€“ shown inline) */}
       {/* Edit Story Form */}
       <AnimatePresence>
         {editingStory && (
@@ -2048,10 +2048,10 @@ export default function TripStoriesPage() {
 
       {/* Global floating upload progress toast (Facebook-style) */}
       {globalUploading && createPortal(
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] w-80 bg-background border border-border rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-300 w-80 bg-background border border-border rounded-2xl shadow-2xl overflow-hidden">
           <div className="px-4 pt-3 pb-1 flex items-center gap-3">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-              globalUploadStatus.startsWith('Error') ? 'bg-red-500' : 'bg-gradient-to-br from-rose-500 to-orange-500'
+              globalUploadStatus.startsWith('Error') ? 'bg-red-500' : 'bg-linear-to-br from-rose-500 to-orange-500'
             }`}>
               <Upload className="w-4 h-4 text-white" />
             </div>
@@ -2059,7 +2059,7 @@ export default function TripStoriesPage() {
               <p className="text-sm font-semibold text-foreground truncate">
                 {globalUploadProgress === 100
                   ? (globalUploadStatus.startsWith('Error') ? 'Upload failed' : 'Story Published!')
-                  : 'Publishing your story…'}
+                  : 'Publishing your storyâ€¦'}
               </p>
               <p className={`text-xs truncate ${globalUploadStatus.startsWith('Error') || globalUploadStatus.includes('failed') ? 'text-red-500' : 'text-muted-foreground'}`}>
                 {globalUploadStatus}
@@ -2077,7 +2077,7 @@ export default function TripStoriesPage() {
               className={`h-full rounded-full ${
                 globalUploadStatus.startsWith('Error') ? 'bg-red-500'
                   : globalUploadProgress === 100 ? 'bg-green-500'
-                  : 'bg-gradient-to-r from-rose-500 to-orange-500'
+                  : 'bg-linear-to-r from-rose-500 to-orange-500'
               }`}
               initial={{ width: '0%' }}
               animate={{ width: `${globalUploadProgress}%` }}
@@ -2091,9 +2091,10 @@ export default function TripStoriesPage() {
       {/* Footer */}
       <footer className="border-t border-border/40 py-8 text-center">
         <p className="text-muted-foreground text-sm">
-          © {new Date().getFullYear()} ABjee Travel · All travel stories are shared by community members
+          Â© {new Date().getFullYear()} ABjee Travel Â· All travel stories are shared by community members
         </p>
       </footer>
     </div>
   );
 }
+
