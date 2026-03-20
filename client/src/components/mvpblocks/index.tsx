@@ -31,6 +31,7 @@ const TouristPlacesManager = lazy(() => import('@/components/ui/tourist-places')
 const PlaceFeedbackTable = lazy(() => import('@/components/ui/place-feedback-table').then((module) => ({ default: module.PlaceFeedbackTable })));
 const AboutPageEditor = lazy(() => import('@/components/ui/about-page-editor').then((module) => ({ default: module.AboutPageEditor })));
 const TripStoriesAdminPanel = lazy(() => import('@/components/ui/trip-stories-admin').then((module) => ({ default: module.TripStoriesAdminPanel })));
+const AdminTravelItenary = lazy(() => import('@/components/ui/travel-itenary'));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -321,6 +322,13 @@ export default function AdminDashboard() {
         return (
           <Suspense fallback={<SectionLoader />}>
             <TouristPlacesManager />
+          </Suspense>
+        );
+
+      case 'travel-itinerary':
+        return (
+          <Suspense fallback={<SectionLoader />}>
+            <AdminTravelItenary />
           </Suspense>
         );
 

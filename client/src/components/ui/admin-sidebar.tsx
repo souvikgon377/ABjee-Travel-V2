@@ -44,6 +44,7 @@ const menuItems = [
   { title: 'Chat Rooms', icon: Database, view: 'chatrooms' },
   { title: 'Trip Stories', icon: BookOpen, view: 'trip-stories' },
   { title: 'Tourist Places', icon: MapPin, view: 'tourist-places' },
+  { title: 'Travel Itinerary', icon: FileText, view: 'travel-itinerary' },
   { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
   { title: 'Settings', icon: Settings, view: 'settings' },

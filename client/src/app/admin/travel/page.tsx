@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import AdminTravelItenary from '@/screens/AdminTravelItenary';
+import AdminTravelItenary from '@/components/ui/travel-itenary';
 
 export const metadata: Metadata = {
   title: 'Travel Admin | AbJee Travel',
