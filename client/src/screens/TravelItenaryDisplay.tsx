@@ -10,6 +10,7 @@ import {
 	Heart,
 	MessageCircle,
 	ArrowLeft,
+	X,
 	Share2,
 	Send,
 	Globe,
@@ -373,37 +374,72 @@ export default function TravelItenaryDisplay() {
 		error: null,
 		hasSearched: false,
 	});
+	const [allResults, setAllResults] = useState<TravelData[]>([]);
+	const [filterDestination, setFilterDestination] = useState('');
+	const [filterDuration, setFilterDuration] = useState('');
+	const [showFilters, setShowFilters] = useState(false);
 	const [selectedResult, setSelectedResult] = useState<TravelData | null>(null);
 	const heroRef = useRef<HTMLElement | null>(null);
 	const resultsRef = useRef<HTMLElement | null>(null);
 
-	const handleSearch = useCallback(async (query: string) => {
-		if (!query.trim()) {
-			setSearch(prev => ({ ...prev, results: [], hasSearched: false, error: null }));
-			return;
-		}
-
-		setSearch(prev => ({ ...prev, query, loading: true, error: null }));
+	const loadItineraries = useCallback(async () => {
+		setSearch(prev => ({ ...prev, loading: true, error: null }));
 		try {
-			const res = await fetch(`/api/travel?search=${encodeURIComponent(query)}`);
+			const res = await fetch('/api/travel');
 			const data = await res.json();
-			if (!res.ok) throw new Error(data.message || 'Search failed');
-			setSearch(prev => ({ ...prev, results: data.results || [], hasSearched: true, loading: false }));
+			if (!res.ok) throw new Error(data.message || 'Failed to fetch itineraries');
+			const fetchedResults: TravelData[] = data?.data?.results || data?.results || [];
+			const combinedResults = [...fetchedResults, ...DEMO_TRAVEL_DATA];
+			setAllResults(combinedResults);
+			setSearch(prev => ({ ...prev, results: combinedResults, loading: false }));
 		} catch (error: any) {
-			setSearch(prev => ({ ...prev, loading: false, error: error.message || 'An error occurred', hasSearched: true }));
+			setAllResults(DEMO_TRAVEL_DATA);
+			setSearch(prev => ({ ...prev, results: DEMO_TRAVEL_DATA, loading: false, error: error.message || 'An error occurred' }));
 		}
 	}, []);
 
 	useEffect(() => {
-		const timer = setTimeout(() => {
-			handleSearch(search.query);
-		}, 300);
-		return () => clearTimeout(timer);
-	}, [search.query, handleSearch]);
+		loadItineraries();
+	}, [loadItineraries]);
 
-	const loadDemoData = useCallback(() => {
-		setSearch(prev => ({ ...prev, query: 'demo', results: DEMO_TRAVEL_DATA, hasSearched: true, loading: false, error: null }));
-	}, []);
+	useEffect(() => {
+		let filtered = [...allResults];
+		const q = search.query.trim().toLowerCase();
+
+		if (q) {
+			filtered = filtered.filter(item => {
+				const searchableText = [
+					item.place,
+					item.country,
+					item.itinerary,
+					item.places.join(' '),
+					item.restaurants.join(' '),
+					item.hotels.join(' '),
+				].join(' ').toLowerCase();
+				return searchableText.includes(q);
+			});
+		}
+
+		if (filterDestination.trim()) {
+			const destinationQuery = filterDestination.trim().toLowerCase();
+			filtered = filtered.filter(item =>
+				`${item.place} ${item.country}`.toLowerCase().includes(destinationQuery)
+			);
+		}
+
+		if (filterDuration) {
+			filtered = filtered.filter(item => {
+				const days = parseInt(getDurationText(item), 10);
+				if (Number.isNaN(days)) return false;
+				if (filterDuration === 'short') return days <= 3;
+				if (filterDuration === 'medium') return days >= 4 && days <= 7;
+				if (filterDuration === 'long') return days > 7;
+				return true;
+			});
+		}
+
+		setSearch(prev => ({ ...prev, results: filtered, hasSearched: Boolean(q) }));
+	}, [allResults, search.query, filterDestination, filterDuration]);
 
 	return (
 		<div className="min-h-screen bg-background">
@@ -428,8 +464,7 @@ export default function TravelItenaryDisplay() {
 							<Button onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="px-6 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25">Explore</Button>
 						</div>
 						<div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-							<Button onClick={loadDemoData} className="rounded-2xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">Load Demo Itineraries</Button>
-							<Button variant="outline" className="rounded-2xl border-white/30 text-white hover:bg-white/10" onClick={() => setSearch({ query: '', results: [], loading: false, error: null, hasSearched: false })}>Clear</Button>
+							<Button variant="outline" className="rounded-2xl border-white/30 text-white hover:bg-white/10" onClick={() => setSearch(prev => ({ ...prev, query: '', hasSearched: false }))}>Clear</Button>
 						</div>
 					</motion.div>
 				</div>
@@ -439,6 +474,65 @@ export default function TravelItenaryDisplay() {
 				{search.error && <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg"><p className="text-red-800 dark:text-red-200 font-medium">{search.error}</p></motion.div>}
 
 				{search.loading && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center py-12"><div className="animate-spin"><div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-700 border-t-rose-500 dark:border-t-orange-400 rounded-full" /></div></motion.div>}
+
+				{!search.loading && (
+					<section className="mb-8">
+						<div className="flex flex-wrap items-center gap-3 mb-4">
+							<span className="text-slate-200 font-semibold text-sm">Filter Itineraries:</span>
+							<button
+								onClick={() => setShowFilters(prev => !prev)}
+								className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 transition-colors text-white"
+							>
+								<Search className="w-3.5 h-3.5" /> {showFilters ? 'Hide Filters' : 'Show Filters'}
+							</button>
+							{(filterDestination || filterDuration) && (
+								<button
+									onClick={() => { setFilterDestination(''); setFilterDuration(''); }}
+									className="text-xs text-rose-300 hover:text-rose-200 flex items-center gap-1"
+								>
+									<X className="w-3 h-3" /> Clear Filters
+								</button>
+							)}
+						</div>
+
+						<AnimatePresence>
+							{showFilters && (
+								<motion.div
+									initial={{ opacity: 0, height: 0 }}
+									animate={{ opacity: 1, height: 'auto' }}
+									exit={{ opacity: 0, height: 0 }}
+									className="overflow-hidden"
+								>
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/5 rounded-2xl p-4 border border-white/10">
+										<div>
+											<label className="block text-xs text-slate-300 mb-1">Destination</label>
+											<input
+												type="text"
+												placeholder="e.g. Goa or India"
+												value={filterDestination}
+												onChange={e => setFilterDestination(e.target.value)}
+												className="w-full bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/50 focus:outline-none"
+											/>
+										</div>
+										<div>
+											<label className="block text-xs text-slate-300 mb-1">Duration</label>
+											<select
+												value={filterDuration}
+												onChange={e => setFilterDuration(e.target.value)}
+												className="w-full bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+											>
+												<option value="">All Durations</option>
+												<option value="short">Short (1-3 Days)</option>
+												<option value="medium">Medium (4-7 Days)</option>
+												<option value="long">Long (8+ Days)</option>
+											</select>
+										</div>
+									</div>
+								</motion.div>
+							)}
+						</AnimatePresence>
+					</section>
+				)}
 
 				{!search.loading && search.hasSearched && search.results.length === 0 && !search.error && (
 					<motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-12">
