@@ -1,25 +1,25 @@
 import type { NextConfig } from "next";
-import withPWA from "next-pwa";
-
-const isDev = process.env.NODE_ENV === "development";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  eslint: { ignoreDuringBuilds: true },
+  poweredByHeader: false,
+  compress: true,
+  productionBrowserSourceMaps: false,
+  serverExternalPackages: ["firebase-admin"],
   typescript: { ignoreBuildErrors: true },
+  turbopack: {},
+  experimental: {
+    optimizePackageImports: ["lucide-react", "framer-motion"],
+  },
   images: {
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [
       { protocol: "https", hostname: "res.cloudinary.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
-      { protocol: "https", hostname: "*.googleusercontent.com" },
+      { protocol: "https", hostname: "**.googleusercontent.com" },
     ],
   },
 };
 
-// @ts-ignore – next-pwa lacks perfect TS typings but works at runtime
-export default withPWA({
-  dest: "public",
-  disable: true,
-  register: true,
-  skipWaiting: true,
-})(nextConfig);
+export default nextConfig;

@@ -1,4 +1,7 @@
+"use client";
+
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, animate } from 'framer-motion';
@@ -108,7 +111,14 @@ export default function Header1() {
           >
             <Link href="/" className="flex items-center space-x-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
-                <img src="/logo.jpg" alt="ABjee Travel" className="h-8 w-8 object-cover" />
+                <Image
+                  src="/logo.jpg"
+                  alt="ABjee Travel"
+                  width={32}
+                  height={32}
+                  priority
+                  className="h-8 w-8 object-cover"
+                />
               </div>
               <span className="bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent">
                 ABjee Travel

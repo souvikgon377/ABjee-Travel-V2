@@ -76,6 +76,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const isRefreshingRef = useRef(false);
+  const pendingProfileRequestRef = useRef<Promise<any> | null>(null);
+  const lastProfileFetchRef = useRef<number>(0);
+  const userProfileRef = useRef<UserProfile | null>(null);
+  const lastFetchedUidRef = useRef<string | null>(null);
+  const lastFetchedAtRef = useRef<number>(0);
+
+  const isTransientFirebaseNetworkError = useCallback((error: unknown) => {
+    const code = typeof (error as { code?: unknown })?.code === 'string'
+      ? ((error as { code?: string }).code as string)
+      : '';
+    const message = typeof (error as { message?: unknown })?.message === 'string'
+      ? ((error as { message?: string }).message as string)
+      : '';
+
+    return (
+      code === 'auth/network-request-failed' ||
+      code === 'unavailable' ||
+      message.includes('network-request-failed') ||
+      message.includes("didn't respond within 10 seconds")
+    );
+  }, []);
 
   const normalizeUserProfile = useCallback((profile: any): UserProfile | null => {
     if (!profile) return null;
@@ -110,15 +131,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(failSafeTimer);
   }, []);
 
+  useEffect(() => {
+    userProfileRef.current = userProfile;
+  }, [userProfile]);
+
   // Helper to get fresh token
-  const refreshToken = useCallback(async (user = currentUser) => {
+  const refreshToken = useCallback(async (userParam?: any, forceRefresh = false) => {
+    const user = userParam || auth.currentUser;
     if (!user) throw new Error('No authenticated user');
     try {
       isRefreshingRef.current = true;
-      const token = await user.getIdToken(true);
+      const token = await user.getIdToken(forceRefresh);
       localStorage.setItem('token', token);
       return token;
     } catch (error) {
+      const cachedToken = localStorage.getItem('token');
+      if (isTransientFirebaseNetworkError(error) && cachedToken) {
+        if ((process.env.NODE_ENV === "development")) {
+          console.warn('Using cached token due to transient Firebase network issue.');
+        }
+        return cachedToken;
+      }
       if ((process.env.NODE_ENV === "development")) {
         console.error('Token refresh failed:', error);
       }
@@ -126,30 +159,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       isRefreshingRef.current = false;
     }
-  }, [currentUser]);
+  }, [isTransientFirebaseNetworkError]);
+
+  // Deduplicated fetch of user profile - prevents rapid repeated requests
+  const fetchUserProfile = useCallback(async (token: string, forceRefresh = false) => {
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastProfileFetchRef.current;
+
+    // Prevent fetching more than once per 5 seconds
+    if (!forceRefresh && timeSinceLastFetch < 5000 && pendingProfileRequestRef.current) {
+      return pendingProfileRequestRef.current;
+    }
+
+    // Reuse pending request if one is already in flight
+    if (pendingProfileRequestRef.current && !forceRefresh && timeSinceLastFetch < 1000) {
+      return pendingProfileRequestRef.current;
+    }
+
+    const request = fetchWithTimeout('/api/auth/me', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    }).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to fetch profile: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.data?.user;
+    });
+
+    pendingProfileRequestRef.current = request;
+    lastProfileFetchRef.current = now;
+
+    try {
+      return await request;
+    } finally {
+      pendingProfileRequestRef.current = null;
+    }
+  }, []);
 
   // Create user profile via API
-  const createUserProfile = async (user: any, additionalData?: any) => {
+  const createUserProfile = useCallback(async (user: any, additionalData?: any) => {
     if (!user) return;
 
     try {
-      const token = await refreshToken(user);
-      
-      // Check if profile exists
-      const checkResponse = await fetchWithTimeout('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (checkResponse.ok) {
-        const { data } = await checkResponse.json();
-        setUserProfile(normalizeUserProfile(data.user));
-        return;
-      }
-
-      // Set basic profile data from Firebase user
+      // Set basic profile data from Firebase user (no API call needed for during signup)
       const { displayName, email, photoURL } = user;
       const newProfile = normalizeUserProfile({
         uid: user.uid,
@@ -169,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       throw error;
     }
-  };
+  }, [normalizeUserProfile]);
 
   // Sign up with email and password
   const signup = async (email: string, password: string, additionalData?: any) => {
@@ -234,18 +288,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
 
-      const profileResponse = await fetchWithTimeout('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const profileResult = await profileResponse.json();
-      if (!profileResponse.ok) {
-        throw new Error(profileResult.message || 'Failed to verify admin profile');
+      // Use deduplicated fetch for profile
+      const profile = await fetchUserProfile(token, true); // forceRefresh=true to bypass throttle for login
+      
+      if (!profile) {
+        throw new Error('Failed to fetch admin profile');
       }
 
-      const role = profileResult?.data?.user?.role;
+      const role = profile?.role;
       const hasRequiredAccess = requiredRole === 'owner'
         ? role === 'owner'
         : role === 'admin' || role === 'owner';
@@ -256,7 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`You are not ${requiredRole}. Please login as a user.`);
       }
 
-      setUserProfile(normalizeUserProfile(profileResult.data.user));
+      setUserProfile(normalizeUserProfile(profile));
       
       if ((process.env.NODE_ENV === "development")) {
         console.log('[Auth] Admin login complete');
@@ -385,45 +435,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(user);
       
         if (user) {
-          const token = await refreshToken(user);
+          let token: string | null = localStorage.getItem('token');
+          try {
+            token = await refreshToken(user);
+          } catch (error) {
+            if (!isTransientFirebaseNetworkError(error)) {
+              throw error;
+            }
+          }
 
-          // Set up periodic token refresh (30 minutes)
-          refreshInterval = setInterval(async () => {
-            if (!isActive || isRefreshingRef.current) return;
+          if (!token) {
+            await createUserProfile(user);
+            if (isActive) setLoading(false);
+            return;
+          }
+
+          const now = Date.now();
+          const shouldSkipProfileFetch =
+            lastFetchedUidRef.current === user.uid &&
+            now - lastFetchedAtRef.current < 60000 &&
+            !!userProfileRef.current;
+
+          // Set up periodic token refresh (30 minutes, only if not already set)
+          if (!refreshInterval) {
+            refreshInterval = setInterval(async () => {
+              if (!isActive || isRefreshingRef.current) return;
+              try {
+                const user = auth.currentUser;
+                if (user) await refreshToken(user, true);
+              } catch (error) {
+                if ((process.env.NODE_ENV === "development") && !isTransientFirebaseNetworkError(error)) {
+                  console.error('Periodic token refresh failed:', error);
+                }
+              }
+            }, 1000 * 60 * 30); // 30 minutes
+          }
+
+          // Load user profile (deduplicated request)
+          if (!shouldSkipProfileFetch) {
             try {
-              const freshToken = await refreshToken(user);
-              localStorage.setItem('token', freshToken);
+              const profile = await fetchUserProfile(token);
+              if (isActive && profile) {
+                setUserProfile(normalizeUserProfile(profile));
+                lastFetchedUidRef.current = user.uid;
+                lastFetchedAtRef.current = Date.now();
+              } else if (isActive && !profile) {
+                // If profile doesn't exist on backend yet, use Firebase data temporarily
+                await createUserProfile(user);
+                lastFetchedUidRef.current = user.uid;
+                lastFetchedAtRef.current = Date.now();
+              }
             } catch (error) {
               if ((process.env.NODE_ENV === "development")) {
-                console.error('Periodic token refresh failed:', error);
+                console.error('Error loading user profile:', error);
               }
-            }
-          }, 1000 * 60 * 30); // 30 minutes
-
-          // Load user profile
-          try {
-            const response = await fetchWithTimeout('/api/auth/me', {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-              },
-            });
-
-            if (response.ok) {
-              const { data } = await response.json();
-              if (isActive) setUserProfile(normalizeUserProfile(data.user));
-            } else {
+              // Fallback: use Firebase data if API fails
               await createUserProfile(user);
+              lastFetchedUidRef.current = user.uid;
+              lastFetchedAtRef.current = Date.now();
             }
-          } catch (error) {
-            if ((process.env.NODE_ENV === "development")) {
-              console.error('Error loading user profile:', error);
-            }
-            await createUserProfile(user);
           }
         } else {
           if (isActive) {
             setUserProfile(null);
             localStorage.removeItem('token');
+            lastFetchedUidRef.current = null;
+            lastFetchedAtRef.current = 0;
           }
         }
       } catch (error) {
@@ -442,35 +519,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearInterval(refreshInterval);
       }
     };
-  }, [createUserProfile, normalizeUserProfile, refreshToken]);
+  }, [createUserProfile, normalizeUserProfile, refreshToken, fetchUserProfile, isTransientFirebaseNetworkError]);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
 
     const userDocRef = doc(firestoreDb, 'users', currentUser.uid);
-    const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
-      if (!snapshot.exists()) return;
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (snapshot) => {
+        if (!snapshot.exists()) return;
 
-      const snapshotProfile = normalizeUserProfile({
-        id: snapshot.id,
-        uid: snapshot.id,
-        ...snapshot.data(),
-      });
+        const snapshotProfile = normalizeUserProfile({
+          id: snapshot.id,
+          uid: snapshot.id,
+          ...snapshot.data(),
+        });
 
-      if (!snapshotProfile) return;
+        if (!snapshotProfile) return;
 
-      setUserProfile((prev) => {
-        const merged = {
-          ...(prev || {}),
-          ...snapshotProfile,
-        };
+        setUserProfile((prev) => {
+          const merged = {
+            ...(prev || {}),
+            ...snapshotProfile,
+          };
 
-        return normalizeUserProfile(merged);
-      });
-    });
+          return normalizeUserProfile(merged);
+        });
+      },
+      (error) => {
+        if ((process.env.NODE_ENV === "development") && !isTransientFirebaseNetworkError(error)) {
+          console.error('User profile Firestore listener failed:', error);
+        }
+      }
+    );
 
     return () => unsubscribe();
-  }, [currentUser?.uid, normalizeUserProfile]);
+  }, [currentUser?.uid, normalizeUserProfile, isTransientFirebaseNetworkError]);
 
   const value: AuthContextType = useMemo(() => ({
     currentUser,
