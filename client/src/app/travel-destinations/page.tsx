@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import TravelItenaryDisplay from '@/screens/TravelItenaryDisplay';
+import TravelItenaryDisplay from '../../screens/TravelItenaryDisplay';
 
 export const metadata: Metadata = {
   title: 'Travel Destinations | AbJee Travel',

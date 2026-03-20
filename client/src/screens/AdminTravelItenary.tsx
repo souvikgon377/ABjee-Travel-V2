@@ -370,7 +370,7 @@ export default function AdminTravelItenary() {
 	}, [form]);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
+		<div className="min-h-screen bg-linear-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
 			<div className="max-w-6xl mx-auto">
 				{/* Header */}
 				<motion.div
@@ -378,7 +378,7 @@ export default function AdminTravelItenary() {
 					animate={{ opacity: 1, y: 0 }}
 					className="mb-8"
 				>
-					<h1 className="text-4xl font-bold bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent mb-2">
+					<h1 className="text-4xl font-bold bg-linear-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent mb-2">
 						Travel Content Admin
 					</h1>
 					<p className="text-slate-600 dark:text-slate-400">
@@ -421,7 +421,7 @@ export default function AdminTravelItenary() {
 						</div>
 						<div className="w-full bg-rose-200 dark:bg-rose-900/50 rounded-full h-2">
 							<motion.div
-								className="bg-gradient-to-r from-rose-500 to-orange-500 h-2 rounded-full"
+								className="bg-linear-to-r from-rose-500 to-orange-500 h-2 rounded-full"
 								initial={{ width: 0 }}
 								animate={{ width: `${uploadState.progress}%` }}
 								transition={{ duration: 0.3 }}
@@ -781,7 +781,7 @@ export default function AdminTravelItenary() {
 							<Button
 								onClick={handleSubmit}
 								disabled={uploadState.uploading}
-								className="flex-1 gap-2 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
+								className="flex-1 gap-2 bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
 							>
 								<Save className="w-4 h-4" />
 								Save

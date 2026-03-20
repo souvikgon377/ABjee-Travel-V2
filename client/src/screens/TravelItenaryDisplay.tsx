@@ -152,13 +152,13 @@ function TravelDetailModal({
 						exit={{ y: 40, opacity: 0 }}
 						onClick={e => e.stopPropagation()}
 					>
-						<div className="relative h-80 md:h-[420px] overflow-hidden">
+						<div className="relative h-80 md:h-105 overflow-hidden">
 							<img
 								src={result.images[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80'}
 								alt={result.place}
 								className="w-full h-full object-cover"
 							/>
-							<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+							<div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
 							<button
 								onClick={onClose}
 								className="absolute top-4 left-4 bg-black/40 backdrop-blur text-white rounded-full p-2 hover:bg-black/60 transition-colors"
@@ -312,7 +312,7 @@ function TravelDetailModal({
 
 								<section>
 									<h3 className="text-2xl font-bold text-white mb-3 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-indigo-400" /> Comments</h3>
-									<div className="rounded-2xl border border-slate-700 bg-gradient-to-br from-slate-900 to-slate-800 p-4 space-y-3">
+									<div className="rounded-2xl border border-slate-700 bg-linear-to-br from-slate-900 to-slate-800 p-4 space-y-3">
 										<input
 											type="text"
 											placeholder="Your name"
@@ -327,7 +327,7 @@ function TravelDetailModal({
 											rows={4}
 											className="w-full bg-black/40 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-400 resize-none focus:outline-none"
 										/>
-										<Button disabled={!commentName.trim() || !commentText.trim()} className="rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">
+										<Button disabled={!commentName.trim() || !commentText.trim()} className="rounded-xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">
 											<Send className="w-4 h-4 mr-2" /> Post Comment
 										</Button>
 									</div>
@@ -335,7 +335,7 @@ function TravelDetailModal({
 							</div>
 
 							<div className="space-y-4">
-								<div className="bg-gradient-to-br from-rose-500/15 to-orange-500/15 border border-rose-500/30 rounded-2xl p-5 sticky top-4">
+								<div className="bg-linear-to-br from-rose-500/15 to-orange-500/15 border border-rose-500/30 rounded-2xl p-5 sticky top-4">
 									<h3 className="font-bold text-white mb-4 text-xl">Trip Information</h3>
 									<div className="space-y-4 text-sm">
 										<div>
@@ -409,26 +409,26 @@ export default function TravelItenaryDisplay() {
 		<div className="min-h-screen bg-background">
 			<Header1 />
 
-			<section ref={heroRef} className="relative pt-16 h-[75vh] min-h-[520px] flex items-center justify-center overflow-hidden">
+			<section ref={heroRef} className="relative pt-16 h-[75vh] min-h-130 flex items-center justify-center overflow-hidden">
 				<div className="absolute inset-0">
 					<img src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1600&q=80" alt="Travel destination" className="w-full h-full object-cover" />
-					<div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/30" />
+					<div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/40 to-black/30" />
 				</div>
-				<div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-background via-background/55 to-transparent pointer-events-none" />
+				<div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-background via-background/55 to-transparent pointer-events-none" />
 				<div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
 					<motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
 						<span className="inline-block bg-rose-500/20 border border-rose-400/40 text-rose-300 text-xs font-semibold px-4 py-1.5 rounded-full mb-5">Curated Destination Plans</span>
-						<h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white mb-5 leading-tight">Travel <span className="bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Itineraries</span></h1>
+						<h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white mb-5 leading-tight">Travel <span className="bg-linear-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent">Itineraries</span></h1>
 						<p className="text-gray-300 text-lg md:text-xl mb-8 max-w-2xl mx-auto">Plan your next trip with destination highlights, recommended stays, food picks, and day-wise itinerary ideas.</p>
 						<div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
 							<div className="flex-1 flex items-center gap-2 bg-white/10 backdrop-blur border border-white/20 rounded-2xl px-4 py-3">
 								<Search className="w-5 h-5 text-white/60 shrink-0" />
 								<input type="text" value={search.query} onChange={e => setSearch(prev => ({ ...prev, query: e.target.value }))} placeholder="Search destinations or countries..." className="flex-1 bg-transparent text-white placeholder:text-white/50 focus:outline-none text-sm" />
 							</div>
-							<Button onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="px-6 py-3 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25">Explore</Button>
+							<Button onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="px-6 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25">Explore</Button>
 						</div>
 						<div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-							<Button onClick={loadDemoData} className="rounded-2xl bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">Load Demo Itineraries</Button>
+							<Button onClick={loadDemoData} className="rounded-2xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">Load Demo Itineraries</Button>
 							<Button variant="outline" className="rounded-2xl border-white/30 text-white hover:bg-white/10" onClick={() => setSearch({ query: '', results: [], loading: false, error: null, hasSearched: false })}>Clear</Button>
 						</div>
 					</motion.div>
@@ -460,7 +460,7 @@ export default function TravelItenaryDisplay() {
 									<Card className="rounded-3xl border border-slate-700/50 shadow-xl overflow-hidden bg-[#12141c] text-white group-hover:shadow-2xl group-hover:border-slate-600 transition-all duration-300 cursor-pointer">
 										<div className="relative h-52 bg-slate-800 overflow-hidden rounded-t-3xl">
 											<img src={result.images[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80'} alt={result.place} className="w-full h-full object-cover" />
-											<div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+											<div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
 											<span className="absolute top-4 right-4 text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">{getCardBadge(idx)}</span>
 											<div className="absolute bottom-4 left-4 right-4">
 												<div className="flex items-center gap-2 text-white text-sm"><MapPin className="w-4 h-4" /><span>{result.place}, {result.country}</span></div>
@@ -476,10 +476,10 @@ export default function TravelItenaryDisplay() {
 												<span className="flex items-center gap-1"><DollarSign className="w-4 h-4" /> {result.budget}</span>
 											</div>
 											<div className="flex items-center justify-between text-sm">
-												<div className="flex items-center gap-2 text-slate-300"><div className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-500 to-orange-500 text-white text-xs font-bold flex items-center justify-center">A</div><span>ABjee Travel</span></div>
+												<div className="flex items-center gap-2 text-slate-300"><div className="w-7 h-7 rounded-full bg-linear-to-br from-rose-500 to-orange-500 text-white text-xs font-bold flex items-center justify-center">A</div><span>ABjee Travel</span></div>
 												<div className="flex items-center gap-3 text-slate-400"><span className="flex items-center gap-1"><Heart className="w-4 h-4" /> {Math.max(1, result.places.length - 1)}</span><span className="flex items-center gap-1"><MessageCircle className="w-4 h-4" /> {Math.max(1, result.hotels.length)}</span></div>
 											</div>
-											<Button className="w-full rounded-2xl bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white font-semibold" onClick={e => { e.stopPropagation(); setSelectedResult(result); }}>Read More</Button>
+											<Button className="w-full rounded-2xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white font-semibold" onClick={e => { e.stopPropagation(); setSelectedResult(result); }}>Read More</Button>
 										</div>
 									</Card>
 								</motion.div>
