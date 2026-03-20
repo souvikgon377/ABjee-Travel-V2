@@ -846,6 +846,10 @@ const ChatRoomsList: React.FC = () => {
     router.push('/trip-stories');
   }, [router]);
 
+  const openTravelItinerary = useCallback(() => {
+    router.push('/travel-destinations');
+  }, [router]);
+
   // Load chat rooms
   useEffect(() => {
     if (!user) {
@@ -1323,6 +1327,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
               whileHover={{ scale: 1.05, y: -5 }}
+              onClick={openTravelItinerary}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
@@ -1506,6 +1511,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
               whileHover={{ scale: 1.05, y: -5 }}
+              onClick={openTravelItinerary}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
