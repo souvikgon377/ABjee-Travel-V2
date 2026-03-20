@@ -53,6 +53,7 @@ export default function AdminTravelItenary() {
 		error: null,
 		success: null,
 	});
+	const [isCompressingImages, setIsCompressingImages] = useState(false);
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const videoInputRef = useRef<HTMLInputElement>(null);
@@ -114,22 +115,103 @@ export default function AdminTravelItenary() {
 	}, []);
 
 	// Handle image uploads
-	const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+	const compressImage = useCallback((file: File, maxDim = 1920, quality = 0.85): Promise<File> =>
+		new Promise((resolve) => {
+			const TARGET_BYTES = 9.5 * 1024 * 1024;
+			const url = URL.createObjectURL(file);
+			const image = new Image();
+
+			const canvasToBlob = (canvas: HTMLCanvasElement, q: number) =>
+				new Promise<Blob | null>((blobResolve) => {
+					canvas.toBlob((blob) => blobResolve(blob), 'image/webp', q);
+				});
+
+			image.onload = async () => {
+				URL.revokeObjectURL(url);
+				let width = image.width;
+				let height = image.height;
+				if (width > maxDim || height > maxDim) {
+					if (width >= height) {
+						height = Math.round((height / width) * maxDim);
+						width = maxDim;
+					} else {
+						width = Math.round((width / height) * maxDim);
+						height = maxDim;
+					}
+				}
+
+				let bestBlob: Blob | null = null;
+				let currentWidth = width;
+				let currentHeight = height;
+				let attempt = 0;
+
+				while (attempt < 6) {
+					const canvas = document.createElement('canvas');
+					canvas.width = currentWidth;
+					canvas.height = currentHeight;
+					const context = canvas.getContext('2d');
+					if (!context) {
+						resolve(file);
+						return;
+					}
+					context.drawImage(image, 0, 0, currentWidth, currentHeight);
+
+					for (const q of [quality, 0.78, 0.68, 0.58, 0.5]) {
+						const blob = await canvasToBlob(canvas, q);
+						if (!blob) continue;
+						if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
+						if (blob.size <= TARGET_BYTES) {
+							const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
+							resolve(compressedFile.size < file.size ? compressedFile : file);
+							return;
+						}
+					}
+
+					currentWidth = Math.max(720, Math.round(currentWidth * 0.85));
+					currentHeight = Math.max(720, Math.round(currentHeight * 0.85));
+					attempt += 1;
+				}
+
+				if (bestBlob) {
+					const compressedFile = new File([bestBlob], file.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
+					resolve(compressedFile.size < file.size ? compressedFile : file);
+					return;
+				}
+
+				resolve(file);
+			};
+
+			image.onerror = () => {
+				URL.revokeObjectURL(url);
+				resolve(file);
+			};
+			image.src = url;
+		}), []);
+
+	const handleImageChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const files = Array.from(e.target.files || []);
-		const validFiles = files.filter(f => f.type.startsWith('image/'));
-		
-		const newPreviews = validFiles.map(f => URL.createObjectURL(f));
-		
-		setForm(prev => ({
-			...prev,
-			imageFiles: [...prev.imageFiles, ...validFiles],
-			imagePreviews: [...prev.imagePreviews, ...newPreviews],
-		}));
+		const validFiles = files.filter(file => file.type.startsWith('image/'));
 
 		if (imageInputRef.current) {
 			imageInputRef.current.value = '';
 		}
-	}, []);
+
+		if (!validFiles.length) return;
+
+		setIsCompressingImages(true);
+		try {
+			const compressedFiles = await Promise.all(validFiles.map(file => compressImage(file)));
+			const newPreviews = compressedFiles.map(file => URL.createObjectURL(file));
+
+			setForm(prev => ({
+				...prev,
+				imageFiles: [...prev.imageFiles, ...compressedFiles],
+				imagePreviews: [...prev.imagePreviews, ...newPreviews],
+			}));
+		} finally {
+			setIsCompressingImages(false);
+		}
+	}, [compressImage]);
 
 	// Handle video uploads
 	const handleVideoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,8 +321,10 @@ export default function AdminTravelItenary() {
 					body: formData,
 				});
 
-				if (!res.ok) throw new Error('Image upload failed');
-				const data = await res.json();
+				const data = await res.json().catch(() => ({} as any));
+				if (!res.ok) {
+					throw new Error(data?.message || 'Image upload failed');
+				}
 				uploadedImages.push(data.data.url);
 				setUploadState(prev => ({
 					...prev,
@@ -260,8 +344,10 @@ export default function AdminTravelItenary() {
 					body: formData,
 				});
 
-				if (!res.ok) throw new Error('Video upload failed');
-				const data = await res.json();
+				const data = await res.json().catch(() => ({} as any));
+				if (!res.ok) {
+					throw new Error(data?.message || 'Video upload failed');
+				}
 				uploadedVideos.push(data.data.url);
 				setUploadState(prev => ({
 					...prev,
@@ -281,8 +367,10 @@ export default function AdminTravelItenary() {
 					body: formData,
 				});
 
-				if (!res.ok) throw new Error('Map upload failed');
-				const data = await res.json();
+				const data = await res.json().catch(() => ({} as any));
+				if (!res.ok) {
+					throw new Error(data?.message || 'Map upload failed');
+				}
 				uploadedMap = data.data.url;
 			}
 			setUploadState(prev => ({
@@ -650,9 +738,9 @@ export default function AdminTravelItenary() {
 								onClick={() => imageInputRef.current?.click()}
 								variant="outline"
 								className="w-full mb-3"
-								disabled={uploadState.uploading}
+								disabled={uploadState.uploading || isCompressingImages}
 							>
-								Choose Images
+								{isCompressingImages ? 'Compressing Images...' : 'Choose Images'}
 							</Button>
 							<div className="space-y-2 max-h-48 overflow-y-auto">
 								{form.imagePreviews.length === 0 ? (
