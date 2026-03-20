@@ -1,0 +1,46 @@
+/**
+ * 🌍 TRAVEL DATA TYPES & SCHEMA
+ * Defines the structure for travel content management system
+ */
+
+export interface TravelData {
+  id: string;
+  place: string;
+  country: string;
+  itinerary: string;
+  places: string[];
+  restaurants: string[];
+  hotels: string[];
+  budget: string;
+  images: string[];
+  videos: string[];
+  map: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TravelDataFormInput {
+  place: string;
+  country: string;
+  itinerary: string;
+  places: string[];
+  restaurants: string[];
+  hotels: string[];
+  budget: string;
+  imageFiles: File[];
+  videoFiles: File[];
+  mapFile: File | null;
+}
+
+export interface UploadedMedia {
+  url: string;
+  publicId: string;
+  type: 'image' | 'video' | 'map';
+  uploadedAt: string;
+}
+
+export interface TravelSearchResult {
+  results: TravelData[];
+  total: number;
+  query: string;
+}

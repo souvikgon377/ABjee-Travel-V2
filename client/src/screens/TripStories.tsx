@@ -1321,8 +1321,8 @@ function SubmitStoryForm({
     onProgress(0, 'Preparing upload…', false);
     try {
       // Upload images to Cloudinary
-      const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-      const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'trip_stories';
+      const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+      const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'trip_stories';
       const photos: StoryPhoto[] = [];
       const errors: string[] = [];
       const total = imageFiles.length;
@@ -1755,7 +1755,7 @@ export default function TripStoriesPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <Header1 transparentMode />
+      <Header1 />
 
       {/* Hero Section */}
       <section ref={heroRef} className="relative pt-16 h-[85vh] min-h-[550px] flex items-center justify-center overflow-hidden">
