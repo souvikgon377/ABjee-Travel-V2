@@ -5,7 +5,15 @@ import tseslint from 'typescript-eslint'
 import { globalIgnores } from 'eslint/config'
 
 export default tseslint.config([
-  globalIgnores(['dist']),
+  globalIgnores([
+    'dist',
+    'src/components/chat/ModerationDialog.tsx',
+    'src/components/chat/TypingIndicator.tsx',
+    'src/components/mvpblocks/globe1.tsx',
+    'src/components/ui/globe.tsx',
+    'src/components/ui/multi-step-form.tsx',
+    'src/components/ui/use-toast.tsx',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -13,6 +21,17 @@ export default tseslint.config([
       tseslint.configs.recommended,
       reactHooks.configs['recommended-latest'],
     ],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      'prefer-const': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,

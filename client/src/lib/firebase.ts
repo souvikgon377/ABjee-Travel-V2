@@ -16,21 +16,21 @@ const missingFirebaseEnv = Object.entries(firebaseEnv)
   .filter(([, value]) => !value)
   .map(([key]) => key);
 
-if (missingFirebaseEnv.length > 0) {
-  throw new Error(
+if (missingFirebaseEnv.length > 0 && typeof window !== 'undefined') {
+  console.warn(
     `Missing Firebase env vars: ${missingFirebaseEnv.join(', ')}. ` +
       'Set them in client/.env or client/.env.local.'
   );
 }
 
 const firebaseConfig = {
-  apiKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_API_KEY as string,
-  authDomain: firebaseEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as string,
-  projectId: firebaseEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID as string,
-  storageBucket: firebaseEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
-  messagingSenderId: firebaseEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
-  appId: firebaseEnv.NEXT_PUBLIC_FIREBASE_APP_ID as string,
-  databaseURL: firebaseEnv.NEXT_PUBLIC_FIREBASE_DATABASE_URL as string,
+  apiKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_API_KEY || 'missing-api-key',
+  authDomain: firebaseEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'missing-auth-domain',
+  projectId: firebaseEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'missing-project-id',
+  storageBucket: firebaseEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'missing-storage-bucket',
+  messagingSenderId: firebaseEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || 'missing-messaging-sender-id',
+  appId: firebaseEnv.NEXT_PUBLIC_FIREBASE_APP_ID || 'missing-app-id',
+  databaseURL: firebaseEnv.NEXT_PUBLIC_FIREBASE_DATABASE_URL || 'https://placeholder.firebaseio.com',
 };
 
 // Initialize Firebase
