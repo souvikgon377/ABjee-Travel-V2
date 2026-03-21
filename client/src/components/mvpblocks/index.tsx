@@ -194,11 +194,6 @@ export default function AdminDashboard() {
                     <SystemStatus />
                   </Suspense>
                 </div>
-                <div id="activity">
-                  <Suspense fallback={<SectionLoader />}>
-                    <RecentActivity />
-                  </Suspense>
-                </div>
               </div>
             </div>
           </div>
