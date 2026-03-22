@@ -1753,7 +1753,7 @@ export default function TripStoriesPage() {
   const gridStories = filteredStories.filter(s => s.id !== featured?.id);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:bg-background">
       {/* Header */}
       <Header1 />
 

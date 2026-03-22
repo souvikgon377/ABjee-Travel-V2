@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { motion, AnimatePresence, animate } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut } from 'lucide-react';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
@@ -49,7 +49,7 @@ const navItems: NavItem[] = [
   //   ],
   // },
   { name: 'About', href: '/about' },
-  { name: 'Pricing', href: '#pricing' },
+  { name: 'Pricing', href: '/pricing' },
 ];
 
 export default function Header1() {
@@ -63,7 +63,7 @@ export default function Header1() {
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
 
   const isActive = (href: string) =>
-    href !== '#pricing' && (href === '/' ? pathname === '/' : pathname?.startsWith(href));
+    href === '/' ? pathname === '/' : pathname?.startsWith(href);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -136,39 +136,17 @@ export default function Header1() {
                 }
                 onMouseLeave={() => setActiveDropdown(null)}
               >
-                {item.name === 'Pricing' ? (
-                  <a
-                    href={item.href}
-                    className="flex items-center space-x-1 font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
-                    onClick={e => {  
-                      e.preventDefault();
-                      const target = document.getElementById('pricing');
-                      if (target) {
-                        const start = window.scrollY;
-                        const end = target.getBoundingClientRect().top + window.scrollY - 60; // adjust for header height
-                        animate(start, end, {
-                          duration: 0.7,
-                          onUpdate: (value) => window.scrollTo(0, value),
-                        });
-                      }
-                    }}
-                  >
-                    <span>{item.name}</span>
-                  </a>
-                
-                ) : (
-                  <Link href={item.href!}
-                    className={[
-                      'flex items-center space-x-1 font-medium transition-colors duration-200 hover:text-rose-500',
-                      isActive(item.href) ? 'text-rose-500' : 'text-foreground',
-                    ].join(' ')}
-                  >
-                    <span>{item.name}</span>
-                    {item.hasDropdown && (
-                      <ChevronDown className="h-4 w-4 transition-transform duration-200" />
-                    )}
-                  </Link>
-                )}
+                <Link href={item.href!}
+                  className={[
+                    'flex items-center space-x-1 font-medium transition-colors duration-200 hover:text-rose-500',
+                    isActive(item.href) ? 'text-rose-500' : 'text-foreground',
+                  ].join(' ')}
+                >
+                  <span>{item.name}</span>
+                  {item.hasDropdown && (
+                    <ChevronDown className="h-4 w-4 transition-transform duration-200" />
+                  )}
+                </Link>
                 
 
                 {item.hasDropdown && (
@@ -305,28 +283,7 @@ export default function Header1() {
             >
               <div className="mt-4 space-y-2 rounded-xl border border-border bg-background/95 py-4 shadow-xl backdrop-blur-lg">
                 {navItems.map((item) => (
-                  item.name === 'Pricing' ? (
-                    <a
-                      key={item.name}
-                      href={item.href}
-                      className="block px-4 py-3 font-medium text-foreground transition-colors duration-200 hover:bg-muted"
-                      onClick={e => {
-                        e.preventDefault();
-                        setIsMobileMenuOpen(false);
-                        const target = document.getElementById('pricing');
-                        if (target) {
-                          const start = window.scrollY;
-                          const end = target.getBoundingClientRect().top + window.scrollY - 60; // adjust for header height
-                          animate(start, end, {
-                            duration: 0.7,
-                            onUpdate: (value) => window.scrollTo(0, value),
-                          });
-                        }
-                      }}
-                    >
-                      {item.name}
-                    </a>
-                  ) : item.hasDropdown ? (
+                  item.hasDropdown ? (
                     <div key={item.name} className="px-4 py-2">
                       <div className="font-medium text-foreground mb-2">{item.name}</div>
                       <div className="pl-4 space-y-1">

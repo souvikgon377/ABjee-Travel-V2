@@ -147,13 +147,13 @@ function TravelDetailModal({
 			>
 				<div className="min-h-screen py-0 flex items-start justify-center">
 					<motion.div
-						className="relative bg-[#060912] max-w-5xl w-full mx-auto min-h-screen md:my-6 md:rounded-3xl overflow-hidden shadow-2xl border border-slate-800"
+						className="relative bg-background max-w-4xl w-full mx-auto min-h-screen md:my-8 md:rounded-3xl overflow-hidden shadow-2xl"
 						initial={{ y: 40, opacity: 0 }}
 						animate={{ y: 0, opacity: 1 }}
 						exit={{ y: 40, opacity: 0 }}
 						onClick={e => e.stopPropagation()}
 					>
-						<div className="relative h-80 md:h-105 overflow-hidden">
+						<div className="relative h-72 md:h-96 overflow-hidden">
 							<img
 								src={result.images[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80'}
 								alt={result.place}
@@ -172,7 +172,7 @@ function TravelDetailModal({
 									<span>{result.place}, {result.country}</span>
 								</div>
 								<h1 className="text-white text-3xl md:text-5xl font-black mb-2">{result.place} Travel Itinerary</h1>
-								<div className="text-slate-300 text-sm flex items-center gap-3">
+								<div className="text-gray-300 text-sm flex items-center gap-3">
 									<span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {getDurationText(result)}</span>
 									<span>by <strong className="text-white">ABjee Travel</strong></span>
 								</div>
@@ -182,73 +182,73 @@ function TravelDetailModal({
 						<div className="p-5 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
 							<div className="lg:col-span-2 space-y-7">
 								<section>
-									<h2 className="text-3xl font-bold text-white mb-3">Place or Country of Travel</h2>
+									<h2 className="text-xl font-bold text-foreground mb-3">Place or Country of Travel</h2>
 									<div className="flex flex-wrap gap-2">
-										<Badge className="rounded-full bg-rose-500/20 text-rose-200 border border-rose-400/40 px-3 py-1">{result.place}</Badge>
-										<Badge className="rounded-full bg-orange-500/20 text-orange-200 border border-orange-400/40 px-3 py-1">{result.country}</Badge>
+										<Badge className="rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-400/40 px-3 py-1">{result.place}</Badge>
+										<Badge className="rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300 border border-orange-400/40 px-3 py-1">{result.country}</Badge>
 									</div>
 								</section>
 
 								<section>
-									<h2 className="text-3xl font-bold text-white mb-3">Introduction</h2>
-									<p className="text-slate-300 text-lg leading-relaxed">{getPreviewText(result)}</p>
+									<h2 className="text-xl font-bold text-foreground mb-3">Introduction</h2>
+									<p className="text-muted-foreground text-sm leading-relaxed">{getPreviewText(result)}</p>
 								</section>
 
 								{result.itinerary && (
 									<section>
-										<h3 className="text-2xl font-bold text-white mb-3">Travel Itinerary</h3>
+										<h3 className="text-xl font-bold text-foreground mb-3">Travel Itinerary</h3>
 										<div className="space-y-2">
 											{result.itinerary.split('\n').map((line, i) => (
-												<p key={i} className="text-slate-300">{line}</p>
+												<p key={i} className="text-muted-foreground text-sm leading-relaxed">{line}</p>
 											))}
 										</div>
 									</section>
 								)}
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3">Top Places to Visit</h3>
+									<h3 className="text-xl font-bold text-foreground mb-3">Top Places to Visit</h3>
 									{result.places.length > 0 ? (
 										<div className="flex flex-wrap gap-2">
 											{result.places.map((place, index) => (
-												<Badge key={`${place}-${index}`} className="rounded-full bg-white/10 text-slate-200 border border-white/20 px-3 py-1">{place}</Badge>
+												<Badge key={`${place}-${index}`} className="rounded-full bg-muted text-foreground border border-border px-3 py-1">{place}</Badge>
 											))}
 										</div>
 									) : (
-										<p className="text-slate-400">No places added yet.</p>
+										<p className="text-muted-foreground">No places added yet.</p>
 									)}
 								</section>
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3">Top Restaurants</h3>
+									<h3 className="text-xl font-bold text-foreground mb-3">Top Restaurants</h3>
 									{result.restaurants.length > 0 ? (
 										<div className="flex flex-wrap gap-2">
 											{result.restaurants.map((restaurant, index) => (
-												<Badge key={`${restaurant}-${index}`} className="rounded-full bg-emerald-500/15 text-emerald-200 border border-emerald-400/30 px-3 py-1">{restaurant}</Badge>
+												<Badge key={`${restaurant}-${index}`} className="rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30 px-3 py-1">{restaurant}</Badge>
 											))}
 										</div>
 									) : (
-										<p className="text-slate-400">No restaurants added yet.</p>
+										<p className="text-muted-foreground">No restaurants added yet.</p>
 									)}
 								</section>
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3">Top Hotels and Resorts</h3>
+									<h3 className="text-xl font-bold text-foreground mb-3">Top Hotels and Resorts</h3>
 									{result.hotels.length > 0 ? (
 										<div className="flex flex-wrap gap-2">
 											{result.hotels.map((hotel, index) => (
-												<Badge key={`${hotel}-${index}`} className="rounded-full bg-blue-500/15 text-blue-200 border border-blue-400/30 px-3 py-1">{hotel}</Badge>
+												<Badge key={`${hotel}-${index}`} className="rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/30 px-3 py-1">{hotel}</Badge>
 											))}
 										</div>
 									) : (
-										<p className="text-slate-400">No hotels or resorts added yet.</p>
+										<p className="text-muted-foreground">No hotels or resorts added yet.</p>
 									)}
 								</section>
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3 flex items-center gap-2"><ImageIcon className="w-5 h-5 text-purple-400" /> Upload Photo, Video</h3>
+									<h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2"><ImageIcon className="w-5 h-5 text-purple-500" /> Upload Photo, Video</h3>
 									{result.images.length > 0 && (
 										<div className="space-y-3 mb-5">
-											<p className="text-slate-300 text-sm">Photos ({result.images.length})</p>
+											<p className="text-muted-foreground text-sm">Photos ({result.images.length})</p>
 											<div className="grid grid-cols-2 md:grid-cols-3 gap-3">
 												{result.images.map((img, i) => (
 													<img key={i} src={img} alt={`${result.place} ${i + 1}`} className="rounded-xl h-36 w-full object-cover" />
@@ -258,7 +258,7 @@ function TravelDetailModal({
 									)}
 									{result.videos.length > 0 && (
 										<div className="space-y-3">
-											<p className="text-slate-300 text-sm">Videos ({result.videos.length})</p>
+											<p className="text-muted-foreground text-sm">Videos ({result.videos.length})</p>
 											<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 												{result.videos.map((videoUrl, i) => (
 													<video key={`${videoUrl}-${i}`} src={videoUrl} controls className="rounded-xl h-56 w-full object-cover bg-black" preload="metadata" />
@@ -267,13 +267,13 @@ function TravelDetailModal({
 										</div>
 									)}
 									{result.images.length === 0 && result.videos.length === 0 && (
-										<p className="text-slate-400">No photos or videos uploaded yet.</p>
+										<p className="text-muted-foreground">No photos or videos uploaded yet.</p>
 									)}
 								</section>
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3">Upload Travel Map</h3>
-									<div className="rounded-2xl overflow-hidden border border-slate-700 h-72">
+									<h3 className="text-xl font-bold text-foreground mb-3">Upload Travel Map</h3>
+									<div className="rounded-2xl overflow-hidden border border-border h-72">
 										{result.map ? (
 											<iframe
 												src={mapSrc}
@@ -296,37 +296,37 @@ function TravelDetailModal({
 											/>
 										)}
 									</div>
-									{!result.map && <p className="text-slate-400 text-sm mt-2">No custom travel map uploaded yet. Showing location map for {result.place}, {result.country}.</p>}
+									{!result.map && <p className="text-muted-foreground text-sm mt-2">No custom travel map uploaded yet. Showing location map for {result.place}, {result.country}.</p>}
 								</section>
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3 flex items-center gap-2"><Share2 className="w-5 h-5 text-blue-400" /> Share This Story</h3>
+									<h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2"><Share2 className="w-5 h-5 text-blue-500" /> Share This Story</h3>
 									<div className="flex flex-wrap gap-3 mb-5">
-										<Button onClick={() => handleShare('whatsapp')} className="bg-green-600 hover:bg-green-700 rounded-xl"><Globe className="w-4 h-4 mr-1" /> WhatsApp</Button>
-										<Button onClick={() => handleShare('facebook')} className="bg-blue-600 hover:bg-blue-700 rounded-xl"><Facebook className="w-4 h-4 mr-1" /> Facebook</Button>
-										<Button onClick={() => handleShare('copy')} variant="secondary" className="rounded-xl">{copied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}{copied ? 'Copied!' : 'Copy Link'}</Button>
+										<Button onClick={() => handleShare('whatsapp')} className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-500/10 border border-green-300 dark:border-green-500/30 text-green-700 dark:text-green-400 rounded-xl text-sm hover:bg-green-100 dark:hover:bg-green-500/20 transition-colors"><Globe className="w-4 h-4" /> WhatsApp</Button>
+										<Button onClick={() => handleShare('facebook')} className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-500/10 border border-blue-300 dark:border-blue-500/30 text-blue-700 dark:text-blue-400 rounded-xl text-sm hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"><Facebook className="w-4 h-4" /> Facebook</Button>
+										<Button onClick={() => handleShare('copy')} className="flex items-center gap-2 px-4 py-2 bg-muted border border-border text-muted-foreground rounded-xl text-sm hover:bg-accent transition-colors">{copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}{copied ? 'Copied!' : 'Copy Link'}</Button>
 									</div>
-									<Button onClick={toggleLike} variant="secondary" className="rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200">
-										<Heart className={`w-4 h-4 mr-2 ${liked ? 'fill-rose-500 text-rose-500' : ''}`} /> Like · {likes}
+									<Button onClick={toggleLike} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-colors ${liked ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40' : 'bg-muted text-muted-foreground border border-border hover:bg-rose-500/10 hover:text-rose-500 dark:hover:text-rose-400'}`}>
+										<Heart className={`w-5 h-5 ${liked ? 'fill-rose-500 text-rose-500' : ''}`} /> Like · {likes}
 									</Button>
 								</section>
 
 								<section>
-									<h3 className="text-2xl font-bold text-white mb-3 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-indigo-400" /> Comments</h3>
-									<div className="rounded-2xl border border-slate-700 bg-linear-to-br from-slate-900 to-slate-800 p-4 space-y-3">
+									<h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-indigo-500" /> Comments</h3>
+									<div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
 										<input
 											type="text"
 											placeholder="Your name"
 											value={commentName}
 											onChange={e => setCommentName(e.target.value)}
-											className="w-full bg-black/40 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-400 focus:outline-none"
+											className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/40"
 										/>
 										<textarea
 											placeholder="Share your thoughts about this itinerary..."
 											value={commentText}
 											onChange={e => setCommentText(e.target.value)}
 											rows={4}
-											className="w-full bg-black/40 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-400 resize-none focus:outline-none"
+											className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/40"
 										/>
 										<Button disabled={!commentName.trim() || !commentText.trim()} className="rounded-xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">
 											<Send className="w-4 h-4 mr-2" /> Post Comment
@@ -336,24 +336,24 @@ function TravelDetailModal({
 							</div>
 
 							<div className="space-y-4">
-								<div className="bg-linear-to-br from-rose-500/15 to-orange-500/15 border border-rose-500/30 rounded-2xl p-5 sticky top-4">
-									<h3 className="font-bold text-white mb-4 text-xl">Trip Information</h3>
+								<div className="bg-linear-to-br from-rose-50 dark:from-rose-500/10 to-orange-50 dark:to-orange-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl p-5 sticky top-4">
+									<h3 className="font-bold text-foreground mb-4 text-base">Trip Information</h3>
 									<div className="space-y-4 text-sm">
 										<div>
-											<p className="text-slate-400">Destination</p>
-											<p className="text-white font-semibold">{result.place}, {result.country}</p>
+											<p className="text-muted-foreground">Destination</p>
+											<p className="text-foreground font-semibold">{result.place}, {result.country}</p>
 										</div>
 										<div>
-											<p className="text-slate-400">Duration</p>
-											<p className="text-white font-semibold">{getDurationText(result)}</p>
+											<p className="text-muted-foreground">Duration</p>
+											<p className="text-foreground font-semibold">{getDurationText(result)}</p>
 										</div>
 										<div>
-											<p className="text-slate-400">Approx Budget</p>
-											<p className="text-white font-semibold">{result.budget}</p>
+											<p className="text-muted-foreground">Approx Budget</p>
+											<p className="text-foreground font-semibold">{result.budget}</p>
 										</div>
 										<div>
-											<p className="text-slate-400">Travel Type</p>
-											<span className="inline-flex mt-1 text-xs font-semibold px-3 py-1 rounded-full bg-pink-500/20 text-pink-300 border border-pink-400/30">{getCardBadge(1)}</span>
+											<p className="text-muted-foreground">Travel Type</p>
+											<span className="inline-flex mt-1 text-xs font-semibold px-3 py-1 rounded-full bg-pink-500/20 text-pink-700 dark:text-pink-300 border border-pink-400/30">{getCardBadge(1)}</span>
 										</div>
 									</div>
 								</div>
@@ -442,7 +442,7 @@ export default function TravelItenaryDisplay() {
 	}, [allResults, search.query, filterDestination, filterDuration]);
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:bg-background">
 			<Header1 />
 
 			<section ref={heroRef} className="relative pt-16 h-[75vh] min-h-130 flex items-center justify-center overflow-hidden">
@@ -551,29 +551,31 @@ export default function TravelItenaryDisplay() {
 						<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 							{search.results.map((result, idx) => (
 								<motion.div key={result.id} className="group" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.08 }} whileHover={{ y: -4 }} onClick={() => setSelectedResult(result)}>
-									<Card className="rounded-3xl border border-slate-700/50 shadow-xl overflow-hidden bg-[#12141c] text-white group-hover:shadow-2xl group-hover:border-slate-600 transition-all duration-300 cursor-pointer">
-										<div className="relative h-52 bg-slate-800 overflow-hidden rounded-t-3xl">
+									<Card className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border border-border cursor-pointer">
+										<div className="relative overflow-hidden h-48 bg-muted">
 											<img src={result.images[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80'} alt={result.place} className="w-full h-full object-cover" />
-											<div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
-											<span className="absolute top-4 right-4 text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">{getCardBadge(idx)}</span>
+											<div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
+											<span className="absolute top-3 right-3 text-xs font-semibold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30">{getCardBadge(idx)}</span>
 											<div className="absolute bottom-4 left-4 right-4">
 												<div className="flex items-center gap-2 text-white text-sm"><MapPin className="w-4 h-4" /><span>{result.place}, {result.country}</span></div>
 											</div>
 										</div>
-										<div className="p-5 space-y-4">
-											<div className="space-y-2">
-												<h3 className="text-3xl font-bold text-white leading-tight line-clamp-2">{result.place} Travel Guide</h3>
-												<p className="text-slate-300 text-sm line-clamp-2">{getPreviewText(result)}</p>
+										<div className="flex flex-col flex-1 p-4 gap-2">
+											<div className="space-y-1">
+												<h3 className="font-bold text-foreground text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">{result.place} Travel Guide</h3>
+												<p className="text-muted-foreground text-xs line-clamp-2">{getPreviewText(result)}</p>
 											</div>
-											<div className="flex flex-wrap gap-4 text-sm text-slate-300 border-b border-white/10 pb-3">
-												<span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {getDurationText(result)}</span>
-												<span className="flex items-center gap-1"><DollarSign className="w-4 h-4" /> {result.budget}</span>
+											<div className="flex flex-wrap gap-2 mt-1">
+												<span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3 h-3" /> {getDurationText(result)}</span>
+												<span className="flex items-center gap-1 text-xs text-muted-foreground"><DollarSign className="w-3 h-3" /> {result.budget}</span>
 											</div>
-											<div className="flex items-center justify-between text-sm">
-												<div className="flex items-center gap-2 text-slate-300"><div className="w-7 h-7 rounded-full bg-linear-to-br from-rose-500 to-orange-500 text-white text-xs font-bold flex items-center justify-center">A</div><span>ABjee Travel</span></div>
-												<div className="flex items-center gap-3 text-slate-400"><span className="flex items-center gap-1"><Heart className="w-4 h-4" /> {Math.max(1, result.places.length - 1)}</span><span className="flex items-center gap-1"><MessageCircle className="w-4 h-4" /> {Math.max(1, result.hotels.length)}</span></div>
+											<div className="flex items-center gap-2 mt-auto pt-3 border-t border-border/40">
+												<div className="w-6 h-6 rounded-full bg-linear-to-br from-rose-500 to-orange-400 text-white text-xs font-bold flex items-center justify-center">A</div>
+												<span className="text-xs text-muted-foreground flex-1 truncate">ABjee Travel</span>
+												<span className="flex items-center gap-1 text-xs text-muted-foreground"><Heart className="w-3.5 h-3.5" /> {Math.max(1, result.places.length - 1)}</span>
+												<span className="flex items-center gap-1 text-xs text-muted-foreground"><MessageCircle className="w-3.5 h-3.5" /> {Math.max(1, result.hotels.length)}</span>
 											</div>
-											<Button className="w-full rounded-2xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white font-semibold" onClick={e => { e.stopPropagation(); setSelectedResult(result); }}>Read More</Button>
+											<Button className="mt-2 w-full py-2 rounded-xl text-xs font-semibold bg-linear-to-r from-rose-500 to-orange-500 text-white hover:opacity-90 transition-opacity" onClick={e => { e.stopPropagation(); setSelectedResult(result); }}>Read More</Button>
 										</div>
 									</Card>
 								</motion.div>

@@ -10,7 +10,6 @@ import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
 
 const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'))
 const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3))
-const SimplePricing = dynamic(() => import('@/components/mvpblocks/simple-pricing'))
 const Faq3 = dynamic(() => import('@/components/mvpblocks/faq-3'))
 const Footer4Col = dynamic(() => import('@/components/mvpblocks/footer-4col'))
 
@@ -207,9 +206,6 @@ function LandingPage() {
         showNavigation={true}
       />
       <FeatureBlock3/>
-      <div id="pricing">
-        <SimplePricing/>
-      </div>
       <Faq3/>
       <Footer4Col/>
 
