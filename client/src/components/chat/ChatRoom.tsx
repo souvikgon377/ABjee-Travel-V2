@@ -4,7 +4,7 @@ import { chatService, type MessageAttachment } from '../../lib/chatService';
 import { type ChatMessage, type ChatRoom as RoomType } from '../../lib/chatService';
 import { useAuth } from '../../contexts/AuthContext';
 import { uploadImageToCloudinary, createImagePreview, revokeImagePreview } from '../../lib/imageUpload';
-import { uploadFileToCloudinary, VoiceRecorder, formatFileSize, formatDuration, getFileIcon } from '../../lib/fileUpload';
+import { uploadFileToCloudinary, VoiceRecorder, compressImageFile, formatFileSize, formatDuration, getFileIcon } from '../../lib/fileUpload';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
@@ -29,6 +29,7 @@ import { usersAPI } from '../../lib/api';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { firestoreDb } from '../../lib/firebaseFirestore';
 import { resolveAvatarUrl } from '../../lib/avatar';
+import { getPrivateRoomParticipationAllowance } from '../../lib/subscriptionPolicy';
 
 // Emoji list constant (moved outside component for performance)
 const EMOJI_LIST = [
@@ -103,7 +104,7 @@ const ChatRoom = () => {
   const roomId = params.roomId as string;
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [room, setRoom] = useState<RoomType | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
@@ -116,6 +117,10 @@ const ChatRoom = () => {
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [joiningRoom, setJoiningRoom] = useState(false);
+  const [showJoinRequestDialog, setShowJoinRequestDialog] = useState(false);
+  const [joinRequestPending, setJoinRequestPending] = useState(false);
+  const [requestingJoin, setRequestingJoin] = useState(false);
+  const [joinRequestError, setJoinRequestError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<ChatMessage | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
@@ -138,6 +143,10 @@ const ChatRoom = () => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [processingJoinRequestUserId, setProcessingJoinRequestUserId] = useState<string | null>(null);
   const [voiceRecorder] = useState(() => new VoiceRecorder());
+  const privateRoomAllowance = useMemo(
+    () => getPrivateRoomParticipationAllowance(userProfile, 0),
+    [userProfile]
+  );
 
   // Add Members dialog state
   const [addMembersDialogOpen, setAddMembersDialogOpen] = useState(false);
@@ -244,6 +253,17 @@ const ChatRoom = () => {
         const isParticipant = roomData.participants.includes(user.uid);
         
         if (!isParticipant) {
+          if (!roomData.isPublic) {
+            const privateRoomCount = await chatService.getUserPrivateRoomMembershipCount(user.uid);
+            const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount);
+
+            if (!allowance.allowed) {
+              alert(allowance.reason || privateRoomAllowance.reason);
+              router.push('/chat');
+              return;
+            }
+          }
+
           // Check for invite token in URL
           const inviteToken = searchParams.get('invite');
           
@@ -268,8 +288,16 @@ const ChatRoom = () => {
               return;
             }
           } else {
-            // For private rooms, show password dialog
-            setShowPasswordDialog(true);
+            // For private rooms, exposed rooms use join requests, hidden rooms are invite-only
+            if (roomData.visibility === 'exposed') {
+              const alreadyRequested = (roomData.joinRequests || []).includes(user.uid);
+              setJoinRequestPending(alreadyRequested);
+              setShowJoinRequestDialog(true);
+            } else {
+              alert('This private room is invite-only. Ask the admin for an invite link.');
+              router.push('/chat');
+              return;
+            }
             setLoading(false);
             return; // Don't load messages yet
           }
@@ -334,7 +362,7 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, router, searchParams]);
+  }, [roomId, user, router, searchParams, subscriptionInfo]);
 
   // Handle password submission
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -356,6 +384,29 @@ const ChatRoom = () => {
       setPasswordError(error.message || 'Incorrect password');
     } finally {
       setJoiningRoom(false);
+    }
+  };
+
+  const handleJoinRequestSubmit = async () => {
+    if (!roomId || !user || !room) return;
+
+    setJoinRequestError('');
+    setRequestingJoin(true);
+
+    try {
+      await chatService.requestToJoinRoom(roomId, user.uid);
+      setJoinRequestPending(true);
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          joinRequests: Array.from(new Set([...(prev.joinRequests || []), user.uid])),
+        };
+      });
+    } catch (error: any) {
+      setJoinRequestError(error.message || 'Failed to send join request');
+    } finally {
+      setRequestingJoin(false);
     }
   };
 
@@ -389,7 +440,11 @@ const ChatRoom = () => {
       if (fileToSend) {
         setUploadingAttachment(true);
         const isVoiceMessage = fileToSend.name.startsWith('voice-message-');
-        attachment = await uploadFileToCloudinary(fileToSend, { isVoiceMessage });
+        const isImage = fileToSend.type.startsWith('image/');
+        attachment = await uploadFileToCloudinary(fileToSend, {
+          isVoiceMessage,
+          maxSizeBytes: isImage ? 1024 * 1024 : undefined,
+        });
         setUploadingAttachment(false);
       }
       
@@ -481,12 +536,24 @@ const ChatRoom = () => {
     }
   }, [roomId, editingMessageId, editText, cancelEditing]);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file size (10MB limit)
-    if (file.size > 10 * 1024 * 1024) {
+    let preparedFile = file;
+
+    // Public room image: compress and enforce 1MB.
+    if (room?.isPublic && file.type.startsWith('image/')) {
+      preparedFile = await compressImageFile(file, { maxSizeBytes: 1024 * 1024, maxDimension: 1600 });
+      if (preparedFile.size > 1024 * 1024) {
+        alert('Image must be 1MB or less in public rooms. Please choose a smaller image.');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+    } else if (file.size > 10 * 1024 * 1024) {
+      // Generic max size for non-public-image files.
       alert('File size must be less than 10MB');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -494,13 +561,13 @@ const ChatRoom = () => {
       return;
     }
 
-    setAttachmentFile(file);
+    setAttachmentFile(preparedFile);
     
     // Create preview for images
-    if (file.type.startsWith('image/')) {
+    if (preparedFile.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => setAttachmentPreview(reader.result as string);
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(preparedFile);
     } else {
       setAttachmentPreview(null);
     }
@@ -509,7 +576,7 @@ const ChatRoom = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, []);
+  }, [room?.isPublic]);
 
   const handleClearAttachment = useCallback(() => {
     setAttachmentFile(null);
@@ -1011,6 +1078,52 @@ const ChatRoom = () => {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exposed Private Room Join Request Dialog */}
+      <Dialog open={showJoinRequestDialog} onOpenChange={(open) => {
+        if (!open) router.push('/chat');
+        setShowJoinRequestDialog(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              Request Access
+            </DialogTitle>
+            <DialogDescription>
+              This is an exposed private room. Send a join request to the room admin for "{room?.name}".
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {joinRequestError && <p className="text-sm text-destructive">{joinRequestError}</p>}
+            {joinRequestPending && (
+              <p className="text-sm text-muted-foreground">
+                Join request already sent. Please wait for admin approval.
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => router.push('/chat')}
+              >
+                Back
+              </Button>
+              <Button
+                type="button"
+                className="flex-1"
+                disabled={joinRequestPending || requestingJoin}
+                onClick={handleJoinRequestSubmit}
+              >
+                {requestingJoin ? 'Sending...' : joinRequestPending ? 'Request Sent' : 'Send Request'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1982,7 +2095,7 @@ const ChatRoom = () => {
 
             {room.isPublic && (
               <p className="mt-2 text-[11px] sm:text-xs text-amber-700 dark:text-amber-400">
-                Public room rules: phone numbers, email addresses, and links are not allowed.
+                Public room rules: no phone/email/links. Image limit per day - Free: 5, Trial/Monthly Paid: 50, Yearly Paid: 200. Images are compressed and capped at 1MB.
               </p>
             )}
           </form>

@@ -62,6 +62,83 @@ function validateFile(file: File, options: FileUploadOptions): void {
   }
 }
 
+/**
+ * Compress an image file to stay under a target size.
+ * Uses canvas + JPEG re-encoding with iterative quality reduction.
+ */
+export async function compressImageFile(
+  file: File,
+  options: { maxSizeBytes?: number; maxDimension?: number } = {}
+): Promise<File> {
+  const targetMax = options.maxSizeBytes ?? 1024 * 1024;
+  const maxDimension = options.maxDimension ?? 1600;
+
+  if (!file.type.startsWith('image/')) {
+    return file;
+  }
+
+  if (file.size <= targetMax) {
+    return file;
+  }
+
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read image for compression'));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image for compression'));
+    img.src = dataUrl;
+  });
+
+  let width = image.width;
+  let height = image.height;
+
+  if (width > maxDimension || height > maxDimension) {
+    if (width >= height) {
+      height = Math.round((height / width) * maxDimension);
+      width = maxDimension;
+    } else {
+      width = Math.round((width / height) * maxDimension);
+      height = maxDimension;
+    }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return file;
+  ctx.drawImage(image, 0, 0, width, height);
+
+  let quality = 0.9;
+  let blob: Blob | null = null;
+  while (quality >= 0.4) {
+    // eslint-disable-next-line no-await-in-loop
+    blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', quality);
+    });
+
+    if (blob && blob.size <= targetMax) {
+      const baseName = file.name.replace(/\.[^.]+$/, '');
+      return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+    }
+
+    quality -= 0.1;
+  }
+
+  if (blob) {
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' });
+  }
+
+  return file;
+}
+
 // ==================== UPLOAD FUNCTION ====================
 
 /**

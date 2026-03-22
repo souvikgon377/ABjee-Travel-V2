@@ -20,12 +20,13 @@ const SUBSCRIPTION_PLANS = {
   },
   pro: {
     type: "pro",
-    name: "Pro Plan",
-    price: { amount: 90, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 75, currency: "USD", interval: "yearly" },
+    name: "Paid Plan",
+    price: { amount: 2, currency: "USD", interval: "monthly" },
+    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
     features: {
       privateChatAccess: true,
-      maxPrivateChats: 10,
+      maxPrivateChats: 3,
+      maxPrivateChatsYearly: 10,
       travelPartnerRequests: 5,
       prioritySupport: true,
       advancedFilters: true,
@@ -37,11 +38,12 @@ const SUBSCRIPTION_PLANS = {
   premium: {
     type: "premium",
     name: "Premium Plan",
-    price: { amount: 150, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 125, currency: "USD", interval: "yearly" },
+    price: { amount: 2, currency: "USD", interval: "monthly" },
+    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
     features: {
       privateChatAccess: true,
-      maxPrivateChats: -1,
+      maxPrivateChats: 3,
+      maxPrivateChatsYearly: 10,
       travelPartnerRequests: -1,
       prioritySupport: true,
       advancedFilters: true,

@@ -89,7 +89,7 @@ class SubscriptionService {
       },
       pro: {
         privateChatAccess: true,
-        maxPrivateChats: 10,
+        maxPrivateChats: 3,
         travelPartnerRequests: 5,
         prioritySupport: true,
         advancedFilters: true,
@@ -99,7 +99,7 @@ class SubscriptionService {
       },
       premium: {
         privateChatAccess: true,
-        maxPrivateChats: -1,
+        maxPrivateChats: 3,
         travelPartnerRequests: -1,
         prioritySupport: true,
         advancedFilters: true,

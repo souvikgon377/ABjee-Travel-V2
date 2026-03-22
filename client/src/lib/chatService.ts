@@ -19,7 +19,10 @@ import {
   onDisconnect,
   update
 } from 'firebase/database';
+import { doc, getDoc } from 'firebase/firestore';
 import { database, auth } from './firebase';
+import { firestoreDb } from './firebaseFirestore';
+import { getPrivateRoomParticipationAllowance } from './subscriptionPolicy';
 
 // ==================== INTERFACES ====================
 
@@ -113,6 +116,106 @@ class ChatService {
     );
   }
 
+  private parseDate(value: unknown): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    if (typeof value === 'object') {
+      const candidate = value as { seconds?: unknown; toDate?: () => Date };
+      if (typeof candidate.toDate === 'function') {
+        const parsed = candidate.toDate();
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+      if (typeof candidate.seconds === 'number') {
+        const parsed = new Date(candidate.seconds * 1000);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+    }
+
+    return null;
+  }
+
+  private async getUserImageLimitPerDay(userId: string): Promise<number> {
+    const userRef = doc(firestoreDb, 'users', userId);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      return 5;
+    }
+
+    const data = userSnap.data() as Record<string, unknown>;
+    const subscription = (data.subscription ?? {}) as Record<string, unknown>;
+    const type = typeof subscription.type === 'string' ? subscription.type.toLowerCase() : 'free';
+    const isActive = Boolean(subscription.isActive);
+    const interval = subscription.interval === 'yearly' ? 'yearly' : 'monthly';
+    const endDate = this.parseDate(subscription.endDate);
+    const hasPaid = isActive && type !== 'free' && (!endDate || endDate.getTime() > Date.now());
+
+    if (hasPaid) {
+      return interval === 'yearly' ? 200 : 50;
+    }
+
+    const createdAt = this.parseDate(data.createdAt);
+    if (createdAt) {
+      const elapsedMs = Date.now() - createdAt.getTime();
+      const trialMs = 7 * 24 * 60 * 60 * 1000;
+      if (elapsedMs <= trialMs) {
+        return 50;
+      }
+    }
+
+    return 5;
+  }
+
+  private async enforcePublicRoomImagePolicy(roomId: string, attachment?: MessageAttachment): Promise<void> {
+    if (!attachment || attachment.type !== 'image') return;
+
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const roomSnapshot = await get(roomRef);
+    if (!roomSnapshot.exists()) {
+      throw new Error('Room not found');
+    }
+
+    const room = roomSnapshot.val() as ChatRoom;
+    if (!room.isPublic) return;
+
+    if (attachment.size > 1024 * 1024) {
+      throw new Error('Image size must be 1MB or less for public rooms.');
+    }
+
+    const user = this.getCurrentUser();
+    const dailyLimit = await this.getUserImageLimitPerDay(user.uid);
+
+    const messagesRef = ref(database, `chatrooms/${roomId}/messages`);
+    const messageSnapshot = await get(messagesRef);
+
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const dayStartTs = dayStart.getTime();
+
+    let imageCountToday = 0;
+    if (messageSnapshot.exists()) {
+      messageSnapshot.forEach((child) => {
+        const msg = child.val() as ChatMessage;
+        const isOwn = msg.userId === user.uid;
+        const isToday = typeof msg.timestamp === 'number' && msg.timestamp >= dayStartTs;
+        const isImage = msg.attachment?.type === 'image';
+        if (isOwn && isToday && isImage) {
+          imageCountToday += 1;
+        }
+      });
+    }
+
+    if (imageCountToday >= dailyLimit) {
+      throw new Error(`Daily image limit reached for public rooms (${dailyLimit}/day).`);
+    }
+  }
+
   private async enforcePublicRoomContentPolicy(roomId: string, text: string): Promise<void> {
     if (!text.trim()) return;
 
@@ -203,18 +306,17 @@ class ChatService {
     name: string, 
     description: string, 
     isPublic: boolean,
-    password: string, 
+    password: string,
     participantIds: string[] = [],
     backgroundImage?: ChatRoomImage,
     iconImage?: ChatRoomImage,
-    visibility?: 'exposed' | 'private'
+    visibility?: 'exposed' | 'private',
+    options?: { maxPrivateRooms?: number }
   ) {
     const user = this.getCurrentUser();
-    
-    // Check room limit (5 rooms per user)
-    const userRoomsCount = await this.getUserCreatedRoomsCount(user.uid);
-    if (userRoomsCount >= 5) {
-      throw new Error('You have reached the maximum limit of 5 rooms. Please delete a room to create a new one.');
+
+    if (!isPublic) {
+      await this.enforcePrivateRoomMembershipLimit(user.uid, options?.maxPrivateRooms);
     }
     
     const roomsRef = ref(database, 'chatrooms');
@@ -238,7 +340,7 @@ class ChatService {
       participants,
       createdBy: user.uid,
       createdAt: Date.now(),
-      ...(isPublic ? {} : { password }), // Only add password for private rooms
+      ...(isPublic ? {} : {}), // Private rooms are access-controlled without password
       inviteToken,
       pendingInvites: !isPublic ? participantIds : [], // Store pending invites for private rooms
       ...(!isPublic && visibility === 'exposed' && { joinRequests: [] }), // Initialize join requests for exposed rooms
@@ -261,18 +363,77 @@ class ChatService {
    * DECISION: Used to enforce 5-room limit
    */
   async getUserCreatedRoomsCount(userId: string): Promise<number> {
+    const stats = await this.getUserCreatedRoomStats(userId);
+    return stats.total;
+  }
+
+  /**
+   * WHY: Count public/private rooms created by a specific user
+   * DECISION: Needed for plan-aware private room limits and trial checks
+   */
+  async getUserCreatedRoomStats(userId: string): Promise<{ total: number; public: number; private: number }> {
     const roomsRef = ref(database, 'chatrooms');
     const snapshot = await get(roomsRef);
-    
-    let count = 0;
+
+    let total = 0;
+    let publicCount = 0;
+    let privateCount = 0;
+
     snapshot.forEach((childSnapshot) => {
       const room = childSnapshot.val();
       if (room.createdBy === userId) {
-        count++;
+        total++;
+        if (room.isPublic) publicCount++;
+        else privateCount++;
       }
     });
-    
-    return count;
+
+    return {
+      total,
+      public: publicCount,
+      private: privateCount,
+    };
+  }
+
+  /**
+   * WHY: Count private rooms where user is a participant
+   * DECISION: Used for create-or-join private room caps
+   */
+  async getUserPrivateRoomMembershipCount(userId: string): Promise<number> {
+    const roomsRef = ref(database, 'chatrooms');
+    const snapshot = await get(roomsRef);
+
+    let privateRoomCount = 0;
+
+    snapshot.forEach((childSnapshot) => {
+      const room = childSnapshot.val() as ChatRoom;
+      if (room?.isPublic) return;
+
+      const participants = room.participants || [];
+      const isParticipant = participants.includes(userId) || room.createdBy === userId;
+      if (isParticipant) {
+        privateRoomCount += 1;
+      }
+    });
+
+    return privateRoomCount;
+  }
+
+  private async enforcePrivateRoomMembershipLimit(userId: string, maxOverride?: number): Promise<void> {
+    const privateRoomCount = await this.getUserPrivateRoomMembershipCount(userId);
+
+    if (typeof maxOverride === 'number' && maxOverride >= 0 && privateRoomCount >= maxOverride) {
+      throw new Error(`You have reached your private room limit (${maxOverride}).`);
+    }
+
+    const userRef = doc(firestoreDb, 'users', userId);
+    const userSnapshot = await getDoc(userRef);
+    const userProfile = userSnapshot.exists() ? userSnapshot.data() : {};
+    const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount);
+
+    if (!allowance.allowed) {
+      throw new Error(allowance.reason);
+    }
   }
 
   /**
@@ -391,17 +552,16 @@ class ChatService {
     
     // For public rooms, skip password check
     if (!room.isPublic) {
-      // For private rooms, check authentication: either valid invite token or correct password
+      await this.enforcePrivateRoomMembershipLimit(userId);
+
+      // For private rooms, invite token is required unless user is already a participant
       if (inviteToken) {
         // Validate invite token
         if (room.inviteToken !== inviteToken) {
           throw new Error('Invalid invite link');
         }
       } else {
-        // Validate password
-        if (!password || room.password !== password) {
-          throw new Error('Incorrect password');
-        }
+        throw new Error('Private room requires invite or admin approval.');
       }
     }
     // For public rooms, allow joining without password
@@ -445,6 +605,8 @@ class ChatService {
       throw new Error('You are already a member of this room');
     }
   
+    await this.enforcePrivateRoomMembershipLimit(userId);
+
     // Check if user already requested
     const joinRequests = room.joinRequests || [];
     if (joinRequests.includes(userId)) {
@@ -483,6 +645,8 @@ class ChatService {
       throw new Error('Join request not found');
     }
   
+    await this.enforcePrivateRoomMembershipLimit(requestUserId);
+
     // Remove from join requests and add to participants
     const updatedRequests = joinRequests.filter((uid: string) => uid !== requestUserId);
     const updatedParticipants = [...participants, requestUserId];
@@ -605,6 +769,7 @@ class ChatService {
     const user = this.getCurrentUser();
     const trimmedText = text.trim();
     await this.enforcePublicRoomContentPolicy(roomId, trimmedText);
+    await this.enforcePublicRoomImagePolicy(roomId, attachment);
 
     const messagesRef = ref(database, `chatrooms/${roomId}/messages`);
     const newMessageRef = push(messagesRef);

@@ -26,6 +26,7 @@ const createUserData = (data: AnyObj): AnyObj => ({
   preferredDestinations: data.preferredDestinations || [],
   subscription: {
     type: data.subscription?.type || "free",
+    interval: data.subscription?.interval || "monthly",
     startDate: data.subscription?.startDate || null,
     endDate: data.subscription?.endDate || null,
     isActive: data.subscription?.isActive || false,

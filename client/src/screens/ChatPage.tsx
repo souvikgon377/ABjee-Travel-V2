@@ -14,6 +14,13 @@ import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToCloudinary, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/imageUpload';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getSubscriptionInfo,
+  getFreePrivateTrialState,
+  getPrivateRoomCreateAllowance,
+  getPaidPrivateRoomLimit,
+  hasPaidAccess,
+} from '@/lib/subscriptionPolicy';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -366,6 +373,7 @@ const ChatRoomsList: React.FC = () => {
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [newRoomPassword, setNewRoomPassword] = useState('');
   const [newRoomIsPublic, setNewRoomIsPublic] = useState(false); // New state for public/private
+  const [newPrivateVisibility, setNewPrivateVisibility] = useState<'exposed' | 'private'>('private');
   const [creating, setCreating] = useState(false);
   
   // Image upload states
@@ -385,6 +393,7 @@ const ChatRoomsList: React.FC = () => {
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [socialShareMessage, setSocialShareMessage] = useState('');
   const [userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
+  const [userCreatedPrivateRoomsCount, setUserCreatedPrivateRoomsCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -394,6 +403,17 @@ const ChatRoomsList: React.FC = () => {
     () => deferredSearchDestination.trim().toLowerCase(),
     [deferredSearchDestination]
   );
+  const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
+  const paidMember = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+  const privateRoomAllowance = useMemo(
+    () => getPrivateRoomCreateAllowance(userProfile, userCreatedPrivateRoomsCount),
+    [userProfile, userCreatedPrivateRoomsCount]
+  );
+  const freeTrialState = useMemo(
+    () => getFreePrivateTrialState(userProfile, userCreatedPrivateRoomsCount),
+    [userProfile, userCreatedPrivateRoomsCount]
+  );
+  const paidPrivateRoomLimit = useMemo(() => getPaidPrivateRoomLimit(subscriptionInfo), [subscriptionInfo]);
   const hasSearchQuery = normalizedSearchDestination.length > 0;
   const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
 
@@ -870,8 +890,14 @@ const ChatRoomsList: React.FC = () => {
         setRooms(loadedRooms);
         
         // Count rooms created by current user
-        const count = loadedRooms.filter(room => room.createdBy === user.uid).length;
-        setUserCreatedRoomsCount(count);
+        const createdByUser = loadedRooms.filter(room => room.createdBy === user.uid);
+        setUserCreatedRoomsCount(createdByUser.length);
+
+        // Policy limit is based on private rooms the user participates in (create or join)
+        const privateMembershipCount = loadedRooms.filter(
+          room => !room.isPublic && (room.participants?.includes(user.uid) || room.createdBy === user.uid)
+        ).length;
+        setUserCreatedPrivateRoomsCount(privateMembershipCount);
         
         setLoading(false);
       });
@@ -944,8 +970,12 @@ const ChatRoomsList: React.FC = () => {
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // For public rooms, password is optional
-    if (!newRoomName.trim() || (!newRoomIsPublic && !newRoomPassword.trim()) ||!user) return;
+    if (!newRoomName.trim() || !user) return;
+
+    if (!newRoomIsPublic && !privateRoomAllowance.allowed) {
+      alert(privateRoomAllowance.reason);
+      return;
+    }
 
     setCreating(true);
     setUploadingImages(true);
@@ -983,10 +1013,14 @@ const ChatRoomsList: React.FC = () => {
         newRoomName.trim(),
         newRoomDescription.trim() || 'No description',
         newRoomIsPublic,
-        newRoomPassword.trim() || '', // Empty password for public rooms
+        '',
         [user.uid],
         backgroundImageData,
-        iconImageData
+        iconImageData,
+        newRoomIsPublic ? undefined : newPrivateVisibility,
+        {
+          maxPrivateRooms: newRoomIsPublic ? undefined : privateRoomAllowance.maxAllowed,
+        }
       );
 
       // Reset form
@@ -995,6 +1029,7 @@ const ChatRoomsList: React.FC = () => {
       setNewRoomDescription('');
       setNewRoomPassword('');
       setNewRoomIsPublic(false);
+      setNewPrivateVisibility('private');
       removeBackgroundImage();
       removeIconImage();
       
@@ -2525,7 +2560,12 @@ const ChatRoomsList: React.FC = () => {
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-linear-to-r from-rose-500/10 to-pink-500/10 dark:from-rose-400/10 dark:to-pink-400/10 border border-rose-500/20 dark:border-rose-400/20">
                     <Crown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
-                      {userCreatedRoomsCount}/5 Rooms Created
+                      {paidMember
+                        ? `${userCreatedPrivateRoomsCount}/${paidPrivateRoomLimit} Private Rooms`
+                        : freeTrialState.eligible
+                          ? `${userCreatedPrivateRoomsCount}/3 Trial Private Rooms (${freeTrialState.daysLeft}d left)`
+                          : `${userCreatedPrivateRoomsCount}/3 Trial Private Rooms Used`
+                      }
                     </span>
                   </div>
                 </div>
@@ -2535,8 +2575,7 @@ const ChatRoomsList: React.FC = () => {
             <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
               <DialogTrigger asChild>
                 <Button 
-                  size="lg" 
-                  disabled={userCreatedRoomsCount >= 5}
+                  size="lg"
                   className="w-full sm:w-auto bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
                 >
                   <Plus className="h-6 w-6 mr-2" />
@@ -2550,7 +2589,7 @@ const ChatRoomsList: React.FC = () => {
                     Create New Chat Room
                   </DialogTitle>
                   <DialogDescription className="text-base">
-                    Create a password-protected room with custom images ({userCreatedRoomsCount}/5 rooms created)
+                    Public rooms are open to all. Private rooms follow your subscription policy.
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateRoom} className="space-y-5">
@@ -2584,37 +2623,67 @@ const ChatRoomsList: React.FC = () => {
                             Public Room
                           </Label>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {newRoomIsPublic ? 'Anyone can join without password' : 'Password required to join'}
+                            {newRoomIsPublic ? 'Anyone can join freely' : 'Private room access by invite or admin approval'}
                           </p>
                         </div>
                       </div>
                       <Switch
                         id="isPublic"
                         checked={newRoomIsPublic}
-                        onCheckedChange={setNewRoomIsPublic}
+                        onCheckedChange={(checked) => {
+                          setNewRoomIsPublic(checked);
+                          if (checked) {
+                            setNewPrivateVisibility('private');
+                          }
+                        }}
                       />
                     </div>
                   </div>
+
                   {!newRoomIsPublic && (
-                  <div className="space-y-2">
-                    <Label htmlFor="roomPassword" className="text-sm font-semibold flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-primary" />
-                      Room Password
-                    </Label>
-                    <Input
-                      id="roomPassword"
-                      type="password"
-                      placeholder="Enter a secure password"
-                      value={newRoomPassword}
-                      onChange={(e) => setNewRoomPassword(e.target.value)}
-                      required
-                      className="h-12 rounded-xl border-2 focus:border-primary"
-                    />
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Lock className="h-3 w-3" />
-                      This password will be required to join the room
-                    </p>
-                  </div>
+                    <div className="space-y-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                      <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Private Group Policy</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        {privateRoomAllowance.reason}
+                      </p>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Room Visibility</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNewPrivateVisibility('private')}
+                            className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                              newPrivateVisibility === 'private'
+                                ? 'border-primary bg-primary/10 text-foreground'
+                                : 'border-border bg-background text-muted-foreground hover:bg-muted/40'
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">Private</p>
+                            <p className="text-xs">Hidden from community listing</p>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewPrivateVisibility('exposed')}
+                            className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                              newPrivateVisibility === 'exposed'
+                                ? 'border-primary bg-primary/10 text-foreground'
+                                : 'border-border bg-background text-muted-foreground hover:bg-muted/40'
+                            }`}
+                          >
+                            <p className="text-sm font-semibold">Exposed</p>
+                            <p className="text-xs">Visible in community, users can request to join</p>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!newRoomIsPublic && (
+                    <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground flex items-start gap-2">
+                      <Shield className="h-4 w-4 mt-0.5" />
+                      Private rooms do not use passwords. Access is controlled by invite links or admin-approved join requests.
+                    </div>
                   )}
                   
                   {/* Background Image Upload */}
@@ -2896,15 +2965,6 @@ const ChatRoomsList: React.FC = () => {
                             {/* Action buttons */}
                             {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1 rounded-xl border-2 border-gray-400 dark:border-white/50 bg-gray-200 dark:bg-black/30 backdrop-blur-sm hover:border-gray-600 dark:hover:border-white hover:bg-gray-300 dark:hover:bg-white/20 transition-all font-semibold text-gray-900 dark:text-white"
-                                  onClick={(e) => handleShareRoom(room, e)}
-                                >
-                                  <Share2 className="h-4 w-4 mr-1.5" />
-                                  Share
-                                </Button>
                                 {room.createdBy === user.uid && (
                                   <Button
                                     variant="outline"
@@ -3042,7 +3102,7 @@ const ChatRoomsList: React.FC = () => {
                     Private Rooms
                   </h2>
                   <span className="text-sm text-muted-foreground">
-                    Password required to join
+                    Exposed rooms allow join requests; private rooms stay hidden
                   </span>
                 </div>
                 <motion.div 
@@ -3154,15 +3214,6 @@ const ChatRoomsList: React.FC = () => {
                             {/* Action buttons */}
                             {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1 rounded-xl border-2 border-gray-400 dark:border-white/50 bg-gray-200 dark:bg-black/30 backdrop-blur-sm hover:border-gray-600 dark:hover:border-white hover:bg-gray-300 dark:hover:bg-white/20 transition-all font-semibold text-gray-900 dark:text-white"
-                                  onClick={(e) => handleShareRoom(room, e)}
-                                >
-                                  <Share2 className="h-4 w-4 mr-1.5" />
-                                  Share
-                                </Button>
                                 {room.createdBy === user.uid && (
                                   <Button
                                     variant="outline"

@@ -19,59 +19,59 @@ import { motion } from 'framer-motion';
 const plans = [
   {
     id: 'hobby',
-    name: 'Hobby',
+    name: 'Free',
     icon: Star,
     price: {
       monthly: 'Free forever',
       yearly: 'Free forever',
     },
     description:
-      'The perfect starting place for your web app or personal project.',
+      'Use public rooms and community features at no cost.',
     features: [
-      '50 API calls / month',
-      '60 second checks',
-      'Single-user account',
-      '5 monitors',
-      'Basic email support',
+      'Public room chat and posting',
+      'Public room creation',
+      'No private room access after trial',
+      '7-day trial: create or join up to 3 private rooms',
+      'Basic community support',
     ],
     cta: 'Get started for free',
   },
   {
     id: 'pro',
-    name: 'Pro',
+    name: 'Paid',
     icon: Zap,
     price: {
-      monthly: 90,
-      yearly: 75,
+      monthly: 2,
+      yearly: 15,
     },
-    description: 'Everything you need to build and scale your business.',
+    description: 'Private groups and premium community access.',
     features: [
-      'Unlimited API calls',
-      '30 second checks',
-      'Multi-user account',
-      '10 monitors',
-      'Priority email support',
+      'Create or join up to 3 private rooms (monthly)',
+      'Create or join up to 10 private rooms (yearly)',
+      'Private room access included',
+      'Expose private rooms for join requests',
+      'Priority support',
     ],
-    cta: 'Subscribe to Pro',
+    cta: 'Subscribe Now',
     popular: true,
   },
   {
     id: 'enterprise',
-    name: 'Enterprise',
+    name: 'Premium',
     icon: Shield,
     price: {
-      monthly: 'Get in touch for pricing',
-      yearly: 'Get in touch for pricing',
+      monthly: 2,
+      yearly: 15,
     },
-    description: 'Critical security, performance, observability and support.',
+    description: 'Same pricing with advanced travel member benefits.',
     features: [
-      'You can DDOS our API.',
-      'Nano-second checks.',
-      'Invite your extended family.',
-      'Unlimited monitors.',
-      "We'll sit on your desk.",
+      'Create or join up to 3 private rooms (monthly)',
+      'Create or join up to 10 private rooms (yearly)',
+      'Private room access included',
+      'Advanced member tools',
+      'Priority assistance',
     ],
-    cta: 'Contact us',
+    cta: 'Choose Premium',
   },
 ];
 
@@ -106,7 +106,7 @@ export default function SimplePricing() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="bg-gradient-to-b from-foreground to-foreground/30 bg-clip-text text-4xl font-bold text-transparent sm:text-5xl"
+            className="bg-linear-to-b from-foreground to-foreground/30 bg-clip-text text-4xl font-bold text-transparent sm:text-5xl"
           >
             Pick the perfect plan for your needs
           </motion.h1>
@@ -171,7 +171,7 @@ export default function SimplePricing() {
                     ? 'shadow-md ring-2 ring-primary/50 dark:shadow-primary/10'
                     : 'hover:border-primary/30',
                   plan.popular &&
-                    'bg-gradient-to-b from-primary/[0.03] to-transparent',
+                    'bg-linear-to-b from-primary/3 to-transparent',
                 )}
               >
                 {plan.popular && (
@@ -292,7 +292,7 @@ export default function SimplePricing() {
                 {/* Subtle gradient effects */}
                 {plan.popular ? (
                   <>
-                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-1/2 rounded-b-lg bg-gradient-to-t from-primary/[0.05] to-transparent" />
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-1/2 rounded-b-lg bg-linear-to-t from-primary/5 to-transparent" />
                     <div className="pointer-events-none absolute inset-0 rounded-lg border border-primary/20" />
                   </>
                 ) : (

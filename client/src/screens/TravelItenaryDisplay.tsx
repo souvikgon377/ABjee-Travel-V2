@@ -480,17 +480,17 @@ export default function TravelItenaryDisplay() {
 				{!search.loading && (
 					<section className="mb-8">
 						<div className="flex flex-wrap items-center gap-3 mb-4">
-							<span className="text-slate-200 font-semibold text-sm">Filter Itineraries:</span>
+							<span className="text-foreground font-semibold text-sm">Filter Itineraries:</span>
 							<button
 								onClick={() => setShowFilters(prev => !prev)}
-								className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 transition-colors text-white"
+								className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-muted border border-border rounded-xl hover:bg-accent transition-colors text-foreground"
 							>
 								<Search className="w-3.5 h-3.5" /> {showFilters ? 'Hide Filters' : 'Show Filters'}
 							</button>
 							{(filterDestination || filterDuration) && (
 								<button
 									onClick={() => { setFilterDestination(''); setFilterDuration(''); }}
-									className="text-xs text-rose-300 hover:text-rose-200 flex items-center gap-1"
+									className="text-xs text-rose-600 hover:text-rose-500 dark:text-rose-300 dark:hover:text-rose-200 flex items-center gap-1"
 								>
 									<X className="w-3 h-3" /> Clear Filters
 								</button>
@@ -505,23 +505,23 @@ export default function TravelItenaryDisplay() {
 									exit={{ opacity: 0, height: 0 }}
 									className="overflow-hidden"
 								>
-									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white/5 rounded-2xl p-4 border border-white/10">
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-muted/50 rounded-2xl p-4 border border-border">
 										<div>
-											<label className="block text-xs text-slate-300 mb-1">Destination</label>
+											<label className="block text-xs text-muted-foreground mb-1">Destination</label>
 											<input
 												type="text"
 												placeholder="e.g. Goa or India"
 												value={filterDestination}
 												onChange={e => setFilterDestination(e.target.value)}
-												className="w-full bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/50 focus:outline-none"
+												className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/30"
 											/>
 										</div>
 										<div>
-											<label className="block text-xs text-slate-300 mb-1">Duration</label>
+											<label className="block text-xs text-muted-foreground mb-1">Duration</label>
 											<select
 												value={filterDuration}
 												onChange={e => setFilterDuration(e.target.value)}
-												className="w-full bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+												className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/30"
 											>
 												<option value="">All Durations</option>
 												<option value="short">Short (1-3 Days)</option>

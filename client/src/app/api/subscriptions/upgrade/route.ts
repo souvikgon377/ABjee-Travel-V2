@@ -9,15 +9,15 @@ export const runtime = "nodejs";
 const SUBSCRIPTION_PLANS: Record<string, any> = {
   pro: {
     type: "pro",
-    name: "Pro Plan",
-    price: { amount: 90, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 75, currency: "USD", interval: "yearly" },
+    name: "Paid Plan",
+    price: { amount: 2, currency: "USD", interval: "monthly" },
+    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
   },
   premium: {
     type: "premium",
     name: "Premium Plan",
-    price: { amount: 150, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 125, currency: "USD", interval: "yearly" },
+    price: { amount: 2, currency: "USD", interval: "monthly" },
+    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
   },
 };
 
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     };
 
     const features = subscriptionService.getFeaturesForPlan(planType);
+    features.maxPrivateChats = interval === "yearly" ? 10 : 3;
 
     if (!subscription) {
       subscription = await subscriptionService.create({
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
     await userService.update(user.id, {
       "subscription.type": planType,
       "subscription.isActive": true,
+      "subscription.interval": interval,
       "subscription.startDate": startDate.toISOString(),
       "subscription.endDate": endDate.toISOString(),
     });
