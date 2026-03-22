@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -26,11 +26,13 @@ import {
   X,
   ChevronDown,
   UserCircle2,
+  MapPin,
 } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { database } from '@/lib/firebase';
+import { loadAboutPageContent } from '@/lib/aboutContent';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface ExportSection {
@@ -65,6 +67,68 @@ interface RoomRecord {
   createdBy: string;
 }
 
+interface TripStoryRecord {
+  id: string;
+  title: string;
+  destination: string;
+  authorId: string;
+  authorName: string;
+  authorEmail: string;
+  travelType: string;
+  duration: string;
+  budget: string;
+  area: string;
+  state: string;
+  country: string;
+  likesCount: number;
+  commentCount: number;
+  mediaCount: number;
+  createdAt: string;
+}
+
+interface TouristPlaceRecord {
+  id: string;
+  name: string;
+  area: string;
+  state: string;
+  country: string;
+  description: string;
+  category: string;
+  googleMapsUrl: string;
+  coverImage: string;
+  mediaCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TravelItineraryRecord {
+  id: string;
+  place: string;
+  country: string;
+  itinerary: string;
+  placesCount: number;
+  restaurantsCount: number;
+  hotelsCount: number;
+  imageCount: number;
+  videoCount: number;
+  budget: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface FeedbackRecord {
+  id: string;
+  type: 'review' | 'comment';
+  placeId: string;
+  placeName: string;
+  userId: string;
+  author: string;
+  text: string;
+  rating: number | null;
+  mediaCount: number;
+  createdAt: string;
+}
+
 interface ExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -75,9 +139,14 @@ interface ExportDialogProps {
 const SECTIONS: ExportSection[] = [
   { id: 'stats',         label: 'Dashboard Stats',  description: 'Users, revenue, sessions, page views',       icon: BarChart3,     color: 'text-blue-500',   bgColor: 'bg-blue-500/10'   },
   { id: 'users',         label: 'Users',            description: 'All users — or pick one for a detailed PDF', icon: Users,         color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  { id: 'activity',      label: 'Activity',         description: 'All website activity for all users or one user', icon: Activity,   color: 'text-red-500',    bgColor: 'bg-red-500/10'    },
+  { id: 'trip-stories',  label: 'Trip Stories',     description: 'All stories with filters: user, area, state, country', icon: MessageSquare, color: 'text-fuchsia-500', bgColor: 'bg-fuchsia-500/10' },
+  { id: 'tourist-places',label: 'Tourist Places',   description: 'All places with filters: area, state, country', icon: MapPin, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
+  { id: 'travel-itineraries', label: 'Travel Itineraries', description: 'All itineraries with filters: place, country', icon: MapPin, color: 'text-sky-500', bgColor: 'bg-sky-500/10' },
+  { id: 'reviews-comments', label: 'Reviews & Comments', description: 'All place feedback with filters: user, type, post', icon: MessageSquare, color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
+  { id: 'about-page',    label: 'About Page',       description: 'All About page CMS content and metadata',     icon: FileText,      color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
   { id: 'subscriptions', label: 'Subscriptions',    description: 'Subscription & revenue records',             icon: DollarSign,    color: 'text-green-500',  bgColor: 'bg-green-500/10'  },
   { id: 'chatrooms',     label: 'Chat Rooms',       description: 'Room list & member counts',                  icon: MessageSquare, color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
-  { id: 'activity',      label: 'Online Status',    description: 'User presence & last-seen data',             icon: Activity,      color: 'text-red-500',    bgColor: 'bg-red-500/10'    },
   { id: 'pageviews',     label: 'Page Views',       description: 'Analytics page view counter',                icon: Eye,           color: 'text-cyan-500',   bgColor: 'bg-cyan-500/10'   },
 ];
 
@@ -117,6 +186,96 @@ function relativeTime(ms: number): string {
   if (diff < 86_400_000)    return `${Math.floor(diff / 3_600_000)}h ago`;
   if (diff < 604_800_000)   return `${Math.floor(diff / 86_400_000)}d ago`;
   return new Date(ms).toLocaleDateString();
+}
+
+function normalizeText(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function deriveStoryGeo(rawStory: any): { area: string; state: string; country: string } {
+  const destination = String(rawStory?.destination || '').trim();
+  const tokens = destination
+    .split(',')
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  const area =
+    String(rawStory?.area || rawStory?.region || rawStory?.city || '').trim() ||
+    (tokens.length >= 3 ? tokens[0] : destination);
+
+  const state =
+    String(rawStory?.state || rawStory?.province || '').trim() ||
+    (tokens.length >= 2 ? tokens[tokens.length - 2] : '');
+
+  const country =
+    String(rawStory?.country || '').trim() ||
+    (tokens.length >= 1 ? tokens[tokens.length - 1] : '');
+
+  return {
+    area,
+    state,
+    country,
+  };
+}
+
+function flattenAboutRows(content: any): Record<string, unknown>[] {
+  const exportedAt = new Date().toISOString();
+  const rows: Record<string, unknown>[] = [];
+
+  const push = (section: string, field: string, value: unknown, order = '') => {
+    rows.push({
+      section,
+      field,
+      value: Array.isArray(value) ? value.join(', ') : value ?? '',
+      order,
+      exportedAt,
+    });
+  };
+
+  Object.entries(content?.hero ?? {}).forEach(([field, value]) => {
+    push('hero', field, value);
+  });
+
+  Object.entries(content?.founder ?? {}).forEach(([field, value]) => {
+    if (field === 'paragraphs' && Array.isArray(value)) {
+      value.forEach((paragraph: unknown, index: number) => {
+        push('founder', `paragraph_${index + 1}`, paragraph, String(index + 1));
+      });
+      return;
+    }
+
+    if (field === 'stats' && Array.isArray(value)) {
+      value.forEach((stat: any, index: number) => {
+        push('founder_stats', 'label', stat?.label ?? '', `${index + 1}`);
+        push('founder_stats', 'value', stat?.value ?? '', `${index + 1}`);
+      });
+      return;
+    }
+
+    push('founder', field, value);
+  });
+
+  (content?.socialLinks ?? []).forEach((item: any, index: number) => {
+    Object.entries(item ?? {}).forEach(([field, value]) => {
+      push('social_links', field, value, String(index + 1));
+    });
+  });
+
+  (content?.youtubeVideos ?? []).forEach((item: any, index: number) => {
+    push('youtube_videos', 'id', item?.id ?? '', String(index + 1));
+  });
+
+  (content?.developers ?? []).forEach((dev: any, index: number) => {
+    Object.entries(dev ?? {}).forEach(([field, value]) => {
+      push('developers', field, value, String(index + 1));
+    });
+  });
+
+  Object.entries(content?.contact ?? {}).forEach(([field, value]) => {
+    push('contact', field, value);
+  });
+
+  return rows;
 }
 
 // ── Single-room deep fetcher ──────────────────────────────────────────────────
@@ -704,6 +863,30 @@ async function fetchSectionData(
   id: string,
   stats: ExportDialogProps['stats'],
   cachedUsers?: UserRecord[],
+  options?: {
+    activityUserId?: string;
+    tripStories?: {
+      userId?: string;
+      area?: string;
+      state?: string;
+      country?: string;
+    };
+    touristPlaces?: {
+      area?: string;
+      state?: string;
+      country?: string;
+    };
+    travelItineraries?: {
+      place?: string;
+      country?: string;
+    };
+    feedback?: {
+      userId?: string;
+      type?: 'all' | 'review' | 'comment';
+      placeId?: string;
+      itemId?: string;
+    };
+  },
 ): Promise<Record<string, unknown>[]> {
   switch (id) {
     case 'stats':
@@ -739,6 +922,293 @@ async function fetchSectionData(
       });
     }
 
+    case 'about-page': {
+      const content = await loadAboutPageContent();
+      return flattenAboutRows(content);
+    }
+
+    case 'trip-stories': {
+      const userFilter = options?.tripStories?.userId || 'all';
+      const areaFilter = normalizeText(options?.tripStories?.area || 'all');
+      const stateFilter = normalizeText(options?.tripStories?.state || 'all');
+      const countryFilter = normalizeText(options?.tripStories?.country || 'all');
+
+      const usersById = new Map<string, UserRecord>();
+      const usersByEmail = new Map<string, UserRecord>();
+      const usersByName = new Map<string, UserRecord>();
+      (cachedUsers || []).forEach((u) => {
+        usersById.set(u.id, u);
+        if (u.email) usersByEmail.set(normalizeText(u.email), u);
+        if (u.displayName) usersByName.set(normalizeText(u.displayName), u);
+      });
+
+      const storiesSnap = await getDocs(collection(firestoreDb, 'stories'));
+      const rows: Record<string, unknown>[] = [];
+
+      storiesSnap.forEach((doc) => {
+        const s: any = doc.data();
+        const { area, state, country } = deriveStoryGeo(s);
+        const authorId = String(s.authorId || '').trim();
+        const authorEmail = String(s.authorEmail || '').trim();
+        const authorName = String(s.authorName || '').trim();
+
+        const resolvedUser =
+          (authorId && usersById.get(authorId)) ||
+          (authorEmail && usersByEmail.get(normalizeText(authorEmail))) ||
+          (authorName && usersByName.get(normalizeText(authorName))) ||
+          null;
+
+        const resolvedUserId = resolvedUser?.id || authorId || '';
+
+        if (userFilter !== 'all' && resolvedUserId !== userFilter) return;
+        if (areaFilter !== 'all' && normalizeText(area) !== areaFilter) return;
+        if (stateFilter !== 'all' && normalizeText(state) !== stateFilter) return;
+        if (countryFilter !== 'all' && normalizeText(country) !== countryFilter) return;
+
+        const createdTs = s.createdAt?.toDate?.()?.getTime?.()
+          ? s.createdAt.toDate().getTime()
+          : new Date(s.createdAt || 0).getTime();
+
+        rows.push({
+          storyId: doc.id,
+          title: s.title || 'Untitled Story',
+          destination: s.destination || '',
+          area,
+          state,
+          country,
+          authorId: resolvedUserId || '—',
+          authorName: resolvedUser?.displayName || authorName || '—',
+          authorEmail: resolvedUser?.email || authorEmail || '—',
+          travelType: s.travelType || '—',
+          duration: s.duration || '—',
+          budget: s.budget || '—',
+          likesCount: Array.isArray(s.likes) ? s.likes.length : 0,
+          commentCount: Number(s.commentCount || 0),
+          mediaCount: (Array.isArray(s.photos) ? s.photos.length : 0) + (Array.isArray(s.videos) ? s.videos.length : 0),
+          createdAt: createdTs ? new Date(createdTs).toLocaleString() : '—',
+          createdRelative: createdTs ? relativeTime(createdTs) : '—',
+          summary: String(s.description || s.fullStory || '').slice(0, 180),
+          exportedAt: new Date().toISOString(),
+          _sortTs: createdTs || 0,
+        });
+      });
+
+      rows.sort((a: any, b: any) => Number(b._sortTs || 0) - Number(a._sortTs || 0));
+      return rows.map(({ _sortTs, ...rest }: any) => rest);
+    }
+
+    case 'tourist-places': {
+      const areaFilter = normalizeText(options?.touristPlaces?.area || 'all');
+      const stateFilter = normalizeText(options?.touristPlaces?.state || 'all');
+      const countryFilter = normalizeText(options?.touristPlaces?.country || 'all');
+
+      const placesSnap = await getDocs(collection(firestoreDb, 'touristPlaces'));
+      const rows: Record<string, unknown>[] = [];
+
+      placesSnap.forEach((doc) => {
+        const p: any = doc.data();
+        const area = String(p.area || p.region || p.city || '').trim();
+        const state = String(p.state || p.province || '').trim();
+        const country = String(p.country || 'India').trim();
+
+        if (areaFilter !== 'all' && normalizeText(area) !== areaFilter) return;
+        if (stateFilter !== 'all' && normalizeText(state) !== stateFilter) return;
+        if (countryFilter !== 'all' && normalizeText(country) !== countryFilter) return;
+
+        const createdTs = p.createdAt?.toDate?.()?.getTime?.()
+          ? p.createdAt.toDate().getTime()
+          : new Date(p.createdAt || 0).getTime();
+        const updatedTs = p.updatedAt?.toDate?.()?.getTime?.()
+          ? p.updatedAt.toDate().getTime()
+          : new Date(p.updatedAt || 0).getTime();
+
+        // Format media items: type | caption | url | thumbnail
+        const mediaList = (Array.isArray(p.media) ? p.media : [])
+          .map((m: any) => `[${m.type || 'unknown'}] ${m.caption || '(no caption)'} — ${m.url || ''}`)
+          .join(' | ');
+
+        // Format extra info sections: heading — description pairs
+        const extraInfoList = (Array.isArray(p.extraInfo) ? p.extraInfo : [])
+          .map((e: any) => `${e.heading || 'Section'}: ${e.description || ''}`)
+          .join(' | ');
+
+        rows.push({
+          placeId: doc.id,
+          name: p.name || 'Unnamed Place',
+          area,
+          state,
+          country,
+          category: p.category || '—',
+          description: String(p.description || ''),
+          fullDescription: String(p.description || ''), // Full text, not sliced
+          googleMapsUrl: p.googleMapsUrl || '—',
+          coverImage: p.coverImage || '—',
+          mediaCount: (Array.isArray(p.media) ? p.media.length : 0),
+          mediaDetails: mediaList || '(no media)',
+          extraInfoSections: extraInfoList || '(no extra info)',
+          createdAt: createdTs ? new Date(createdTs).toLocaleString() : '—',
+          createdRelative: createdTs ? relativeTime(createdTs) : '—',
+          updatedAt: updatedTs ? new Date(updatedTs).toLocaleString() : '—',
+          updatedRelative: updatedTs ? relativeTime(updatedTs) : '—',
+          exportedAt: new Date().toISOString(),
+          _sortTs: createdTs || 0,
+        });
+      });
+
+      rows.sort((a: any, b: any) => Number(b._sortTs || 0) - Number(a._sortTs || 0));
+      return rows.map(({ _sortTs, ...rest }: any) => rest);
+    }
+
+    case 'travel-itineraries': {
+      const placeFilter = normalizeText(options?.travelItineraries?.place || 'all');
+      const countryFilter = normalizeText(options?.travelItineraries?.country || 'all');
+
+      const itinerariesSnap = await getDocs(collection(firestoreDb, 'travel-destinations'));
+      const rows: Record<string, unknown>[] = [];
+
+      itinerariesSnap.forEach((doc) => {
+        const t: any = doc.data();
+        const place = String(t.place || '').trim();
+        const country = String(t.country || '').trim();
+
+        if (placeFilter !== 'all' && normalizeText(place) !== placeFilter) return;
+        if (countryFilter !== 'all' && normalizeText(country) !== countryFilter) return;
+
+        const createdTs = t.createdAt?.toDate?.()?.getTime?.()
+          ? t.createdAt.toDate().getTime()
+          : new Date(t.createdAt || 0).getTime();
+        const updatedTs = t.updatedAt?.toDate?.()?.getTime?.()
+          ? t.updatedAt.toDate().getTime()
+          : new Date(t.updatedAt || 0).getTime();
+
+        // Format lists
+        const placesList = (Array.isArray(t.places) ? t.places : []).join(' | ') || '(none)';
+        const restaurantsList = (Array.isArray(t.restaurants) ? t.restaurants : []).join(' | ') || '(none)';
+        const hotelsList = (Array.isArray(t.hotels) ? t.hotels : []).join(' | ') || '(none)';
+        const imageUrls = (Array.isArray(t.images) ? t.images : []).join(' | ') || '(none)';
+        const videoUrls = (Array.isArray(t.videos) ? t.videos : []).join(' | ') || '(none)';
+
+        rows.push({
+          itineraryId: doc.id,
+          place,
+          country,
+          budget: t.budget || '—',
+          itinerary: String(t.itinerary || ''),
+          fullItinerary: String(t.itinerary || ''),
+          placesCount: (Array.isArray(t.places) ? t.places.length : 0),
+          places: placesList,
+          restaurantsCount: (Array.isArray(t.restaurants) ? t.restaurants.length : 0),
+          restaurants: restaurantsList,
+          hotelsCount: (Array.isArray(t.hotels) ? t.hotels.length : 0),
+          hotels: hotelsList,
+          imageCount: (Array.isArray(t.images) ? t.images.length : 0),
+          imageUrls,
+          videoCount: (Array.isArray(t.videos) ? t.videos.length : 0),
+          videoUrls,
+          mapUrl: t.map || '—',
+          createdAt: createdTs ? new Date(createdTs).toLocaleString() : '—',
+          createdRelative: createdTs ? relativeTime(createdTs) : '—',
+          updatedAt: updatedTs ? new Date(updatedTs).toLocaleString() : '—',
+          updatedRelative: updatedTs ? relativeTime(updatedTs) : '—',
+          exportedAt: new Date().toISOString(),
+          _sortTs: createdTs || 0,
+        });
+      });
+
+      rows.sort((a: any, b: any) => Number(b._sortTs || 0) - Number(a._sortTs || 0));
+      return rows.map(({ _sortTs, ...rest }: any) => rest);
+    }
+
+    case 'reviews-comments': {
+      const userFilter = options?.feedback?.userId || 'all';
+      const typeFilter = options?.feedback?.type || 'all';
+      const placeFilter = options?.feedback?.placeId || 'all';
+      const itemFilter = options?.feedback?.itemId || 'all';
+
+      const placesSnap = await getDocs(collection(firestoreDb, 'touristPlaces'));
+      const rows: Record<string, unknown>[] = [];
+
+      const parseTs = (value: any): number => {
+        if (!value) return 0;
+        if (typeof value?.toDate === 'function') return value.toDate().getTime();
+        if (typeof value?.seconds === 'number') return value.seconds * 1000;
+        if (typeof value === 'number') return value;
+        const ms = Date.parse(String(value));
+        return Number.isNaN(ms) ? 0 : ms;
+      };
+
+      for (const placeDoc of placesSnap.docs) {
+        const placeId = placeDoc.id;
+        const placeData: any = placeDoc.data();
+        const placeName = String(placeData?.name || 'Unknown place');
+
+        if (placeFilter !== 'all' && placeId !== placeFilter) continue;
+
+        const [reviewsSnap, commentsSnap] = await Promise.all([
+          getDocs(collection(firestoreDb, 'touristPlaces', placeId, 'reviews')),
+          getDocs(collection(firestoreDb, 'touristPlaces', placeId, 'mediaComments')),
+        ]);
+
+        if (typeFilter === 'all' || typeFilter === 'review') {
+          reviewsSnap.forEach((reviewDoc) => {
+            const r: any = reviewDoc.data();
+            const userId = String(r.userId || '').trim();
+            const itemKey = `review:${placeId}:${reviewDoc.id}`;
+            if (userFilter !== 'all' && userId !== userFilter) return;
+            if (itemFilter !== 'all' && itemKey !== itemFilter) return;
+
+            const createdTs = parseTs(r.createdAt);
+            rows.push({
+              feedbackId: reviewDoc.id,
+              type: 'review',
+              placeId,
+              placeName,
+              userId: userId || '—',
+              author: r.author || '—',
+              rating: Number.isFinite(Number(r.rating)) ? Number(r.rating) : '—',
+              text: String(r.text || ''),
+              mediaCount: Array.isArray(r.media) ? r.media.length : 0,
+              createdAt: createdTs ? new Date(createdTs).toLocaleString() : '—',
+              createdRelative: createdTs ? relativeTime(createdTs) : '—',
+              exportedAt: new Date().toISOString(),
+              _sortTs: createdTs || 0,
+            });
+          });
+        }
+
+        if (typeFilter === 'all' || typeFilter === 'comment') {
+          commentsSnap.forEach((commentDoc) => {
+            const c: any = commentDoc.data();
+            const userId = String(c.userId || '').trim();
+            const itemKey = `comment:${placeId}:${commentDoc.id}`;
+            if (userFilter !== 'all' && userId !== userFilter) return;
+            if (itemFilter !== 'all' && itemKey !== itemFilter) return;
+
+            const createdTs = parseTs(c.createdAt);
+            rows.push({
+              feedbackId: commentDoc.id,
+              type: 'comment',
+              placeId,
+              placeName,
+              userId: userId || '—',
+              author: c.author || '—',
+              rating: '—',
+              text: String(c.text || ''),
+              mediaCount: 0,
+              mediaKey: c.mediaKey || '—',
+              createdAt: createdTs ? new Date(createdTs).toLocaleString() : '—',
+              createdRelative: createdTs ? relativeTime(createdTs) : '—',
+              exportedAt: new Date().toISOString(),
+              _sortTs: createdTs || 0,
+            });
+          });
+        }
+      }
+
+      rows.sort((a: any, b: any) => Number(b._sortTs || 0) - Number(a._sortTs || 0));
+      return rows.map(({ _sortTs, ...rest }: any) => rest);
+    }
+
     case 'subscriptions': {
       const snap = await getDocs(collection(firestoreDb, 'subscriptions'));
       return snap.docs.map(d => {
@@ -769,57 +1239,325 @@ async function fetchSectionData(
     }
 
     case 'activity': {
-      const statusSnap = await get(ref(database, 'status'));
-      const statusData = statusSnap.val() ?? {};
-      const statusEntries = Object.entries(statusData) as [string, any][];
+      const activityUserId = options?.activityUserId;
+      const parseTs = (value: any): number => {
+        if (!value) return 0;
+        if (typeof value?.toDate === 'function') return value.toDate().getTime();
+        if (typeof value === 'number') return value;
+        const ms = new Date(value).getTime();
+        return Number.isFinite(ms) ? ms : 0;
+      };
 
-      // Build user lookup from already-cached list or fetch from Firestore
+      // Build user lookup from already-cached list or full Firestore users collection.
       const usersLookup: Record<string, any> = {};
+      const userIdentityMap = new Map<string, string>();
       if (cachedUsers && cachedUsers.length > 0) {
-        cachedUsers.forEach(u => { usersLookup[u.id] = u; });
+        cachedUsers.forEach((u) => {
+          usersLookup[u.id] = u;
+          [u.id, u.displayName, u.email, u.username].forEach((v) => {
+            const key = String(v || '').trim().toLowerCase();
+            if (key) userIdentityMap.set(key, u.id);
+          });
+        });
       } else {
-        const uids = statusEntries.map(([uid]) => uid).filter(Boolean);
-        const chunks: string[][] = [];
-        for (let i = 0; i < uids.length; i += 10) chunks.push(uids.slice(i, i + 10));
-        await Promise.allSettled(
-          chunks.map(chunk =>
-            getDocs(query(collection(firestoreDb, 'users'), where('__name__', 'in', chunk)))
-              .then(snap => snap.forEach(d => {
-                const u = d.data();
-                usersLookup[d.id] = {
-                  id: d.id,
-                  displayName: u.displayName ?? '',
-                  email: u.email ?? '',
-                  role: u.role ?? 'user',
-                  avatar: u.photoURL ?? u.avatar ?? '',
-                };
-              }))
-          )
-        );
+        const usersSnap = await getDocs(collection(firestoreDb, 'users'));
+        usersSnap.forEach((doc) => {
+          const u = doc.data();
+          const row = {
+            id: doc.id,
+            displayName: u.displayName ?? '',
+            email: u.email ?? '',
+            role: u.role ?? 'user',
+            avatar: u.photoURL ?? u.avatar ?? '',
+            username: u.username ?? '',
+            createdAt: u.createdAt?.toDate?.()?.toISOString() ?? u.createdAt ?? '',
+          };
+          usersLookup[doc.id] = row;
+          [row.id, row.displayName, row.email, row.username].forEach((v) => {
+            const key = String(v || '').trim().toLowerCase();
+            if (key) userIdentityMap.set(key, row.id);
+          });
+        });
       }
 
-      const rows = statusEntries.map(([uid, s]) => {
-        const u = usersLookup[uid] ?? {};
-        return {
-          uid,
-          displayName:     (u.displayName || s?.username || '—') as string,
-          email:           (u.email        || '—') as string,
-          role:            (u.role         || 'user') as string,
-          status:          s?.isOnline ? 'Online' : 'Offline',
-          lastSeen:        s?.lastSeen ? new Date(s.lastSeen).toLocaleString() : '—',
-          lastSeenRelative: relativeTime(s?.lastSeen ?? 0),
-          _lastSeenMs:     (s?.lastSeen ?? 0) as number,
-          _isOnline:       !!(s?.isOnline),
-        };
+      const normalizeKey = (value: unknown) => String(value || '').trim().toLowerCase();
+      const resolveUserId = (...candidates: unknown[]): string | null => {
+        for (const c of candidates) {
+          const key = normalizeKey(c);
+          if (!key) continue;
+          const resolved = userIdentityMap.get(key);
+          if (resolved) return resolved;
+          if (usersLookup[key]) return key;
+        }
+        return null;
+      };
+
+      const activityRows: Array<Record<string, unknown> & { _ts: number; _actorUserId: string; _targetUserId: string }> = [];
+
+      const pushActivity = (payload: Record<string, unknown> & { _ts: number; _actorUserId?: string; _targetUserId?: string }) => {
+        activityRows.push({
+          ...payload,
+          _actorUserId: String(payload._actorUserId || ''),
+          _targetUserId: String(payload._targetUserId || ''),
+        });
+      };
+
+      // Source 1: Registration activity from users collection.
+      Object.values(usersLookup).forEach((u: any) => {
+        const ts = parseTs(u.createdAt);
+        if (!ts) return;
+        pushActivity({
+          activityType: 'registration',
+          source: 'users',
+          action: 'User registered',
+          details: `Account created with role: ${u.role || 'user'}`,
+          userId: u.id,
+          userName: u.displayName || u.username || '—',
+          email: u.email || '—',
+          role: u.role || 'user',
+          roomName: '—',
+          occurredAt: new Date(ts).toLocaleString(),
+          occurredRelative: relativeTime(ts),
+          _ts: ts,
+          _actorUserId: u.id,
+        });
       });
 
-      // Sort: online first, then by most-recently-seen
-      rows.sort((a, b) => {
-        if (a._isOnline !== b._isOnline) return a._isOnline ? -1 : 1;
-        return b._lastSeenMs - a._lastSeenMs;
+      // Source 2: Chat message activity from all rooms.
+      const roomsSnap = await get(ref(database, 'chatrooms'));
+      const roomsData = roomsSnap.val() ?? {};
+      Object.entries(roomsData).forEach(([, room]: [string, any]) => {
+        const roomName = room?.name || 'room';
+        const msgs = room?.messages;
+        if (!msgs || typeof msgs !== 'object') return;
+
+        Object.values(msgs).forEach((msg: any) => {
+          const ts = parseTs(msg?.timestamp);
+          if (!ts) return;
+
+          const resolvedUserId = resolveUserId(
+            msg?.userId,
+            msg?.uid,
+            msg?.senderId,
+            msg?.username,
+            msg?.displayName,
+            msg?.email
+          );
+          const u = resolvedUserId ? usersLookup[resolvedUserId] : null;
+
+          pushActivity({
+            activityType: 'chat_message',
+            source: 'chatrooms',
+            action: `Message sent in ${roomName}`,
+            details: String(msg?.text || msg?.content || '(attachment)').slice(0, 120),
+            userId: resolvedUserId || String(msg?.userId || '—'),
+            userName: u?.displayName || msg?.username || msg?.displayName || '—',
+            email: u?.email || msg?.email || '—',
+            role: u?.role || 'user',
+            roomName,
+            occurredAt: new Date(ts).toLocaleString(),
+            occurredRelative: relativeTime(ts),
+            _ts: ts,
+            _actorUserId: resolvedUserId || '',
+          });
+        });
       });
 
-      return rows.map(({ _lastSeenMs: _l, _isOnline: _o, ...rest }) => rest);
+      // Source 3: Presence status activity.
+      const statusSnap = await get(ref(database, 'status'));
+      const statusData = statusSnap.val() ?? {};
+      Object.entries(statusData).forEach(([uid, s]: [string, any]) => {
+        const ts = parseTs(s?.lastSeen);
+        if (!ts) return;
+        const u = usersLookup[uid] ?? null;
+        pushActivity({
+          activityType: 'presence',
+          source: 'status',
+          action: s?.isOnline ? 'User is online' : 'User was active',
+          details: s?.isOnline ? 'Online session detected' : 'Recorded from last-seen state',
+          userId: uid,
+          userName: u?.displayName || s?.username || '—',
+          email: u?.email || '—',
+          role: u?.role || 'user',
+          roomName: '—',
+          occurredAt: new Date(ts).toLocaleString(),
+          occurredRelative: relativeTime(ts),
+          _ts: ts,
+          _actorUserId: uid,
+        });
+      });
+
+      // Source 4: Subscription activity.
+      try {
+        const subsSnap = await getDocs(collection(firestoreDb, 'subscriptions'));
+        subsSnap.forEach((doc) => {
+          const s: any = doc.data();
+          const userId = resolveUserId(s.userId, s.user, s.uid);
+          const u = userId ? usersLookup[userId] : null;
+          const status = String(s.status || 'active');
+
+          const createdTs = parseTs(s.createdAt || s.startDate);
+          if (createdTs) {
+            pushActivity({
+              activityType: 'subscription',
+              source: 'subscriptions',
+              action: `Subscription ${status}`,
+              details: `${s.plan?.type || s.type || 'plan'} · ${s.plan?.price?.amount ?? ''} ${s.plan?.price?.currency ?? ''}`.trim(),
+              userId: userId || String(s.userId || s.user || '—'),
+              userName: u?.displayName || '—',
+              email: u?.email || '—',
+              role: u?.role || 'user',
+              roomName: '—',
+              occurredAt: new Date(createdTs).toLocaleString(),
+              occurredRelative: relativeTime(createdTs),
+              _ts: createdTs,
+              _actorUserId: userId || '',
+            });
+          }
+
+          const updatedTs = parseTs(s.updatedAt);
+          if (updatedTs && updatedTs !== createdTs) {
+            pushActivity({
+              activityType: 'subscription_update',
+              source: 'subscriptions',
+              action: `Subscription updated (${status})`,
+              details: `${s.plan?.type || s.type || 'plan'} status changed`,
+              userId: userId || String(s.userId || s.user || '—'),
+              userName: u?.displayName || '—',
+              email: u?.email || '—',
+              role: u?.role || 'user',
+              roomName: '—',
+              occurredAt: new Date(updatedTs).toLocaleString(),
+              occurredRelative: relativeTime(updatedTs),
+              _ts: updatedTs,
+              _actorUserId: userId || '',
+            });
+          }
+        });
+      } catch {
+        // Ignore subscriptions source failures.
+      }
+
+      // Source 5: Notifications activity (invitations/alerts between users).
+      try {
+        const notificationsSnap = await getDocs(collection(firestoreDb, 'notifications'));
+        notificationsSnap.forEach((doc) => {
+          const n: any = doc.data();
+          const fromUserId = resolveUserId(n.fromUserId, n.fromUser, n.fromEmail);
+          const toUserId = resolveUserId(n.toUserId, n.toUser, n.toEmail);
+          const fromUser = fromUserId ? usersLookup[fromUserId] : null;
+          const toUser = toUserId ? usersLookup[toUserId] : null;
+          const ts = parseTs(n.createdAt || n.updatedAt);
+          if (!ts) return;
+
+          pushActivity({
+            activityType: 'notification',
+            source: 'notifications',
+            action: `Notification ${n.type || 'event'} (${n.status || 'pending'})`,
+            details: n.message || 'Notification activity',
+            userId: fromUserId || toUserId || '—',
+            userName: fromUser?.displayName || toUser?.displayName || '—',
+            email: fromUser?.email || toUser?.email || '—',
+            role: fromUser?.role || toUser?.role || 'user',
+            roomName: n.roomName || '—',
+            occurredAt: new Date(ts).toLocaleString(),
+            occurredRelative: relativeTime(ts),
+            _ts: ts,
+            _actorUserId: fromUserId || '',
+            _targetUserId: toUserId || '',
+          });
+        });
+      } catch {
+        // Ignore notifications source failures.
+      }
+
+      // Source 6: Trip stories activity.
+      try {
+        const storiesSnap = await getDocs(collection(firestoreDb, 'stories'));
+        storiesSnap.forEach((doc) => {
+          const st: any = doc.data();
+          const userId = resolveUserId(st.userId, st.authorId, st.createdBy, st.uid, st.username, st.email);
+          const u = userId ? usersLookup[userId] : null;
+          const ts = parseTs(st.createdAt || st.updatedAt);
+          if (!ts) return;
+
+          pushActivity({
+            activityType: 'story',
+            source: 'stories',
+            action: 'Trip story published',
+            details: st.title || st.storyTitle || 'Untitled story',
+            userId: userId || '—',
+            userName: u?.displayName || st.username || '—',
+            email: u?.email || st.email || '—',
+            role: u?.role || 'user',
+            roomName: '—',
+            occurredAt: new Date(ts).toLocaleString(),
+            occurredRelative: relativeTime(ts),
+            _ts: ts,
+            _actorUserId: userId || '',
+          });
+        });
+      } catch {
+        // Ignore stories source failures.
+      }
+
+      // Source 7: Travel partner requests activity.
+      try {
+        const partnerReqSnap = await getDocs(collection(firestoreDb, 'travelPartnerRequests'));
+        partnerReqSnap.forEach((doc) => {
+          const req: any = doc.data();
+          const userId = resolveUserId(req.userId, req.createdBy, req.ownerId, req.uid, req.email);
+          const u = userId ? usersLookup[userId] : null;
+          const createdTs = parseTs(req.createdAt);
+          const updatedTs = parseTs(req.updatedAt);
+
+          if (createdTs) {
+            pushActivity({
+              activityType: 'travel_partner_request',
+              source: 'travelPartnerRequests',
+              action: 'Travel partner request created',
+              details: req.title || req.destination || req.status || 'New request',
+              userId: userId || '—',
+              userName: u?.displayName || '—',
+              email: u?.email || req.email || '—',
+              role: u?.role || 'user',
+              roomName: '—',
+              occurredAt: new Date(createdTs).toLocaleString(),
+              occurredRelative: relativeTime(createdTs),
+              _ts: createdTs,
+              _actorUserId: userId || '',
+            });
+          }
+
+          if (updatedTs && updatedTs !== createdTs) {
+            pushActivity({
+              activityType: 'travel_partner_request_update',
+              source: 'travelPartnerRequests',
+              action: `Travel partner request updated (${req.status || 'active'})`,
+              details: req.title || req.destination || 'Request updated',
+              userId: userId || '—',
+              userName: u?.displayName || '—',
+              email: u?.email || req.email || '—',
+              role: u?.role || 'user',
+              roomName: '—',
+              occurredAt: new Date(updatedTs).toLocaleString(),
+              occurredRelative: relativeTime(updatedTs),
+              _ts: updatedTs,
+              _actorUserId: userId || '',
+            });
+          }
+        });
+      } catch {
+        // Ignore travel partner requests source failures.
+      }
+
+      activityRows.sort((a, b) => b._ts - a._ts);
+
+      const filteredRows = activityUserId && activityUserId !== 'all'
+        ? activityRows.filter((row) => row._actorUserId === activityUserId || row._targetUserId === activityUserId)
+        : activityRows;
+
+      return filteredRows.map(({ _ts, _actorUserId, _targetUserId, ...rest }) => rest);
     }
 
     case 'pageviews': {
@@ -832,34 +1570,32 @@ async function fetchSectionData(
   }
 }
 
-// ── Online-status dedicated PDF ─────────────────────────────────────────────
+// ── Activity dedicated PDF ──────────────────────────────────────────────────
 function printActivityPdf(rows: Record<string, unknown>[]) {
   const logoUrl = `${window.location.origin}/logo.jpg`;
   const genDate = new Date().toLocaleString();
   const total   = rows.length;
-  const online  = rows.filter(r => r.status === 'Online').length;
-  const offline = total - online;
+  const uniqueUsers = new Set(rows.map((r) => String(r.userId || ''))).size;
+  const messageCount = rows.filter((r) => r.activityType === 'chat_message').length;
+  const registrationCount = rows.filter((r) => r.activityType === 'registration').length;
+  const presenceCount = rows.filter((r) => r.activityType === 'presence').length;
 
   const tableRows = rows.map((r, i) => {
-    const isOnline = r.status === 'Online';
+    const type = String(r.activityType || 'activity');
+    const typeColor =
+      type === 'chat_message' ? '#0369a1' :
+      type === 'registration' ? '#166534' : '#7c2d12';
     return `
     <tr>
       <td style="text-align:center;color:#9ca3af;font-size:10px">${i + 1}</td>
-      <td>
-        <span style="display:inline-flex;align-items:center;gap:5px">
-          <span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${isOnline ? '#16a34a' : '#d1d5db'};
-            box-shadow:${isOnline ? '0 0 0 2px #bbf7d0' : 'none'}"></span>
-          <strong style="color:${isOnline ? '#15803d' : '#6b7280'}">${isOnline ? 'Online' : 'Offline'}</strong>
-        </span>
-      </td>
-      <td style="font-weight:600;color:#111827">${r.displayName ?? '—'}</td>
+      <td><span style="color:${typeColor};font-weight:700;text-transform:uppercase">${type}</span></td>
+      <td style="font-weight:600;color:#111827">${r.userName ?? '—'}</td>
       <td style="color:#2563eb">${r.email ?? '—'}</td>
-      <td style="font-size:10px;word-break:break-all;color:#6b7280">${r.uid ?? '—'}</td>
-      <td><span style="background:${r.role === 'admin' ? '#fef3c7' : r.role === 'owner' ? '#fce7f3' : '#f0fdf4'};
-        color:${r.role === 'admin' ? '#92400e' : r.role === 'owner' ? '#9d174d' : '#166534'};
-        padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700;text-transform:uppercase">${r.role ?? 'user'}</span></td>
-      <td style="white-space:nowrap;font-size:10px;color:#374151">${r.lastSeen ?? '—'}</td>
-      <td style="white-space:nowrap;font-size:10px;color:${isOnline ? '#16a34a' : '#9ca3af'}">${r.lastSeenRelative ?? '—'}</td>
+      <td style="font-size:10px;word-break:break-all;color:#6b7280">${r.userId ?? '—'}</td>
+      <td style="white-space:nowrap;font-size:10px;color:#374151">${r.roomName ?? '—'}</td>
+      <td style="white-space:nowrap;font-size:10px;color:#374151">${r.occurredAt ?? '—'}</td>
+      <td style="white-space:nowrap;font-size:10px;color:#6b7280">${r.occurredRelative ?? '—'}</td>
+      <td style="max-width:280px;word-break:break-word">${r.details ?? '—'}</td>
     </tr>`;
   }).join('');
 
@@ -867,7 +1603,7 @@ function printActivityPdf(rows: Record<string, unknown>[]) {
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Online Status Report</title>
+<title>User Activity Report</title>
 <style>
   * { box-sizing:border-box;margin:0;padding:0; }
   body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;font-size:11px;color:#111827;
@@ -950,33 +1686,36 @@ function printActivityPdf(rows: Record<string, unknown>[]) {
     </div>
     <div class="brand-right">
       <span class="report-label">Admin Report</span>
-      <span class="report-title">User Online Status</span>
+      <span class="report-title">User Activity</span>
       <span class="report-date">${genDate}</span>
     </div>
   </div>
   <div class="brand-divider"></div>
 
   <div class="stats-bar">
-    <div class="stat-item"><div class="stat-value">${total}</div><div class="stat-label">Total Users</div></div>
-    <div class="stat-item"><div class="stat-value green">${online}</div><div class="stat-label">Online Now</div></div>
-    <div class="stat-item"><div class="stat-value gray">${offline}</div><div class="stat-label">Offline</div></div>
+    <div class="stat-item"><div class="stat-value">${total}</div><div class="stat-label">Total Activities</div></div>
+    <div class="stat-item"><div class="stat-value green">${messageCount}</div><div class="stat-label">Messages</div></div>
+    <div class="stat-item"><div class="stat-value gray">${registrationCount + presenceCount}</div><div class="stat-label">User/Presence Events</div></div>
     <div class="stat-item"><div class="stat-value" style="font-size:12px;color:#6b7280">${genDate.split(',')[0]}</div><div class="stat-label">Snapshot Date</div></div>
   </div>
 
+  <p style="margin:-10px 0 14px;color:#6b7280;font-size:10px">Unique users in report: ${uniqueUsers}</p>
+
   <div class="section">
-    <div class="section-title">Presence Table (${total} users &mdash; online first)</div>
+    <div class="section-title">Activity Timeline (${total} events &mdash; newest first)</div>
     <table>
       <thead><tr>
         <th style="width:28px">#</th>
-        <th style="width:80px">Status</th>
+        <th style="width:110px">Type</th>
         <th>Name</th>
         <th>Email</th>
         <th>UID</th>
-        <th style="width:70px">Role</th>
-        <th style="width:130px">Last Seen</th>
+        <th style="width:120px">Room</th>
+        <th style="width:130px">Occurred At</th>
         <th style="width:80px">How Long Ago</th>
+        <th>Details</th>
       </tr></thead>
-      <tbody>${tableRows || '<tr><td colspan="8" style="text-align:center;color:#9ca3af">No status data found</td></tr>'}</tbody>
+      <tbody>${tableRows || '<tr><td colspan="9" style="text-align:center;color:#9ca3af">No activity data found</td></tr>'}</tbody>
     </table>
   </div>
 
@@ -989,8 +1728,8 @@ function printActivityPdf(rows: Record<string, unknown>[]) {
       </div>
     </div>
     <div class="footer-right">
-      <div>Admin Report &mdash; User Online Status</div>
-      <div>${online} online &nbsp;&middot;&nbsp; ${offline} offline &nbsp;&middot;&nbsp; ${total} total</div>
+      <div>Admin Report &mdash; User Activity</div>
+      <div>${total} events &nbsp;&middot;&nbsp; ${uniqueUsers} users</div>
       <div>Generated: ${genDate}</div>
     </div>
   </div>
@@ -1071,11 +1810,41 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   const [usersList, setUsersList]           = useState<UserRecord[]>([]);
   const [usersLoading, setUsersLoading]     = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>('all');
+  const [selectedActivityUserId, setSelectedActivityUserId] = useState<string>('all');
 
   // Room dropdown state
   const [roomsList, setRoomsList]           = useState<RoomRecord[]>([]);
   const [roomsLoading, setRoomsLoading]     = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('all');
+
+  // Trip stories export filters
+  const [tripStoriesList, setTripStoriesList] = useState<TripStoryRecord[]>([]);
+  const [tripStoriesLoading, setTripStoriesLoading] = useState(false);
+  const [selectedTripStoryUserId, setSelectedTripStoryUserId] = useState<string>('all');
+  const [selectedTripStoryArea, setSelectedTripStoryArea] = useState<string>('all');
+  const [selectedTripStoryState, setSelectedTripStoryState] = useState<string>('all');
+  const [selectedTripStoryCountry, setSelectedTripStoryCountry] = useState<string>('all');
+
+  // Tourist places export filters
+  const [touristPlacesList, setTouristPlacesList] = useState<TouristPlaceRecord[]>([]);
+  const [touristPlacesLoading, setTouristPlacesLoading] = useState(false);
+  const [selectedTouristPlaceArea, setSelectedTouristPlaceArea] = useState<string>('all');
+  const [selectedTouristPlaceState, setSelectedTouristPlaceState] = useState<string>('all');
+  const [selectedTouristPlaceCountry, setSelectedTouristPlaceCountry] = useState<string>('all');
+
+  // Travel itineraries export filters
+  const [travelItinerariesList, setTravelItinerariesList] = useState<TravelItineraryRecord[]>([]);
+  const [travelItinerariesLoading, setTravelItinerariesLoading] = useState(false);
+  const [selectedTravelPlace, setSelectedTravelPlace] = useState<string>('all');
+  const [selectedTravelCountry, setSelectedTravelCountry] = useState<string>('all');
+
+  // Reviews & comments export filters
+  const [feedbackList, setFeedbackList] = useState<FeedbackRecord[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [selectedFeedbackUserId, setSelectedFeedbackUserId] = useState<string>('all');
+  const [selectedFeedbackType, setSelectedFeedbackType] = useState<'all' | 'review' | 'comment'>('all');
+  const [selectedFeedbackPlaceId, setSelectedFeedbackPlaceId] = useState<string>('all');
+  const [selectedFeedbackItemId, setSelectedFeedbackItemId] = useState<string>('all');
 
   // Clear done-timer on unmount to prevent state updates on unmounted component
   useEffect(() => () => { if (doneTimerRef.current) clearTimeout(doneTimerRef.current); }, []);
@@ -1083,10 +1852,14 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   const usersChecked    = selected.has('users');
   const roomsChecked    = selected.has('chatrooms');
   const activityChecked = selected.has('activity');
+  const tripStoriesChecked = selected.has('trip-stories');
+  const touristPlacesChecked = selected.has('tourist-places');
+  const travelItinerariesChecked = selected.has('travel-itineraries');
+  const feedbackChecked = selected.has('reviews-comments');
 
-  // Load users when the users section is first checked
+  // Load users when user-dependent section is first checked
   useEffect(() => {
-    if (!usersChecked || usersList.length > 0 || usersLoading) return;
+    if ((!usersChecked && !activityChecked && !tripStoriesChecked && !feedbackChecked) || usersList.length > 0 || usersLoading) return;
     setUsersLoading(true);
     getDocs(collection(firestoreDb, 'users'))
       .then(snap => {
@@ -1108,12 +1881,225 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
       })
       .catch(() => {})
       .finally(() => setUsersLoading(false));
-  }, [usersChecked]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [usersChecked, activityChecked, tripStoriesChecked, feedbackChecked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset user selection when users section is unchecked
   useEffect(() => {
     if (!usersChecked) setSelectedUserId('all');
   }, [usersChecked]);
+
+  // Reset activity user selection when activity section is unchecked
+  useEffect(() => {
+    if (!activityChecked) setSelectedActivityUserId('all');
+  }, [activityChecked]);
+
+  useEffect(() => {
+    if (!tripStoriesChecked) {
+      setSelectedTripStoryUserId('all');
+      setSelectedTripStoryArea('all');
+      setSelectedTripStoryState('all');
+      setSelectedTripStoryCountry('all');
+    }
+  }, [tripStoriesChecked]);
+
+  // Reset tourist places filters when section is unchecked
+  useEffect(() => {
+    if (!touristPlacesChecked) {
+      setSelectedTouristPlaceArea('all');
+      setSelectedTouristPlaceState('all');
+      setSelectedTouristPlaceCountry('all');
+    }
+  }, [touristPlacesChecked]);
+
+  // Reset travel itineraries filters when section is unchecked
+  useEffect(() => {
+    if (!travelItinerariesChecked) {
+      setSelectedTravelPlace('all');
+      setSelectedTravelCountry('all');
+    }
+  }, [travelItinerariesChecked]);
+
+  // Reset feedback filters when section is unchecked
+  useEffect(() => {
+    if (!feedbackChecked) {
+      setSelectedFeedbackUserId('all');
+      setSelectedFeedbackType('all');
+      setSelectedFeedbackPlaceId('all');
+      setSelectedFeedbackItemId('all');
+    }
+  }, [feedbackChecked]);
+
+  useEffect(() => {
+    setSelectedFeedbackItemId('all');
+  }, [selectedFeedbackType, selectedFeedbackPlaceId]);
+
+  useEffect(() => {
+    if (!tripStoriesChecked || tripStoriesLoading || tripStoriesList.length > 0) return;
+
+    setTripStoriesLoading(true);
+    getDocs(collection(firestoreDb, 'stories'))
+      .then((snap) => {
+        const stories = snap.docs.map((doc) => {
+          const s: any = doc.data();
+          const geo = deriveStoryGeo(s);
+          return {
+            id: doc.id,
+            title: s.title || 'Untitled Story',
+            destination: s.destination || '',
+            authorId: s.authorId || '',
+            authorName: s.authorName || '',
+            authorEmail: s.authorEmail || '',
+            travelType: s.travelType || '',
+            duration: s.duration || '',
+            budget: s.budget || '',
+            area: geo.area,
+            state: geo.state,
+            country: geo.country,
+            likesCount: Array.isArray(s.likes) ? s.likes.length : 0,
+            commentCount: Number(s.commentCount || 0),
+            mediaCount: (Array.isArray(s.photos) ? s.photos.length : 0) + (Array.isArray(s.videos) ? s.videos.length : 0),
+            createdAt: s.createdAt?.toDate?.()?.toISOString?.() || s.createdAt || '',
+          } as TripStoryRecord;
+        });
+        setTripStoriesList(stories);
+      })
+      .catch(() => {
+        setTripStoriesList([]);
+      })
+      .finally(() => setTripStoriesLoading(false));
+  }, [tripStoriesChecked, tripStoriesLoading, tripStoriesList.length]);
+
+  // Load tourist places when section is first checked
+  useEffect(() => {
+    if (!touristPlacesChecked || touristPlacesLoading || touristPlacesList.length > 0) return;
+
+    setTouristPlacesLoading(true);
+    getDocs(collection(firestoreDb, 'touristPlaces'))
+      .then((snap) => {
+        const places = snap.docs.map((doc) => {
+          const p: any = doc.data();
+          return {
+            id: doc.id,
+            name: p.name || 'Unnamed Place',
+            area: String(p.area || p.region || p.city || '').trim(),
+            state: String(p.state || p.province || '').trim(),
+            country: String(p.country || 'India').trim(),
+            description: p.description || '',
+            category: p.category || 'Other',
+            googleMapsUrl: p.googleMapsUrl || '',
+            coverImage: p.coverImage || '',
+            mediaCount: (Array.isArray(p.media) ? p.media.length : 0),
+            createdAt: p.createdAt?.toDate?.()?.toISOString?.() || p.createdAt || '',
+            updatedAt: p.updatedAt?.toDate?.()?.toISOString?.() || p.updatedAt || '',
+          } as TouristPlaceRecord;
+        });
+        setTouristPlacesList(places);
+      })
+      .catch(() => {
+        setTouristPlacesList([]);
+      })
+      .finally(() => setTouristPlacesLoading(false));
+  }, [touristPlacesChecked, touristPlacesLoading, touristPlacesList.length]);
+
+  // Load travel itineraries when section is first checked
+  useEffect(() => {
+    if (!travelItinerariesChecked || travelItinerariesLoading || travelItinerariesList.length > 0) return;
+
+    setTravelItinerariesLoading(true);
+    getDocs(collection(firestoreDb, 'travel-destinations'))
+      .then((snap) => {
+        const itineraries = snap.docs.map((doc) => {
+          const t: any = doc.data();
+          return {
+            id: doc.id,
+            place: t.place || 'Unnamed Place',
+            country: t.country || 'India',
+            itinerary: t.itinerary || '',
+            placesCount: (Array.isArray(t.places) ? t.places.length : 0),
+            restaurantsCount: (Array.isArray(t.restaurants) ? t.restaurants.length : 0),
+            hotelsCount: (Array.isArray(t.hotels) ? t.hotels.length : 0),
+            imageCount: (Array.isArray(t.images) ? t.images.length : 0),
+            videoCount: (Array.isArray(t.videos) ? t.videos.length : 0),
+            budget: t.budget || '',
+            createdAt: t.createdAt?.toDate?.()?.toISOString?.() || t.createdAt || '',
+            updatedAt: t.updatedAt?.toDate?.()?.toISOString?.() || t.updatedAt || '',
+          } as TravelItineraryRecord;
+        });
+        setTravelItinerariesList(itineraries);
+      })
+      .catch(() => {
+        setTravelItinerariesList([]);
+      })
+      .finally(() => setTravelItinerariesLoading(false));
+  }, [travelItinerariesChecked, travelItinerariesLoading, travelItinerariesList.length]);
+
+  // Load reviews and comments when section is first checked
+  useEffect(() => {
+    if (!feedbackChecked || feedbackLoading || feedbackList.length > 0) return;
+
+    setFeedbackLoading(true);
+    getDocs(collection(firestoreDb, 'touristPlaces'))
+      .then(async (placesSnap) => {
+        const parseTs = (value: any): number => {
+          if (!value) return 0;
+          if (typeof value?.toDate === 'function') return value.toDate().getTime();
+          if (typeof value?.seconds === 'number') return value.seconds * 1000;
+          if (typeof value === 'number') return value;
+          const ms = Date.parse(String(value));
+          return Number.isNaN(ms) ? 0 : ms;
+        };
+
+        const allRows: FeedbackRecord[] = [];
+        for (const placeDoc of placesSnap.docs) {
+          const placeId = placeDoc.id;
+          const placeData: any = placeDoc.data();
+          const placeName = String(placeData?.name || 'Unknown place');
+
+          const [reviewsSnap, commentsSnap] = await Promise.all([
+            getDocs(collection(firestoreDb, 'touristPlaces', placeId, 'reviews')),
+            getDocs(collection(firestoreDb, 'touristPlaces', placeId, 'mediaComments')),
+          ]);
+
+          reviewsSnap.forEach((reviewDoc) => {
+            const r: any = reviewDoc.data();
+            allRows.push({
+              id: reviewDoc.id,
+              type: 'review',
+              placeId,
+              placeName,
+              userId: String(r.userId || '').trim(),
+              author: String(r.author || ''),
+              text: String(r.text || ''),
+              rating: Number.isFinite(Number(r.rating)) ? Number(r.rating) : null,
+              mediaCount: Array.isArray(r.media) ? r.media.length : 0,
+              createdAt: String(r.createdAt || parseTs(r.createdAt) || ''),
+            });
+          });
+
+          commentsSnap.forEach((commentDoc) => {
+            const c: any = commentDoc.data();
+            allRows.push({
+              id: commentDoc.id,
+              type: 'comment',
+              placeId,
+              placeName,
+              userId: String(c.userId || '').trim(),
+              author: String(c.author || ''),
+              text: String(c.text || ''),
+              rating: null,
+              mediaCount: 0,
+              createdAt: String(c.createdAt || parseTs(c.createdAt) || ''),
+            });
+          });
+        }
+
+        setFeedbackList(allRows);
+      })
+      .catch(() => {
+        setFeedbackList([]);
+      })
+      .finally(() => setFeedbackLoading(false));
+  }, [feedbackChecked, feedbackLoading, feedbackList.length]);
 
   // Load rooms when chatrooms section is first checked
   useEffect(() => {
@@ -1175,9 +2161,63 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   // Memoize derived state to avoid recomputing on every render
   const isSingleUser   = useMemo(() => usersChecked    && selectedUserId !== 'all', [usersChecked, selectedUserId]);
   const selectedUser   = useMemo(() => usersList.find(u => u.id === selectedUserId), [usersList, selectedUserId]);
+  const isActivityUserScoped = useMemo(
+    () => activityChecked && selectedActivityUserId !== 'all',
+    [activityChecked, selectedActivityUserId]
+  );
+  const selectedActivityUser = useMemo(
+    () => usersList.find(u => u.id === selectedActivityUserId),
+    [usersList, selectedActivityUserId]
+  );
   const isSingleRoom   = useMemo(() => roomsChecked    && selectedRoomId !== 'all', [roomsChecked, selectedRoomId]);
   const selectedRoom   = useMemo(() => roomsList.find(r => r.id === selectedRoomId), [roomsList, selectedRoomId]);
   const isActivityOnly = useMemo(() => activityChecked && selected.size === 1, [activityChecked, selected]);
+
+  const tripStoryAreas = useMemo(
+    () => Array.from(new Set(tripStoriesList.map((s) => s.area).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [tripStoriesList]
+  );
+  const tripStoryStates = useMemo(
+    () => Array.from(new Set(tripStoriesList.map((s) => s.state).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [tripStoriesList]
+  );
+  const tripStoryCountries = useMemo(
+    () => Array.from(new Set(tripStoriesList.map((s) => s.country).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [tripStoriesList]
+  );
+
+  const touristPlaceAreas = useMemo(
+    () => Array.from(new Set(touristPlacesList.map((p) => p.area).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [touristPlacesList]
+  );
+  const touristPlaceStates = useMemo(
+    () => Array.from(new Set(touristPlacesList.map((p) => p.state).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [touristPlacesList]
+  );
+  const touristPlaceCountries = useMemo(
+    () => Array.from(new Set(touristPlacesList.map((p) => p.country).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [touristPlacesList]
+  );
+
+  const travelPlaces = useMemo(
+    () => Array.from(new Set(travelItinerariesList.map((t) => t.place).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [travelItinerariesList]
+  );
+  const travelCountries = useMemo(
+    () => Array.from(new Set(travelItinerariesList.map((t) => t.country).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [travelItinerariesList]
+  );
+
+  const feedbackPlaces = useMemo(
+    () => Array.from(new Set(feedbackList.map((f) => `${f.placeId}::${f.placeName}`))).sort((a, b) => a.localeCompare(b)),
+    [feedbackList]
+  );
+  const feedbackItemOptions = useMemo(() => {
+    return feedbackList
+      .filter((item) => selectedFeedbackType === 'all' || item.type === selectedFeedbackType)
+      .filter((item) => selectedFeedbackPlaceId === 'all' || item.placeId === selectedFeedbackPlaceId)
+      .slice(0, 300);
+  }, [feedbackList, selectedFeedbackType, selectedFeedbackPlaceId]);
 
   const handleExport = useCallback(async (format: 'csv' | 'pdf') => {
     if (!selected.size) return;
@@ -1253,7 +2293,9 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
       // ── Activity-only dedicated PDF ───────────────────────────────────────
       if (isActivityOnly && format === 'pdf') {
         const cachedUsers = usersList.length > 0 ? usersList : undefined;
-        const rows = await fetchSectionData('activity', stats, cachedUsers);
+        const rows = await fetchSectionData('activity', stats, cachedUsers, {
+          activityUserId: selectedActivityUserId,
+        });
         printActivityPdf(rows);
         scheduleDone('pdf');
         return;
@@ -1264,7 +2306,49 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
       // Pass the already-loaded users list to avoid a redundant Firestore read
       const cachedUsers = usersList.length > 0 ? usersList : undefined;
       const results = await Promise.allSettled(
-        ids.map(id => fetchSectionData(id, stats, cachedUsers))
+        ids.map(id =>
+          fetchSectionData(
+            id,
+            stats,
+            cachedUsers,
+            id === 'activity'
+              ? { activityUserId: selectedActivityUserId }
+              : id === 'trip-stories'
+              ? {
+                  tripStories: {
+                    userId: selectedTripStoryUserId,
+                    area: selectedTripStoryArea,
+                    state: selectedTripStoryState,
+                    country: selectedTripStoryCountry,
+                  },
+                }
+              : id === 'tourist-places'
+              ? {
+                  touristPlaces: {
+                    area: selectedTouristPlaceArea,
+                    state: selectedTouristPlaceState,
+                    country: selectedTouristPlaceCountry,
+                  },
+                }
+              : id === 'travel-itineraries'
+              ? {
+                  travelItineraries: {
+                    place: selectedTravelPlace,
+                    country: selectedTravelCountry,
+                  },
+                }
+              : id === 'reviews-comments'
+              ? {
+                  feedback: {
+                    userId: selectedFeedbackUserId,
+                    type: selectedFeedbackType,
+                    placeId: selectedFeedbackPlaceId,
+                    itemId: selectedFeedbackItemId,
+                  },
+                }
+              : undefined
+          )
+        )
       );
       const allData: Record<string, Record<string, unknown>[]> = {};
       results.forEach((r, i) => {
@@ -1286,7 +2370,30 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     } finally {
       setExporting(null);
     }
-  }, [selected, stats, isSingleUser, selectedUserId, isSingleRoom, selectedRoomId, isActivityOnly, usersList]);
+  }, [
+    selected,
+    stats,
+    isSingleUser,
+    selectedUserId,
+    isSingleRoom,
+    selectedRoomId,
+    isActivityOnly,
+    usersList,
+    selectedActivityUserId,
+    selectedTripStoryUserId,
+    selectedTripStoryArea,
+    selectedTripStoryState,
+    selectedTripStoryCountry,
+    selectedTouristPlaceArea,
+    selectedTouristPlaceState,
+    selectedTouristPlaceCountry,
+    selectedTravelPlace,
+    selectedTravelCountry,
+    selectedFeedbackUserId,
+    selectedFeedbackType,
+    selectedFeedbackPlaceId,
+    selectedFeedbackItemId,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1299,13 +2406,13 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
           className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-border"
         >
           <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2">
+            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
               <Download className="h-5 w-5 text-primary" />
               Export Dashboard Data
-            </h2>
-            <p className="text-muted-foreground text-sm mt-0.5">
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground text-sm mt-0.5">
               Choose sections and format to download
-            </p>
+            </DialogDescription>
           </div>
           <button
             onClick={() => onOpenChange(false)}
@@ -1334,7 +2441,11 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
             const isUsers    = sec.id === 'users';
             const isRooms    = sec.id === 'chatrooms';
             const isActivity = sec.id === 'activity';
-            const hasPanel   = (isUsers || isRooms || isActivity) && checked;
+            const isTripStories = sec.id === 'trip-stories';
+            const isTouristPlaces = sec.id === 'tourist-places';
+            const isTravelItineraries = sec.id === 'travel-itineraries';
+            const isFeedback = sec.id === 'reviews-comments';
+            const hasPanel   = (isUsers || isRooms || isActivity || isTripStories || isTouristPlaces || isTravelItineraries || isFeedback) && checked;
             return (
               <div key={sec.id}>
                 <motion.button
@@ -1426,7 +2537,39 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                       className="overflow-hidden"
                     >
                       <div className="border border-t-0 border-red-400/40 bg-red-500/5 rounded-b-lg px-3 pb-3 pt-2.5 space-y-2">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Live presence snapshot</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Activity scope for export</p>
+                        <Select value={selectedActivityUserId} onValueChange={setSelectedActivityUserId} disabled={usersLoading}>
+                          <SelectTrigger className="h-8 text-xs bg-background">
+                            {usersLoading
+                              ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading users…</span>
+                              : <SelectValue placeholder="All users (activity export)" />}
+                          </SelectTrigger>
+                          <SelectContent className="max-h-52">
+                            <SelectItem value="all"><span className="flex items-center gap-2"><Users className="h-3.5 w-3.5 text-muted-foreground" />All users (activity export)</span></SelectItem>
+                            {usersList.map(u => (
+                              <SelectItem key={u.id} value={u.id}>
+                                <span className="flex items-center gap-2">
+                                  {u.avatar ? <img src={u.avatar} alt="" className="h-4 w-4 rounded-full object-cover flex-shrink-0" /> : <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
+                                  <span className="truncate max-w-[220px]">{u.displayName || u.email}<span className="text-muted-foreground ml-1.5">· {u.role}</span></span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <AnimatePresence>
+                          {selectedActivityUser && (
+                            <motion.div initial={{ opacity:0, scale:.95 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:.95 }}
+                              className="flex items-center gap-2 rounded-lg border border-red-400/30 bg-background px-2.5 py-1.5">
+                              {selectedActivityUser.avatar
+                                ? <img src={selectedActivityUser.avatar} alt="" className="h-6 w-6 rounded-full object-cover flex-shrink-0" />
+                                : <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-content-center flex-shrink-0 text-xs font-bold text-red-600">{(selectedActivityUser.displayName || selectedActivityUser.email).charAt(0).toUpperCase()}</div>}
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{selectedActivityUser.displayName || selectedActivityUser.email}</p>
+                                <p className="text-[10px] text-muted-foreground">Export activity for this user only</p>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                         <div className="flex items-center gap-3 rounded-lg border border-red-400/30 bg-background px-3 py-2">
                           {onlineCountLoading ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />
@@ -1451,7 +2594,11 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                                 <span className="text-muted-foreground"> users online right now</span>
                               </p>
                             ) : null}
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Export includes all users — name, email, UID, role, last-seen</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {isActivityUserScoped
+                                ? 'Export includes selected user activity across website modules (users, chat, subscriptions, notifications, stories, partner requests)'
+                                : 'Export includes all users activity across website modules (users, chat, subscriptions, notifications, stories, partner requests)'}
+                            </p>
                           </div>
                           <button
                             onClick={fetchOnlineCount}
@@ -1462,6 +2609,284 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                             <Activity className={`h-3.5 w-3.5 ${onlineCountLoading ? 'animate-pulse' : ''}`} />
                           </button>
                         </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ── Trip stories filter panel ── */}
+                <AnimatePresence>
+                  {isTripStories && checked && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border border-t-0 border-fuchsia-400/40 bg-fuchsia-500/5 rounded-b-lg px-3 pb-3 pt-2.5 space-y-2">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Trip stories filters</p>
+
+                        <div className="grid grid-cols-1 gap-2">
+                          <Select value={selectedTripStoryUserId} onValueChange={setSelectedTripStoryUserId} disabled={usersLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {usersLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading users…</span>
+                                : <SelectValue placeholder="All users" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All users</SelectItem>
+                              {usersList.map(u => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  <span className="truncate max-w-[220px]">{u.displayName || u.email}</span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedTripStoryArea} onValueChange={setSelectedTripStoryArea} disabled={tripStoriesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {tripStoriesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading areas…</span>
+                                : <SelectValue placeholder="All areas" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All areas</SelectItem>
+                              {tripStoryAreas.map(area => (
+                                <SelectItem key={area} value={area}>{area}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedTripStoryState} onValueChange={setSelectedTripStoryState} disabled={tripStoriesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {tripStoriesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading states…</span>
+                                : <SelectValue placeholder="All states" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All states</SelectItem>
+                              {tripStoryStates.map(state => (
+                                <SelectItem key={state} value={state}>{state}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedTripStoryCountry} onValueChange={setSelectedTripStoryCountry} disabled={tripStoriesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {tripStoriesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading countries…</span>
+                                : <SelectValue placeholder="All countries" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All countries</SelectItem>
+                              {tripStoryCountries.map(country => (
+                                <SelectItem key={country} value={country}>{country}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <p className="text-[10px] text-muted-foreground">
+                          Export includes trip story details for all users or filtered by user/area/state/country.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ── Tourist places filter panel ── */}
+                <AnimatePresence>
+                  {isTouristPlaces && checked && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border border-t-0 border-emerald-400/40 bg-emerald-500/5 rounded-b-lg px-3 pb-3 pt-2.5 space-y-2">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Tourist places filters</p>
+
+                        <div className="grid grid-cols-1 gap-2">
+                          <Select value={selectedTouristPlaceArea} onValueChange={setSelectedTouristPlaceArea} disabled={touristPlacesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {touristPlacesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading areas…</span>
+                                : <SelectValue placeholder="All areas" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All areas</SelectItem>
+                              {touristPlaceAreas.map(area => (
+                                <SelectItem key={area} value={area}>{area}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedTouristPlaceState} onValueChange={setSelectedTouristPlaceState} disabled={touristPlacesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {touristPlacesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading states…</span>
+                                : <SelectValue placeholder="All states" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All states</SelectItem>
+                              {touristPlaceStates.map(state => (
+                                <SelectItem key={state} value={state}>{state}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedTouristPlaceCountry} onValueChange={setSelectedTouristPlaceCountry} disabled={touristPlacesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {touristPlacesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading countries…</span>
+                                : <SelectValue placeholder="All countries" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All countries</SelectItem>
+                              {touristPlaceCountries.map(country => (
+                                <SelectItem key={country} value={country}>{country}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <p className="text-[10px] text-muted-foreground">
+                          Export includes tourist place details filtered by area, state, and country.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ── Travel itineraries filter panel ── */}
+                <AnimatePresence>
+                  {isTravelItineraries && checked && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border border-t-0 border-sky-400/40 bg-sky-500/5 rounded-b-lg px-3 pb-3 pt-2.5 space-y-2">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Travel itineraries filters</p>
+
+                        <div className="grid grid-cols-1 gap-2">
+                          <Select value={selectedTravelPlace} onValueChange={setSelectedTravelPlace} disabled={travelItinerariesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {travelItinerariesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading places…</span>
+                                : <SelectValue placeholder="All places" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All places</SelectItem>
+                              {travelPlaces.map(place => (
+                                <SelectItem key={place} value={place}>{place}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedTravelCountry} onValueChange={setSelectedTravelCountry} disabled={travelItinerariesLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {travelItinerariesLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading countries…</span>
+                                : <SelectValue placeholder="All countries" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All countries</SelectItem>
+                              {travelCountries.map(country => (
+                                <SelectItem key={country} value={country}>{country}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <p className="text-[10px] text-muted-foreground">
+                          Export includes travel itinerary details with places, restaurants, hotels, budget, and media for selected destination.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* ── Reviews & comments filter panel ── */}
+                <AnimatePresence>
+                  {isFeedback && checked && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border border-t-0 border-amber-400/40 bg-amber-500/5 rounded-b-lg px-3 pb-3 pt-2.5 space-y-2">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Reviews & comments filters</p>
+
+                        <div className="grid grid-cols-1 gap-2">
+                          <Select value={selectedFeedbackUserId} onValueChange={setSelectedFeedbackUserId} disabled={usersLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {usersLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading users…</span>
+                                : <SelectValue placeholder="All users" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All users</SelectItem>
+                              {usersList.map((u) => (
+                                <SelectItem key={u.id} value={u.id}>{u.displayName || u.email}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedFeedbackType} onValueChange={(v) => setSelectedFeedbackType(v as 'all' | 'review' | 'comment')}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              <SelectValue placeholder="All feedback types" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All types</SelectItem>
+                              <SelectItem value="review">Reviews only</SelectItem>
+                              <SelectItem value="comment">Comments only</SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedFeedbackPlaceId} onValueChange={setSelectedFeedbackPlaceId} disabled={feedbackLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {feedbackLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading posts…</span>
+                                : <SelectValue placeholder="All posts/places" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All posts/places</SelectItem>
+                              {feedbackPlaces.map((pair) => {
+                                const [placeId, placeName] = pair.split('::');
+                                return (
+                                  <SelectItem key={placeId} value={placeId}>{placeName || placeId}</SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+
+                          <Select value={selectedFeedbackItemId} onValueChange={setSelectedFeedbackItemId} disabled={feedbackLoading}>
+                            <SelectTrigger className="h-8 text-xs bg-background">
+                              {feedbackLoading
+                                ? <span className="flex items-center gap-1.5 text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading feedback…</span>
+                                : <SelectValue placeholder="All reviews/comments" />}
+                            </SelectTrigger>
+                            <SelectContent className="max-h-52">
+                              <SelectItem value="all">All reviews/comments</SelectItem>
+                              {feedbackItemOptions.map((item) => (
+                                <SelectItem key={`${item.type}-${item.id}-${item.placeId}`} value={`${item.type}:${item.placeId}:${item.id}`}>
+                                  {`${item.type.toUpperCase()} · ${item.placeName} · ${(item.text || '').slice(0, 40)}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <p className="text-[10px] text-muted-foreground">
+                          Export includes all reviews and comments together, or filtered by specific user, post, and review/comment entry.
+                        </p>
                       </div>
                     </motion.div>
                   )}
@@ -1550,7 +2975,9 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
               {isSingleUser
                 ? 'PDF will include full profile photo, details, messages & subscriptions'
                 : isActivityOnly
-                ? 'PDF will include a branded presence table — name, email, role, last-seen for all users'
+                ? isActivityUserScoped
+                  ? 'PDF will include a branded presence table for the selected user'
+                  : 'PDF will include a branded presence table — name, email, role, last-seen for all users'
                 : 'PDF will include room details, all participants & full message transcript'}
             </motion.p>
           )}
@@ -1574,7 +3001,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                 {exporting === 'csv' ? 'Exporting…' : done === 'csv' ? 'Downloaded!' : 'Export CSV'}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {isSingleUser ? 'Profile + subs + messages' : isSingleRoom ? 'Info + participants + transcript' : isActivityOnly ? 'Name, email, status, last-seen' : 'Comma-separated values'}
+                {isSingleUser ? 'Profile + subs + messages' : isSingleRoom ? 'Info + participants + transcript' : isActivityOnly ? (isActivityUserScoped ? 'Selected user status export' : 'Name, email, status, last-seen') : 'Comma-separated values'}
               </span>
             </Button>
 
@@ -1596,7 +3023,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                 {exporting === 'pdf' ? 'Preparing…' : done === 'pdf' ? 'Opened!' : 'Export PDF'}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {isSingleUser ? 'Detailed profile report' : isSingleRoom ? 'Full room transcript' : isActivityOnly ? 'Branded presence table' : 'Print-ready report'}
+                {isSingleUser ? 'Detailed profile report' : isSingleRoom ? 'Full room transcript' : isActivityOnly ? (isActivityUserScoped ? 'Single-user presence report' : 'Branded presence table') : 'Print-ready report'}
               </span>
             </Button>
           </div>
@@ -1608,6 +3035,8 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                 const sec = SECTIONS.find(s => s.id === id);
                 const label = id === 'users' && selectedUser
                   ? `User: ${selectedUser.displayName || selectedUser.email}`
+                  : id === 'activity' && selectedActivityUser
+                  ? `Activity: ${selectedActivityUser.displayName || selectedActivityUser.email}`
                   : id === 'chatrooms' && selectedRoom
                   ? `Room: ${selectedRoom.name}`
                   : sec?.label;

@@ -19,19 +19,27 @@ export async function POST(req: NextRequest) {
       return fail("File is required", 400);
     }
 
+    const mimeType = file.type || "";
+    const resourceType = mimeType.startsWith("image/")
+      ? "image"
+      : mimeType.startsWith("video/")
+        ? "video"
+        : "raw";
+
     const payload = new FormData();
     payload.append("file", file);
     payload.append("upload_preset", uploadPreset);
     payload.append("folder", String(form.get("folder") || "chat-rooms"));
 
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
       method: "POST",
       body: payload,
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      return fail(`Cloudinary upload failed: ${err}`, 400);
+      const err = await response.json().catch(async () => ({ raw: await response.text() }));
+      const message = err?.error?.message || err?.message || err?.raw || "Cloudinary upload failed";
+      return fail(`Cloudinary upload failed: ${message}`, 400);
     }
 
     const data = await response.json();

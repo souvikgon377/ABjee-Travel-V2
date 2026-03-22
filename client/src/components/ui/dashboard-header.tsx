@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +40,63 @@ import {
   RefreshCw,
   MoreHorizontal,
   X,
+  CheckCheck,
+  Inbox,
 } from 'lucide-react';
+
+type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  status: string;
+  roomId?: string;
+};
+
+const READ_NOTIFICATIONS_KEY = 'admin_dashboard_read_notifications';
+
+function toDate(value: any): Date {
+  if (!value) return new Date();
+  if (typeof value?.toDate === 'function') return value.toDate();
+  if (value?._seconds) return new Date(value._seconds * 1000);
+  return new Date(value);
+}
+
+function timeAgo(createdAt: string): string {
+  const timestamp = new Date(createdAt).getTime();
+  const delta = Date.now() - timestamp;
+  const minutes = Math.floor(delta / 60000);
+  const hours = Math.floor(delta / 3600000);
+  const days = Math.floor(delta / 86400000);
+
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'Just now';
+}
+
+function normalizeNotification(raw: any): NotificationItem {
+  const created = toDate(raw?.createdAt);
+  const type = String(raw?.type || 'notification');
+  const status = String(raw?.status || 'pending');
+  const roomName = String(raw?.roomName || '').trim();
+  const isInvitation = type === 'room_invite';
+  const title = isInvitation ? 'Room Invitation' : 'Notification';
+  const fallbackMessage = isInvitation
+    ? `You have an invitation${roomName ? ` to join "${roomName}"` : ''}.`
+    : 'You have a new platform notification.';
+
+  return {
+    id: String(raw?.id || crypto.randomUUID()),
+    type,
+    title,
+    message: String(raw?.message || fallbackMessage),
+    createdAt: created.toISOString(),
+    status,
+    roomId: raw?.roomId ? String(raw.roomId) : undefined,
+  };
+}
 
 export interface DashboardFilters {
   dateRange: '7d' | '30d' | '90d' | '1y' | 'all';
@@ -91,8 +147,101 @@ export const DashboardHeader = memo(
     activeFilters,
     onFilterChange,
   }: DashboardHeaderProps) => {
-    const [open, setOpen] = useState(false);
+    const [filterOpen, setFilterOpen] = useState(false);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [notificationLoading, setNotificationLoading] = useState(false);
+    const [notificationError, setNotificationError] = useState<string | null>(null);
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+    const [readIds, setReadIds] = useState<Set<string>>(new Set());
     const activeCount = countActiveFilters(activeFilters, currentView);
+
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const raw = window.localStorage.getItem(READ_NOTIFICATIONS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setReadIds(new Set(parsed.map(String)));
+        }
+      } catch {
+        // Ignore local storage parse issues.
+      }
+    }, []);
+
+    const persistReadIds = useCallback((next: Set<string>) => {
+      if (typeof window === 'undefined') return;
+      window.localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(Array.from(next)));
+    }, []);
+
+    const fetchNotifications = useCallback(async () => {
+      setNotificationLoading(true);
+      setNotificationError(null);
+
+      try {
+        const [allRes, pendingRes] = await Promise.all([
+          fetch('/api/notifications?limit=30'),
+          fetch('/api/notifications/pending'),
+        ]);
+
+        const allJson = await allRes.json().catch(() => ({ success: false }));
+        const pendingJson = await pendingRes.json().catch(() => ({ success: false }));
+
+        const all = Array.isArray(allJson?.data) ? allJson.data : [];
+        const pending = Array.isArray(pendingJson?.data) ? pendingJson.data : [];
+
+        const byId = new Map<string, NotificationItem>();
+        [...all, ...pending].forEach((raw) => {
+          const item = normalizeNotification(raw);
+          byId.set(item.id, item);
+        });
+
+        const merged = Array.from(byId.values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setNotifications(merged);
+      } catch {
+        setNotificationError('Could not load notifications');
+      } finally {
+        setNotificationLoading(false);
+      }
+    }, []);
+
+    useEffect(() => {
+      fetchNotifications();
+    }, [fetchNotifications]);
+
+    useEffect(() => {
+      if (!notificationsOpen || notifications.length === 0) return;
+
+      // Mark notifications currently shown as read when bell popover is opened.
+      setReadIds((prev) => {
+        const next = new Set(prev);
+        notifications.forEach((item) => next.add(item.id));
+        persistReadIds(next);
+        return next;
+      });
+    }, [notificationsOpen, notifications, persistReadIds]);
+
+    const unreadCount = useMemo(
+      () => notifications.filter((item) => !readIds.has(item.id)).length,
+      [notifications, readIds]
+    );
+
+    const markAllAsRead = useCallback(() => {
+      setReadIds((prev) => {
+        const next = new Set(prev);
+        notifications.forEach((item) => next.add(item.id));
+        persistReadIds(next);
+        return next;
+      });
+    }, [notifications, persistReadIds]);
+
+    const clearAllRead = useCallback(() => {
+      const read = new Set(readIds);
+      const nextNotifications = notifications.filter((item) => !read.has(item.id));
+      setNotifications(nextNotifications);
+    }, [notifications, readIds]);
 
     const resetFilters = () => onFilterChange(DEFAULT_FILTERS);
 
@@ -202,7 +351,7 @@ export const DashboardHeader = memo(
     );
 
     return (
-      <header className="bg-background/95 sticky top-0 z-50 flex h-16 w-full shrink-0 items-center gap-2 border-b backdrop-blur transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+      <header className="bg-background/95 sticky top-0 z-50 flex h-16 w-full shrink-0 items-center gap-2 border-b backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
         <div className="flex items-center gap-2 px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
@@ -240,7 +389,7 @@ export const DashboardHeader = memo(
 
             {/* Desktop Actions */}
             <div className="hidden items-center gap-2 md:flex">
-              <Popover open={open} onOpenChange={setOpen}>
+              <Popover open={filterOpen} onOpenChange={setFilterOpen}>
                 <PopoverTrigger asChild>
                   <Button variant={activeCount > 0 ? 'default' : 'outline'} size="sm" className="relative">
                     <Filter className="mr-2 h-4 w-4" />
@@ -290,7 +439,7 @@ export const DashboardHeader = memo(
                   <Search className="mr-2 h-4 w-4" />
                   Search
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setOpen(true)}>
+                <DropdownMenuItem onClick={() => setFilterOpen(true)}>
                   <Filter className="mr-2 h-4 w-4" />
                   Filter {activeCount > 0 && `(${activeCount})`}
                 </DropdownMenuItem>
@@ -305,9 +454,93 @@ export const DashboardHeader = memo(
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="outline" size="sm">
-              <Bell className="h-4 w-4" />
-            </Button>
+            <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="relative" aria-label="Notifications">
+                  <Bell className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 inline-flex min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-4 text-white">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-90 p-0">
+                <div className="flex items-center justify-between border-b px-3 py-2">
+                  <p className="text-sm font-semibold">Notifications</p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={fetchNotifications}
+                      disabled={notificationLoading}
+                    >
+                      <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={markAllAsRead}
+                      disabled={notifications.length === 0}
+                    >
+                      <CheckCheck className="mr-1 h-3 w-3" />
+                      Read all
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="max-h-85 overflow-y-auto p-2">
+                  {notificationError && (
+                    <p className="text-destructive px-2 py-2 text-xs">{notificationError}</p>
+                  )}
+
+                  {!notificationError && notificationLoading && notifications.length === 0 && (
+                    <div className="text-muted-foreground flex items-center justify-center gap-2 py-6 text-sm">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Loading notifications...
+                    </div>
+                  )}
+
+                  {!notificationError && !notificationLoading && notifications.length === 0 && (
+                    <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 py-8 text-sm">
+                      <Inbox className="h-5 w-5" />
+                      No notifications yet
+                    </div>
+                  )}
+
+                  {notifications.map((item) => {
+                    const isUnread = !readIds.has(item.id);
+                    return (
+                      <div key={item.id} className="mb-1 rounded-md border p-2 last:mb-0">
+                        <div className="mb-1 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{item.title}</p>
+                            <p className="text-muted-foreground text-xs">{timeAgo(item.createdAt)}</p>
+                          </div>
+                          {isUnread && <span className="mt-1 h-2 w-2 rounded-full bg-blue-500" />}
+                        </div>
+                        <p className="text-muted-foreground line-clamp-2 text-xs">{item.message}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="border-t px-3 py-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-full text-xs"
+                    onClick={clearAllRead}
+                    disabled={notifications.length === 0}
+                  >
+                    Clear read notifications
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </motion.div>
         </div>
       </header>

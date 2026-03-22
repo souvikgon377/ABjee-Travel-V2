@@ -29,6 +29,9 @@ const SettingsDialog = lazy(() => import('@/components/ui/settings-dialog').then
 const ExportDialog  = lazy(() => import('@/components/ui/export-dialog').then((module) => ({ default: module.ExportDialog })));
 const TouristPlacesManager = lazy(() => import('@/components/ui/tourist-places').then((module) => ({ default: module.TouristPlacesManager })));
 const PlaceFeedbackTable = lazy(() => import('@/components/ui/place-feedback-table').then((module) => ({ default: module.PlaceFeedbackTable })));
+const AboutPageEditor = lazy(() => import('@/components/ui/about-page-editor').then((module) => ({ default: module.AboutPageEditor })));
+const TripStoriesAdminPanel = lazy(() => import('@/components/ui/trip-stories-admin').then((module) => ({ default: module.TripStoriesAdminPanel })));
+const AdminTravelItenary = lazy(() => import('@/components/ui/travel-itenary'));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -191,11 +194,6 @@ export default function AdminDashboard() {
                     <SystemStatus />
                   </Suspense>
                 </div>
-                <div id="activity">
-                  <Suspense fallback={<SectionLoader />}>
-                    <RecentActivity />
-                  </Suspense>
-                </div>
               </div>
             </div>
           </div>
@@ -222,6 +220,13 @@ export default function AdminDashboard() {
               />
             </Suspense>
           </div>
+        );
+
+      case 'about-page':
+        return (
+          <Suspense fallback={<SectionLoader />}>
+            <AboutPageEditor />
+          </Suspense>
         );
 
       case 'analytics':
@@ -301,10 +306,24 @@ export default function AdminDashboard() {
           </div>
         );
 
+      case 'trip-stories':
+        return (
+          <Suspense fallback={<SectionLoader />}>
+            <TripStoriesAdminPanel />
+          </Suspense>
+        );
+
       case 'tourist-places':
         return (
           <Suspense fallback={<SectionLoader />}>
             <TouristPlacesManager />
+          </Suspense>
+        );
+
+      case 'travel-itinerary':
+        return (
+          <Suspense fallback={<SectionLoader />}>
+            <AdminTravelItenary />
           </Suspense>
         );
 

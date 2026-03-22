@@ -1,15 +1,66 @@
 import type { Metadata } from "next";
+import type { Viewport } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Providers } from "./providers";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
+
 export const metadata: Metadata = {
-  title: "ABjee Travel",
-  description: "Your ultimate travel companion",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "ABjee Travel | Plan Better Trips Together",
+    template: "%s | ABjee Travel",
+  },
+  description:
+    "ABjee Travel helps you discover destinations, collaborate in chat rooms, explore travel stories, and plan complete itineraries.",
+  applicationName: "ABjee Travel",
+  keywords: [
+    "travel planning",
+    "trip itinerary",
+    "chat rooms",
+    "travel stories",
+    "group travel",
+    "destination guides",
+  ],
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    title: "ABjee Travel | Plan Better Trips Together",
+    description:
+      "Discover destinations, collaborate in live community chat, and build complete itineraries with ABjee Travel.",
+    siteName: "ABjee Travel",
+    images: [
+      {
+        url: "/logo.jpg",
+        width: 1200,
+        height: 630,
+        alt: "ABjee Travel",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ABjee Travel | Plan Better Trips Together",
+    description:
+      "Discover destinations, collaborate in live community chat, and build complete itineraries with ABjee Travel.",
+    images: ["/logo.jpg"],
+  },
   manifest: "/manifest.json",
   icons: { icon: "/logo.jpg", apple: "/logo.jpg" },
 };
 
-export const viewport = {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
   themeColor: "#f43f5e",
 };
 
@@ -21,7 +72,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <SpeedInsights />
+        </Providers>
       </body>
     </html>
   );

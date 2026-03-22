@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -356,6 +356,7 @@ const PlaceCard: React.FC<{
  */
 const ChatRoomsList: React.FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, userProfile } = useAuth();
   
   const [rooms, setRooms] = useState<ChatRoomType[]>([]);
@@ -394,6 +395,7 @@ const ChatRoomsList: React.FC = () => {
     [deferredSearchDestination]
   );
   const hasSearchQuery = normalizedSearchDestination.length > 0;
+  const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
 
   // Firestore tourist places
   const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
@@ -807,6 +809,12 @@ const ChatRoomsList: React.FC = () => {
     return () => unsub();
   }, [selectedCategory]);
 
+  useEffect(() => {
+    if (shouldOpenExploreInterest) {
+      setSelectedCategory('outdoors');
+    }
+  }, [shouldOpenExploreInterest]);
+
   // When search output changes, close any opened place/detail cards.
   useEffect(() => {
     setSelectedPlaceShareMessage('');
@@ -841,6 +849,14 @@ const ChatRoomsList: React.FC = () => {
   const scrollToExploreOutdoors = useCallback(() => {
     setSelectedCategory('outdoors');
   }, []);
+
+  const openTripStories = useCallback(() => {
+    router.push('/trip-stories');
+  }, [router]);
+
+  const openTravelItinerary = useCallback(() => {
+    router.push('/travel-destinations');
+  }, [router]);
 
   // Load chat rooms
   useEffect(() => {
@@ -1159,7 +1175,8 @@ const ChatRoomsList: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="mb-12 py-4"
+          id="explore-your-interest"
+          className="mb-12 py-4 scroll-mt-32"
         >
           {/* Mobile Layout: Single column with explore section after first card */}
           <div className="md:hidden space-y-6">
@@ -1266,6 +1283,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
+              onClick={openTripStories}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
@@ -1313,15 +1331,28 @@ const ChatRoomsList: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Card 4: Make a perfect plan */}
+            {/* Card 4: Make a Perfect Travel Itenary */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
               whileHover={{ scale: 1.05, y: -5 }}
+              onClick={openTravelItinerary}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                {/* Video Background */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v4.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -1333,7 +1364,7 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2">
-                      Make a Perfect Plan
+                      Make a Perfect Travel Itenary
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
                       Collaborate with others to create unforgettable journeys
@@ -1449,6 +1480,7 @@ const ChatRoomsList: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
               whileHover={{ scale: 1.08, y: -8, rotateY: 2 }}
+              onClick={openTripStories}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
@@ -1496,15 +1528,28 @@ const ChatRoomsList: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Card 4: Make a perfect plan */}
+            {/* Card 4: Make a Perfect Travel Itenary */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
               whileHover={{ scale: 1.05, y: -5 }}
+              onClick={openTravelItinerary}
               className="group cursor-pointer"
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
+                {/* Video Background */}
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                >
+                  <source src="/v4.mp4" type="video/mp4" />
+                </video>
+                {/* Dark overlay for text readability */}
+                <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
@@ -1516,7 +1561,7 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2">
-                      Make a Perfect Plan
+                      Make a Perfect Travel Itenary
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
                       Collaborate with others to create unforgettable journeys
