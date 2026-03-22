@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
+import CommunityHeader from '@/components/mvpblocks/community-header';
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1756,6 +1757,7 @@ export default function TripStoriesPage() {
     <div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:bg-background">
       {/* Header */}
       <Header1 />
+      <CommunityHeader />
 
       {/* Hero Section */}
       <section ref={heroRef} className="relative pt-16 h-[85vh] min-h-137.5 flex items-center justify-center overflow-hidden">

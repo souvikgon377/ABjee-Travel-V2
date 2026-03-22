@@ -24,6 +24,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { TravelData } from '@/types/travel';
 import Header1 from '@/components/mvpblocks/header-1';
+import CommunityHeader from '@/components/mvpblocks/community-header';
 
 interface SearchState {
 	query: string;
@@ -444,6 +445,7 @@ export default function TravelItenaryDisplay() {
 	return (
 		<div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:bg-background">
 			<Header1 />
+			<CommunityHeader />
 
 			<section ref={heroRef} className="relative pt-16 h-[75vh] min-h-130 flex items-center justify-center overflow-hidden">
 				<div className="absolute inset-0">

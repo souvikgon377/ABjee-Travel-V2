@@ -455,7 +455,7 @@ const BikeRental: React.FC = () => {
             <Header2 />
             {/* Hero Section with Search */}
             <div className="mx-4 mt-4">
-                <div className="bg-gradient-to-b from-orange-500 via-orange-600 to-orange-700 text-white rounded-3xl pb-16">
+                <div className="bg-linear-to-b from-orange-500 via-orange-600 to-orange-700 text-white rounded-3xl pb-16">
                     <div className="max-w-7xl mx-auto px-4 pt-10 pb-8">
                         <div className="text-center mb-8">
                             <h1 className="text-4xl font-bold mb-3 italic">Self-Drive Bike Rentals</h1>
@@ -486,7 +486,7 @@ const BikeRental: React.FC = () => {
                         <div className="search-dropdown-container bg-white dark:bg-gray-800 rounded-3xl p-5 shadow-2xl mx-4">
                             <div className="flex flex-wrap items-end gap-4">
                                 {/* Pickup Location */}
-                                <div className="flex-1 min-w-[200px] relative">
+                                <div className="flex-1 min-w-50 relative">
                                     <div 
                                         className="cursor-pointer"
                                         onClick={() => setActiveDropdown(activeDropdown === 'pickup' ? null : 'pickup')}
@@ -539,7 +539,7 @@ const BikeRental: React.FC = () => {
 
                                 {/* Dropoff Location */}
                                 {!sameDropoff && (
-                                    <div className="flex-1 min-w-[200px] relative">
+                                    <div className="flex-1 min-w-50 relative">
                                         <div 
                                             className="cursor-pointer"
                                             onClick={() => setActiveDropdown(activeDropdown === 'dropoff' ? null : 'dropoff')}
@@ -579,7 +579,7 @@ const BikeRental: React.FC = () => {
                                 )}
 
                                 {/* Pickup Date & Time */}
-                                <div className="min-w-[140px]">
+                                <div className="min-w-35">
                                     <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Pickup</div>
                                     <div className="border-b-2 border-orange-500 pb-2">
                                         <div className="font-bold text-gray-800 dark:text-white">{pickupDate}</div>
@@ -598,7 +598,7 @@ const BikeRental: React.FC = () => {
                                 </div>
 
                                 {/* Dropoff Date & Time */}
-                                <div className="min-w-[140px]">
+                                <div className="min-w-35">
                                     <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Drop-off</div>
                                     <div className="border-b-2 border-orange-500 pb-2">
                                         <div className="font-bold text-gray-800 dark:text-white">{dropoffDate}</div>
@@ -670,7 +670,7 @@ const BikeRental: React.FC = () => {
                         initial={{ x: -50, opacity: 0 }}
                         animate={{ x: 0, opacity: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="w-64 flex-shrink-0"
+                        className="w-64 shrink-0"
                     >
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sticky top-4">
                             <div className="flex items-center justify-between mb-4">
@@ -891,7 +891,7 @@ const BikeRental: React.FC = () => {
                                             disabled={!bike.available}
                                             className={`w-full mt-4 py-2.5 rounded-lg font-bold transition-all ${
                                                 bike.available
-                                                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-md'
+                                                    ? 'bg-linear-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-md'
                                                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                             }`}
                                         >

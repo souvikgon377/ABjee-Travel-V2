@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -356,6 +356,7 @@ const PlaceCard: React.FC<{
  */
 const ChatRoomsList: React.FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, userProfile } = useAuth();
   
   const [rooms, setRooms] = useState<ChatRoomType[]>([]);
@@ -394,6 +395,7 @@ const ChatRoomsList: React.FC = () => {
     [deferredSearchDestination]
   );
   const hasSearchQuery = normalizedSearchDestination.length > 0;
+  const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
 
   // Firestore tourist places
   const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
@@ -807,6 +809,12 @@ const ChatRoomsList: React.FC = () => {
     return () => unsub();
   }, [selectedCategory]);
 
+  useEffect(() => {
+    if (shouldOpenExploreInterest) {
+      setSelectedCategory('outdoors');
+    }
+  }, [shouldOpenExploreInterest]);
+
   // When search output changes, close any opened place/detail cards.
   useEffect(() => {
     setSelectedPlaceShareMessage('');
@@ -1167,7 +1175,8 @@ const ChatRoomsList: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="mb-12 py-4"
+          id="explore-your-interest"
+          className="mb-12 py-4 scroll-mt-32"
         >
           {/* Mobile Layout: Single column with explore section after first card */}
           <div className="md:hidden space-y-6">
