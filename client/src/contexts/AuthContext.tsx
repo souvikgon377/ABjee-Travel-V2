@@ -8,6 +8,9 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -39,6 +42,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  changePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
 
@@ -394,6 +398,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Change password for authenticated users
+  const changePassword = async (newPassword: string, currentPassword?: string) => {
+    if (!currentUser) {
+      throw new Error('You must be signed in to change password.');
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('New password should be at least 6 characters.');
+    }
+
+    const isEmailPasswordUser = currentUser?.providerData?.some((p: any) => p.providerId === 'password');
+
+    try {
+      if (isEmailPasswordUser) {
+        if (!currentPassword) {
+          throw new Error('Current password is required.');
+        }
+
+        if (!currentUser.email) {
+          throw new Error('Unable to verify your account email for password change.');
+        }
+
+        const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+
+      await updatePassword(currentUser, newPassword);
+    } catch (error: any) {
+      if ((process.env.NODE_ENV === 'development')) {
+        console.error('Password change error:', error);
+      }
+
+      const errorMessages: Record<string, string> = {
+        'auth/wrong-password': 'Current password is incorrect.',
+        'auth/invalid-credential': 'Current password is incorrect.',
+        'auth/weak-password': 'New password should be at least 6 characters.',
+        'auth/requires-recent-login': 'Please sign in again and then change your password.',
+      };
+
+      throw new Error(errorMessages[error?.code] || error?.message || 'Failed to change password. Please try again.');
+    }
+  };
+
   // Update user profile
   const updateUserProfile = async (data: Partial<UserProfile>) => {
     if (!currentUser) return;
@@ -568,6 +615,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loginWithGoogle,
     logout,
     resetPassword,
+    changePassword,
     updateUserProfile,
   }), [
     currentUser,
@@ -579,6 +627,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loginWithGoogle,
     logout,
     resetPassword,
+    changePassword,
     updateUserProfile
   ]);
 

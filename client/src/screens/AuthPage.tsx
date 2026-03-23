@@ -25,7 +25,7 @@ export default function AuthPage() {
   const handleAuthComplete = () => {
     // Check if user has admin role and redirect to admin dashboard
     if (canAccessAdmin) {
-      navigate('/admin');
+      router.push('/admin');
       return;
     }
     

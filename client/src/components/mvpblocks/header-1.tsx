@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut } from 'lucide-react';
+import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw } from 'lucide-react';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 
 interface NavItem {
   name: string;
@@ -52,18 +53,115 @@ const navItems: NavItem[] = [
   { name: 'Pricing', href: '/pricing' },
 ];
 
+type NotificationItem = {
+  id: string;
+  type: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+const toDate = (value: any): Date => {
+  if (!value) return new Date();
+  if (typeof value?.toDate === 'function') return value.toDate();
+  if (value?._seconds) return new Date(value._seconds * 1000);
+  return new Date(value);
+};
+
+const timeAgo = (createdAt: string): string => {
+  const timestamp = new Date(createdAt).getTime();
+  const delta = Date.now() - timestamp;
+  const minutes = Math.floor(delta / 60000);
+  const hours = Math.floor(delta / 3600000);
+  const days = Math.floor(delta / 86400000);
+
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'Just now';
+};
+
+const normalizeNotification = (raw: any): NotificationItem => ({
+  id: String(raw?.id || `${raw?.toUserId || 'notification'}-${Math.random().toString(36).slice(2)}`),
+  type: String(raw?.type || 'notification'),
+  message: String(raw?.message || 'You have a new notification.'),
+  status: String(raw?.status || 'pending'),
+  createdAt: toDate(raw?.createdAt).toISOString(),
+});
+
 export default function Header1() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
 
+  const goToProfile = () => {
+    setIsMobileMenuOpen(false);
+    router.push('/profile');
+  };
+
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname?.startsWith(href);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+
+    setNotificationLoading(true);
+    setNotificationError(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token missing');
+      }
+
+      const response = await fetch('/api/notifications?limit=20', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const json = await response.json().catch(() => ({ success: false }));
+
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.message || 'Failed to fetch notifications');
+      }
+
+      const items = Array.isArray(json?.data) ? json.data.map(normalizeNotification) : [];
+      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setNotifications(items);
+    } catch {
+      setNotificationError('Could not load notifications');
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+
+    fetchNotifications();
+  }, [currentUser, fetchNotifications]);
+
+  const unreadCount = useMemo(
+    () => notifications.filter((item) => item.status === 'pending').length,
+    [notifications]
+  );
+  const totalCount = notifications.length;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -200,24 +298,99 @@ export default function Header1() {
                   </motion.div>
                 )}
                 <div className="flex items-center space-x-3">
+                  <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted"
+                        aria-label="Open notifications"
+                        title="Notifications"
+                      >
+                        <Bell className="h-4 w-4" />
+                        {totalCount > 0 && (
+                          <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                            {totalCount > 9 ? '9+' : totalCount}
+                          </span>
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80 p-0">
+                      <div className="border-b px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">Notification Centre</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {totalCount} total • {unreadCount} unread
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={fetchNotifications}
+                            className="inline-flex items-center rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            disabled={notificationLoading}
+                          >
+                            <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
+                            Refresh
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto px-2 py-2">
+                        {notificationError && (
+                          <p className="px-2 py-2 text-xs text-destructive">{notificationError}</p>
+                        )}
+
+                        {!notificationError && notificationLoading && notifications.length === 0 && (
+                          <p className="px-2 py-2 text-xs text-muted-foreground">Loading notifications...</p>
+                        )}
+
+                        {!notificationError && !notificationLoading && notifications.length === 0 && (
+                          <p className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</p>
+                        )}
+
+                        {notifications.map((item) => (
+                          <div
+                            key={item.id}
+                            className="mb-2 rounded-lg border border-border px-3 py-2"
+                          >
+                            <div className="mb-1 flex items-center justify-between">
+                              <p className="text-xs font-medium text-foreground capitalize">
+                                {item.type.replace('_', ' ')}
+                              </p>
+                              <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{item.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
                   <div className="text-right">
                     <p className="text-sm font-medium text-foreground">
                       {userDisplayName}
                     </p>
                     <p className="text-xs text-muted-foreground">Welcome back!</p>
                   </div>
-                  {profileAvatar ? (
-                    <img
-                      src={profileAvatar}
-                      alt="Profile"
-                      className="w-8 h-8 rounded-full border-2 border-rose-500"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                      {userDisplayName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={goToProfile}
+                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+                    aria-label="Open profile"
+                    title="Open profile"
+                  >
+                    {profileAvatar ? (
+                      <img
+                        src={profileAvatar}
+                        alt="Profile"
+                        className="w-8 h-8 rounded-full border-2 border-rose-500"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                        {userDisplayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </button>
                 </div>
                 <motion.button
                   onClick={() => {
@@ -319,17 +492,25 @@ export default function Header1() {
                   {currentUser ? (
                     <>
                       <div className="flex items-center space-x-3 px-4 py-3 bg-muted rounded-lg">
-                        {profileAvatar ? (
-                          <img
-                            src={profileAvatar}
-                            alt="Profile"
-                            className="w-10 h-10 rounded-full border-2 border-rose-500"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white font-bold">
-                            {userDisplayName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <button
+                          type="button"
+                          onClick={goToProfile}
+                          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+                          aria-label="Open profile"
+                          title="Open profile"
+                        >
+                          {profileAvatar ? (
+                            <img
+                              src={profileAvatar}
+                              alt="Profile"
+                              className="w-10 h-10 rounded-full border-2 border-rose-500"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white font-bold">
+                              {userDisplayName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </button>
                         <div>
                           <p className="font-medium text-foreground">
                             {userDisplayName}
