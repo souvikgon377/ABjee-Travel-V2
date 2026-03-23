@@ -20,6 +20,7 @@ import {
   Shield,
   Pin,
 } from 'lucide-react';
+import { resolveAvatarUrl } from '@/lib/avatar';
 
 interface User {
   id: string;
@@ -121,6 +122,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   }
   
   const isModerator = userRole === 'moderator' || userRole === 'admin';
+  const senderAvatar = resolveAvatarUrl(message.sender as Record<string, unknown>);
 
   const handleReaction = (emoji: string) => {
     if (onReaction) {
@@ -147,8 +149,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   return (
     <div className={`flex gap-3 p-3 hover:bg-muted/50 group ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
       {/* Avatar */}
-      <Avatar className="h-8 w-8 flex-shrink-0">
-        <AvatarImage src={message.sender?.avatar} />
+      <Avatar className="h-8 w-8 shrink-0">
+        <AvatarImage src={senderAvatar || undefined} />
         <AvatarFallback>
           {message.sender?.firstName?.[0] || '?'}{message.sender?.lastName?.[0] || '?'}
         </AvatarFallback>
@@ -185,11 +187,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
         <div className={`${isOwnMessage ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg px-3 py-2 inline-block max-w-[70%]`}>
           {message.type === 'travel_request' ? (
             <div className="space-y-2">
-              <div className="font-medium">=ƒº¦ Travel Partner Request</div>
+              <div className="font-medium">=ï¿½ï¿½ï¿½ Travel Partner Request</div>
               <div className="text-sm">{message.content}</div>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap break-words">
+            <div className="whitespace-pre-wrap wrap-break-word">
               {message.content}
             </div>
           )}
@@ -230,7 +232,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleReaction('G¥ñn+Å')}
+              onClick={() => handleReaction('Gï¿½ï¿½n+ï¿½')}
               className="h-6 px-2"
             >
               <Heart className="h-3 w-3" />

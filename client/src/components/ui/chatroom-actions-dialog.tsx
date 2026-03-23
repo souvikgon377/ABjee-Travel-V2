@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Users, Settings, Activity, Hash, Tag, Shield, Clock, MessageSquare, Crown, Globe, Lock, Paperclip, Mic, RefreshCw } from 'lucide-react';
+import { resolveAvatarUrl } from '@/lib/avatar';
 
 // ─── Pure helpers (outside component) ───────────────────────────────
 
@@ -133,7 +134,12 @@ export const ChatRoomActionsDialog = memo(
             )
           );
           for (const { uid, val } of statusSnaps) {
-            if (val?.username) nameMap[uid] = { displayName: val.username, avatar: val.photoURL || null };
+            if (val?.username) {
+              nameMap[uid] = {
+                displayName: val.username,
+                avatar: resolveAvatarUrl(val as Record<string, unknown>) || null,
+              };
+            }
           }
 
           // Source 2 — any messages already cached (no extra RTDB call)
@@ -141,7 +147,10 @@ export const ChatRoomActionsDialog = memo(
           if (messagesData && typeof messagesData === 'object') {
             for (const msg of Object.values(messagesData) as any[]) {
               if (msg?.userId && msg?.username && !nameMap[msg.userId]) {
-                nameMap[msg.userId] = { displayName: msg.username, avatar: msg.photoURL || null };
+                nameMap[msg.userId] = {
+                  displayName: msg.username,
+                  avatar: resolveAvatarUrl(msg as Record<string, unknown>) || null,
+                };
               }
             }
           }
@@ -471,11 +480,13 @@ export const ChatRoomActionsDialog = memo(
                 </div>
               ) : (
                 <div className="space-y-2 max-h-100 overflow-y-auto pr-1">
-                  {messages.map((msg) => (
+                  {messages.map((msg) => {
+                    const messageAvatar = resolveAvatarUrl(msg as Record<string, unknown>);
+                    return (
                     <div key={msg.id} className="flex items-start gap-3 rounded-lg border border-border p-3 bg-card">
                       {/* Avatar */}
-                      {msg.photoURL ? (
-                        <img src={msg.photoURL} alt={msg.username} className="h-8 w-8 rounded-full shrink-0 object-cover" />
+                      {messageAvatar ? (
+                        <img src={messageAvatar} alt={msg.username} className="h-8 w-8 rounded-full shrink-0 object-cover" />
                       ) : (
                         <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                           <span className="text-xs font-medium">{(msg.username || 'U').charAt(0).toUpperCase()}</span>
@@ -505,7 +516,8 @@ export const ChatRoomActionsDialog = memo(
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               </>}

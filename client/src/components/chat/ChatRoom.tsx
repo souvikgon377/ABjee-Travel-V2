@@ -1678,7 +1678,10 @@ const ChatRoom = () => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
-                const messageAvatarUrl = userAvatarMap[message.userId] || message.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`;
+                const messageAvatarUrl =
+                  userAvatarMap[message.userId] ||
+                  resolveAvatarUrl(message as Record<string, unknown>) ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`;
                 
                 return (
                   <div

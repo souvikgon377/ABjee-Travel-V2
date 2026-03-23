@@ -33,6 +33,7 @@ import { ref, get } from 'firebase/database';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { database } from '@/lib/firebase';
 import { loadAboutPageContent } from '@/lib/aboutContent';
+import { resolveAvatarUrl } from '@/lib/avatar';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface ExportSection {
@@ -339,7 +340,7 @@ async function fetchRoomDetail(roomId: string) {
     role:        creatorData.role        ?? '—',
     city:        creatorData.city        ?? '—',
     phone:       creatorData.phoneNumber ?? '—',
-    avatar:      creatorData.photoURL    ?? creatorData.avatar ?? '',
+    avatar:      resolveAvatarUrl(creatorData),
     createdAt:   creatorData.createdAt?.toDate?.()?.toLocaleDateString()
                   ?? (creatorData.createdAt ? new Date(creatorData.createdAt).toLocaleDateString() : '—'),
   };
@@ -656,7 +657,7 @@ function isInRoom(room: any, uid: string): boolean {
 function printUserProfilePdf(data: Awaited<ReturnType<typeof fetchUserProfile>>) {
   const { profile, subscriptions, status, messages } = data;
   const name   = profile.displayName || profile.email || 'Unknown User';
-  const avatar = profile.photoURL || profile.avatar || '';
+  const avatar = resolveAvatarUrl(profile);
 
   const subRows = subscriptions.map(s => `
     <tr>
@@ -1268,7 +1269,7 @@ async function fetchSectionData(
             displayName: u.displayName ?? '',
             email: u.email ?? '',
             role: u.role ?? 'user',
-            avatar: u.photoURL ?? u.avatar ?? '',
+            avatar: resolveAvatarUrl(u),
             username: u.username ?? '',
             createdAt: u.createdAt?.toDate?.()?.toISOString() ?? u.createdAt ?? '',
           };
@@ -1870,7 +1871,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
             displayName: u.displayName ?? '',
             email: u.email ?? '',
             role: u.role ?? 'user',
-            avatar: u.photoURL ?? u.avatar ?? '',
+            avatar: resolveAvatarUrl(u),
             isActive: u.isActive !== false,
             city: u.city ?? '',
             phoneNumber: u.phoneNumber ?? '',
@@ -2423,7 +2424,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
         </motion.div>
 
         {/* ── Section picker ── */}
-        <div className="px-6 py-4 space-y-2 max-h-[380px] overflow-y-auto">
+        <div className="px-6 py-4 space-y-2 max-h-95 overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Select sections ({selected.size}/{SECTIONS.length})
@@ -2461,14 +2462,14 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                       : 'border-border bg-card/40 hover:bg-accent/50'
                   }`}
                 >
-                  <div className={`rounded-lg p-1.5 ${sec.bgColor} flex-shrink-0`}>
+                  <div className={`rounded-lg p-1.5 ${sec.bgColor} shrink-0`}>
                     <Icon className={`h-3.5 w-3.5 ${sec.color}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium leading-none">{sec.label}</p>
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">{sec.description}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {hasPanel && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                     {checked
                       ? <CheckCircle2 className="h-4 w-4 text-primary" />
@@ -2500,8 +2501,8 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                             {usersList.map(u => (
                               <SelectItem key={u.id} value={u.id}>
                                 <span className="flex items-center gap-2">
-                                  {u.avatar ? <img src={u.avatar} alt="" className="h-4 w-4 rounded-full object-cover flex-shrink-0" /> : <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
-                                  <span className="truncate max-w-[220px]">{u.displayName || u.email}<span className="text-muted-foreground ml-1.5">· {u.role}</span></span>
+                                  {u.avatar ? <img src={u.avatar} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" /> : <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  <span className="truncate max-w-55">{u.displayName || u.email}<span className="text-muted-foreground ml-1.5">· {u.role}</span></span>
                                 </span>
                               </SelectItem>
                             ))}
@@ -2512,8 +2513,8 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                             <motion.div initial={{ opacity:0, scale:.95 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:.95 }}
                               className="flex items-center gap-2 rounded-lg border border-primary/30 bg-background px-2.5 py-1.5">
                               {selectedUser.avatar
-                                ? <img src={selectedUser.avatar} alt="" className="h-6 w-6 rounded-full object-cover flex-shrink-0" />
-                                : <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-content-center flex-shrink-0 text-xs font-bold text-primary">{(selectedUser.displayName || selectedUser.email).charAt(0).toUpperCase()}</div>}
+                                ? <img src={selectedUser.avatar} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                                : <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-content-center shrink-0 text-xs font-bold text-primary">{(selectedUser.displayName || selectedUser.email).charAt(0).toUpperCase()}</div>}
                               <div className="min-w-0">
                                 <p className="text-xs font-medium truncate">{selectedUser.displayName || selectedUser.email}</p>
                                 <p className="text-[10px] text-muted-foreground">Photo · profile · messages · subscriptions</p>
@@ -2549,8 +2550,8 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                             {usersList.map(u => (
                               <SelectItem key={u.id} value={u.id}>
                                 <span className="flex items-center gap-2">
-                                  {u.avatar ? <img src={u.avatar} alt="" className="h-4 w-4 rounded-full object-cover flex-shrink-0" /> : <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
-                                  <span className="truncate max-w-[220px]">{u.displayName || u.email}<span className="text-muted-foreground ml-1.5">· {u.role}</span></span>
+                                  {u.avatar ? <img src={u.avatar} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" /> : <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                                  <span className="truncate max-w-55">{u.displayName || u.email}<span className="text-muted-foreground ml-1.5">· {u.role}</span></span>
                                 </span>
                               </SelectItem>
                             ))}
@@ -2561,8 +2562,8 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                             <motion.div initial={{ opacity:0, scale:.95 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:.95 }}
                               className="flex items-center gap-2 rounded-lg border border-red-400/30 bg-background px-2.5 py-1.5">
                               {selectedActivityUser.avatar
-                                ? <img src={selectedActivityUser.avatar} alt="" className="h-6 w-6 rounded-full object-cover flex-shrink-0" />
-                                : <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-content-center flex-shrink-0 text-xs font-bold text-red-600">{(selectedActivityUser.displayName || selectedActivityUser.email).charAt(0).toUpperCase()}</div>}
+                                ? <img src={selectedActivityUser.avatar} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                                : <div className="h-6 w-6 rounded-full bg-red-100 flex items-center justify-content-center shrink-0 text-xs font-bold text-red-600">{(selectedActivityUser.displayName || selectedActivityUser.email).charAt(0).toUpperCase()}</div>}
                               <div className="min-w-0">
                                 <p className="text-xs font-medium truncate">{selectedActivityUser.displayName || selectedActivityUser.email}</p>
                                 <p className="text-[10px] text-muted-foreground">Export activity for this user only</p>
@@ -2572,16 +2573,16 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                         </AnimatePresence>
                         <div className="flex items-center gap-3 rounded-lg border border-red-400/30 bg-background px-3 py-2">
                           {onlineCountLoading ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
                           ) : onlineCountErr ? (
-                            <span className="h-2.5 w-2.5 rounded-full bg-red-400 flex-shrink-0" />
+                            <span className="h-2.5 w-2.5 rounded-full bg-red-400 shrink-0" />
                           ) : onlineCount !== null ? (
-                            <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                            <span className="relative flex h-2.5 w-2.5 shrink-0">
                               {onlineCount > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>}
                               <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${onlineCount > 0 ? 'bg-green-500' : 'bg-gray-300'}`}></span>
                             </span>
                           ) : (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
                             {onlineCountLoading ? (
@@ -2603,7 +2604,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                           <button
                             onClick={fetchOnlineCount}
                             disabled={onlineCountLoading}
-                            className="flex-shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors p-0.5 rounded"
+                            className="shrink-0 text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors p-0.5 rounded"
                             title="Refresh count"
                           >
                             <Activity className={`h-3.5 w-3.5 ${onlineCountLoading ? 'animate-pulse' : ''}`} />
@@ -2638,7 +2639,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                               <SelectItem value="all">All users</SelectItem>
                               {usersList.map(u => (
                                 <SelectItem key={u.id} value={u.id}>
-                                  <span className="truncate max-w-[220px]">{u.displayName || u.email}</span>
+                                  <span className="truncate max-w-55">{u.displayName || u.email}</span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -2917,8 +2918,8 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                             {roomsList.map(r => (
                               <SelectItem key={r.id} value={r.id}>
                                 <span className="flex items-center gap-2">
-                                  <span className="h-4 w-4 rounded flex items-center justify-center bg-orange-100 text-orange-600 text-[10px] flex-shrink-0">{r.isPrivate ? '🔒' : '🌐'}</span>
-                                  <span className="truncate max-w-[200px]">{r.name}<span className="text-muted-foreground ml-1.5">· {r.memberCount} members</span></span>
+                                  <span className="h-4 w-4 rounded flex items-center justify-center bg-orange-100 text-orange-600 text-[10px] shrink-0">{r.isPrivate ? '🔒' : '🌐'}</span>
+                                  <span className="truncate max-w-50">{r.name}<span className="text-muted-foreground ml-1.5">· {r.memberCount} members</span></span>
                                 </span>
                               </SelectItem>
                             ))}
@@ -2928,7 +2929,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
                           {selectedRoom && (
                             <motion.div initial={{ opacity:0, scale:.95 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0, scale:.95 }}
                               className="flex items-center gap-2 rounded-lg border border-orange-400/30 bg-background px-2.5 py-1.5">
-                              <div className="h-7 w-7 rounded-lg bg-orange-100 flex items-center justify-center text-base flex-shrink-0">
+                              <div className="h-7 w-7 rounded-lg bg-orange-100 flex items-center justify-center text-base shrink-0">
                                 {selectedRoom.isPrivate ? '🔒' : '💬'}
                               </div>
                               <div className="min-w-0">

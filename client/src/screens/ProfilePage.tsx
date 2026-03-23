@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/mvpblocks/header-1';
 import { usersAPI } from '../lib/api';
 import { uploadImageToCloudinary } from '../lib/imageUpload';
+import { resolveAvatarUrl } from '../lib/avatar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -131,8 +132,8 @@ export default function ProfilePage() {
   );
 
   const profilePhoto = useMemo(() => {
-    return imagePreviewUrl || userProfile?.photoURL || userProfile?.avatar || userProfile?.profileImage || currentUser?.photoURL || '';
-  }, [imagePreviewUrl, userProfile?.photoURL, userProfile?.avatar, userProfile?.profileImage, currentUser?.photoURL]);
+    return imagePreviewUrl || resolveAvatarUrl(userProfile, currentUser as Record<string, unknown> | null | undefined) || '';
+  }, [imagePreviewUrl, userProfile, currentUser]);
 
   useEffect(() => {
     if (!loading && !currentUser) {

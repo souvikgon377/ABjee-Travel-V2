@@ -3033,7 +3033,7 @@ const ChatRoomsList: React.FC = () => {
                   >
                     {[...countryUsers, ...countryUsers].map((countryUser, index) => {
                       const fallbackLetter = (countryUser.name[0] || countryUser.username[0] || 'U').toUpperCase();
-                      const avatarSrc = countryUser.profilePictureUrl || countryUser.avatarUrl || undefined;
+                      const avatarSrc = resolveAvatarUrl(countryUser as Record<string, unknown>) || undefined;
                       return (
                         <motion.div
                           key={`${countryUser.id}-${countryUser.country}-${index}`}

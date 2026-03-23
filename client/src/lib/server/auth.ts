@@ -10,6 +10,23 @@ export class AuthError extends Error {
   }
 }
 
+const isAdminDataStoreError = (error: any) => {
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(error?.message || "").toLowerCase();
+
+  return (
+    code.includes("firestore") ||
+    code.includes("permission") ||
+    code.includes("unavailable") ||
+    message.includes("firestore") ||
+    message.includes("database") ||
+    message.includes("default credentials") ||
+    message.includes("project id") ||
+    message.includes("permission") ||
+    message.includes("unavailable")
+  );
+};
+
 const getBearerToken = (req: NextRequest) => {
   const header = req.headers.get("authorization");
   if (!header?.startsWith("Bearer ")) {
@@ -28,21 +45,85 @@ const getAdminRoleByEmail = async (email?: string | null) => {
 
 export const authenticateRequest = async (req: NextRequest) => {
   const token = getBearerToken(req);
-  const decoded = await adminAuth.verifyIdToken(token);
+  let decoded: Record<string, any>;
 
-  let user = await userService.findByFirebaseUid(decoded.uid);
-  const elevatedRole =
-    decoded.role === "admin" || decoded.role === "owner"
-      ? decoded.role
-      : await getAdminRoleByEmail(decoded.email);
+  try {
+    decoded = await adminAuth.verifyIdToken(token);
+  } catch (error: any) {
+    const code = typeof error?.code === "string" ? error.code : "";
+    const message = String(error?.message || "").toLowerCase();
 
-  if (!user) {
+    if (
+      code.startsWith("auth/") ||
+      message.includes("token") ||
+      message.includes("decod")
+    ) {
+      throw new AuthError("Invalid or expired authentication token.", 401);
+    }
+
+    throw error;
+  }
+
+  let user: Record<string, any> | null = null;
+
+  try {
+    user = await userService.findByFirebaseUid(decoded.uid);
+    const elevatedRole =
+      decoded.role === "admin" || decoded.role === "owner"
+        ? decoded.role
+        : await getAdminRoleByEmail(decoded.email);
+
+    if (!user) {
+      const displayName = decoded.name || "";
+      const nameParts = displayName.split(" ");
+      user = await userService.createWithId(decoded.uid, {
+        firebaseUid: decoded.uid,
+        email: decoded.email,
+        emailVerified: decoded.email_verified,
+        displayName,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
+        username: decoded.email?.split("@")[0] || "",
+        avatar: decoded.picture || "",
+        photoURL: decoded.picture || "",
+        profileImage: decoded.picture || "",
+        profilePicture: decoded.picture || "",
+        role: elevatedRole || "user",
+      });
+    } else {
+      const patch: Record<string, unknown> = {};
+
+      if (decoded.picture && decoded.picture !== user.avatar) {
+        patch.avatar = decoded.picture;
+        patch.photoURL = decoded.picture;
+        patch.profileImage = decoded.picture;
+        patch.profilePicture = decoded.picture;
+      }
+
+      if (decoded.name && decoded.name !== user.displayName) {
+        patch.displayName = decoded.name;
+      }
+
+      if (elevatedRole && user.role !== elevatedRole) {
+        patch.role = elevatedRole;
+      }
+
+      if (Object.keys(patch).length > 0) {
+        user = await userService.update(user.id, patch as Record<string, any>);
+      }
+    }
+  } catch (error: any) {
+    if (!isAdminDataStoreError(error)) {
+      throw error;
+    }
+
     const displayName = decoded.name || "";
     const nameParts = displayName.split(" ");
-    user = await userService.createWithId(decoded.uid, {
+    user = {
+      id: decoded.uid,
       firebaseUid: decoded.uid,
-      email: decoded.email,
-      emailVerified: decoded.email_verified,
+      email: decoded.email || "",
+      emailVerified: !!decoded.email_verified,
       displayName,
       firstName: nameParts[0] || "",
       lastName: nameParts.slice(1).join(" ") || "",
@@ -51,29 +132,10 @@ export const authenticateRequest = async (req: NextRequest) => {
       photoURL: decoded.picture || "",
       profileImage: decoded.picture || "",
       profilePicture: decoded.picture || "",
-      role: elevatedRole || "user",
-    });
-  } else {
-    const patch: Record<string, unknown> = {};
-
-    if (decoded.picture && decoded.picture !== user.avatar) {
-      patch.avatar = decoded.picture;
-      patch.photoURL = decoded.picture;
-      patch.profileImage = decoded.picture;
-      patch.profilePicture = decoded.picture;
-    }
-
-    if (decoded.name && decoded.name !== user.displayName) {
-      patch.displayName = decoded.name;
-    }
-
-    if (elevatedRole && user.role !== elevatedRole) {
-      patch.role = elevatedRole;
-    }
-
-    if (Object.keys(patch).length > 0) {
-      user = await userService.update(user.id, patch as Record<string, any>);
-    }
+      role: decoded.role === "admin" || decoded.role === "owner" ? decoded.role : "user",
+      isActive: true,
+      _degradedAuth: true,
+    };
   }
 
   if (!user?.isActive) {
