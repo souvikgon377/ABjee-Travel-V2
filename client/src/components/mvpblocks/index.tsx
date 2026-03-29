@@ -20,7 +20,7 @@ import { QuickActions } from '@/components/ui/quick-actions';
 import { DashboardHeader, DEFAULT_FILTERS, type DashboardFilters } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getCountFromServer, getDocs } from 'firebase/firestore';
+import { collection, getCountFromServer, getDocs, query, where } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { database } from '@/lib/firebase';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -75,14 +75,16 @@ export default function AdminDashboard() {
   const fetchStats = useCallback(async () => {
     const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
 
-    const [usersResult, statusResult, subsResult, pvResult] = await Promise.allSettled([
+    const [usersResult, statusResult, paymentResult, subsResult, pvResult] = await Promise.allSettled([
       // 1. Total Users (Firestore)
       getCountFromServer(collection(firestoreDb, 'users')),
       // 2. Active Sessions (RTDB status nodes)
       get(ref(database, 'status')),
-      // 3. Revenue (Firestore subscriptions)
+      // 3. Revenue (Razorpay-backed subscription payments)
+      getDocs(query(collection(firestoreDb, 'subscriptionPayments'), where('status', '==', 'paid'))),
+      // 4. Revenue fallback (legacy Firestore subscriptions)
       getDocs(collection(firestoreDb, 'subscriptions')),
-      // 4. Page Views (RTDB analytics/pageViews)
+      // 5. Page Views (RTDB analytics/pageViews)
       get(ref(database, 'analytics/pageViews')),
     ]);
 
@@ -105,10 +107,22 @@ export default function AdminDashboard() {
       console.warn('Active sessions fetch failed:', statusResult.reason);
     }
 
-    // 3. Revenue
+    // 3. Revenue (Razorpay first)
     let totalRevenue = 0;
-    let activeSubCount = 0;
-    if (subsResult.status === 'fulfilled') {
+    let paidTxnCount = 0;
+
+    if (paymentResult.status === 'fulfilled' && paymentResult.value.size > 0) {
+      paymentResult.value.forEach((d) => {
+        const payment = d.data() as Record<string, any>;
+        const amountFromPaise = typeof payment.amountInPaise === 'number' ? payment.amountInPaise / 100 : null;
+        const amount = typeof amountFromPaise === 'number'
+          ? amountFromPaise
+          : (typeof payment.amount === 'number' ? payment.amount : 0);
+        totalRevenue += amount;
+        paidTxnCount += 1;
+      });
+    } else if (subsResult.status === 'fulfilled') {
+      // Legacy fallback for old subscription records without payment transactions.
       const now = new Date();
       subsResult.value.forEach((d) => {
         const sub = d.data();
@@ -116,7 +130,7 @@ export default function AdminDashboard() {
         const endDate = sub.endDate?.toDate?.() ?? (sub.endDate ? new Date(sub.endDate) : null);
         if (!endDate || endDate > now) {
           totalRevenue += sub.plan?.price?.amount ?? prices[sub.plan?.type] ?? 0;
-          activeSubCount++;
+          paidTxnCount++;
         }
       });
     } else if ((process.env.NODE_ENV === "development")) {
@@ -130,7 +144,7 @@ export default function AdminDashboard() {
 
     setStats([
       { ...STAT_DEFAULTS[0], value: totalUsers.toLocaleString(),                               change: totalUsers > 0 ? `${totalUsers} registered` : '+0%' },
-      { ...STAT_DEFAULTS[1], value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, change: activeSubCount > 0 ? `${activeSubCount} active subs` : '+0%' },
+      { ...STAT_DEFAULTS[1], value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, change: paidTxnCount > 0 ? `${paidTxnCount} paid txns` : '+0%' },
       { ...STAT_DEFAULTS[2], value: activeUsers.toLocaleString(),                              change: activeUsers > 0 ? `${activeUsers} online` : '+0%' },
       { ...STAT_DEFAULTS[3], value: pageViews.toLocaleString(),                                change: pageViews > 0 ? `${pageViews} total` : '+0%', changeType: 'positive' as const },
     ]);

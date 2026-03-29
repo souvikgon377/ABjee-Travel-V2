@@ -2,7 +2,7 @@ import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { BarChart3, Calendar } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 
 export const RevenueChart = memo(() => {
@@ -11,15 +11,22 @@ export const RevenueChart = memo(() => {
 
   const fetchRevenueData = useCallback(async () => {
     try {
-      const subsSnap = await getDocs(collection(firestoreDb, 'subscriptions'));
-      const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
-
+      const paymentsSnap = await getDocs(
+        query(collection(firestoreDb, 'subscriptionPayments'), where('status', '==', 'paid')),
+      );
       const revenueByMonth: Record<string, number> = {};
-      subsSnap.forEach((doc) => {
-        const sub = doc.data();
-        const createdAt: Date = sub.createdAt?.toDate?.() ?? (sub.createdAt ? new Date(sub.createdAt) : new Date());
+      paymentsSnap.forEach((doc) => {
+        const payment = doc.data() as Record<string, any>;
+        const amountFromPaise = typeof payment.amountInPaise === 'number' ? payment.amountInPaise / 100 : null;
+        const amount = typeof amountFromPaise === 'number'
+          ? amountFromPaise
+          : (typeof payment.amount === 'number' ? payment.amount : 0);
+
+        const createdAt: Date = payment.verifiedAt
+          ? new Date(payment.verifiedAt)
+          : (payment.createdAt?.toDate?.() ?? (payment.createdAt ? new Date(payment.createdAt) : new Date()));
         const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
-        revenueByMonth[key] = (revenueByMonth[key] || 0) + (prices[sub.type] || 0);
+        revenueByMonth[key] = (revenueByMonth[key] || 0) + amount;
       });
 
       const lastSix: { month: string; value: number; monthKey: string }[] = [];

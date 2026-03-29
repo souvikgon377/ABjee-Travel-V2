@@ -147,6 +147,7 @@ const SECTIONS: ExportSection[] = [
   { id: 'reviews-comments', label: 'Reviews & Comments', description: 'All place feedback with filters: user, type, post', icon: MessageSquare, color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
   { id: 'about-page',    label: 'About Page',       description: 'All About page CMS content and metadata',     icon: FileText,      color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
   { id: 'subscriptions', label: 'Subscriptions',    description: 'Subscription & revenue records',             icon: DollarSign,    color: 'text-green-500',  bgColor: 'bg-green-500/10'  },
+  { id: 'razorpay-payments', label: 'Razorpay Payments', description: 'Paid payment transactions and order records', icon: DollarSign, color: 'text-lime-600', bgColor: 'bg-lime-500/10' },
   { id: 'chatrooms',     label: 'Chat Communities', description: 'Community list & member counts',             icon: MessageSquare, color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
   { id: 'pageviews',     label: 'Page Views',       description: 'Analytics page view counter',                icon: Eye,           color: 'text-cyan-500',   bgColor: 'bg-cyan-500/10'   },
 ];
@@ -1214,15 +1215,44 @@ async function fetchSectionData(
       const snap = await getDocs(collection(firestoreDb, 'subscriptions'));
       return snap.docs.map(d => {
         const s = d.data();
+        const paymentMethod = (s.paymentMethod || {}) as Record<string, unknown>;
         return {
           id: d.id,
-          userId: s.userId ?? '',
+          userId: s.user ?? s.userId ?? '',
           status: s.status ?? '',
           planType: s.plan?.type ?? s.type ?? '',
           amount: s.plan?.price?.amount ?? '',
-          currency: s.plan?.price?.currency ?? 'USD',
+          currency: s.plan?.price?.currency ?? 'INR',
+          paymentType: paymentMethod.type ?? 'unknown',
+          razorpayOrderId: paymentMethod.orderId ?? '',
+          razorpayPaymentId: paymentMethod.paymentId ?? '',
           startDate: s.startDate?.toDate?.()?.toISOString() ?? s.startDate ?? '',
           endDate:   s.endDate?.toDate?.()?.toISOString()   ?? s.endDate   ?? '',
+        };
+      });
+    }
+
+    case 'razorpay-payments': {
+      const snap = await getDocs(collection(firestoreDb, 'subscriptionPayments'));
+      return snap.docs.map((d) => {
+        const p = d.data() as Record<string, any>;
+        const amount = typeof p.amountInPaise === 'number'
+          ? p.amountInPaise / 100
+          : (typeof p.amount === 'number' ? p.amount : 0);
+
+        return {
+          id: d.id,
+          orderId: p.orderId ?? d.id,
+          paymentId: p.razorpayPaymentId ?? '',
+          userId: p.userId ?? '',
+          planType: p.planType ?? '',
+          interval: p.interval ?? '',
+          status: p.status ?? '',
+          amount,
+          currency: p.currency ?? 'INR',
+          createdAt: p.createdAt ?? '',
+          verifiedAt: p.verifiedAt ?? '',
+          updatedAt: p.updatedAt ?? '',
         };
       });
     }

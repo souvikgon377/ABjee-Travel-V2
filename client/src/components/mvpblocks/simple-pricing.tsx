@@ -13,8 +13,11 @@ import {
 } from '../ui/card';
 import { cn } from '../../lib/utils';
 import { Sparkles, ArrowRight, Check, Star, Zap, Shield } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useAuth } from '../../contexts/AuthContext';
+import { auth } from '../../lib/firebase';
+import { useRouter } from 'next/navigation';
 
 const plans = [
   {
@@ -78,6 +81,135 @@ const plans = [
 export default function SimplePricing() {
   const [frequency, setFrequency] = useState<string>('monthly');
   const [mounted, setMounted] = useState(false);
+  const [processingPlan, setProcessingPlan] = useState<string | null>(null);
+  const { currentUser, userProfile } = useAuth();
+  const router = useRouter();
+
+  const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
+  const loadRazorpayScript = useCallback(async () => {
+    if (typeof window === 'undefined') return false;
+    if ((window as any).Razorpay) return true;
+
+    return new Promise<boolean>((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  }, []);
+
+  const getPlanType = (planId: string) => {
+    if (planId === 'pro') return 'pro';
+    if (planId === 'enterprise') return 'premium';
+    return null;
+  };
+
+  const handleSubscribe = useCallback(async (planId: string) => {
+    const planType = getPlanType(planId);
+
+    if (!planType) {
+      router.push('/chat');
+      return;
+    }
+
+    if (!currentUser || !auth.currentUser) {
+      alert('Please login to continue with subscription.');
+      router.push('/auth');
+      return;
+    }
+
+    if (!razorpayKeyId) {
+      alert('Razorpay public key is missing. Please contact support.');
+      return;
+    }
+
+    setProcessingPlan(planId);
+
+    try {
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady) {
+        alert('Unable to load Razorpay checkout. Please try again.');
+        return;
+      }
+
+      const token = await auth.currentUser.getIdToken();
+
+      const orderRes = await fetch('/api/subscriptions/razorpay/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          planType,
+          interval: frequency,
+        }),
+      });
+
+      const orderPayload = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok || !orderPayload?.success) {
+        throw new Error(orderPayload?.message || 'Failed to create order');
+      }
+
+      const orderData = orderPayload.data;
+
+      const checkout = new (window as any).Razorpay({
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'ABjee Travel',
+        description: `${orderData.planName} (${frequency})`,
+        order_id: orderData.orderId,
+        handler: async (response: any) => {
+          try {
+            const verifyRes = await fetch('/api/subscriptions/razorpay/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                ...response,
+                planType,
+                interval: frequency,
+              }),
+            });
+
+            const verifyPayload = await verifyRes.json().catch(() => ({}));
+            if (!verifyRes.ok || !verifyPayload?.success) {
+              throw new Error(verifyPayload?.message || 'Payment verification failed');
+            }
+
+            alert('Subscription activated successfully.');
+            router.push('/profile');
+          } catch (error: any) {
+            alert(error?.message || 'Payment verification failed. Please contact support.');
+          }
+        },
+        prefill: {
+          name: userProfile?.displayName || '',
+          email: userProfile?.email || currentUser.email || '',
+        },
+        theme: {
+          color: '#e11d48',
+        },
+        modal: {
+          ondismiss: () => {
+            setProcessingPlan(null);
+          },
+        },
+      });
+
+      checkout.open();
+    } catch (error: any) {
+      alert(error?.message || 'Failed to start payment. Please try again.');
+    } finally {
+      setProcessingPlan(null);
+    }
+  }, [currentUser, frequency, loadRazorpayScript, razorpayKeyId, router, userProfile?.displayName, userProfile?.email]);
 
   useEffect(() => {
     setMounted(true);
@@ -217,7 +349,7 @@ export default function SimplePricing() {
                             )}
                             format={{
                               style: 'currency',
-                              currency: 'USD',
+                              currency: 'INR',
                               maximumFractionDigits: 0,
                             }}
                             value={
@@ -283,8 +415,10 @@ export default function SimplePricing() {
                         ? 'bg-primary hover:bg-primary/90 hover:shadow-md hover:shadow-primary/20'
                         : 'hover:border-primary/30 hover:bg-primary/5 hover:text-primary',
                     )}
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={processingPlan === plan.id}
                   >
-                    {plan.cta}
+                    {processingPlan === plan.id ? 'Processing...' : plan.cta}
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                   </Button>
                 </CardFooter>
