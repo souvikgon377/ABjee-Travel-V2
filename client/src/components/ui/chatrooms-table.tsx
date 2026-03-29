@@ -61,9 +61,9 @@ function getTypeColor(type: string): string {
 
 function getTypeLabel(type: string): string {
   switch (type) {
-    case 'private': return 'Private';
+    case 'private': return 'Private Community Chat';
     case 'premium': return 'Premium';
-    default:        return 'Public';
+    default:        return 'General Community Chat';
   }
 }
 
@@ -229,7 +229,7 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
         setLoading(false);
       },
       (err) => {
-        console.error('Failed to listen to chat rooms from RTDB:', err);
+        console.error('Failed to listen to chat communities from RTDB:', err);
         setRooms([]); setTotalPages(1); setTotalRooms(0);
         setLoading(false);
       }
@@ -266,8 +266,8 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
       await remove(ref(database, `chatrooms/${room.id}`));
       fetchRooms();
     } catch (err: any) {
-      console.error('Failed to delete chat room:', err);
-      alert('Failed to delete chat room. Please try again.');
+      console.error('Failed to delete chat community:', err);
+      alert('Failed to delete chat community. Please try again.');
     }
   }, [fetchRooms]);
 
@@ -280,9 +280,9 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-bold">Chat Rooms</h2>
+          <h2 className="text-xl font-bold">Chat Communities</h2>
           <p className="text-muted-foreground text-sm">
-            {totalRooms} {totalRooms === 1 ? 'room' : 'rooms'} total
+            {totalRooms} {totalRooms === 1 ? 'community' : 'communities'} total
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -291,7 +291,7 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
           </Button>
           <Button onClick={() => setShowAddDialog(true)} size="sm">
             <Plus className="h-4 w-4 mr-2" />
-            Add Room
+            Add Community
           </Button>
         </div>
       </div>
@@ -301,7 +301,7 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
         <div className="relative flex-1">
           <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <Input
-            placeholder="Search rooms..."
+            placeholder="Search communities..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-10"
@@ -334,7 +334,7 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
       {loading && rooms.length === 0 ? (
         <div className="text-center py-12">
           <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading chat rooms...</p>
+          <p className="text-muted-foreground">Loading chat communities...</p>
         </div>
       ) : (
         <>
@@ -353,8 +353,8 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
 
           {rooms.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg font-medium">No chat rooms found</p>
-              <p className="text-sm mt-1">Try adjusting your filters or create a new room</p>
+              <p className="text-lg font-medium">No chat communities found</p>
+              <p className="text-sm mt-1">Try adjusting your filters or create a new community</p>
             </div>
           )}
 
@@ -477,11 +477,11 @@ const RoomCard = memo(({ room, onManage, onDelete }: RoomCardProps) => {
             variant="ghost" size="sm"
             onClick={() => onDelete(room)}
             className="text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 w-8 p-0"
-            title="Delete room"
+            title="Delete community"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onManage(room)} className="h-8 w-8 p-0" title="Manage room">
+          <Button variant="ghost" size="sm" onClick={() => onManage(room)} className="h-8 w-8 p-0" title="Manage community">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </div>

@@ -93,7 +93,7 @@ export const adminAPI = {
   getActivity: (params?: any) => api.get('/admin/activity', { params }),
   getRevenue: (params?: any) => api.get('/admin/revenue', { params }),
   getSystemStatus: () => api.get('/admin/system-status'),
-  // Chat Rooms
+  // Chat Communities
   getChatRooms: (params?: any) => api.get('/admin/chatrooms', { params }),
   getChatRoom: (roomId: string) => api.get(`/admin/chatrooms/${roomId}`),
   createChatRoom: (data: any) => api.post('/admin/chatrooms', data),

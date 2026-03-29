@@ -12,7 +12,7 @@ import 'swiper/css';
 import 'swiper/css/effect-fade';
 import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
-import { uploadImageToCloudinary, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/imageUpload';
+import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getSubscriptionInfo,
@@ -30,31 +30,23 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import Header from '@/components/mvpblocks/header-1';
 
-const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME as string;
-const CLOUDINARY_UPLOAD_PRESET = (process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string) || 'ml_default';
 
-async function uploadVideoToCloudinary(file: File): Promise<{ url: string; publicId: string; thumbnail: string }> {
-  if (!CLOUDINARY_CLOUD_NAME) {
-    throw new Error('Cloudinary cloud name not configured.');
-  }
+async function uploadVideoToR2(file: File): Promise<{ url: string; key: string }> {
   const fd = new FormData();
   fd.append('file', file);
-  fd.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
   fd.append('folder', 'tourist-places/user-videos');
-  fd.append('resource_type', 'video');
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`,
-    { method: 'POST', body: fd }
-  );
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: fd
+  });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err?.error?.message ?? 'Video upload failed');
+    const err = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(err?.error ?? 'Video upload failed');
   }
 
-  const data = await res.json() as { secure_url: string; public_id: string };
-  const thumbnail = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_0,w_800,h_450,c_fill,f_jpg/${data.public_id}.jpg`;
-  return { url: data.secure_url, publicId: data.public_id, thumbnail };
+  const data = await res.json() as { url: string; key: string };
+  return { url: data.url, key: data.key };
 }
 
 type PlaceReview = {
@@ -359,7 +351,7 @@ const PlaceCard: React.FC<{
 };
 
 /**
- * Chat Rooms List Component
+ * Chat Communities List Component
  */
 const ChatRoomsList: React.FC = () => {
   const router = useRouter();
@@ -414,6 +406,10 @@ const ChatRoomsList: React.FC = () => {
     [userProfile, userCreatedPrivateRoomsCount]
   );
   const paidPrivateRoomLimit = useMemo(() => getPaidPrivateRoomLimit(subscriptionInfo), [subscriptionInfo]);
+  const isAdminOrOwner = useMemo(() => {
+    const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
+    return role === 'admin' || role === 'owner';
+  }, [userProfile?.role]);
   const hasSearchQuery = normalizedSearchDestination.length > 0;
   const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
 
@@ -736,18 +732,15 @@ const ChatRoomsList: React.FC = () => {
       for (const { file } of userMediaFiles) {
         const isVideo = file.type.startsWith('video/');
         const mediaItem = isVideo
-          ? await uploadVideoToCloudinary(file)
-          : await uploadImageToCloudinary(file, { folder: 'tourist-places/user-images' });
+          ? await uploadVideoToR2(file)
+          : await uploadImageToR2(file, { folder: 'tourist-places/user-images' });
 
         const reviewMediaItem: MediaItem = {
           type: isVideo ? 'video' : 'image',
           url: mediaItem.url,
-          publicId: mediaItem.publicId,
+          publicId: mediaItem.key,
         };
 
-        if ('thumbnail' in mediaItem && mediaItem.thumbnail) {
-          reviewMediaItem.thumbnail = mediaItem.thumbnail;
-        }
         if (reviewText) {
           reviewMediaItem.caption = reviewText;
         }
@@ -878,7 +871,7 @@ const ChatRoomsList: React.FC = () => {
     router.push('/travel-destinations');
   }, [router]);
 
-  // Load chat rooms
+  // Load chat communities
   useEffect(() => {
     if (!user) {
       setLoading(false);
@@ -907,7 +900,7 @@ const ChatRoomsList: React.FC = () => {
       };
     } catch (error) {
       if ((process.env.NODE_ENV === "development")) {
-        console.error('Error loading chat rooms:', error);
+        console.error('Error loading chat communities:', error);
       }
       setLoading(false);
     }
@@ -972,7 +965,12 @@ const ChatRoomsList: React.FC = () => {
     
     if (!newRoomName.trim() || !user) return;
 
-    if (!newRoomIsPublic && !privateRoomAllowance.allowed) {
+    if (!isAdminOrOwner) {
+      alert('Only admins can create community chat.');
+      return;
+    }
+
+    if (!newRoomIsPublic && !isAdminOrOwner && !privateRoomAllowance.allowed) {
       alert(privateRoomAllowance.reason);
       return;
     }
@@ -1070,7 +1068,7 @@ const ChatRoomsList: React.FC = () => {
   const copyCredentials = () => {
     if (!shareRoom || !shareRoom.id) return;
     
-    const credentials = `Room ID: ${shareRoom.id}\nPassword: ${shareRoom.password || 'N/A'}`;
+    const credentials = `Community ID: ${shareRoom.id}\nPassword: ${shareRoom.password || 'N/A'}`;
     navigator.clipboard.writeText(credentials);
     setCopiedPassword(true);
     setTimeout(() => setCopiedPassword(false), 2000);
@@ -1080,7 +1078,7 @@ const ChatRoomsList: React.FC = () => {
     if (!shareRoom?.id || !shareRoom.inviteToken) return;
 
     const inviteLink = chatService.getInviteLink(shareRoom.id, shareRoom.inviteToken);
-    const shareText = `Join my room "${shareRoom.name}" on ABjee Travel: ${inviteLink}`;
+    const shareText = `Join my community "${shareRoom.name}" on ABjee Travel: ${inviteLink}`;
 
     if (platform === 'facebook') {
       const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(inviteLink)}&quote=${encodeURIComponent(shareText)}`;
@@ -1131,18 +1129,18 @@ const ChatRoomsList: React.FC = () => {
     setTimeout(() => setSelectedPlaceShareMessage(''), 3500);
   };
 
-  // Delete room
+  // Delete community
   const handleDeleteRoom = async (roomId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (!confirm('Are you sure you want to delete this room? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this community? This action cannot be undone.')) {
       return;
     }
 
     try {
       await chatService.deleteRoom(roomId);
     } catch (error: any) {
-      alert(error.message || 'Failed to delete room');
+      alert(error.message || 'Failed to delete community');
     }
   };
 
@@ -1184,7 +1182,7 @@ const ChatRoomsList: React.FC = () => {
             <Sparkles className="h-6 w-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
           </div>
           <p className="mt-6 text-lg font-medium bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
-            Loading chat rooms...
+            Loading communities...
           </p>
         </motion.div>
       </div>
@@ -2532,7 +2530,7 @@ const ChatRoomsList: React.FC = () => {
           )}
         </AnimatePresence>
 
-        {/* Community Rooms Section - Hidden when category is selected */}
+        {/* Communities Section - Hidden when category is selected */}
         {!selectedCategory && (
           <>
             {/* Header */}
@@ -2549,7 +2547,7 @@ const ChatRoomsList: React.FC = () => {
                       <MessageCircle className="h-8 w-8 text-white" />
                     </div>
                     <h1 className="text-3xl sm:text-4xl font-extrabold bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
-                      Community Rooms
+                      Communities
                 </h1>
               </div>
               <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300 ml-1">
@@ -2561,10 +2559,10 @@ const ChatRoomsList: React.FC = () => {
                     <Crown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
                       {paidMember
-                        ? `${userCreatedPrivateRoomsCount}/${paidPrivateRoomLimit} Private Rooms`
+                        ? `${userCreatedPrivateRoomsCount}/${paidPrivateRoomLimit} Private Communities`
                         : freeTrialState.eligible
-                          ? `${userCreatedPrivateRoomsCount}/3 Trial Private Rooms (${freeTrialState.daysLeft}d left)`
-                          : `${userCreatedPrivateRoomsCount}/3 Trial Private Rooms Used`
+                          ? `${userCreatedPrivateRoomsCount}/3 Trial Private Communities (${freeTrialState.daysLeft}d left)`
+                          : `${userCreatedPrivateRoomsCount}/3 Trial Private Communities Used`
                       }
                     </span>
                   </div>
@@ -2572,29 +2570,33 @@ const ChatRoomsList: React.FC = () => {
               )}
             </div>
         
-            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <Dialog
+              open={showCreateDialog}
+              onOpenChange={(open) => setShowCreateDialog(isAdminOrOwner ? open : false)}
+            >
               <DialogTrigger asChild>
                 <Button 
                   size="lg"
+                  disabled={!isAdminOrOwner}
                   className="w-full sm:w-auto bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
                 >
                   <Plus className="h-6 w-6 mr-2" />
-                  Create New Room
+                  {isAdminOrOwner ? 'Create New Community' : 'Admin Only'}
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[95vw] sm:max-w-137.5 max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-bold bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
-                    Create New Chat Room
+                    Create New Community Chat
                   </DialogTitle>
                   <DialogDescription className="text-base">
-                    Public rooms are open to all. Private rooms follow your subscription policy.
+                    Create a private community chat for your members.
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateRoom} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="roomName" className="text-sm font-semibold">Room Name</Label>
+                    <Label htmlFor="roomName" className="text-sm font-semibold">Community Name</Label>
                     <Input
                       id="roomName"
                       placeholder="e.g., Travel Planning, Beach Trip 2026"
@@ -2608,38 +2610,12 @@ const ChatRoomsList: React.FC = () => {
                     <Label htmlFor="roomDescription" className="text-sm font-semibold">Description (Optional)</Label>
                     <Input
                       id="roomDescription"
-                      placeholder="What's this room about?"
+                      placeholder="What's this community about?"
                       value={newRoomDescription}
                       onChange={(e) => setNewRoomDescription(e.target.value)}
                       className="h-12 rounded-xl border-2 focus:border-primary"
                     />
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-linear-to-r from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 border border-rose-200 dark:border-rose-800">
-                      <div className="flex items-center gap-2">
-                        <Compass className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-                        <div>
-                          <Label htmlFor="isPublic" className="text-sm font-semibold cursor-pointer">
-                            Public Room
-                          </Label>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {newRoomIsPublic ? 'Anyone can join freely' : 'Private room access by invite or admin approval'}
-                          </p>
-                        </div>
-                      </div>
-                      <Switch
-                        id="isPublic"
-                        checked={newRoomIsPublic}
-                        onCheckedChange={(checked) => {
-                          setNewRoomIsPublic(checked);
-                          if (checked) {
-                            setNewPrivateVisibility('private');
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-
                   {!newRoomIsPublic && (
                     <div className="space-y-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                       <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Private Group Policy</p>
@@ -2648,7 +2624,7 @@ const ChatRoomsList: React.FC = () => {
                       </p>
 
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Room Visibility</Label>
+                        <Label className="text-sm font-semibold">Community Visibility</Label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <button
                             type="button"
@@ -2682,7 +2658,7 @@ const ChatRoomsList: React.FC = () => {
                   {!newRoomIsPublic && (
                     <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground flex items-start gap-2">
                       <Shield className="h-4 w-4 mt-0.5" />
-                      Private rooms do not use passwords. Access is controlled by invite links or admin-approved join requests.
+                      Private communities do not use passwords. Access is controlled by invite links or admin-approved join requests.
                     </div>
                   )}
                   
@@ -2690,7 +2666,7 @@ const ChatRoomsList: React.FC = () => {
                   <div className="space-y-2">
                     <Label htmlFor="backgroundImage" className="text-sm font-semibold flex items-center gap-2">
                       <ImageIcon className="h-4 w-4 text-primary" />
-                      Room Background Image (Optional)
+                      Community Background Image (Optional)
                     </Label>
                     <div className="space-y-3">
                       {backgroundImagePreview ? (
@@ -2734,7 +2710,7 @@ const ChatRoomsList: React.FC = () => {
                   <div className="space-y-2">
                     <Label htmlFor="iconImage" className="text-sm font-semibold flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
-                      Room Icon (Optional)
+                      Community Icon (Optional)
                     </Label>
                     <div className="space-y-3">
                       {iconImagePreview ? (
@@ -2796,7 +2772,7 @@ const ChatRoomsList: React.FC = () => {
                     ) : (
                       <>
                         <Plus className="h-5 w-5 mr-2" />
-                        Create Room
+                        Create Community
                       </>
                     )}
                   </Button>
@@ -2829,17 +2805,17 @@ const ChatRoomsList: React.FC = () => {
                   </div>
                 </motion.div>
                 <h3 className="text-2xl font-bold mb-3 bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">
-                  No Chat Rooms Yet
+                  No Communities Yet
                 </h3>
                 <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg">
-                  Be the first to create a chat room and start connecting! ?
+                  Be the first to create a community and start connecting! ?
                 </p>
                 <Button 
                   onClick={() => setShowCreateDialog(true)}
                   className="bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-8 py-6 text-lg font-semibold"
                 >
                   <Plus className="h-5 w-5 mr-2" />
-                  Create First Room
+                  Create First Community
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </CardContent>
@@ -2855,7 +2831,7 @@ const ChatRoomsList: React.FC = () => {
                     <Compass className="h-6 w-6 text-white" />
                   </div>
                   <h2 className="text-2xl font-bold bg-linear-to-r from-green-600 to-emerald-500 bg-clip-text text-transparent">
-                    Public Rooms
+                    General Community Chat
                   </h2>
                   <span className="text-sm text-muted-foreground">
                     Anyone can join without a password
@@ -2965,7 +2941,7 @@ const ChatRoomsList: React.FC = () => {
                             {/* Action buttons */}
                             {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                {room.createdBy === user.uid && (
+                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -3099,10 +3075,10 @@ const ChatRoomsList: React.FC = () => {
                     <Lock className="h-6 w-6 text-white" />
                   </div>
                   <h2 className="text-2xl font-bold bg-linear-to-r from-amber-600 to-orange-500 bg-clip-text text-transparent">
-                    Private Rooms
+                    Private Community Chat
                   </h2>
                   <span className="text-sm text-muted-foreground">
-                    Exposed rooms allow join requests; private rooms stay hidden
+                    Exposed communities allow join requests; private communities stay hidden
                   </span>
                 </div>
                 <motion.div 
@@ -3214,7 +3190,7 @@ const ChatRoomsList: React.FC = () => {
                             {/* Action buttons */}
                             {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                {room.createdBy === user.uid && (
+                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) && (
                                   <Button
                                     variant="outline"
                                     size="sm"

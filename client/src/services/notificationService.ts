@@ -39,7 +39,7 @@ class NotificationService {
         roomId,
         roomName,
         status: "pending",
-        message: `You've been invited to join the private room "${roomName}"`,
+        message: `You've been invited to join the private community "${roomName}"`,
       });
 
       batch.set(ref, payload);

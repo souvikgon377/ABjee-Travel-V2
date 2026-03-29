@@ -264,7 +264,7 @@ export const ChatRoomActionsDialog = memo(
               )}
               <div>
                 <DialogTitle className="text-left">{room.name}</DialogTitle>
-                <DialogDescription className="text-left">View and edit chat room details</DialogDescription>
+                <DialogDescription className="text-left">View and edit chat community details</DialogDescription>
               </div>
             </div>
           </DialogHeader>
@@ -292,7 +292,7 @@ export const ChatRoomActionsDialog = memo(
             {/* Details Tab */}
             <TabsContent value="details" className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label htmlFor="edit-name">Room Name *</Label>
+                <Label htmlFor="edit-name">Community Name *</Label>
                 <Input
                   id="edit-name"
                   placeholder="e.g., Paris Travel Group"
@@ -305,7 +305,7 @@ export const ChatRoomActionsDialog = memo(
                 <Label htmlFor="edit-description">Description</Label>
                 <Textarea
                   id="edit-description"
-                  placeholder="Brief description of the chat room..."
+                  placeholder="Brief description of the chat community..."
                   value={formData.description}
                   onChange={(e) => handleChange('description', e.target.value)}
                   rows={3}
@@ -314,7 +314,7 @@ export const ChatRoomActionsDialog = memo(
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-type">Room Type *</Label>
+                  <Label htmlFor="edit-type">Community Type *</Label>
                   <Select value={formData.type} onValueChange={(value) => handleChange('type', value)}>
                     <SelectTrigger id="edit-type">
                       <SelectValue />
@@ -366,7 +366,7 @@ export const ChatRoomActionsDialog = memo(
                 <div className="space-y-0.5">
                   <Label htmlFor="edit-isActive">Active Status</Label>
                   <p className="text-sm text-muted-foreground">
-                    {formData.isActive ? 'Room is active and accepting members' : 'Room is inactive and hidden'}
+                    {formData.isActive ? 'Community is active and accepting members' : 'Community is inactive and hidden'}
                   </p>
                 </div>
                 <Switch
@@ -381,7 +381,7 @@ export const ChatRoomActionsDialog = memo(
                   Cancel
                 </Button>
                 <Button onClick={handleUpdate} disabled={loading}>
-                  {loading ? 'Updating...' : 'Update Room'}
+                  {loading ? 'Updating...' : 'Update Community'}
                 </Button>
               </div>
             </TabsContent>
@@ -395,7 +395,7 @@ export const ChatRoomActionsDialog = memo(
                 </div>
               ) : members.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">No members in this room yet</p>
+                  <p className="text-muted-foreground">No members in this community yet</p>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-100 overflow-y-auto">
@@ -476,7 +476,7 @@ export const ChatRoomActionsDialog = memo(
               ) : messages.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p>No messages in this room yet</p>
+                  <p>No messages in this community yet</p>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-100 overflow-y-auto pr-1">
@@ -526,10 +526,10 @@ export const ChatRoomActionsDialog = memo(
             {/* Statistics Tab */}
             <TabsContent value="stats" className="space-y-4 mt-4">
               {visitedTabs.has('stats') && <>
-              {/* Room images */}
+              {/* Community images */}
               {(iconUrl || (room.backgroundImage?.url)) && (
                 <div className="rounded-lg border border-border p-4 space-y-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Room Images</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Community Images</p>
                   <div className="flex items-center gap-4">
                     {iconUrl && (
                       <div className="space-y-1 text-center">
@@ -558,11 +558,11 @@ export const ChatRoomActionsDialog = memo(
                   <p className="text-2xl font-bold mt-1">{room.messageCount || 0}</p>
                 </div>
                 <div className="rounded-lg border border-border p-4">
-                  <p className="text-xs text-muted-foreground">Room Type</p>
+                  <p className="text-xs text-muted-foreground">Community Type</p>
                   <div className="mt-2">
                     {room.type === 'private' ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-400/30 bg-orange-500/10 px-3 py-1 text-sm font-semibold text-orange-500">
-                        <Lock className="h-4 w-4" /> Private
+                        <Lock className="h-4 w-4" /> Private Community Chat
                       </span>
                     ) : room.type === 'premium' ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-400/30 bg-purple-500/10 px-3 py-1 text-sm font-semibold text-purple-500">
@@ -570,7 +570,7 @@ export const ChatRoomActionsDialog = memo(
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-sm font-semibold text-blue-500">
-                        <Globe className="h-4 w-4" /> Public
+                        <Globe className="h-4 w-4" /> General Community Chat
                       </span>
                     )}
                   </div>
@@ -680,10 +680,10 @@ export const ChatRoomActionsDialog = memo(
                 </div>
               )}
 
-              {/* Room ID */}
+              {/* Community ID */}
               <div className="rounded-lg border border-border p-4">
                 <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                  <Hash className="h-3.5 w-3.5" /> Room ID
+                  <Hash className="h-3.5 w-3.5" /> Community ID
                 </p>
                 <p className="text-xs font-mono wrap-anywhere text-muted-foreground">{room.id}</p>
               </div>

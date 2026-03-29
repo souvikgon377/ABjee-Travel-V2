@@ -12,7 +12,7 @@ import {
   query,
 } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
-import { uploadImageToCloudinary } from '@/lib/imageUpload';
+import { uploadImageToR2 } from '@/lib/r2Upload';
 import {
   MapPin,
   Plus,
@@ -79,10 +79,6 @@ const CATEGORIES = [
   'City / Urban',
   'Other',
 ];
-
-const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME as string;
-const CLOUDINARY_UPLOAD_PRESET = (process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as string) || 'ml_default';
-
 const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '',
   area: '',
@@ -97,25 +93,22 @@ const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
 };
 
 // ─── Video upload (raw fetch, no extra SDK) ──────────────────────────────────
-async function uploadVideoToCloudinary(file: File): Promise<MediaItem> {
-  if (!CLOUDINARY_CLOUD_NAME) throw new Error('Cloudinary cloud name not configured.');
+// ─── Video upload (R2 S3-compatible API) ───────────────────────────────────
+async function uploadVideoToR2(file: File): Promise<MediaItem> {
   const fd = new FormData();
   fd.append('file', file);
-  fd.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
   fd.append('folder', 'tourist-places/videos');
-  fd.append('resource_type', 'video');
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`,
-    { method: 'POST', body: fd }
-  );
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    body: fd
+  });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err?.error?.message ?? 'Video upload failed');
+    const err = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(err?.error ?? 'Video upload failed');
   }
-  const data = await res.json() as { secure_url: string; public_id: string };
-  const thumbnail = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_0,w_400,h_300,c_fill,f_jpg/${data.public_id}.jpg`;
-  return { url: data.secure_url, publicId: data.public_id, type: 'video', thumbnail };
+  const data = await res.json() as { url: string; key: string };
+  return { url: data.url, publicId: data.key, type: 'video' };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -387,7 +380,7 @@ export function TouristPlacesManager() {
     const file = e.target.files?.[0];
     if (!file || !thumbnailTarget) return;
     try {
-      const r = await uploadImageToCloudinary(file, { folder: 'tourist-places/thumbnails' });
+      const r = await uploadImageToR2(file, { folder: 'tourist-places/thumbnails' });
       setForm((f) => ({
         ...f,
         media: f.media.map((m) =>
@@ -449,14 +442,14 @@ export function TouristPlacesManager() {
       try {
         let uploaded: MediaItem;
         if (item.type === 'image') {
-          const r = await uploadImageToCloudinary(item.file, { folder: 'tourist-places/images' });
-          uploaded = { url: r.url, publicId: r.publicId, type: 'image' };
+          const r = await uploadImageToR2(item.file, { folder: 'tourist-places/images' });
+          uploaded = { url: r.url, publicId: r.key, type: 'image' };
         } else {
-          uploaded = await uploadVideoToCloudinary(item.file);
+          uploaded = await uploadVideoToR2(item.file);
           // Upload custom pending thumbnail if provided
           if (item.thumbnailFile) {
             try {
-              const tr = await uploadImageToCloudinary(item.thumbnailFile, { folder: 'tourist-places/thumbnails' });
+              const tr = await uploadImageToR2(item.thumbnailFile, { folder: 'tourist-places/thumbnails' });
               uploaded = { ...uploaded, thumbnail: tr.url };
             } catch { /* ignore thumbnail failure, keep auto-thumb */ }
           }
@@ -556,7 +549,7 @@ export function TouristPlacesManager() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-rose-600 via-pink-600 to-rose-800 p-8 shadow-xl"
+        className="relative overflow-hidden rounded-3xl bg-linear-to-br from-rose-600 via-pink-600 to-rose-800 p-8 shadow-xl"
       >
         {/* Decorative blobs */}
         <div className="pointer-events-none absolute -top-16 -right-16 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
@@ -617,7 +610,7 @@ export function TouristPlacesManager() {
           className="rounded-3xl border border-border bg-card shadow-xl overflow-hidden"
         >
           {/* Form header band */}
-          <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-rose-600/10 via-pink-500/5 to-transparent border-b border-border">
+          <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-rose-600/10 via-pink-500/5 to-transparent border-b border-border">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-rose-600/10">
                 <Sparkles className="h-5 w-5 text-rose-600" />
@@ -680,7 +673,7 @@ export function TouristPlacesManager() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -10, scale: 0.97, height: 0, marginTop: 0 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-                    className="rounded-xl border border-rose-200/60 dark:border-rose-800/40 bg-gradient-to-br from-rose-50/60 to-pink-50/40 dark:from-rose-950/30 dark:to-pink-950/20 p-4 space-y-3"
+                    className="rounded-xl border border-rose-200/60 dark:border-rose-800/40 bg-linear-to-br from-rose-50/60 to-pink-50/40 dark:from-rose-950/30 dark:to-pink-950/20 p-4 space-y-3"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -752,10 +745,10 @@ export function TouristPlacesManager() {
               className="space-y-4"
             >
               <div className="flex items-center gap-3 pb-3 border-b border-rose-100 dark:border-rose-900/30">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500/15 to-pink-500/15 ring-1 ring-rose-500/20">
+                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500/15 to-pink-500/15 ring-1 ring-rose-500/20">
                   <ImageIcon className="h-4 w-4 text-rose-500" />
                 </div>
-                <h3 className="font-bold text-base bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">Photos</h3>
+                <h3 className="font-bold text-base bg-linear-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">Photos</h3>
                 <span className="ml-auto text-xs font-semibold text-rose-600 bg-rose-500/10 px-2.5 py-1 rounded-full ring-1 ring-rose-500/20">
                   {formImages.length + pendingImages.length} added
                 </span>
@@ -775,7 +768,7 @@ export function TouristPlacesManager() {
                     >
                       {/* Post header */}
                       <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-sm">
+                        <div className="w-7 h-7 rounded-full bg-linear-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-sm">
                           <ImageIcon className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -788,7 +781,7 @@ export function TouristPlacesManager() {
                       </div>
 
                       {/* Image */}
-                      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                      <div className="relative aspect-4/3 overflow-hidden bg-muted">
                         <img src={img.url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
                         {/* hover overlay */}
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 transition-all duration-300 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
@@ -846,7 +839,7 @@ export function TouristPlacesManager() {
                   >
                     {/* Post header */}
                     <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center opacity-60">
+                      <div className="w-7 h-7 rounded-full bg-linear-to-br from-rose-400 to-pink-500 flex items-center justify-center opacity-60">
                         <ImageIcon className="h-3.5 w-3.5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -862,7 +855,7 @@ export function TouristPlacesManager() {
                     </div>
 
                     {/* Image preview */}
-                    <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                    <div className="relative aspect-4/3 overflow-hidden bg-muted">
                       <img src={p.preview} alt="" className="w-full h-full object-cover" />
                       {p.progress === 'uploading' && (
                         <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center gap-1.5">
@@ -912,7 +905,7 @@ export function TouristPlacesManager() {
                     </div>
                     <span className="text-xs font-semibold text-muted-foreground group-hover:text-rose-500 transition-colors">New Photo Post</span>
                   </div>
-                  <div className="aspect-[4/3] flex flex-col items-center justify-center gap-2 text-muted-foreground group-hover:text-rose-500 transition-colors">
+                  <div className="aspect-4/3 flex flex-col items-center justify-center gap-2 text-muted-foreground group-hover:text-rose-500 transition-colors">
                     <motion.div
                       animate={{ rotate: [0, 90, 0] }}
                       transition={{ duration: 3, repeat: Infinity, repeatDelay: 2 }}
@@ -933,10 +926,10 @@ export function TouristPlacesManager() {
               className="space-y-4"
             >
               <div className="flex items-center gap-3 pb-3 border-b border-rose-100 dark:border-rose-900/30">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-rose-500/15 to-pink-500/15 ring-1 ring-rose-500/20">
+                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500/15 to-pink-500/15 ring-1 ring-rose-500/20">
                   <Video className="h-4 w-4 text-rose-500" />
                 </div>
-                <h3 className="font-bold text-base bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">Videos</h3>
+                <h3 className="font-bold text-base bg-linear-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">Videos</h3>
                 <span className="ml-auto text-xs font-semibold text-rose-600 bg-rose-500/10 px-2.5 py-1 rounded-full ring-1 ring-rose-500/20">
                   {formVideos.length + pendingVideos.length} added
                 </span>
@@ -955,7 +948,7 @@ export function TouristPlacesManager() {
                     >
                       {/* Post header */}
                       <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-zinc-800">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-600 to-pink-700 flex items-center justify-center shadow-sm">
+                        <div className="w-7 h-7 rounded-full bg-linear-to-br from-rose-600 to-pink-700 flex items-center justify-center shadow-sm">
                           <Video className="h-3.5 w-3.5 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1035,7 +1028,7 @@ export function TouristPlacesManager() {
                   >
                     {/* Post header */}
                     <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-zinc-800">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-500/60 to-pink-600/60 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-full bg-linear-to-br from-rose-500/60 to-pink-600/60 flex items-center justify-center">
                         <Video className="h-3.5 w-3.5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1134,7 +1127,7 @@ export function TouristPlacesManager() {
             <div className="flex gap-3 justify-end pt-2 border-t border-border">
               <Button type="button" variant="outline" onClick={resetForm} className="rounded-xl">Cancel</Button>
               <Button type="submit" disabled={saving || uploadingCount > 0}
-                className="bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white gap-2 min-w-36 rounded-xl shadow-lg shadow-rose-500/20">
+                className="bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white gap-2 min-w-36 rounded-xl shadow-lg shadow-rose-500/20">
                 {(saving || uploadingCount > 0) && <Loader2 className="h-4 w-4 animate-spin" />}
                 {uploadingCount > 0
                   ? `Uploading ${uploadingCount}…`
@@ -1161,22 +1154,22 @@ export function TouristPlacesManager() {
               className="rounded-2xl border border-border bg-card overflow-hidden"
             >
               <div className="relative h-44 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-muted to-muted/70" />
+                <div className="absolute inset-0 bg-linear-to-br from-muted to-muted/70" />
                 <motion.div
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent"
+                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/8 to-transparent"
                   animate={{ x: ['-100%', '200%'] }}
                   transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 }}
                 />
               </div>
               <div className="p-4 space-y-3">
                 <div className="relative h-4 rounded-full bg-muted w-3/4 overflow-hidden">
-                  <motion.div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 + 0.1 }} />
+                  <motion.div className="absolute inset-0 bg-linear-to-r from-transparent via-white/8 to-transparent" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 + 0.1 }} />
                 </div>
                 <div className="relative h-3 rounded-full bg-muted w-1/2 overflow-hidden">
-                  <motion.div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 + 0.2 }} />
+                  <motion.div className="absolute inset-0 bg-linear-to-r from-transparent via-white/8 to-transparent" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 + 0.2 }} />
                 </div>
                 <div className="relative h-3 rounded-full bg-muted w-full overflow-hidden">
-                  <motion.div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 + 0.3 }} />
+                  <motion.div className="absolute inset-0 bg-linear-to-r from-transparent via-white/8 to-transparent" animate={{ x: ['-100%', '200%'] }} transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.4, ease: 'linear', delay: i * 0.1 + 0.3 }} />
                 </div>
               </div>
             </motion.div>
@@ -1194,13 +1187,13 @@ export function TouristPlacesManager() {
             transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
             className="relative"
           >
-            <div className="w-28 h-28 rounded-3xl bg-gradient-to-br from-rose-100 to-pink-200 dark:from-rose-900/40 dark:to-pink-900/40 flex items-center justify-center shadow-2xl shadow-rose-300/40 dark:shadow-rose-900/30 ring-1 ring-rose-200 dark:ring-rose-800">
+            <div className="w-28 h-28 rounded-3xl bg-linear-to-br from-rose-100 to-pink-200 dark:from-rose-900/40 dark:to-pink-900/40 flex items-center justify-center shadow-2xl shadow-rose-300/40 dark:shadow-rose-900/30 ring-1 ring-rose-200 dark:ring-rose-800">
               <MapPin className="h-12 w-12 text-rose-500" />
             </div>
             <motion.div
               animate={{ scale: [1, 1.15, 1], rotate: [0, 8, 0] }}
               transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
-              className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg"
+              className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-linear-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg"
             >
               <Plus className="h-4 w-4 text-white" />
             </motion.div>
@@ -1232,7 +1225,7 @@ export function TouristPlacesManager() {
                 {/* Shimmer on hover */}
                 <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
                   <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/8 to-transparent skew-x-12"
+                    className="absolute inset-0 bg-linear-to-r from-transparent via-white/8 to-transparent skew-x-12"
                     animate={{ x: ['-150%', '250%'] }}
                     transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 0.8, ease: 'linear' }}
                   />
@@ -1243,13 +1236,13 @@ export function TouristPlacesManager() {
                     <img src={place.coverImage} alt={place.name}
                       loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/20 dark:to-pink-900/20 flex items-center justify-center">
+                    <div className="w-full h-full bg-linear-to-br from-rose-100 to-pink-100 dark:from-rose-900/20 dark:to-pink-900/20 flex items-center justify-center">
                       <ImageIcon className="h-10 w-10 text-rose-300" />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
                   {/* Category badge */}
-                  <span className="absolute top-3 left-3 bg-gradient-to-r from-rose-600 to-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg">
+                  <span className="absolute top-3 left-3 bg-linear-to-r from-rose-600 to-pink-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg">
                     {place.category}
                   </span>
                   {/* Actions - always show on mobile, hover on desktop */}
@@ -1371,4 +1364,5 @@ export function TouristPlacesManager() {
     </div>
   );
 }
+
 

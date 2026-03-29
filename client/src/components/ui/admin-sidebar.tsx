@@ -32,6 +32,7 @@ import {
   MapPin,
   MessageSquare,
   BookOpen,
+  TicketPercent,
 } from 'lucide-react';
 
 const menuItems = [
@@ -41,10 +42,11 @@ const menuItems = [
   { title: 'Analytics', icon: BarChart3, view: 'analytics' },
   { title: 'Bookings', icon: FileText, view: 'bookings' },
   { title: 'Activity', icon: Activity, view: 'activity' },
-  { title: 'Chat Rooms', icon: Database, view: 'chatrooms' },
+  { title: 'Communities', icon: Database, view: 'chatrooms' },
   { title: 'Trip Stories', icon: BookOpen, view: 'trip-stories' },
   { title: 'Tourist Places', icon: MapPin, view: 'tourist-places' },
   { title: 'Travel Itinerary', icon: FileText, view: 'travel-itinerary' },
+  { title: 'Offers', icon: TicketPercent, view: 'offers' },
   { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
   { title: 'Settings', icon: Settings, view: 'settings' },

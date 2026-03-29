@@ -15,7 +15,8 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [
-      { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "*.r2.cloudflarestorage.com" },
+      { protocol: "https", hostname: "*.r2.dev" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
       { protocol: "https", hostname: "**.googleusercontent.com" },
     ],

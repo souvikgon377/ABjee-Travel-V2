@@ -1321,9 +1321,6 @@ function SubmitStoryForm({
     onClose();
     onProgress(0, 'Preparing uploadâ€¦', false);
     try {
-      // Upload images to Cloudinary
-      const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'trip_stories';
       const photos: StoryPhoto[] = [];
       const errors: string[] = [];
       const total = imageFiles.length;
@@ -1333,19 +1330,18 @@ function SubmitStoryForm({
         onProgress(Math.round((fi / Math.max(total, 1)) * 80), `Uploading photo ${fi + 1} of ${total}â€¦`, false);
         const fd = new FormData();
         fd.append('file', file);
-        fd.append('upload_preset', UPLOAD_PRESET);
         fd.append('folder', 'trip-stories');
-        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, { method: 'POST', body: fd });
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
         if (res.ok) {
           const data = await res.json();
-          photos.push({ url: data.secure_url, publicId: data.public_id, caption: '' });
+          photos.push({ url: data.url, publicId: data.key, caption: '' });
         } else {
           const errBody = await res.json().catch(() => ({}));
-          console.error(`Cloudinary upload failed for ${file.name}:`, res.status, errBody);
+          console.error(`R2 upload failed for ${file.name}:`, res.status, errBody);
           errors.push(file.name);
         }
         onProgress(Math.round(((fi + 1) / Math.max(total, 1)) * 80), `Uploaded ${fi + 1} of ${total} photos`, false);
-        // small delay to avoid Cloudinary free-tier rate limiting
+        // small delay to avoid R2 rate limiting
         if (fi < imageFiles.length - 1) await new Promise(r => setTimeout(r, 200));
       }
 

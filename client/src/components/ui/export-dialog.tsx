@@ -147,7 +147,7 @@ const SECTIONS: ExportSection[] = [
   { id: 'reviews-comments', label: 'Reviews & Comments', description: 'All place feedback with filters: user, type, post', icon: MessageSquare, color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
   { id: 'about-page',    label: 'About Page',       description: 'All About page CMS content and metadata',     icon: FileText,      color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
   { id: 'subscriptions', label: 'Subscriptions',    description: 'Subscription & revenue records',             icon: DollarSign,    color: 'text-green-500',  bgColor: 'bg-green-500/10'  },
-  { id: 'chatrooms',     label: 'Chat Rooms',       description: 'Room list & member counts',                  icon: MessageSquare, color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
+  { id: 'chatrooms',     label: 'Chat Communities', description: 'Community list & member counts',             icon: MessageSquare, color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
   { id: 'pageviews',     label: 'Page Views',       description: 'Analytics page view counter',                icon: Eye,           color: 'text-cyan-500',   bgColor: 'bg-cyan-500/10'   },
 ];
 
@@ -412,7 +412,7 @@ function printRoomPdf(data: Awaited<ReturnType<typeof fetchRoomDetail>>) {
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Chat Room \u2014 ${info.name}</title>
+<title>Chat Community \u2014 ${info.name}</title>
 <style>
   * { box-sizing:border-box;margin:0;padding:0; }
   body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;font-size:11px;color:#111827;padding:28px 32px 32px;background:#fff;position:relative; }
@@ -521,7 +521,7 @@ function printRoomPdf(data: Awaited<ReturnType<typeof fetchRoomDetail>>) {
     </div>
     <div class="brand-right">
       <span class="report-label">Admin Report</span>
-      <span class="report-title">Chat Room Transcript</span>
+      <span class="report-title">Chat Community Transcript</span>
       <span class="report-date">${genDate}</span>
     </div>
   </div>
@@ -581,7 +581,7 @@ function printRoomPdf(data: Awaited<ReturnType<typeof fetchRoomDetail>>) {
       </div>
     </div>
     <div class="footer-right">
-      <div>Admin Report &mdash; Chat Room Transcript</div>
+      <div>Admin Report &mdash; Chat Community Transcript</div>
       <div>Room: ${info.name} (${info.id})</div>
       <div>Generated: ${genDate}</div>
     </div>

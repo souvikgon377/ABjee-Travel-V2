@@ -82,9 +82,9 @@ function normalizeNotification(raw: any): NotificationItem {
   const status = String(raw?.status || 'pending');
   const roomName = String(raw?.roomName || '').trim();
   const isInvitation = type === 'room_invite';
-  const title = isInvitation ? 'Room Invitation' : 'Notification';
+  const title = isInvitation ? 'Community Invitation' : 'Notification';
   const fallbackMessage = isInvitation
-    ? `You have an invitation${roomName ? ` to join "${roomName}"` : ''}.`
+    ? `You have an invitation${roomName ? ` to join community "${roomName}"` : ''}.`
     : 'You have a new platform notification.';
 
   return {
@@ -329,7 +329,7 @@ export const DashboardHeader = memo(
         {/* Chatrooms: Room Type */}
         {currentView === 'chatrooms' && (
           <div className="space-y-1.5">
-            <Label className="text-xs">Room Type</Label>
+            <Label className="text-xs">Community Type</Label>
             <Select
               value={activeFilters.roomType}
               onValueChange={(v) =>

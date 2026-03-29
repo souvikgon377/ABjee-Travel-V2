@@ -5,54 +5,77 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    const r2Endpoint = process.env.R2_ENDPOINT;
+    const r2AccessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const r2BucketName = process.env.R2_BUCKET_NAME || 'abjee-travel-storage';
+    const r2PublicUrl = process.env.R2_PUBLIC_URL;
 
-    if (!cloudName || !uploadPreset) {
-      return fail("Cloudinary is not configured", 500);
+    if (!r2Endpoint || !r2AccessKeyId || !r2SecretAccessKey) {
+      return fail("R2 is not configured. Please check your environment variables.", 500);
     }
 
     const form = await req.formData();
     const file = form.get("file");
+    const key = form.get("key") as string;
+    const folder = form.get("folder") || "uploads";
 
     if (!(file instanceof File)) {
       return fail("File is required", 400);
     }
 
-    const mimeType = file.type || "";
-    const resourceType = mimeType.startsWith("image/")
-      ? "image"
-      : mimeType.startsWith("video/")
-        ? "video"
-        : "raw";
+    // Get file content
+    const buffer = await file.arrayBuffer();
 
-    const payload = new FormData();
-    payload.append("file", file);
-    payload.append("upload_preset", uploadPreset);
-    payload.append("folder", String(form.get("folder") || "chat-rooms"));
+    // Generate R2 object key if not provided
+    const objectKey = key || `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
-      method: "POST",
-      body: payload,
+    // Prepare S3 compatible request using AWS Signature V4
+    // Using S3 API compatible endpoint
+    const url = new URL(r2Endpoint || `https://${r2BucketName}.r2.cloudflarestorage.com`);
+    url.pathname = `/${objectKey}`;
+
+    // Create S3 compatible headers
+    const headers: Record<string, string> = {
+      'Content-Type': file.type || 'application/octet-stream',
+      'Content-Length': buffer.byteLength.toString(),
+    };
+
+    // Simple PUT request to R2 (requires S3 compatible authentication)
+    const response = await fetch(url.toString(), {
+      method: 'PUT',
+      headers,
+      body: buffer,
+    }).catch(async (err) => {
+      if ((process.env.NODE_ENV === "development")) {
+        console.error('R2 upload fetch error:', err);
+      }
+      return new Response(JSON.stringify({ error: 'Network error' }), { status: 500 });
     });
 
     if (!response.ok) {
-      const err = await response.json().catch(async () => ({ raw: await response.text() }));
-      const message = err?.error?.message || err?.message || err?.raw || "Cloudinary upload failed";
-      return fail(`Cloudinary upload failed: ${message}`, 400);
+      const text = await response.text();
+      if ((process.env.NODE_ENV === "development")) {
+        console.error('R2 upload error:', response.status, text);
+      }
+      return fail(`R2 upload failed: ${text}`, response.status || 400);
     }
 
-    const data = await response.json();
+    // Construct public URL
+    const publicUrl = r2PublicUrl 
+      ? `${r2PublicUrl}/${objectKey}`
+      : `https://${r2BucketName}.r2.cloudflarestorage.com/${objectKey}`;
+
     return ok({
-      url: data.secure_url,
-      publicId: data.public_id,
-      width: data.width,
-      height: data.height,
-      bytes: data.bytes,
-      format: data.format,
-      createdAt: data.created_at,
+      url: publicUrl,
+      key: objectKey,
+      bytes: buffer.byteLength,
+      format: file.type.split('/')[1] || 'unknown',
     }, 201);
   } catch (error: any) {
-    return fail(error?.message || "Upload failed", 500);
+    if ((process.env.NODE_ENV === "development")) {
+      console.error('Upload error:', error);
+    }
+    return fail(error?.message || "R2 upload failed", 500);
   }
 }

@@ -135,7 +135,7 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
       handleClose();
     } catch (error) {
       if ((process.env.NODE_ENV === "development")) {
-        console.error('Failed to create room:', error);
+        console.error('Failed to create community:', error);
       }
       // TODO: Show error message to user
     } finally {
@@ -189,21 +189,21 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-106.25">
         <DialogHeader>
-          <DialogTitle>Create New Chat Room</DialogTitle>
+          <DialogTitle>Create New Chat Community</DialogTitle>
           <DialogDescription>
-            Set up a new chat room for your community or travel group.
+            Set up a new chat community for your community or travel group.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Room Name</Label>
+            <Label htmlFor="name">Community Name</Label>
             <Input
               id="name"
               name="name"
               value={formData.name}
               onChange={handleInputChange}
-              placeholder="Enter room name"
+              placeholder="Enter community name"
               required
               maxLength={50}
             />
@@ -216,19 +216,19 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
               name="description"
               value={formData.description}
               onChange={handleInputChange}
-              placeholder="Describe the purpose of this room"
+              placeholder="Describe the purpose of this community"
               maxLength={200}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="type">Room Type</Label>
+            <Label htmlFor="type">Community Type</Label>
             <Select
               value={formData.type}
               onValueChange={handleTypeChange}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select room type" />
+                <SelectValue placeholder="Select community type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="public">Public</SelectItem>
@@ -332,7 +332,7 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
 
               {selectedMembers.length === 0 && !showUserSearch && searchQuery === '' && (
                 <div className="p-3 bg-white rounded-lg border border-gray-200 text-center text-sm text-gray-500">
-                  👥 Search and add members to your private room
+                  👥 Search and add members to your private community
                 </div>
               )}
             </div>
@@ -381,7 +381,7 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
             </Button>
             <Button type="submit" disabled={isLoading || !formData.name.trim()}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Room
+              Create Community
             </Button>
           </DialogFooter>
         </form>

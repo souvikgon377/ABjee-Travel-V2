@@ -6,7 +6,7 @@ import { Eye, EyeOff, Loader2, Upload, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/mvpblocks/header-1';
 import { usersAPI } from '../lib/api';
-import { uploadImageToCloudinary } from '../lib/imageUpload';
+import { uploadImageToR2 } from '../lib/r2Upload';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -267,7 +267,7 @@ export default function ProfilePage() {
 
       let uploadedPhotoUrl: string | undefined;
       if (selectedImageFile) {
-        const uploadResult = await uploadImageToCloudinary(selectedImageFile, {
+        const uploadResult = await uploadImageToR2(selectedImageFile, {
           folder: 'user-profiles',
           maxSizeBytes: 5 * 1024 * 1024,
         });

@@ -122,14 +122,14 @@ export const getPrivateRoomParticipationAllowance = (
       return {
         allowed: false,
         maxAllowed,
-        reason: `${planName} plan allows up to ${maxAllowed} private rooms (create or join).`,
+        reason: `${planName} plan allows up to ${maxAllowed} private communities (create or join).`,
       };
     }
 
     return {
       allowed: true,
       maxAllowed,
-      reason: `${planName} paid member: up to ${maxAllowed} private rooms (create or join).`,
+      reason: `${planName} paid member: up to ${maxAllowed} private communities (create or join).`,
     };
   }
 
@@ -138,14 +138,14 @@ export const getPrivateRoomParticipationAllowance = (
     return {
       allowed: false,
       maxAllowed: TRIAL_PRIVATE_ROOM_LIMIT,
-      reason: `Free members can only access public rooms, or up to ${TRIAL_PRIVATE_ROOM_LIMIT} private rooms during the 7-day trial.`,
+      reason: `Free members can only access public communities, or up to ${TRIAL_PRIVATE_ROOM_LIMIT} private communities during the 7-day trial.`,
     };
   }
 
   return {
     allowed: true,
     maxAllowed: TRIAL_PRIVATE_ROOM_LIMIT,
-    reason: `Free trial active: up to ${TRIAL_PRIVATE_ROOM_LIMIT} private rooms (create or join), ${trial.daysLeft} day${trial.daysLeft === 1 ? '' : 's'} left.`,
+    reason: `Free trial active: up to ${TRIAL_PRIVATE_ROOM_LIMIT} private communities (create or join), ${trial.daysLeft} day${trial.daysLeft === 1 ? '' : 's'} left.`,
   };
 };
 

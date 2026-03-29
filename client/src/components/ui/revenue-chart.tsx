@@ -22,13 +22,16 @@ export const RevenueChart = memo(() => {
         revenueByMonth[key] = (revenueByMonth[key] || 0) + (prices[sub.type] || 0);
       });
 
-      const lastSix: { month: string; value: number }[] = [];
+      const lastSix: { month: string; value: number; monthKey: string }[] = [];
+      const baseMonth = new Date();
+      baseMonth.setDate(1);
+
       for (let i = 5; i >= 0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
+        const d = new Date(baseMonth);
+        d.setMonth(baseMonth.getMonth() - i);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const label = d.toLocaleDateString('en-US', { month: 'short' });
-        lastSix.push({ month: label, value: parseFloat((revenueByMonth[key] || 0).toFixed(2)) });
+        lastSix.push({ month: label, value: parseFloat((revenueByMonth[key] || 0).toFixed(2)), monthKey: key });
       }
 
       const maxValue = Math.max(...lastSix.map(x => x.value), 1);
@@ -93,7 +96,7 @@ export const RevenueChart = memo(() => {
         <div className="flex h-full items-end justify-between gap-3">
           {chartData.map((item, index) => (
             <div
-              key={item.month}
+              key={item.monthKey}
               className="group flex flex-1 flex-col items-center"
             >
               <motion.div

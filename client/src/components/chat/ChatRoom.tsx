@@ -3,8 +3,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { chatService, type MessageAttachment } from '../../lib/chatService';
 import { type ChatMessage, type ChatRoom as RoomType } from '../../lib/chatService';
 import { useAuth } from '../../contexts/AuthContext';
-import { uploadImageToCloudinary, createImagePreview, revokeImagePreview } from '../../lib/imageUpload';
-import { uploadFileToCloudinary, VoiceRecorder, compressImageFile, formatFileSize, formatDuration, getFileIcon } from '../../lib/fileUpload';
+import { uploadImageToR2, createImagePreview, revokeImagePreview } from '../../lib/r2Upload';
+import { uploadFileToR2, VoiceRecorder, compressImageFile, formatFileSize, formatDuration, getFileIcon } from '../../lib/r2FileUpload';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
@@ -146,6 +146,13 @@ const ChatRoom = () => {
   const privateRoomAllowance = useMemo(
     () => getPrivateRoomParticipationAllowance(userProfile, 0),
     [userProfile]
+  );
+  const isAdminOrOwner = useMemo(() => {
+    const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
+    return role === 'admin' || role === 'owner';
+  }, [userProfile?.role]);
+  const canManageCurrentCommunity = Boolean(
+    user && room && ((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid))
   );
 
   // Add Members dialog state
@@ -294,7 +301,7 @@ const ChatRoom = () => {
               setJoinRequestPending(alreadyRequested);
               setShowJoinRequestDialog(true);
             } else {
-              alert('This private room is invite-only. Ask the admin for an invite link.');
+              alert('This private community is invite-only. Ask the admin for an invite link.');
               router.push('/chat');
               return;
             }
@@ -355,7 +362,7 @@ const ChatRoom = () => {
         };
       } catch (error) {
         if ((process.env.NODE_ENV === "development")) {
-          console.error('Error initializing chat room:', error);
+          console.error('Error initializing chat community:', error);
         }
         setLoading(false);
       }
@@ -441,7 +448,7 @@ const ChatRoom = () => {
         setUploadingAttachment(true);
         const isVoiceMessage = fileToSend.name.startsWith('voice-message-');
         const isImage = fileToSend.type.startsWith('image/');
-        attachment = await uploadFileToCloudinary(fileToSend, {
+        attachment = await uploadFileToR2(fileToSend, {
           isVoiceMessage,
           maxSizeBytes: isImage ? 1024 * 1024 : undefined,
         });
@@ -643,7 +650,7 @@ const ChatRoom = () => {
       
       // Upload to Cloudinary (but don't apply yet)
       setUploadingBackground(true);
-      const result = await uploadImageToCloudinary(file, {
+      const result = await uploadImageToR2(file, {
         folder: 'chat-rooms/backgrounds',
       });
 
@@ -677,7 +684,7 @@ const ChatRoom = () => {
       
       // Upload to Cloudinary (but don't apply yet)
       setUploadingIcon(true);
-      const result = await uploadImageToCloudinary(file, {
+      const result = await uploadImageToR2(file, {
         folder: 'chat-rooms/icons',
       });
 
@@ -1011,7 +1018,7 @@ const ChatRoom = () => {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading chat room...</p>
+          <p className="mt-4 text-muted-foreground">Loading community...</p>
         </div>
       </div>
     );
@@ -1021,7 +1028,7 @@ const ChatRoom = () => {
     return (
       <div className="flex items-center justify-center h-screen">
         <Card className="p-6">
-          <p className="text-muted-foreground">Room not found</p>
+          <p className="text-muted-foreground">Community not found</p>
           <Button onClick={() => router.push('/chat')} className="mt-4">
             Back to Chat
           </Button>
@@ -1050,11 +1057,11 @@ const ChatRoom = () => {
           
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">Room Password</Label>
+              <Label htmlFor="password">Community Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter room password"
+                placeholder="Enter community password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -1074,7 +1081,7 @@ const ChatRoom = () => {
                 Cancel
               </Button>
               <Button type="submit" className="flex-1" disabled={joiningRoom}>
-                {joiningRoom ? 'Joining...' : 'Join Room'}
+                {joiningRoom ? 'Joining...' : 'Join Community'}
               </Button>
             </div>
           </form>
@@ -1093,7 +1100,7 @@ const ChatRoom = () => {
               Request Access
             </DialogTitle>
             <DialogDescription>
-              This is an exposed private room. Send a join request to the room admin for "{room?.name}".
+              This is an exposed private community. Send a join request to the community admin for "{room?.name}".
             </DialogDescription>
           </DialogHeader>
 
@@ -1270,7 +1277,7 @@ const ChatRoom = () => {
                           {isInviting ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : isAlreadyMember ? (
-                            'In Room'
+                            'In Community'
                           ) : isInvited ? (
                             <><Check className="h-3.5 w-3.5 mr-1" />Invited</>
                           ) : (
@@ -1305,10 +1312,10 @@ const ChatRoom = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
               <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
-              Room Settings
+              Community Settings
             </DialogTitle>
             <DialogDescription>
-              Customize the appearance of your chat room by uploading new images or selecting from previous uploads.
+              Customize the appearance of your chat community by uploading new images or selecting from previous uploads.
             </DialogDescription>
           </DialogHeader>
 
@@ -1403,7 +1410,7 @@ const ChatRoom = () => {
 
             {/* Icon Image Section */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Room Icon</Label>
+              <Label className="text-sm font-medium">Community Icon</Label>
               
               <Tabs value={iconImageTab} onValueChange={(v) => setIconImageTab(v as 'upload' | 'history')}>
                 <TabsList className="grid w-full grid-cols-2">
@@ -1516,7 +1523,7 @@ const ChatRoom = () => {
                           </Button>
                           <Button
                             type="button"
-                            size="sm"
+                            title="Community Settings"
                             disabled={processingJoinRequestUserId === requestUserId}
                             onClick={() => handleApproveJoinRequest(requestUserId)}
                             className="h-8"
@@ -1595,7 +1602,7 @@ const ChatRoom = () => {
               <div className="shrink-0">
                 <ModeToggle />
               </div>
-              {user && room.createdBy === user.uid && (
+              {canManageCurrentCommunity && (
                 <>
                   <Button
                     variant="outline"
@@ -1610,7 +1617,7 @@ const ChatRoom = () => {
                     variant="outline" 
                     size="icon"
                     onClick={() => setSettingsDialogOpen(true)}
-                    title="Room Settings"
+                    title="Community Settings"
                     className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
                   >
                     <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />

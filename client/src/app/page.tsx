@@ -6,14 +6,14 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel
 export const metadata: Metadata = {
   title: "Home",
   description:
-    "Explore the ABjee Travel community, chat rooms, trip stories, and curated itineraries for your next journey.",
+    "Explore the ABjee Travel community, chat communities, trip stories, and curated itineraries for your next journey.",
   alternates: {
     canonical: "/",
   },
   openGraph: {
     title: "ABjee Travel | Plan Better Trips Together",
     description:
-      "Explore the ABjee Travel community, chat rooms, trip stories, and curated itineraries for your next journey.",
+      "Explore the ABjee Travel community, chat communities, trip stories, and curated itineraries for your next journey.",
     url: "/",
     type: "website",
     images: [
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ABjee Travel | Plan Better Trips Together",
     description:
-      "Explore the ABjee Travel community, chat rooms, trip stories, and curated itineraries for your next journey.",
+      "Explore the ABjee Travel community, chat communities, trip stories, and curated itineraries for your next journey.",
     images: ["/logo.jpg"],
   },
 };

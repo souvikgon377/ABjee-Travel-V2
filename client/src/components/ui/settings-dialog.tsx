@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -28,50 +28,103 @@ import {
   Settings,
   Bell,
   Database,
-  Mail,
   Shield,
   Clock,
 } from 'lucide-react';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+type AdminSettings = {
+  siteName: string;
+  siteDescription: string;
+  maintenanceMode: boolean;
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  newUserNotification: boolean;
+  bookingNotification: boolean;
+  autoBackup: boolean;
+  backupFrequency: string;
+  retentionDays: string;
+  twoFactorAuth: boolean;
+  sessionTimeout: string;
+  maxLoginAttempts: string;
+};
+
+const DEFAULT_SETTINGS: AdminSettings = {
+  siteName: 'ABjee Travel',
+  siteDescription: 'Your travel companion',
+  maintenanceMode: false,
+  emailNotifications: true,
+  pushNotifications: true,
+  newUserNotification: true,
+  bookingNotification: true,
+  autoBackup: true,
+  backupFrequency: 'daily',
+  retentionDays: '30',
+  twoFactorAuth: false,
+  sessionTimeout: '30',
+  maxLoginAttempts: '5',
+};
+
 export const SettingsDialog = memo(
   ({ open, onOpenChange }: SettingsDialogProps) => {
     const [loading, setLoading] = useState(false);
-    const [settings, setSettings] = useState({
-      // General settings
-      siteName: 'ABjee Travel',
-      siteDescription: 'Your travel companion',
-      maintenanceMode: false,
-      
-      // Notification settings
-      emailNotifications: true,
-      pushNotifications: true,
-      newUserNotification: true,
-      bookingNotification: true,
-      
-      // Database settings
-      autoBackup: true,
-      backupFrequency: 'daily',
-      retentionDays: '30',
-      
-      // Security settings
-      twoFactorAuth: false,
-      sessionTimeout: '30',
-      maxLoginAttempts: '5',
-    });
+    const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+    const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
+
+    useEffect(() => {
+      if (!open) return;
+
+      let isMounted = true;
+
+      const loadSettings = async () => {
+        setIsLoadingSettings(true);
+        try {
+          const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
+          const snapshot = await getDoc(settingsRef);
+
+          if (!isMounted) return;
+
+          if (snapshot.exists()) {
+            const data = snapshot.data() as Partial<AdminSettings>;
+            setSettings((prev) => ({ ...prev, ...data }));
+          } else {
+            setSettings(DEFAULT_SETTINGS);
+          }
+        } catch (error) {
+          console.error('Failed to load settings:', error);
+          setSettings(DEFAULT_SETTINGS);
+        } finally {
+          if (isMounted) {
+            setIsLoadingSettings(false);
+          }
+        }
+      };
+
+      loadSettings();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [open]);
 
     const handleSaveSettings = useCallback(async () => {
       setLoading(true);
       try {
-        // Here you would call an API to save settings
-        // await adminAPI.updateSettings(settings);
-        
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
+        await setDoc(
+          settingsRef,
+          {
+            ...settings,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
         
         onOpenChange(false);
         
@@ -104,7 +157,7 @@ export const SettingsDialog = memo(
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-150">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
@@ -344,12 +397,12 @@ export const SettingsDialog = memo(
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={loading}
+              disabled={loading || isLoadingSettings}
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveSettings} disabled={loading}>
-              {loading ? 'Saving...' : 'Save Settings'}
+            <Button onClick={handleSaveSettings} disabled={loading || isLoadingSettings}>
+              {isLoadingSettings ? 'Loading...' : loading ? 'Saving...' : 'Save Settings'}
             </Button>
           </DialogFooter>
         </DialogContent>

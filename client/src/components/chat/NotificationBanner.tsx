@@ -55,10 +55,10 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
     <div className="bg-linear-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-lg shadow-md p-4 mb-4 flex items-center justify-between gap-4">
       <div className="flex-1">
         <h3 className="font-semibold text-gray-800">
-          Room Invitation
+          Community Invitation
         </h3>
         <p className="text-sm text-gray-600 mt-1">
-          You've been invited to join the private room{' '}
+          You've been invited to join the private community{' '}
           <span className="font-medium text-blue-600">"{invitation.roomName}"</span>
           {invitation.fromUserName && (
             <span> by <span className="font-medium">{invitation.fromUserName}</span></span>

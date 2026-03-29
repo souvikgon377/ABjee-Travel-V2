@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Users, BarChart3, Download, Settings } from 'lucide-react';
@@ -41,9 +41,28 @@ const actions = [
   },
 ];
 
+const actionStyles: Record<string, { buttonClass: string; iconClass: string }> = {
+  blue: {
+    buttonClass: 'hover:border-blue-500/50 hover:bg-blue-500/10',
+    iconClass: 'text-blue-500',
+  },
+  green: {
+    buttonClass: 'hover:border-green-500/50 hover:bg-green-500/10',
+    iconClass: 'text-green-500',
+  },
+  purple: {
+    buttonClass: 'hover:border-purple-500/50 hover:bg-purple-500/10',
+    iconClass: 'text-purple-500',
+  },
+  orange: {
+    buttonClass: 'hover:border-orange-500/50 hover:bg-orange-500/10',
+    iconClass: 'text-orange-500',
+  },
+};
+
 export const QuickActions = memo(
   ({ onAddUser, onExport, onSettings, onViewChange }: QuickActionsProps) => {
-    const handleAction = (action: string) => {
+    const handleAction = useCallback((action: string) => {
       switch (action) {
         case 'addUser':
           onAddUser();
@@ -88,7 +107,34 @@ export const QuickActions = memo(
           }
           break;
       }
-    };
+    }, [onAddUser, onExport, onSettings, onViewChange]);
+
+    useEffect(() => {
+      const handleKeydown = (event: KeyboardEvent) => {
+        if (!event.ctrlKey) return;
+
+        const activeTag = (event.target as HTMLElement | null)?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+        const key = event.key.toLowerCase();
+        if (key === 'n') {
+          event.preventDefault();
+          handleAction('addUser');
+        } else if (key === 'a') {
+          event.preventDefault();
+          handleAction('analytics');
+        } else if (key === 'e') {
+          event.preventDefault();
+          handleAction('export');
+        } else if (key === 's') {
+          event.preventDefault();
+          handleAction('settings');
+        }
+      };
+
+      window.addEventListener('keydown', handleKeydown);
+      return () => window.removeEventListener('keydown', handleKeydown);
+    }, [handleAction]);
 
     return (
       <div className="border-border bg-card/40 rounded-xl border p-6">
@@ -96,6 +142,7 @@ export const QuickActions = memo(
         <div className="space-y-3">
           {actions.map((action, index) => {
             const Icon = action.icon;
+            const styles = actionStyles[action.color] ?? actionStyles.blue;
             return (
               <motion.div
                 key={action.label}
@@ -104,10 +151,10 @@ export const QuickActions = memo(
               >
                 <Button
                   variant="outline"
-                  className={`h-12 w-full justify-start hover:bg-${action.color}-500/10 hover:border-${action.color}-500/50 transition-all duration-200`}
+                  className={`h-12 w-full justify-start transition-all duration-200 ${styles.buttonClass}`}
                   onClick={() => handleAction(action.action)}
                 >
-                  <Icon className={`mr-3 h-5 w-5 text-${action.color}-500`} />
+                  <Icon className={`mr-3 h-5 w-5 ${styles.iconClass}`} />
                   <span className="font-medium">{action.label}</span>
                   <div className="text-muted-foreground ml-auto text-xs">
                     {action.shortcut}

@@ -1,6 +1,20 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import { Users, Activity, DollarSign, Eye } from 'lucide-react';
+import {
+  Users,
+  Activity,
+  DollarSign,
+  Eye,
+  Database,
+  TicketPercent,
+  BookOpen,
+  MapPin,
+  FileText,
+  MessageSquare,
+  BarChart3,
+  Settings,
+  Zap,
+} from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
 import { QuickActions } from '@/components/ui/quick-actions';
 import { DashboardHeader, DEFAULT_FILTERS, type DashboardFilters } from '@/components/ui/dashboard-header';
@@ -10,6 +24,7 @@ import { collection, getCountFromServer, getDocs } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { database } from '@/lib/firebase';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import { motion } from 'framer-motion';
 
 // ── Static stat shape (reset between fetches) ──────────────────────────────
 const STAT_DEFAULTS = [
@@ -32,6 +47,8 @@ const PlaceFeedbackTable = lazy(() => import('@/components/ui/place-feedback-tab
 const AboutPageEditor = lazy(() => import('@/components/ui/about-page-editor').then((module) => ({ default: module.AboutPageEditor })));
 const TripStoriesAdminPanel = lazy(() => import('@/components/ui/trip-stories-admin').then((module) => ({ default: module.TripStoriesAdminPanel })));
 const AdminTravelItenary = lazy(() => import('@/components/ui/travel-itenary'));
+const OffersManager = lazy(() => import('@/components/ui/offers-manager').then((module) => ({ default: module.OffersManager })));
+const BookingsOverview = lazy(() => import('@/components/ui/bookings-overview').then((module) => ({ default: module.BookingsOverview })));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -154,6 +171,21 @@ export default function AdminDashboard() {
   const renderView = useMemo(() => {
     switch (currentView) {
       case 'dashboard':
+        const overviewSections = [
+          { title: 'Users', desc: 'Accounts, roles, and permissions', view: 'users', icon: Users, tone: 'from-blue-500 to-cyan-500' },
+          { title: 'Communities', desc: 'Chat communities and moderation', view: 'chatrooms', icon: Database, tone: 'from-violet-500 to-indigo-500' },
+          { title: 'Offers', desc: 'Homepage campaigns and promotions', view: 'offers', icon: TicketPercent, tone: 'from-rose-500 to-orange-500' },
+          { title: 'Trip Stories', desc: 'Review and curate user stories', view: 'trip-stories', icon: BookOpen, tone: 'from-fuchsia-500 to-pink-500' },
+          { title: 'Tourist Places', desc: 'Manage destination directory', view: 'tourist-places', icon: MapPin, tone: 'from-emerald-500 to-teal-500' },
+          { title: 'Travel Itinerary', desc: 'Control itinerary content', view: 'travel-itinerary', icon: FileText, tone: 'from-sky-500 to-blue-500' },
+          { title: 'Reviews & Comments', desc: 'Moderate platform feedback', view: 'place-feedback', icon: MessageSquare, tone: 'from-amber-500 to-orange-500' },
+          { title: 'Analytics', desc: 'Growth, usage, and trends', view: 'analytics', icon: BarChart3, tone: 'from-purple-500 to-violet-500' },
+          { title: 'Revenue', desc: 'Subscriptions and finance', view: 'revenue', icon: Zap, tone: 'from-green-500 to-emerald-500' },
+          { title: 'Activity', desc: 'Recent platform events', view: 'activity', icon: Activity, tone: 'from-cyan-500 to-blue-500' },
+          { title: 'About Page', desc: 'Homepage and about content', view: 'about-page', icon: FileText, tone: 'from-indigo-500 to-purple-500' },
+          { title: 'Settings', desc: 'System controls and preferences', view: 'settings', icon: Settings, tone: 'from-slate-500 to-gray-600' },
+        ] as const;
+
         return (
           <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
             <div className="px-2 sm:px-0">
@@ -171,6 +203,52 @@ export default function AdminDashboard() {
                 <DashboardCard key={stat.title} stat={stat} index={index} />
               ))}
             </div>
+
+            <motion.section
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45 }}
+              className="rounded-2xl border border-border bg-card/50 p-4 sm:p-5"
+            >
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight">Admin Overview Hub</h2>
+                  <p className="text-sm text-muted-foreground">
+                    One visual map of every admin area. Click any card to jump directly.
+                  </p>
+                </div>
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                  {overviewSections.length} sections
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {overviewSections.map((section, index) => {
+                  const Icon = section.icon;
+                  return (
+                    <motion.button
+                      key={section.view}
+                      type="button"
+                      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: index * 0.04, duration: 0.28 }}
+                      onClick={() => setCurrentView(section.view)}
+                      className="group rounded-xl border border-border bg-background/70 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className={`rounded-lg bg-linear-to-br ${section.tone} p-2 text-white shadow-sm`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <span className="text-xs text-muted-foreground group-hover:text-primary">Open</span>
+                      </div>
+
+                      <h3 className="mt-3 text-sm font-semibold sm:text-base">{section.title}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{section.desc}</p>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.section>
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
@@ -246,6 +324,56 @@ export default function AdminDashboard() {
           </div>
         );
 
+      case 'bookings':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Bookings
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Monitor bookings and navigate quickly to booking modules.
+              </p>
+            </div>
+            <Suspense fallback={<SectionLoader />}>
+              <BookingsOverview />
+            </Suspense>
+          </div>
+        );
+
+      case 'revenue':
+        return (
+          <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
+            <div className="flex flex-wrap items-end justify-between gap-3 px-2 sm:px-0">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                  Revenue
+                </h1>
+                <p className="text-muted-foreground text-sm sm:text-base">
+                  Track subscription revenue and export finance snapshots.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExport}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Export Revenue Data
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+              {stats.map((stat, index) => (
+                <DashboardCard key={stat.title} stat={stat} index={index} />
+              ))}
+            </div>
+
+            <Suspense fallback={<SectionLoader />}>
+              <RevenueChart />
+            </Suspense>
+          </div>
+        );
+
       case 'activity':
         return (
           <div className="mx-auto max-w-6xl space-y-4 sm:space-y-6">
@@ -293,10 +421,10 @@ export default function AdminDashboard() {
           <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
             <div className="px-2 sm:px-0">
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Chat Rooms Management
+                Chat Communities Management
               </h1>
               <p className="text-muted-foreground text-sm sm:text-base">
-                Manage all chat rooms, members, and moderation
+                Manage all chat communities, members, and moderation
               </p>
             </div>
 
@@ -325,6 +453,23 @@ export default function AdminDashboard() {
           <Suspense fallback={<SectionLoader />}>
             <AdminTravelItenary />
           </Suspense>
+        );
+
+      case 'offers':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Offers Management
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Create, edit, and publish animated homepage offers.
+              </p>
+            </div>
+            <Suspense fallback={<SectionLoader />}>
+              <OffersManager />
+            </Suspense>
+          </div>
         );
 
       case 'place-feedback':

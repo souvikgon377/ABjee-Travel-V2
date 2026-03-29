@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { adminAPI } from '@/lib/api';
 
 interface AddChatRoomDialogProps {
   open: boolean;
@@ -33,6 +32,7 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
     name: '',
     description: '',
     type: 'public',
+    visibility: 'private',
     country: '',
     city: '',
     maxMembers: '1000',
@@ -40,6 +40,14 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
 
   const handleChange = useCallback((field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const handleTypeChange = useCallback((value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      type: value,
+      visibility: value === 'private' ? prev.visibility : 'private',
+    }));
   }, []);
 
   const handleSubmit = useCallback(
@@ -62,13 +70,14 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
           description: formData.description || '',
           type: formData.type,
           isPublic: formData.type === 'public',
+          ...(formData.type === 'private' ? { visibility: formData.visibility } : {}),
           destination,
           maxMembers: parseInt(formData.maxMembers) || 1000,
           isActive: true,
           participants: [],
           members: {},
           messageCount: 0,
-          subscriptionRequired: formData.type === 'premium',
+          subscriptionRequired: false,
           tags: [],
           rules: [],
           lastMessage: null,
@@ -85,6 +94,7 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
           name: '',
           description: '',
           type: 'public',
+          visibility: 'private',
           country: '',
           city: '',
           maxMembers: '1000',
@@ -93,8 +103,8 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
         onRoomAdded();
         onOpenChange(false);
       } catch (error: any) {
-        console.error('Failed to create chat room:', error);
-        alert('Failed to create chat room. Please try again.');
+        console.error('Failed to create chat community:', error);
+        alert('Failed to create chat community. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -106,13 +116,13 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-125">
         <DialogHeader>
-          <DialogTitle>Create New Chat Room</DialogTitle>
-          <DialogDescription>Add a new chat room for users to join and communicate.</DialogDescription>
+          <DialogTitle>Create New Chat Community</DialogTitle>
+          <DialogDescription>Add a new chat community for users to join and communicate.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Room Name *</Label>
+            <Label htmlFor="name">Community Name *</Label>
             <Input
               id="name"
               placeholder="e.g., Paris Travel Group"
@@ -126,7 +136,7 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              placeholder="Brief description of the chat room..."
+              placeholder="Brief description of the chat community..."
               value={formData.description}
               onChange={(e) => handleChange('description', e.target.value)}
               rows={3}
@@ -135,15 +145,14 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="type">Room Type *</Label>
-              <Select value={formData.type} onValueChange={(value) => handleChange('type', value)}>
+              <Label htmlFor="type">Community Type *</Label>
+              <Select value={formData.type} onValueChange={handleTypeChange}>
                 <SelectTrigger id="type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Public</SelectItem>
+                  <SelectItem value="public">General</SelectItem>
                   <SelectItem value="private">Private</SelectItem>
-                  <SelectItem value="premium">Premium</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -160,6 +169,21 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
               />
             </div>
           </div>
+
+          {formData.type === 'private' && (
+            <div className="space-y-2">
+              <Label htmlFor="visibility">Private Visibility *</Label>
+              <Select value={formData.visibility} onValueChange={(value) => handleChange('visibility', value)}>
+                <SelectTrigger id="visibility">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="exposed">Exposed</SelectItem>
+                  <SelectItem value="private">Private</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -188,7 +212,7 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Room'}
+              {loading ? 'Creating...' : 'Create Community'}
             </Button>
           </div>
         </form>

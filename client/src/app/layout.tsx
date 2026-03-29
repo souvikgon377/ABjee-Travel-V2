@@ -13,12 +13,12 @@ export const metadata: Metadata = {
     template: "%s | ABjee Travel",
   },
   description:
-    "ABjee Travel helps you discover destinations, collaborate in chat rooms, explore travel stories, and plan complete itineraries.",
+    "ABjee Travel helps you discover destinations, collaborate in chat communities, explore travel stories, and plan complete itineraries.",
   applicationName: "ABjee Travel",
   keywords: [
     "travel planning",
     "trip itinerary",
-    "chat rooms",
+    "chat communities",
     "travel stories",
     "group travel",
     "destination guides",

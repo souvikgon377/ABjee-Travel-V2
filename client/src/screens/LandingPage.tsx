@@ -7,6 +7,8 @@ import { MessageCircle, Users, Camera, Map, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Header1 from '@/components/mvpblocks/header-1'
 import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
+import { collection, onSnapshot } from 'firebase/firestore'
+import { firestoreDb } from '@/lib/firebaseFirestore'
 
 const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'))
 const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3))
@@ -22,10 +24,10 @@ const landingHighlights = [
     icon: Users,
   },
   {
-    title: 'Chat Rooms',
-    description: 'Join active travel rooms or create your own space to plan with your group in real-time.',
+    title: 'Chat Communities',
+    description: 'Join active travel communities or create your own space to plan with your group in real-time.',
     href: '/chat',
-    cta: 'Open Chat Rooms',
+    cta: 'Open Chat Communities',
     icon: MessageCircle,
   },
   {
@@ -44,9 +46,21 @@ const landingHighlights = [
   },
 ]
 
+type HomeOffer = {
+  id: string
+  title: string
+  description: string
+  badge: string
+  ctaText: string
+  ctaHref: string
+  isActive: boolean
+  priority?: number
+}
+
 function LandingPage() {
   const [showCommunityPopup, setShowCommunityPopup] = useState(false)
   const [showFeaturesOverlay, setShowFeaturesOverlay] = useState(false)
+  const [offers, setOffers] = useState<HomeOffer[]>([])
 
   useEffect(() => {
     const dismissed = window.sessionStorage.getItem('abjee-community-popup-dismissed')
@@ -57,6 +71,18 @@ function LandingPage() {
     }, 1200)
 
     return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(firestoreDb, 'offers'), (snapshot) => {
+      const rows = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<HomeOffer, 'id'>) }))
+        .filter((offer) => offer.isActive)
+        .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+      setOffers(rows)
+    })
+
+    return () => unsub()
   }, [])
 
   const closeCommunityPopup = () => {
@@ -113,7 +139,7 @@ function LandingPage() {
                     Join the ABJEE Travel Community
                   </h2>
                   <p className="mt-3 text-muted-foreground text-base md:text-lg max-w-3xl">
-                    Connect with travelers, discover active groups, ask questions, and plan trips together in real-time chat rooms.
+                    Connect with travelers, discover active groups, ask questions, and plan trips together in real-time chat communities.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
@@ -134,7 +160,7 @@ function LandingPage() {
                       }}
                       className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold border border-border text-foreground hover:bg-muted transition-colors"
                     >
-                      Browse Chat Rooms
+                      Browse Chat Communities
                     </Link>
                   </div>
                 </div>
@@ -148,6 +174,55 @@ function LandingPage() {
                   </ul>
                 </div>
               </div>
+
+              {offers.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.12, duration: 0.35 }}
+                  className="mt-6 rounded-2xl border border-rose-300/50 bg-linear-to-br from-rose-100/70 via-orange-100/70 to-amber-100/70 dark:from-rose-950/35 dark:via-orange-950/30 dark:to-amber-950/30 p-4 sm:p-5"
+                >
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h3 className="text-lg sm:text-xl font-extrabold tracking-tight bg-linear-to-r from-rose-600 to-orange-500 bg-clip-text text-transparent">
+                      Live Offers
+                    </h3>
+                    <span className="rounded-full border border-rose-400/40 bg-white/70 dark:bg-black/20 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      Updated by admin
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {offers.slice(0, 6).map((offer, index) => (
+                      <motion.div
+                        key={offer.id}
+                        initial={{ opacity: 0, y: 18, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ delay: index * 0.06, duration: 0.3 }}
+                        className="group relative overflow-hidden rounded-xl border border-rose-300/40 bg-white/85 dark:bg-slate-900/70 p-4 shadow-sm"
+                      >
+                        <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-orange-500/0 to-amber-500/0 group-hover:from-rose-500/10 group-hover:via-orange-500/10 group-hover:to-amber-500/10 transition-all duration-300" />
+                        <div className="relative">
+                          <p className="inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/10 px-2.5 py-1 text-[11px] font-bold text-rose-700 dark:text-rose-300">
+                            {offer.badge || 'Featured'}
+                          </p>
+                          <h4 className="mt-2 text-base font-bold text-foreground line-clamp-2">{offer.title}</h4>
+                          <p className="mt-1 text-sm text-muted-foreground line-clamp-3 min-h-16">{offer.description}</p>
+                          <Link
+                            href={offer.ctaHref || '/chat'}
+                            onClick={() => {
+                              window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
+                              setShowCommunityPopup(false)
+                            }}
+                            className="mt-3 inline-flex items-center justify-center rounded-lg bg-linear-to-r from-rose-500 to-orange-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:from-rose-600 hover:to-orange-600"
+                          >
+                            {offer.ctaText || 'Explore'}
+                          </Link>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -160,7 +235,7 @@ function LandingPage() {
               Explore ABJEE Travel
             </h2>
             <p className="mt-3 text-muted-foreground text-base md:text-lg max-w-3xl mx-auto">
-              Everything you need in one place: community, live chat rooms, traveler stories, and curated itineraries.
+              Everything you need in one place: community, live chat communities, traveler stories, and curated itineraries.
             </p>
           </div>
 

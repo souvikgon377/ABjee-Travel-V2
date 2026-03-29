@@ -178,14 +178,14 @@ class ChatService {
     const roomRef = ref(database, `chatrooms/${roomId}`);
     const roomSnapshot = await get(roomRef);
     if (!roomSnapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
 
     const room = roomSnapshot.val() as ChatRoom;
     if (!room.isPublic) return;
 
     if (attachment.size > 1024 * 1024) {
-      throw new Error('Image size must be 1MB or less for public rooms.');
+      throw new Error('Image size must be 1MB or less for public communities.');
     }
 
     const user = this.getCurrentUser();
@@ -212,7 +212,7 @@ class ChatService {
     }
 
     if (imageCountToday >= dailyLimit) {
-      throw new Error(`Daily image limit reached for public rooms (${dailyLimit}/day).`);
+      throw new Error(`Daily image limit reached for public communities (${dailyLimit}/day).`);
     }
   }
 
@@ -222,14 +222,14 @@ class ChatService {
     const roomRef = ref(database, `chatrooms/${roomId}`);
     const snapshot = await get(roomRef);
     if (!snapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
 
     const room = snapshot.val() as ChatRoom;
     if (!room.isPublic) return;
 
     if (this.hasRestrictedPublicContent(text)) {
-      throw new Error('In public rooms, phone numbers, email addresses, and links are not allowed.');
+      throw new Error('In public communities, phone numbers, email addresses, and links are not allowed.');
     }
   }
   
@@ -243,6 +243,24 @@ class ChatService {
       throw new Error('User must be authenticated to use chat');
     }
     return user;
+  }
+
+  private async isAdminOrOwner(userId: string): Promise<boolean> {
+    const userRef = doc(firestoreDb, 'users', userId);
+    const userSnapshot = await getDoc(userRef);
+
+    if (!userSnapshot.exists()) return false;
+
+    const roleRaw = (userSnapshot.data() as Record<string, unknown>).role;
+    const role = typeof roleRaw === 'string' ? roleRaw.toLowerCase() : '';
+    return role === 'admin' || role === 'owner';
+  }
+
+  private async assertAdminOrOwner(userId: string, message: string): Promise<void> {
+    const isAdmin = await this.isAdminOrOwner(userId);
+    if (!isAdmin) {
+      throw new Error(message);
+    }
   }
 
   // ==================== USER PRESENCE ====================
@@ -296,10 +314,10 @@ class ChatService {
     });
   }
 
-  // ==================== CHAT ROOMS ====================
+  // ==================== CHAT COMMUNITIES ====================
 
   /**
-   * WHY: Create a group chat room
+   * WHY: Create a group chat community
    * DECISION: Store in RTDB for consistency, not Firestore
    */
   async createGroupRoom(
@@ -314,6 +332,8 @@ class ChatService {
     options?: { maxPrivateRooms?: number }
   ) {
     const user = this.getCurrentUser();
+
+    await this.assertAdminOrOwner(user.uid, 'Only admins can create community chat.');
 
     if (!isPublic) {
       await this.enforcePrivateRoomMembershipLimit(user.uid, options?.maxPrivateRooms);
@@ -423,7 +443,7 @@ class ChatService {
     const privateRoomCount = await this.getUserPrivateRoomMembershipCount(userId);
 
     if (typeof maxOverride === 'number' && maxOverride >= 0 && privateRoomCount >= maxOverride) {
-      throw new Error(`You have reached your private room limit (${maxOverride}).`);
+      throw new Error(`You have reached your private community limit (${maxOverride}).`);
     }
 
     const userRef = doc(firestoreDb, 'users', userId);
@@ -447,7 +467,7 @@ class ChatService {
   }
 
   /**
-   * Listen to ALL public chat rooms
+   * Listen to ALL public chat communities
    */
   listenToUserRooms(callback: (rooms: ChatRoom[]) => void) {
     const user = this.getCurrentUser();
@@ -481,7 +501,7 @@ class ChatService {
       callback(rooms);
     }, (error) => {
       if ((process.env.NODE_ENV === "development")) {
-        console.error('Error listening to chat rooms:', error);
+        console.error('Error listening to chat communities:', error);
         console.error('Make sure Firebase Realtime Database rules are deployed!');
       }
       callback([]); // Return empty array on error
@@ -539,7 +559,7 @@ class ChatService {
     const snapshot = await get(roomRef);
     
     if (!snapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
     
     const room = snapshot.val();
@@ -561,7 +581,7 @@ class ChatService {
           throw new Error('Invalid invite link');
         }
       } else {
-        throw new Error('Private room requires invite or admin approval.');
+        throw new Error('Private community requires invite or admin approval.');
       }
     }
     // For public rooms, allow joining without password
@@ -589,20 +609,20 @@ class ChatService {
     const snapshot = await get(roomRef);
   
     if (!snapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
   
     const room = snapshot.val();
   
     // Validate room is exposed private room
     if (room.isPublic || room.visibility !== 'exposed') {
-      throw new Error('Join requests are only available for exposed private rooms');
+      throw new Error('Join requests are only available for exposed private communities');
     }
   
     // Check if user is already a participant
     const participants = room.participants || [];
     if (participants.includes(userId)) {
-      throw new Error('You are already a member of this room');
+      throw new Error('You are already a member of this community');
     }
   
     await this.enforcePrivateRoomMembershipLimit(userId);
@@ -610,7 +630,7 @@ class ChatService {
     // Check if user already requested
     const joinRequests = room.joinRequests || [];
     if (joinRequests.includes(userId)) {
-      throw new Error('You have already requested to join this room');
+      throw new Error('You have already requested to join this community');
     }
   
     // Add user to join requests
@@ -627,14 +647,14 @@ class ChatService {
     const snapshot = await get(roomRef);
   
     if (!snapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
   
     const room = snapshot.val();
   
     // Check if admin is the creator
     if (room.createdBy !== adminUserId) {
-      throw new Error('Only the room creator can accept join requests');
+      throw new Error('Only the community creator can accept join requests');
     }
   
     const joinRequests = room.joinRequests || [];
@@ -666,14 +686,14 @@ class ChatService {
     const snapshot = await get(roomRef);
   
     if (!snapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
   
     const room = snapshot.val();
   
     // Check if admin is the creator
     if (room.createdBy !== adminUserId) {
-      throw new Error('Only the room creator can reject join requests');
+      throw new Error('Only the community creator can reject join requests');
     }
   
     const joinRequests = room.joinRequests || [];
@@ -697,10 +717,16 @@ class ChatService {
     const user = this.getCurrentUser();
     const roomRef = ref(database, `chatrooms/${roomId}`);
     
-    // Verify ownership
     const snapshot = await get(roomRef);
-    if (!snapshot.exists() || snapshot.val().createdBy !== user.uid) {
-      throw new Error('Cannot delete room: not the creator');
+    if (!snapshot.exists()) {
+      throw new Error('Community not found');
+    }
+
+    const room = snapshot.val() as ChatRoom;
+    if (room.isPublic) {
+      await this.assertAdminOrOwner(user.uid, 'Only admins can maintain General Community Chat.');
+    } else if (room.createdBy !== user.uid) {
+      throw new Error('Cannot delete community: not the creator');
     }
     
     await remove(roomRef);
@@ -721,12 +747,14 @@ class ChatService {
     // Verify ownership
     const snapshot = await get(roomRef);
     if (!snapshot.exists()) {
-      throw new Error('Room not found');
+      throw new Error('Community not found');
     }
     
-    const room = snapshot.val();
-    if (room.createdBy !== user.uid) {
-      throw new Error('Cannot update room: not the creator');
+    const room = snapshot.val() as ChatRoom;
+    if (room.isPublic) {
+      await this.assertAdminOrOwner(user.uid, 'Only admins can maintain General Community Chat.');
+    } else if (room.createdBy !== user.uid) {
+      throw new Error('Cannot update community: not the creator');
     }
     
     // Prepare updates
@@ -763,7 +791,7 @@ class ChatService {
   // ==================== MESSAGES ====================
 
   /**
-   * Send a message to a chat room
+   * Send a message to a chat community
    */
   async sendMessage(roomId: string, text: string, attachment?: MessageAttachment) {
     const user = this.getCurrentUser();
