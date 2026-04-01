@@ -8,6 +8,7 @@ import {
   Phone,
   Twitter,
 } from 'lucide-react';
+import { publicAsset } from '@/lib/publicAsset';
 
 const data = {
   facebookLink: 'https://facebook.com/ABjee Travel',
@@ -41,7 +42,7 @@ const data = {
     name: 'ABjee Travel',
     description:
       'Building beautiful and functional web experiences with modern technologies. We help startups and businesses create their digital presence.',
-    logo: '/logo.webp',
+    logo: publicAsset('/logo.jpg'),
   },
 };
 
@@ -87,7 +88,7 @@ export default function Footer4Col() {
           <div>
             <div className="text-primary flex justify-center gap-2 sm:justify-start">
               <img
-                src={data.company.logo || '/placeholder.svg'}
+                src={data.company.logo || publicAsset('/placeholder.svg')}
                 alt="logo"
                 className="h-8 w-8 rounded-full"
               />

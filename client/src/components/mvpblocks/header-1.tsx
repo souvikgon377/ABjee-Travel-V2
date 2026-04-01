@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
+import { publicAsset } from '@/lib/publicAsset';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -210,7 +211,7 @@ export default function Header1() {
             <Link href="/" className="flex items-center space-x-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
                 <Image
-                  src="/logo.jpg"
+                  src={publicAsset('/logo.jpg')}
                   alt="ABjee Travel"
                   width={32}
                   height={32}

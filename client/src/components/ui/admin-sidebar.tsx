@@ -16,6 +16,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { publicAsset } from '@/lib/publicAsset';
 import {
   LayoutDashboard,
   Users,
@@ -101,7 +102,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" onClick={() => handleViewChange('dashboard')}>
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
-                <img src="/logo.jpg" alt="ABjee Travel" className="h-8 w-8 object-cover" />
+                  <img src={publicAsset('/logo.jpg')} alt="ABjee Travel" className="h-8 w-8 object-cover" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">ABjee Travel</span>

@@ -13,6 +13,7 @@ import 'swiper/css/effect-fade';
 import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
+import { publicAsset } from '@/lib/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getSubscriptionInfo,
@@ -29,6 +30,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import Header from '@/components/mvpblocks/header-1';
+import OfferSpotlightPopup from '@/components/ui/offer-spotlight-popup';
 
 
 async function uploadVideoToR2(file: File): Promise<{ url: string; key: string }> {
@@ -77,6 +79,22 @@ type CountryUserHighlight = {
   profilePictureUrl?: string;
   avatarUrl?: string;
 };
+
+type LiveOffer = {
+  id: string;
+  title: string;
+  description: string;
+  badge?: string;
+  ctaText?: string;
+  ctaHref?: string;
+  isActive?: boolean;
+  priority?: number;
+};
+
+const STATIC_VIDEO_V1 = publicAsset('/v1.mp4');
+const STATIC_VIDEO_V2 = publicAsset('/v2.mp4');
+const STATIC_VIDEO_V3 = publicAsset('/v3.mp4');
+const STATIC_VIDEO_V4 = publicAsset('/v4.mp4');
 
 const getCountryFromUserData = (data: Record<string, unknown>): string => {
   const location = data.location && typeof data.location === 'object'
@@ -1231,7 +1249,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v1.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V1} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
@@ -1274,7 +1292,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v2.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V2} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
@@ -1328,7 +1346,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v3.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V3} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-yellow-700/60 via-amber-700/50 to-yellow-700/60" />
@@ -1382,7 +1400,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v4.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V4} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
@@ -1428,7 +1446,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v1.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V1} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
@@ -1471,7 +1489,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v2.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V2} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
@@ -1525,7 +1543,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v3.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V3} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-yellow-700/60 via-amber-700/50 to-yellow-700/60" />
@@ -1579,7 +1597,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v4.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V4} type="video/mp4" />
                 </video>
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
@@ -1626,7 +1644,7 @@ const ChatRoomsList: React.FC = () => {
                   playsInline
                   className="absolute inset-0 w-full h-full object-cover"
                 >
-                  <source src="/v1.mp4" type="video/mp4" />
+                  <source src={STATIC_VIDEO_V1} type="video/mp4" />
                 </video>
 
                 {/* Multi-layer gradient overlay */}
@@ -3354,9 +3372,27 @@ const ChatRoomsList: React.FC = () => {
  * Main Chat Page
  */
 const ChatPage: React.FC = () => {
+  const [offers, setOffers] = useState<LiveOffer[]>([]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(firestoreDb, 'offers'), (snapshot) => {
+      const rows = snapshot.docs
+        .map((entry) => ({ id: entry.id, ...(entry.data() as Omit<LiveOffer, 'id'>) }))
+        .filter((offer) => offer.isActive)
+        .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+      setOffers(rows);
+    });
+
+    return () => unsub();
+  }, []);
+
   return (
     <div className="min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
       <Header />
+      <OfferSpotlightPopup
+        offers={offers}
+        contextLabel="Community Offers"
+      />
       <ChatRoomsList />
     </div>
   );

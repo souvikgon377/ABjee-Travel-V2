@@ -1,5 +1,6 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import { publicAsset } from '@/lib/publicAsset';
 import type {
   AboutContactContent,
   AboutDeveloper,
@@ -25,7 +26,7 @@ export const DEFAULT_ABOUT_PAGE_CONTENT: AboutPageContent = {
     name: 'Anupam Banerjee',
     title: 'Founder & Soul Traveller',
     location: 'Kolkata, West Bengal, India',
-    photoUrl: '/logo.jpg',
+    photoUrl: publicAsset('/logo.jpg'),
     quote: 'The more I travel, the more my soul became rich.',
     paragraphs: [
       "Hi, I'm Anupam Banerjee - a passionate world traveller with an insatiable curiosity for cultures, landscapes, and the stories hidden in every corner of this beautiful planet.",

@@ -4,6 +4,7 @@ import Header1 from '../mvpblocks/header-1';
 import Footer4Col from '../mvpblocks/footer-4col';
 import { GroupToursPopup } from './GroupToursPopup';
 import Header2 from '../mvpblocks/Header-2';
+import { publicAsset } from '@/lib/publicAsset';
 
 // --- TYPE DEFINITIONS ---
 interface TourPackage {
@@ -354,7 +355,7 @@ export default function BookingCategories() {
         {/* Hero Section */}
         <section className="w-full">
         <video
-          src="/video1.mp4" //add video link here..
+          src={publicAsset('/video1.mp4')} //add video link here..
           className="w-full h-[60vw] max-h-150 object-cover pt-2"
           autoPlay
           loop

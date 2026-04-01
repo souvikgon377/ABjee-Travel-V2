@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Header1 from "@/components/mvpblocks/header-1";
 import SimplePricing from "@/components/mvpblocks/simple-pricing";
 import Footer4Col from "@/components/mvpblocks/footer-4col";
+import { publicAsset } from "@/lib/publicAsset";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/logo.jpg",
+        url: publicAsset('/logo.jpg'),
         width: 1200,
         height: 630,
         alt: "ABjee Travel Pricing",
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ABjee Travel | Pricing",
     description: "Explore ABjee Travel pricing plans and choose the best option for your needs.",
-    images: ["/logo.jpg"],
+    images: [publicAsset('/logo.jpg')],
   },
 };
 

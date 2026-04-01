@@ -9,6 +9,8 @@ import Header1 from '@/components/mvpblocks/header-1'
 import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { firestoreDb } from '@/lib/firebaseFirestore'
+import { publicAsset } from '@/lib/publicAsset'
+import OfferSpotlightPopup from '@/components/ui/offer-spotlight-popup'
 
 const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'))
 const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3))
@@ -97,7 +99,7 @@ function LandingPage() {
       <GradientTypewriter/>
       <section className="w-full" aria-label="Featured travel video">
         <video
-          src="/video1.mp4"
+          src={publicAsset('/video1.mp4')}
           className="h-[58vw] max-h-170 min-h-55 w-full object-cover pt-2 sm:h-[52vw]"
           autoPlay
           loop
@@ -228,6 +230,11 @@ function LandingPage() {
         )}
       </AnimatePresence>
 
+      <OfferSpotlightPopup
+        offers={offers}
+        contextLabel="Home Offers"
+      />
+
       <section className="bg-linear-to-b from-background to-muted/30 px-4 py-12 md:px-8 md:py-14">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10">
@@ -267,14 +274,14 @@ function LandingPage() {
 
       <CardCarousel
         images={[
-          { src: "/img1.png", alt: "Image 1" },
-          { src: "/img2.png", alt: "Image 2" },
-          { src: "/img3.png", alt: "Image 3" },
-          { src: "/img4.png", alt: "Image 3" },
-          { src: "/img5.png", alt: "Image 3" },
-          { src: "/img6.jpg", alt: "Image 3" },
-          { src: "/img7.jpg", alt: "Image 3" },
-          { src: "/img8.jpg", alt: "Image 3" },
+          { src: publicAsset('/img1.png'), alt: "Image 1" },
+          { src: publicAsset('/img2.png'), alt: "Image 2" },
+          { src: publicAsset('/img3.png'), alt: "Image 3" },
+          { src: publicAsset('/img4.png'), alt: "Image 3" },
+          { src: publicAsset('/img5.png'), alt: "Image 3" },
+          { src: publicAsset('/img6.jpg'), alt: "Image 3" },
+          { src: publicAsset('/img7.jpg'), alt: "Image 3" },
+          { src: publicAsset('/img8.jpg'), alt: "Image 3" },
         ]}
         autoplayDelay={2000}
         showPagination={true}

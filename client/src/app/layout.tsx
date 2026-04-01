@@ -3,6 +3,7 @@ import type { Viewport } from "next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { publicAsset } from "@/lib/publicAsset";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
 
@@ -39,7 +40,7 @@ export const metadata: Metadata = {
     siteName: "ABjee Travel",
     images: [
       {
-        url: "/logo.jpg",
+        url: publicAsset('/logo.jpg'),
         width: 1200,
         height: 630,
         alt: "ABjee Travel",
@@ -51,10 +52,10 @@ export const metadata: Metadata = {
     title: "ABjee Travel | Plan Better Trips Together",
     description:
       "Discover destinations, collaborate in live community chat, and build complete itineraries with ABjee Travel.",
-    images: ["/logo.jpg"],
+    images: [publicAsset('/logo.jpg')],
   },
   manifest: "/manifest.json",
-  icons: { icon: "/logo.jpg", apple: "/logo.jpg" },
+  icons: { icon: publicAsset('/logo.jpg'), apple: publicAsset('/logo.jpg') },
 };
 
 export const viewport: Viewport = {

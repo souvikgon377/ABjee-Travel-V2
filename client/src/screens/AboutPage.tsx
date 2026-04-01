@@ -19,6 +19,7 @@ import {
 import Header1 from '@/components/mvpblocks/header-1';
 import Footer4Col from '@/components/mvpblocks/footer-4col';
 import { DEFAULT_ABOUT_PAGE_CONTENT, loadAboutPageContent } from '@/lib/aboutContent';
+import { publicAsset } from '@/lib/publicAsset';
 import type { AboutFounderContent, AboutPageContent, AboutSocialIconName } from '@/types/about';
 
 // â”€â”€â”€ Animation Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -119,8 +120,8 @@ function FounderSection({ founder }: { founder: AboutFounderContent }) {
                 transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
               />
               <div className="relative w-56 h-56 sm:w-72 sm:h-72 rounded-full overflow-hidden border-4 border-background bg-secondary">
-                <img
-                  src={founder.photoUrl || '/logo.jpg'}
+                  <img
+                    src={founder.photoUrl || publicAsset('/logo.jpg')}
                   alt={`${founder.name} - Founder`}
                   className="w-full h-full object-cover"
                 />

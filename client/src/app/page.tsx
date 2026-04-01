@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LandingPage from "@/screens/LandingPage";
+import { publicAsset } from "@/lib/publicAsset";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
 
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/logo.jpg",
+        url: publicAsset('/logo.jpg'),
         width: 1200,
         height: 630,
         alt: "ABjee Travel Home",
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
     title: "ABjee Travel | Plan Better Trips Together",
     description:
       "Explore the ABjee Travel community, chat communities, trip stories, and curated itineraries for your next journey.",
-    images: ["/logo.jpg"],
+    images: [publicAsset('/logo.jpg')],
   },
 };
 
@@ -52,7 +53,7 @@ export default function RootPage() {
     "@type": "Organization",
     name: "ABjee Travel",
     url: siteUrl,
-    logo: `${siteUrl}/logo.jpg`,
+    logo: publicAsset('/logo.jpg'),
   };
 
   return (
