@@ -25,6 +25,17 @@ const getRazorpayAuthHeader = () => {
   };
 };
 
+const buildReceipt = (userId: string, planType: string, interval: string) => {
+  const safeUserPart = String(userId).replace(/[^a-zA-Z0-9]/g, '').slice(-12);
+  const timestampPart = Date.now().toString(36);
+  const planPart = String(planType).slice(0, 1).toLowerCase() || 'p';
+  const intervalPart = String(interval).slice(0, 1).toLowerCase() || 'm';
+  const fallbackUserPart = Math.random().toString(36).slice(2, 8);
+  const userPart = safeUserPart || fallbackUserPart;
+  // Razorpay requires receipt length <= 40.
+  return `sub_${timestampPart}_${planPart}${intervalPart}_${userPart}`.slice(0, 40);
+};
+
 export async function POST(req: NextRequest) {
   try {
     const user = await authenticateRequest(req);
@@ -47,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { keyId, authHeader } = getRazorpayAuthHeader();
-    const receipt = `sub_${user.id}_${planType}_${interval}_${Date.now()}`;
+    const receipt = buildReceipt(user.id, planType, interval);
 
     const razorpayRes = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
