@@ -20,10 +20,7 @@ import { QuickActions } from '@/components/ui/quick-actions';
 import { DashboardHeader, DEFAULT_FILTERS, type DashboardFilters } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, getCountFromServer, getDocs, query, where } from 'firebase/firestore';
-import { ref, get } from 'firebase/database';
-import { database } from '@/lib/firebase';
-import { firestoreDb } from '@/lib/firebaseFirestore';
+import { adminAPI } from '@/lib/api';
 import { motion } from 'framer-motion';
 
 // ── Static stat shape (reset between fetches) ──────────────────────────────
@@ -73,86 +70,46 @@ export default function AdminDashboard() {
 
   // Fetch all 4 sources in parallel — one failure never affects the rest
   const fetchStats = useCallback(async () => {
-    const prices: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
+    setLoading(true);
+    try {
+      const response = await adminAPI.getStats();
+      const data = response?.data?.data ?? {};
 
-    const [usersResult, statusResult, paymentResult, subsResult, pvResult] = await Promise.allSettled([
-      // 1. Total Users (Firestore)
-      getCountFromServer(collection(firestoreDb, 'users')),
-      // 2. Active Sessions (RTDB status nodes)
-      get(ref(database, 'status')),
-      // 3. Revenue (Razorpay-backed subscription payments)
-      getDocs(query(collection(firestoreDb, 'subscriptionPayments'), where('status', '==', 'paid'))),
-      // 4. Revenue fallback (legacy Firestore subscriptions)
-      getDocs(collection(firestoreDb, 'subscriptions')),
-      // 5. Page Views (RTDB analytics/pageViews)
-      get(ref(database, 'analytics/pageViews')),
-    ]);
+      const totalUsers = Number(data.totalUsers ?? 0);
+      const activeUsers = Number(data.activeUsers ?? 0);
+      const totalRevenue = Number(data.revenue ?? 0);
+      const pageViews = Number(data.pageViews ?? 0);
+      const paidTxnCount = Number(data.paidTransactions ?? 0);
 
-    // 1. Total Users
-    const totalUsers = usersResult.status === 'fulfilled' ? usersResult.value.data().count : 0;
-    if (usersResult.status === 'rejected' && (process.env.NODE_ENV === "development"))
-      console.warn('Total users fetch failed:', usersResult.reason);
-
-    // 2. Active Sessions
-    let activeUsers = 0;
-    if (statusResult.status === 'fulfilled') {
-      const data = statusResult.value.val();
-      if (data) {
-        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-        activeUsers = Object.values(data).filter(
-          (s: any) => s?.isOnline || (s?.lastSeen && s.lastSeen > fiveMinAgo)
-        ).length;
+      setStats([
+        { ...STAT_DEFAULTS[0], value: totalUsers.toLocaleString(), change: totalUsers > 0 ? `${totalUsers} registered` : '+0%' },
+        { ...STAT_DEFAULTS[1], value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, change: paidTxnCount > 0 ? `${paidTxnCount} paid txns` : '+0%' },
+        { ...STAT_DEFAULTS[2], value: activeUsers.toLocaleString(), change: activeUsers > 0 ? `${activeUsers} online` : '+0%' },
+        { ...STAT_DEFAULTS[3], value: pageViews.toLocaleString(), change: pageViews > 0 ? `${pageViews} total` : '+0%', changeType: 'positive' as const },
+      ]);
+    } catch (error) {
+      if ((process.env.NODE_ENV === "development")) {
+        console.warn('Dashboard stats fetch failed:', error);
       }
-    } else if ((process.env.NODE_ENV === "development")) {
-      console.warn('Active sessions fetch failed:', statusResult.reason);
+      setStats(STAT_DEFAULTS);
+    } finally {
+      setLoading(false);
     }
-
-    // 3. Revenue (Razorpay first)
-    let totalRevenue = 0;
-    let paidTxnCount = 0;
-
-    if (paymentResult.status === 'fulfilled' && paymentResult.value.size > 0) {
-      paymentResult.value.forEach((d) => {
-        const payment = d.data() as Record<string, any>;
-        const amountFromPaise = typeof payment.amountInPaise === 'number' ? payment.amountInPaise / 100 : null;
-        const amount = typeof amountFromPaise === 'number'
-          ? amountFromPaise
-          : (typeof payment.amount === 'number' ? payment.amount : 0);
-        totalRevenue += amount;
-        paidTxnCount += 1;
-      });
-    } else if (subsResult.status === 'fulfilled') {
-      // Legacy fallback for old subscription records without payment transactions.
-      const now = new Date();
-      subsResult.value.forEach((d) => {
-        const sub = d.data();
-        if (sub.status !== 'active') return;
-        const endDate = sub.endDate?.toDate?.() ?? (sub.endDate ? new Date(sub.endDate) : null);
-        if (!endDate || endDate > now) {
-          totalRevenue += sub.plan?.price?.amount ?? prices[sub.plan?.type] ?? 0;
-          paidTxnCount++;
-        }
-      });
-    } else if ((process.env.NODE_ENV === "development")) {
-      console.warn('Revenue fetch failed:', subsResult.reason);
-    }
-
-    // 4. Page Views
-    const pageViews = pvResult.status === 'fulfilled' ? (pvResult.value.val() || 0) : 0;
-    if (pvResult.status === 'rejected' && (process.env.NODE_ENV === "development"))
-      console.warn('Page views fetch failed:', pvResult.reason);
-
-    setStats([
-      { ...STAT_DEFAULTS[0], value: totalUsers.toLocaleString(),                               change: totalUsers > 0 ? `${totalUsers} registered` : '+0%' },
-      { ...STAT_DEFAULTS[1], value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, change: paidTxnCount > 0 ? `${paidTxnCount} paid txns` : '+0%' },
-      { ...STAT_DEFAULTS[2], value: activeUsers.toLocaleString(),                              change: activeUsers > 0 ? `${activeUsers} online` : '+0%' },
-      { ...STAT_DEFAULTS[3], value: pageViews.toLocaleString(),                                change: pageViews > 0 ? `${pageViews} total` : '+0%', changeType: 'positive' as const },
-    ]);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchStats();
+    
+    // Poll stats every 30 seconds to get updated data
+    const statsInterval = setInterval(() => {
+      fetchStats().catch((err) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error polling stats:', err);
+        }
+      });
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(statsInterval);
   }, [fetchStats]);
 
   const handleRefresh = useCallback(async () => {

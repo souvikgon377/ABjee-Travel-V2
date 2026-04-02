@@ -1,4 +1,3 @@
-import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -149,7 +148,7 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
         <div className="space-y-3 text-left">
           {getFeatureList().map((feature, index) => (
             <div key={index} className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+              <Check className="h-4 w-4 text-green-500 shrink-0" />
               <span className="text-sm">{feature}</span>
             </div>
           ))}

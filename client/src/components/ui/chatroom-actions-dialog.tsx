@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useRef } from 'react';
+import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ref, get, update, onValue } from 'firebase/database';
 import { database } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,12 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Users, Settings, Activity, Hash, Tag, Shield, Clock, MessageSquare, Crown, Globe, Lock, Paperclip, Mic, RefreshCw } from 'lucide-react';
+import { Users, Settings, Activity, Hash, Tag, Shield, Clock, MessageSquare, Crown, Globe, Lock, Paperclip, Mic, RefreshCw, Image as ImageIcon, Upload, X, Sparkles } from 'lucide-react';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { useAuth } from '@/contexts/AuthContext';
+import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
+import { useRouter } from 'next/navigation';
+import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
 
 // ─── Pure helpers (outside component) ───────────────────────────────
 
@@ -53,6 +57,14 @@ export const ChatRoomActionsDialog = memo(
     const [messages, setMessages] = useState<any[]>([]);
     const [loadingMessages, setLoadingMessages] = useState(false);
     const [messagesError, setMessagesError] = useState<string | null>(null);
+    const { userProfile } = useAuth();
+    const router = useRouter();
+    const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
+    const paidMember = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+    const isAdminOrOwner = useMemo(() => {
+      const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
+      return role === 'admin' || role === 'owner';
+    }, [userProfile?.role]);
     // Visited tabs: only mount content after the tab has been opened at least once
     const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['details']));
     // Cache the full room snapshot — shared by fetchMembers and fetchMessages
@@ -60,6 +72,8 @@ export const ChatRoomActionsDialog = memo(
     // Unsubscribe handles for live listeners
     const msgsUnsubRef = useRef<(() => void) | null>(null);
     const membersUnsubRef = useRef<(() => void) | null>(null);
+    const backgroundInputRef = useRef<HTMLInputElement | null>(null);
+    const iconInputRef = useRef<HTMLInputElement | null>(null);
     const [formData, setFormData] = useState({
       name: '',
       description: '',
@@ -69,6 +83,12 @@ export const ChatRoomActionsDialog = memo(
       maxMembers: '1000',
       isActive: true,
     });
+    const [backgroundImagePreview, setBackgroundImagePreview] = useState<string | null>(null);
+    const [iconImagePreview, setIconImagePreview] = useState<string | null>(null);
+    const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<ImageUploadResult | null>(null);
+    const [selectedIconImage, setSelectedIconImage] = useState<ImageUploadResult | null>(null);
+    const [uploadingBackground, setUploadingBackground] = useState(false);
+    const [uploadingIcon, setUploadingIcon] = useState(false);
 
     // Reset tab + data when room changes to avoid stale state
     useEffect(() => {
@@ -84,6 +104,10 @@ export const ChatRoomActionsDialog = memo(
         setMessages([]);
         setMessagesError(null);
         roomDataRef.current = null; // clear snapshot cache
+        setBackgroundImagePreview(room.backgroundImage?.url || null);
+        setIconImagePreview(room.iconImage?.url || room.iconUrl || null);
+        setSelectedBackgroundImage(room.backgroundImage || null);
+        setSelectedIconImage(room.iconImage || null);
         setFormData({
           name: room.name || '',
           description: room.description || '',
@@ -93,8 +117,30 @@ export const ChatRoomActionsDialog = memo(
           maxMembers: String(room.maxMembers || 1000),
           isActive: room.isActive !== false,
         });
+        if (backgroundInputRef.current) {
+          backgroundInputRef.current.value = '';
+        }
+        if (iconInputRef.current) {
+          iconInputRef.current.value = '';
+        }
       }
-    }, [room?.id]); // only on id change, not on every room object re-reference
+    }, [room?.id]); // only on room change, not on every render
+
+    useEffect(() => {
+      return () => {
+        if (backgroundImagePreview) {
+          revokeImagePreview(backgroundImagePreview);
+        }
+      };
+    }, [backgroundImagePreview]);
+
+    useEffect(() => {
+      return () => {
+        if (iconImagePreview) {
+          revokeImagePreview(iconImagePreview);
+        }
+      };
+    }, [iconImagePreview]);
 
     // Tear down live listeners when dialog is closed
     useEffect(() => {
@@ -216,9 +262,90 @@ export const ChatRoomActionsDialog = memo(
       setFormData((prev) => ({ ...prev, [field]: value }));
     }, []);
 
+    const handleBackgroundImageChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const preview = createImagePreview(file);
+        setBackgroundImagePreview(preview);
+        setUploadingBackground(true);
+        const result = await uploadImageToR2(file, {
+          folder: 'chat-rooms/backgrounds',
+        });
+        setSelectedBackgroundImage(result);
+      } catch (error: any) {
+        alert(error.message || 'Failed to upload background image');
+        setBackgroundImagePreview(room?.backgroundImage?.url || null);
+        setSelectedBackgroundImage(room?.backgroundImage || null);
+      } finally {
+        setUploadingBackground(false);
+        e.target.value = '';
+      }
+    }, [room?.backgroundImage]);
+
+    const handleIconImageChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const preview = createImagePreview(file);
+        setIconImagePreview(preview);
+        setUploadingIcon(true);
+        const result = await uploadImageToR2(file, {
+          folder: 'chat-rooms/icons',
+        });
+        setSelectedIconImage(result);
+      } catch (error: any) {
+        alert(error.message || 'Failed to upload icon image');
+        setIconImagePreview(room?.iconImage?.url || room?.iconUrl || null);
+        setSelectedIconImage(room?.iconImage || null);
+      } finally {
+        setUploadingIcon(false);
+        e.target.value = '';
+      }
+    }, [room?.iconImage, room?.iconUrl]);
+
+    const removeBackgroundImage = useCallback(() => {
+      if (backgroundImagePreview) {
+        revokeImagePreview(backgroundImagePreview);
+      }
+      setBackgroundImagePreview(null);
+      setSelectedBackgroundImage(null);
+      if (backgroundInputRef.current) {
+        backgroundInputRef.current.value = '';
+      }
+    }, [backgroundImagePreview]);
+
+    const removeIconImage = useCallback(() => {
+      if (iconImagePreview) {
+        revokeImagePreview(iconImagePreview);
+      }
+      setIconImagePreview(null);
+      setSelectedIconImage(null);
+      if (iconInputRef.current) {
+        iconInputRef.current.value = '';
+      }
+    }, [iconImagePreview]);
+
+    useEffect(() => {
+      if (!open) {
+        removeBackgroundImage();
+        removeIconImage();
+      }
+    }, [open, removeBackgroundImage, removeIconImage]);
+
     const handleUpdate = useCallback(async () => {
       if (!room?.id) return;
       setLoading(true);
+
+      if (formData.type !== 'public' && !isAdminOrOwner && !paidMember) {
+        setLoading(false);
+        onOpenChange(false);
+        router.push('/pricing?source=private-community');
+        return;
+      }
+
       try {
         const updates: Record<string, any> = {
           name: formData.name,
@@ -230,6 +357,8 @@ export const ChatRoomActionsDialog = memo(
             city: formData.city || null,
             region: null,
           },
+          ...(selectedBackgroundImage ? { backgroundImage: selectedBackgroundImage } : {}),
+          ...(selectedIconImage ? { iconImage: selectedIconImage } : {}),
           maxMembers: parseInt(formData.maxMembers) || 1000,
           isActive: formData.isActive,
           updatedAt: new Date().toISOString(),
@@ -243,7 +372,18 @@ export const ChatRoomActionsDialog = memo(
       } finally {
         setLoading(false);
       }
-    }, [room?.id, formData, onRoomUpdated, onOpenChange]);
+    }, [formData, isAdminOrOwner, onOpenChange, onRoomUpdated, paidMember, router, room?.id]);
+
+    useEffect(() => {
+      return () => {
+        if (backgroundImagePreview) {
+          revokeImagePreview(backgroundImagePreview);
+        }
+        if (iconImagePreview) {
+          revokeImagePreview(iconImagePreview);
+        }
+      };
+    }, [backgroundImagePreview, iconImagePreview]);
 
     if (!room) return null;
 
@@ -252,8 +392,8 @@ export const ChatRoomActionsDialog = memo(
 
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-150 max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex w-[calc(100vw-1.5rem)] max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-150">
+          <DialogHeader className="border-b border-border px-6 pb-3 pt-6">
             <div className="flex items-center gap-3">
               {iconUrl ? (
                 <img src={iconUrl} alt={room.name} className="h-12 w-12 rounded-full object-cover ring-2 ring-border shrink-0" />
@@ -269,7 +409,7 @@ export const ChatRoomActionsDialog = memo(
             </div>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="min-h-0 flex-1 w-full overflow-y-auto px-6 pb-6 pt-4">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="details" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
@@ -362,6 +502,97 @@ export const ChatRoomActionsDialog = memo(
                 </div>
               </div>
 
+              <div className="space-y-4 rounded-xl border border-dashed border-border bg-muted/30 p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-backgroundImage" className="text-sm font-semibold flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4 text-primary" />
+                    Community Background Image (Optional)
+                  </Label>
+                  <div className="space-y-3">
+                    {backgroundImagePreview ? (
+                      <div className="relative group">
+                        <img
+                          src={backgroundImagePreview}
+                          alt="Background preview"
+                          className="h-32 w-full rounded-xl border border-border object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeBackgroundImage}
+                          className="absolute right-2 top-2 rounded-full bg-red-500 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label htmlFor="edit-backgroundImage" className="cursor-pointer">
+                        <div className="flex h-32 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background transition-colors hover:border-primary hover:bg-primary/5">
+                          <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">Click to upload background</p>
+                          <p className="mt-1 text-xs text-muted-foreground/70">PNG, JPG, WEBP (Max 5MB)</p>
+                        </div>
+                      </label>
+                    )}
+                    <Input
+                      id="edit-backgroundImage"
+                      type="file"
+                      accept="image/*"
+                      ref={backgroundInputRef}
+                      onChange={handleBackgroundImageChange}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-iconImage" className="text-sm font-semibold flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Community Icon (Optional)
+                  </Label>
+                  <div className="space-y-3">
+                    {iconImagePreview ? (
+                      <div className="relative group inline-block">
+                        <img
+                          src={iconImagePreview}
+                          alt="Icon preview"
+                          className="h-24 w-24 rounded-xl border border-border object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeIconImage}
+                          className="absolute right-1 top-1 rounded-full bg-red-500 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label htmlFor="edit-iconImage" className="inline-block cursor-pointer">
+                        <div className="flex h-24 w-24 flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background transition-colors hover:border-primary hover:bg-primary/5">
+                          <Upload className="mb-1 h-6 w-6 text-muted-foreground" />
+                          <p className="px-1 text-center text-xs text-muted-foreground">Upload icon</p>
+                        </div>
+                      </label>
+                    )}
+                    <Input
+                      id="edit-iconImage"
+                      type="file"
+                      accept="image/*"
+                      ref={iconInputRef}
+                      onChange={handleIconImageChange}
+                      className="hidden"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Square images work best (recommended: 256x256px)</p>
+                </div>
+
+                {(uploadingBackground || uploadingIcon) && (
+                  <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                    <p className="text-sm font-medium text-blue-700">Uploading images...</p>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between rounded-lg border border-border p-4">
                 <div className="space-y-0.5">
                   <Label htmlFor="edit-isActive">Active Status</Label>
@@ -377,11 +608,11 @@ export const ChatRoomActionsDialog = memo(
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading || uploadingBackground || uploadingIcon}>
                   Cancel
                 </Button>
-                <Button onClick={handleUpdate} disabled={loading}>
-                  {loading ? 'Updating...' : 'Update Community'}
+                <Button onClick={handleUpdate} disabled={loading || uploadingBackground || uploadingIcon}>
+                  {loading ? 'Updating...' : uploadingBackground || uploadingIcon ? 'Uploading...' : 'Update Community'}
                 </Button>
               </div>
             </TabsContent>

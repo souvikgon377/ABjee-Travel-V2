@@ -13,10 +13,8 @@ export interface FreePrivateTrialState {
   daysLeft: number;
 }
 
-const TRIAL_DAYS = 7;
 const MONTHLY_PRIVATE_ROOM_LIMIT = 3;
 const YEARLY_PRIVATE_ROOM_LIMIT = 10;
-const TRIAL_PRIVATE_ROOM_LIMIT = 3;
 
 const parseMaybeDate = (value: unknown): Date | null => {
   if (!value) return null;
@@ -85,27 +83,10 @@ export const getFreePrivateTrialState = (
   userProfile: unknown,
   privateRoomCount: number
 ): FreePrivateTrialState => {
-  const subscription = getSubscriptionInfo(userProfile);
-  if (hasPaidAccess(subscription)) {
-    return { eligible: false, daysLeft: 0 };
-  }
-
-  const profile = (userProfile ?? {}) as Record<string, unknown>;
-  const createdAt = parseMaybeDate(profile.createdAt);
-  if (!createdAt) {
-    return { eligible: false, daysLeft: 0 };
-  }
-
-  const elapsedMs = Date.now() - createdAt.getTime();
-  const elapsedDays = Math.floor(elapsedMs / (24 * 60 * 60 * 1000));
-  const daysLeft = Math.max(0, TRIAL_DAYS - elapsedDays);
-  const withinTrial = elapsedMs <= TRIAL_DAYS * 24 * 60 * 60 * 1000;
-  const hasRoomCapacity = privateRoomCount < TRIAL_PRIVATE_ROOM_LIMIT;
-
-  return {
-    eligible: withinTrial && hasRoomCapacity,
-    daysLeft,
-  };
+  void userProfile;
+  void privateRoomCount;
+  // Private communities require paid subscription only.
+  return { eligible: false, daysLeft: 0 };
 };
 
 export const getPrivateRoomParticipationAllowance = (
@@ -133,19 +114,10 @@ export const getPrivateRoomParticipationAllowance = (
     };
   }
 
-  const trial = getFreePrivateTrialState(userProfile, privateRoomCount);
-  if (!trial.eligible) {
-    return {
-      allowed: false,
-      maxAllowed: TRIAL_PRIVATE_ROOM_LIMIT,
-      reason: `Free members can only access public communities, or up to ${TRIAL_PRIVATE_ROOM_LIMIT} private communities during the 7-day trial.`,
-    };
-  }
-
   return {
-    allowed: true,
-    maxAllowed: TRIAL_PRIVATE_ROOM_LIMIT,
-    reason: `Free trial active: up to ${TRIAL_PRIVATE_ROOM_LIMIT} private communities (create or join), ${trial.daysLeft} day${trial.daysLeft === 1 ? '' : 's'} left.`,
+    allowed: false,
+    maxAllowed: 0,
+    reason: 'Private communities require an active paid subscription.',
   };
 };
 

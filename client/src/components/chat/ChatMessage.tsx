@@ -1,5 +1,5 @@
-import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { memo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -301,5 +301,5 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   );
 };
 
-export default ChatMessage;
+export default memo(ChatMessage);
 

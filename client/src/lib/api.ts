@@ -12,6 +12,15 @@ const api = axios.create({
   },
 });
 
+// Admin API instance with longer timeout for heavy queries
+const adminApiInstance = axios.create({
+  baseURL: `${API_BASE_URL}/api`,
+  timeout: 60000, // 60 seconds for admin/stats which does multiple Firebase queries
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   async (config) => {
@@ -33,6 +42,37 @@ api.interceptors.request.use(
 
 // Response interceptor to handle errors
 api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      if (window.location.pathname !== '/auth') {
+        window.location.href = '/auth';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Admin API interceptors (same as api, but with longer timeout)
+adminApiInstance.interceptors.request.use(
+  async (config) => {
+    try {
+      const firebaseUser = auth.currentUser;
+      if (firebaseUser) {
+        const token = await firebaseUser.getIdToken();
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {
+      // If token retrieval fails, proceed without auth header
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+adminApiInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
@@ -82,7 +122,7 @@ export const subscriptionsAPI = {
 
 // Admin API
 export const adminAPI = {
-  getStats: () => api.get('/admin/stats'),
+  getStats: () => adminApiInstance.get('/admin/stats'),
   getUsers: (params?: any) => api.get('/admin/users', { params }),
   getUser: (userId: string) => api.get(`/admin/users/${userId}`),
   createUser: (data: any) => api.post('/admin/users', data),

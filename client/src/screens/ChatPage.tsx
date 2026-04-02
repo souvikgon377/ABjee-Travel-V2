@@ -17,7 +17,6 @@ import { publicAsset } from '@/lib/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getSubscriptionInfo,
-  getFreePrivateTrialState,
   getPrivateRoomCreateAllowance,
   getPaidPrivateRoomLimit,
   hasPaidAccess,
@@ -417,10 +416,6 @@ const ChatRoomsList: React.FC = () => {
   const paidMember = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
   const privateRoomAllowance = useMemo(
     () => getPrivateRoomCreateAllowance(userProfile, userCreatedPrivateRoomsCount),
-    [userProfile, userCreatedPrivateRoomsCount]
-  );
-  const freeTrialState = useMemo(
-    () => getFreePrivateTrialState(userProfile, userCreatedPrivateRoomsCount),
     [userProfile, userCreatedPrivateRoomsCount]
   );
   const paidPrivateRoomLimit = useMemo(() => getPaidPrivateRoomLimit(subscriptionInfo), [subscriptionInfo]);
@@ -982,6 +977,11 @@ const ChatRoomsList: React.FC = () => {
     e.preventDefault();
     
     if (!newRoomName.trim() || !user) return;
+
+    if (!newRoomIsPublic && !paidMember) {
+      router.push('/pricing?source=private-community');
+      return;
+    }
 
     if (!isAdminOrOwner) {
       alert('Only admins can create community chat.');
@@ -2578,9 +2578,7 @@ const ChatRoomsList: React.FC = () => {
                     <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
                       {paidMember
                         ? `${userCreatedPrivateRoomsCount}/${paidPrivateRoomLimit} Private Communities`
-                        : freeTrialState.eligible
-                          ? `${userCreatedPrivateRoomsCount}/3 Trial Private Communities (${freeTrialState.daysLeft}d left)`
-                          : `${userCreatedPrivateRoomsCount}/3 Trial Private Communities Used`
+                        : 'Private Communities Locked (Paid Plan Required)'
                       }
                     </span>
                   </div>

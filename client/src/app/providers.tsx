@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { ThemeProvider } from "@/components/mvpblocks/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { PageViewTracker } from "@/components/PageViewTracker";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -32,7 +33,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <PageViewTracker />
+        {children}
+      </AuthProvider>
     </ThemeProvider>
   );
 }

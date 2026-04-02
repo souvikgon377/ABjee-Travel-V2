@@ -33,8 +33,8 @@ const plans = [
     features: [
       'Public room chat and posting',
       'Public room creation',
-      'No private room access after trial',
-      '7-day trial: create or join up to 3 private rooms',
+      'No private room access',
+      'Private rooms require paid subscription',
       'Basic community support',
     ],
     cta: 'Get started for free',

@@ -17,6 +17,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider } from '../lib/firebase';
 import { firestoreDb } from '../lib/firebaseFirestore';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { trackUserSession, trackUserLogout, updateUserActivity } from '../lib/analyticsTracker';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -370,6 +371,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign out
   const logout = useCallback(async () => {
     try {
+      const user = auth.currentUser;
+      if (user) {
+        await trackUserLogout(user.uid);
+      }
       await signOut(auth);
       setUserProfile(null);
       localStorage.removeItem('token');
@@ -482,6 +487,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(user);
       
         if (user) {
+          // Track user session when they come online
+          try {
+            await trackUserSession(user.uid, user.email || undefined);
+          } catch (err) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error('Error tracking session:', err);
+            }
+          }
+
           let token: string | null = localStorage.getItem('token');
           try {
             token = await refreshToken(user);
