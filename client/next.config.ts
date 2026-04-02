@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const cdnUrl = (process.env.NEXT_PUBLIC_CDN_URL || "").trim().replace(/\/+$/, "");
 const useCdnPrefix = process.env.NODE_ENV === "production" && Boolean(cdnUrl);
@@ -9,7 +10,6 @@ const nextConfig: NextConfig = {
   compress: true,
   generateEtags: true,
   productionBrowserSourceMaps: false,
-  serverExternalPackages: ["firebase-admin"],
   typescript: { ignoreBuildErrors: true },
   assetPrefix: useCdnPrefix ? cdnUrl : undefined,
   crossOrigin: useCdnPrefix ? "anonymous" : undefined,
@@ -30,3 +30,5 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+initOpenNextCloudflareForDev();
