@@ -8,6 +8,13 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "abjee-travel",
+      "preview_bucket_name": "abjee-travel"
+    }
+  ],
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
