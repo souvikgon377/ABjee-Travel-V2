@@ -2,7 +2,7 @@ import { createHmac } from 'crypto';
 import { NextRequest } from 'next/server';
 import { authenticateRequest, AuthError } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
-import { adminDb } from '@/lib/server/firebaseAdmin';
+import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { subscriptionService } from '@/services/subscriptionService';
 import { userService } from '@/services/userService';
 import {

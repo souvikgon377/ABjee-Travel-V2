@@ -1,4 +1,4 @@
-import { admin, adminDb } from "@/lib/server/firebaseAdmin";
+import { FieldValue, adminDb } from "@/lib/server/firebaseAdminFirestore";
 
 const COLLECTION = "users";
 
@@ -32,7 +32,7 @@ const createUserData = (data: AnyObj): AnyObj => ({
     isActive: data.subscription?.isActive || false,
   },
   isOnline: data.isOnline || false,
-  lastSeen: data.lastSeen || admin.firestore.FieldValue.serverTimestamp(),
+  lastSeen: data.lastSeen || FieldValue.serverTimestamp(),
   joinedChatRooms: data.joinedChatRooms || [],
   isVerified: data.isVerified || false,
   isActive: data.isActive !== undefined ? data.isActive : true,
@@ -40,8 +40,8 @@ const createUserData = (data: AnyObj): AnyObj => ({
     notifications: data.preferences?.notifications !== undefined ? data.preferences.notifications : true,
     theme: data.preferences?.theme || "light",
   },
-  createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  createdAt: data.createdAt || FieldValue.serverTimestamp(),
+  updatedAt: FieldValue.serverTimestamp(),
 });
 
 class UserService {
@@ -77,7 +77,7 @@ class UserService {
   async update(userId: string, updateData: AnyObj) {
     await this.collection.doc(userId).update({
       ...updateData,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     return this.findById(userId);
   }
@@ -98,7 +98,7 @@ class UserService {
   async updateStatus(userId: string, isOnline: boolean) {
     return this.update(userId, {
       isOnline,
-      lastSeen: admin.firestore.FieldValue.serverTimestamp(),
+      lastSeen: FieldValue.serverTimestamp(),
     });
   }
 

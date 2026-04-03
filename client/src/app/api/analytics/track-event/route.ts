@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/server/auth';
 import { ok, fail } from '@/lib/server/http';
-import { getAdminRtdb } from '@/lib/server/firebaseAdmin';
-import { adminDb } from '@/lib/server/firebaseAdmin';
+import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { getAdminRtdb } from '@/lib/server/firebaseAdminRtdb';
 
 // Simple in-memory cache for analytics data to reduce database reads
 const analyticsCache: {

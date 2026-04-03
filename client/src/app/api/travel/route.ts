@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
-import { adminDb as db } from '@/lib/server/firebaseAdmin';
+import { adminDb as db } from '@/lib/server/firebaseAdminFirestore';
 
 interface TravelDestinationDoc {
   place?: string;

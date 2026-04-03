@@ -1,4 +1,4 @@
-import { admin, adminDb } from "@/lib/server/firebaseAdmin";
+import { FieldValue, adminDb } from "@/lib/server/firebaseAdminFirestore";
 
 type AnyObj = Record<string, any>;
 const COLLECTION = "travelPartnerRequests";
@@ -46,8 +46,8 @@ const createTravelRequestData = (data: AnyObj): AnyObj => ({
   expiresAt: data.expiresAt || null,
   views: typeof data.views === "number" ? data.views : 0,
   responseCount: typeof data.responseCount === "number" ? data.responseCount : 0,
-  createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  createdAt: data.createdAt || FieldValue.serverTimestamp(),
+  updatedAt: FieldValue.serverTimestamp(),
 });
 
 class TravelPartnerRequestService {
@@ -67,7 +67,7 @@ class TravelPartnerRequestService {
   }
 
   async update(id: string, updates: AnyObj) {
-    await this.collection.doc(id).update({ ...updates, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await this.collection.doc(id).update({ ...updates, updatedAt: FieldValue.serverTimestamp() });
     return this.findById(id);
   }
 
@@ -86,7 +86,7 @@ class TravelPartnerRequestService {
     await ref.update({
       responses,
       responseCount: responses.length,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     return this.findById(requestId);
@@ -94,8 +94,8 @@ class TravelPartnerRequestService {
 
   async incrementViews(requestId: string) {
     await this.collection.doc(requestId).update({
-      views: admin.firestore.FieldValue.increment(1),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      views: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
     });
   }
 

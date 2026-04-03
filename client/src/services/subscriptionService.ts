@@ -1,4 +1,4 @@
-import { admin, adminDb } from "@/lib/server/firebaseAdmin";
+import { FieldValue, Timestamp, adminDb } from "@/lib/server/firebaseAdminFirestore";
 
 type AnyObj = Record<string, any>;
 const COLLECTION = "subscriptions";
@@ -15,7 +15,7 @@ const createSubscriptionData = (data: AnyObj): AnyObj => ({
     },
   },
   status: data.status || "active",
-  startDate: data.startDate || admin.firestore.Timestamp.now(),
+  startDate: data.startDate || Timestamp.now(),
   endDate: data.endDate || null,
   trialEndDate: data.trialEndDate || null,
   paymentMethod: data.paymentMethod || { type: "free" },
@@ -37,13 +37,13 @@ const createSubscriptionData = (data: AnyObj): AnyObj => ({
   usage: data.usage || {
     privateChatsUsed: 0,
     travelRequestsUsed: 0,
-    lastResetDate: admin.firestore.Timestamp.now(),
+    lastResetDate: Timestamp.now(),
   },
   cancellation: data.cancellation || null,
   autoRenew: data.autoRenew !== undefined ? data.autoRenew : true,
   promoCode: data.promoCode || null,
-  createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  createdAt: data.createdAt || FieldValue.serverTimestamp(),
+  updatedAt: FieldValue.serverTimestamp(),
 });
 
 class SubscriptionService {
@@ -71,7 +71,7 @@ class SubscriptionService {
   }
 
   async update(id: string, updateData: AnyObj) {
-    await this.collection.doc(id).update({ ...updateData, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    await this.collection.doc(id).update({ ...updateData, updatedAt: FieldValue.serverTimestamp() });
     return this.findById(id);
   }
 
@@ -119,7 +119,7 @@ class SubscriptionService {
   async cancel(subscriptionId: string, reason: string, cancelAtPeriodEnd = true) {
     const updates: AnyObj = {
       cancellation: {
-        cancelledAt: admin.firestore.Timestamp.now(),
+        cancelledAt: Timestamp.now(),
         reason,
         cancelAtPeriodEnd,
       },
@@ -128,7 +128,7 @@ class SubscriptionService {
 
     if (!cancelAtPeriodEnd) {
       updates.status = "cancelled";
-      updates.endDate = admin.firestore.Timestamp.now();
+      updates.endDate = Timestamp.now();
     }
 
     await this.update(subscriptionId, updates);

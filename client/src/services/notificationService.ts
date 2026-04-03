@@ -1,4 +1,4 @@
-import { admin, adminDb } from "@/lib/server/firebaseAdmin";
+import { FieldValue, adminDb } from "@/lib/server/firebaseAdminFirestore";
 
 type AnyObj = Record<string, any>;
 const COLLECTION = "notifications";
@@ -11,8 +11,8 @@ const createNotificationData = (data: AnyObj): AnyObj => ({
   roomName: data.roomName || "",
   status: data.status || "pending",
   message: data.message || "",
-  createdAt: data.createdAt || admin.firestore.FieldValue.serverTimestamp(),
-  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  createdAt: data.createdAt || FieldValue.serverTimestamp(),
+  updatedAt: FieldValue.serverTimestamp(),
   expiresAt: data.expiresAt || null,
 });
 
@@ -83,7 +83,7 @@ class NotificationService {
     const ref = this.collection.doc(notificationId);
     await ref.update({
       status: "accepted",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     const doc = await ref.get();
     if (!doc.exists) return null;
@@ -94,7 +94,7 @@ class NotificationService {
     const ref = this.collection.doc(notificationId);
     await ref.update({
       status: "rejected",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     const doc = await ref.get();
     if (!doc.exists) return null;

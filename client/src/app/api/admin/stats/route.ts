@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, AuthError, requireAdmin } from "@/lib/server/auth";
 import { fail, ok } from "@/lib/server/http";
-import { adminDb, getAdminRtdb } from "@/lib/server/firebaseAdmin";
+import { adminDb } from "@/lib/server/firebaseAdminFirestore";
+import { getAdminRtdb } from "@/lib/server/firebaseAdminRtdb";
 
 export const runtime = "nodejs";
 

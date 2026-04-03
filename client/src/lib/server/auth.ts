@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { adminAuth, adminDb } from "@/lib/server/firebaseAdmin";
+import { adminAuth } from "@/lib/server/firebaseAdminAuth";
+import { adminDb } from "@/lib/server/firebaseAdminFirestore";
 import { userService } from "@/services/userService";
 
 export class AuthError extends Error {
