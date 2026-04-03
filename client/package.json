@@ -9,6 +9,10 @@
     "start": "next start",
     "lint": "next lint",
     "upload:r2:public": "node scripts/upload-public-to-r2.mjs",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "pages:build": "opennextjs-cloudflare build",
     "pages:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "pages:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"

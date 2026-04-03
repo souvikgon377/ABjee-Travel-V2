@@ -16,21 +16,33 @@ const missingFirebaseEnv = Object.entries(firebaseEnv)
   .filter(([, value]) => !value)
   .map(([key]) => key);
 
-if (missingFirebaseEnv.length > 0) {
+const isBuildTime = process.env.NEXT_PHASE === "phase-production-build";
+
+if (missingFirebaseEnv.length > 0 && !isBuildTime) {
   throw new Error(
     `Missing Firebase env vars: ${missingFirebaseEnv.join(', ')}. ` +
-      'Set them in client/.env or client/.env.local.'
+      'Set them in Cloudflare environment variables or local .env files.'
   );
 }
 
+if (missingFirebaseEnv.length > 0 && isBuildTime) {
+  console.warn(
+    `Firebase env vars missing during build: ${missingFirebaseEnv.join(', ')}. ` +
+      "Using placeholder config so prerender can complete."
+  );
+}
+
+const envOrPlaceholder = (value: string | undefined, fallback: string) =>
+  (value && value.trim()) || fallback;
+
 const firebaseConfig = {
-  apiKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_API_KEY as string,
-  authDomain: firebaseEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN as string,
-  projectId: firebaseEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID as string,
-  storageBucket: firebaseEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
-  messagingSenderId: firebaseEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
-  appId: firebaseEnv.NEXT_PUBLIC_FIREBASE_APP_ID as string,
-  databaseURL: firebaseEnv.NEXT_PUBLIC_FIREBASE_DATABASE_URL as string,
+  apiKey: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_API_KEY, "build-placeholder"),
+  authDomain: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, "build-placeholder.firebaseapp.com"),
+  projectId: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID, "build-placeholder"),
+  storageBucket: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, "build-placeholder.appspot.com"),
+  messagingSenderId: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, "000000000000"),
+  appId: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_APP_ID, "1:000000000000:web:buildplaceholder"),
+  databaseURL: envOrPlaceholder(firebaseEnv.NEXT_PUBLIC_FIREBASE_DATABASE_URL, "https://build-placeholder.firebaseio.com"),
 };
 
 // Initialize Firebase
