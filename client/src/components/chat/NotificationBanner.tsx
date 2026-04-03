@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { X, Check, XCircle } from 'lucide-react';
 
 export interface RoomInvitation {

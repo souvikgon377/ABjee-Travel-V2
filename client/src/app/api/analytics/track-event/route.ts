@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { eventType, pagePath, userEmail } = body;
+    const { eventType, pagePath: _pagePath, userEmail } = body;
 
     if (!eventType) {
       return fail('eventType is required', 400);

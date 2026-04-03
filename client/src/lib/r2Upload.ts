@@ -28,7 +28,7 @@ export interface ImageUploadOptions {
 
 const R2_ENDPOINT = process.env.NEXT_PUBLIC_R2_ENDPOINT;
 const R2_BUCKET_NAME = process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'abjee-travel-storage';
-const R2_ACCOUNT_ID = process.env.NEXT_PUBLIC_R2_ACCOUNT_ID;
+const _R2_ACCOUNT_ID = process.env.NEXT_PUBLIC_R2_ACCOUNT_ID;
 
 const DEFAULT_OPTIONS: ImageUploadOptions = {
   folder: 'chat-rooms',
@@ -228,7 +228,7 @@ export async function uploadMultipleImages(
  * WHY: Delete image from R2
  * NOTE: This requires backend implementation with R2 credentials
  */
-export async function deleteImageFromR2(key: string): Promise<void> {
+export async function deleteImageFromR2(_key: string): Promise<void> {
   // TODO: Implement backend API call to delete image from R2
   // This requires R2 API token and must be done server-side
   // const response = await fetch(`/api/upload`, { method: 'DELETE', body: JSON.stringify({ key }) });

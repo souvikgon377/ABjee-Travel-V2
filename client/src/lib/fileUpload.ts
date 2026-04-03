@@ -232,7 +232,7 @@ export class VoiceRecorder {
 
       // Start recording
       this.mediaRecorder.start();
-    } catch (error) {
+    } catch {
       throw new Error('Failed to access microphone. Please grant permission.');
     }
   }

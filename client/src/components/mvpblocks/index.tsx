@@ -141,7 +141,7 @@ export default function AdminDashboard() {
 
   const renderView = useMemo(() => {
     switch (currentView) {
-      case 'dashboard':
+      case 'dashboard': {
         const overviewSections = [
           { title: 'Users', desc: 'Accounts, roles, and permissions', view: 'users', icon: Users, tone: 'from-blue-500 to-cyan-500' },
           { title: 'Communities', desc: 'Chat communities and moderation', view: 'chatrooms', icon: Database, tone: 'from-violet-500 to-indigo-500' },
@@ -247,6 +247,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         );
+      }
 
       case 'users':
         return (

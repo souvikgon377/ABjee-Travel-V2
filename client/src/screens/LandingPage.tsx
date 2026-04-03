@@ -10,12 +10,12 @@ import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { firestoreDb } from '@/lib/firebaseFirestore'
 import { publicAsset } from '@/lib/publicAsset'
-import OfferSpotlightPopup from '@/components/ui/offer-spotlight-popup'
 
 const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'))
 const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3))
 const Faq3 = dynamic(() => import('@/components/mvpblocks/faq-3'))
 const Footer4Col = dynamic(() => import('@/components/mvpblocks/footer-4col'))
+const OfferSpotlightPopup = dynamic(() => import('@/components/ui/offer-spotlight-popup'))
 
 const landingHighlights = [
   {

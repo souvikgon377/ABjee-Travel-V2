@@ -27,7 +27,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import Header from '@/components/mvpblocks/header-1';
 import OfferSpotlightPopup from '@/components/ui/offer-spotlight-popup';
 
@@ -380,7 +379,7 @@ const ChatRoomsList: React.FC = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
-  const [newRoomPassword, setNewRoomPassword] = useState('');
+  const [_newRoomPassword, setNewRoomPassword] = useState('');
   const [newRoomIsPublic, setNewRoomIsPublic] = useState(false); // New state for public/private
   const [newPrivateVisibility, setNewPrivateVisibility] = useState<'exposed' | 'private'>('private');
   const [creating, setCreating] = useState(false);
@@ -401,7 +400,7 @@ const ChatRoomsList: React.FC = () => {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [socialShareMessage, setSocialShareMessage] = useState('');
-  const [userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
+  const [_userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
   const [userCreatedPrivateRoomsCount, setUserCreatedPrivateRoomsCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
@@ -429,7 +428,7 @@ const ChatRoomsList: React.FC = () => {
   // Firestore tourist places
   const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<TouristPlace | null>(null);
-  const [selectedPlaceMediaIdx, setSelectedPlaceMediaIdx] = useState(0);
+  const [_selectedPlaceMediaIdx, setSelectedPlaceMediaIdx] = useState(0);
   const [detailVidIdx, setDetailVidIdx] = useState(0);
   const [detailVidPaused, setDetailVidPaused] = useState(false);
   const [detailBannerImgIdx, setDetailBannerImgIdx] = useState(0);
@@ -851,7 +850,7 @@ const ChatRoomsList: React.FC = () => {
   }, [searchDestination]);
 
   // Memoized event handlers
-  const toggleVideoPlayback = useCallback(() => {
+  const _toggleVideoPlayback = useCallback(() => {
     if (videoRef.current) {
       if (isVideoPlaying) {
         videoRef.current.pause();
@@ -1063,7 +1062,7 @@ const ChatRoomsList: React.FC = () => {
   };
 
   // Handle share room
-  const handleShareRoom = (room: ChatRoomType, e: React.MouseEvent) => {
+  const _handleShareRoom = (room: ChatRoomType, e: React.MouseEvent) => {
     e.stopPropagation();
     setShareRoom(room);
     setShowShareDialog(true);

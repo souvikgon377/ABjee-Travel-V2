@@ -17,7 +17,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, googleProvider } from '../lib/firebase';
 import { firestoreDb } from '../lib/firebaseFirestore';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { trackUserSession, trackUserLogout, updateUserActivity } from '../lib/analyticsTracker';
+import { trackUserSession, trackUserLogout } from '../lib/analyticsTracker';
 
 const REQUEST_TIMEOUT_MS = 15000;
 

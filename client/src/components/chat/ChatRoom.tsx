@@ -12,7 +12,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, Image as ImageIcon, File, XCircle, Play, Pause, Download, UserPlus, Search, Loader2 } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -501,7 +501,7 @@ const ChatRoom = () => {
     try {
       await chatService.deleteMessageForMe(roomId, message.id);
       setMessages(prev => prev.filter(m => m.id !== message.id));
-    } catch (error) {
+    } catch {
       alert('Failed to delete message');
     }
   }, [roomId]);
@@ -512,7 +512,7 @@ const ChatRoom = () => {
       await chatService.deleteMessageForEveryone(roomId, message.id);
       setDeleteDialogOpen(false);
       setMessageToDelete(null);
-    } catch (error) {
+    } catch {
       alert('Failed to delete message for everyone');
     }
   }, [roomId]);

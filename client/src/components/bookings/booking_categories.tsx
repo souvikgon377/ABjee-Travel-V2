@@ -101,22 +101,22 @@ export default function BookingCategories() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // Hotel Search State
-  const [activeTab, setActiveTab] = useState('hotels');
-  const [location, setLocation] = useState({ city: 'Goa', country: 'India' });
+  const [_activeTab, _setActiveTab] = useState('hotels');
+  const [location, _setLocation] = useState({ city: 'Goa', country: 'India' });
   const [checkIn, setCheckIn] = useState(new Date());
   const [checkOut, setCheckOut] = useState(new Date(Date.now() + 86400000)); // Tomorrow
-  const [rooms, setRooms] = useState(1);
-  const [adults, setAdults] = useState(2);
-  const [children, setChildren] = useState(0);
-  const [travellingWithPets, setTravellingWithPets] = useState(false);
-  const [priceRange, setPriceRange] = useState('₹0-₹1500');
-  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [showRoomsDropdown, setShowRoomsDropdown] = useState(false);
-  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [rooms, _setRooms] = useState(1);
+  const [adults, _setAdults] = useState(2);
+  const [_children, _setChildren] = useState(0);
+  const [_travellingWithPets, _setTravellingWithPets] = useState(false);
+  const [priceRange, _setPriceRange] = useState('₹0-₹1500');
+  const [_showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [_showRoomsDropdown, setShowRoomsDropdown] = useState(false);
+  const [_showPriceDropdown, setShowPriceDropdown] = useState(false);
+  const [_showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(new Date());
   const [selectingCheckOut, setSelectingCheckOut] = useState(false);
-  const [locationSearch, setLocationSearch] = useState('');
+  const [_locationSearch, _setLocationSearch] = useState('');
 
   // Ref for search form to detect clicks outside
   const searchFormRef = useRef<HTMLDivElement>(null);
@@ -138,7 +138,7 @@ export default function BookingCategories() {
     };
   }, []);
 
-  const bookingTabs = [
+  const _bookingTabs = [
     { id: 'flights', name: 'Flights', icon: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg> },
     { id: 'hotels', name: 'Hotels', icon: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><path d="m9 16 .348-.24c1.465-1.013 3.84-1.013 5.304 0L15 16"/><path d="M8 7h.01"/><path d="M16 7h.01"/><path d="M12 7h.01"/><path d="M12 11h.01"/><path d="M16 11h.01"/><path d="M8 11h.01"/><path d="M10 22v-6.5m4 0V22"/></svg> },
     { id: 'homestays', name: 'Homestays & Villas', icon: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
@@ -153,7 +153,7 @@ export default function BookingCategories() {
     { id: 'insurance', name: 'Travel Insurance', icon: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg> },
   ];
 
-  const popularLocations = [
+  const _popularLocations = [
     { city: 'Dubai', country: 'United Arab Emirates' },
     { city: 'Mumbai', country: 'India' },
     { city: 'Bangkok', country: 'Thailand' },
@@ -162,7 +162,7 @@ export default function BookingCategories() {
     { city: 'Bali', country: 'Indonesia' },
   ];
 
-  const priceRanges = [
+  const _priceRanges = [
     '₹0-₹1500',
     '₹1500-₹2500',
     '₹2500-₹5000',
@@ -185,14 +185,14 @@ export default function BookingCategories() {
     '2026-01-26': { name: 'Repu...', color: 'text-orange-500' },
   };
 
-  const holidayLegend = [
+  const _holidayLegend = [
     { dates: '25 Dec-28 Dec', name: 'Christmas', color: 'bg-orange-500' },
     { dates: '01 Jan-04 Jan', name: 'New Year', color: 'bg-orange-500' },
     { dates: '23 Jan-25 Jan', name: 'Basant Panchami', color: 'bg-orange-500' },
     { dates: '24 Jan-26 Jan', name: 'Republic Day', color: 'bg-orange-500' },
   ];
 
-  const formatDate = (date: Date) => {
+  const _formatDate = (date: Date) => {
     const day = date.getDate();
     const month = date.toLocaleString('default', { month: 'short' });
     const year = date.getFullYear().toString().slice(-2);
@@ -200,7 +200,7 @@ export default function BookingCategories() {
     return { day, month, year, weekday };
   };
 
-  const formatDateFull = (date: Date) => {
+  const _formatDateFull = (date: Date) => {
     const day = date.getDate();
     const month = date.toLocaleString('default', { month: 'short' });
     const year = date.getFullYear().toString().slice(-2);
@@ -254,11 +254,11 @@ export default function BookingCategories() {
     }
   };
 
-  const nextMonth = () => {
+  const _nextMonth = () => {
     setDatePickerMonth(new Date(datePickerMonth.getFullYear(), datePickerMonth.getMonth() + 1, 1));
   };
 
-  const prevMonth = () => {
+  const _prevMonth = () => {
     const today = new Date();
     const prevMonthDate = new Date(datePickerMonth.getFullYear(), datePickerMonth.getMonth() - 1, 1);
     if (prevMonthDate >= new Date(today.getFullYear(), today.getMonth(), 1)) {
@@ -266,7 +266,7 @@ export default function BookingCategories() {
     }
   };
 
-  const renderCalendarMonth = (monthDate: Date) => {
+  const _renderCalendarMonth = (monthDate: Date) => {
     const daysInMonth = getDaysInMonth(monthDate);
     const firstDay = getFirstDayOfMonth(monthDate);
     const days = [];
@@ -326,7 +326,7 @@ export default function BookingCategories() {
     );
   };
 
-  const handleSearch = () => {
+  const _handleSearch = () => {
     if ((process.env.NODE_ENV === "development")) {
       console.log('Searching with:', { location, checkIn, checkOut, rooms, adults, priceRange });
     }

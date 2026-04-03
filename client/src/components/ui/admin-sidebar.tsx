@@ -60,7 +60,7 @@ interface AdminSidebarProps {
 
 export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarProps) => {
   const { theme, setTheme } = useTheme();
-  const { userProfile, logout } = useAuth();
+  const { logout } = useAuth();
   const router = useRouter();
   const { isMobile, setOpenMobile, setOpen } = useSidebar();
 

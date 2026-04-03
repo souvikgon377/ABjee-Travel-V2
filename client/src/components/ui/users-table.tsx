@@ -38,7 +38,7 @@ interface UsersTableProps {
 }
 
 export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter, externalStatusFilter }: UsersTableProps) => {
-  const [users, setUsers] = useState<any[]>([]);
+  const [_users, _setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUserActions, setShowUserActions] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);

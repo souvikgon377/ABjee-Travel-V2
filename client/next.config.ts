@@ -10,6 +10,12 @@ const nextConfig: NextConfig = {
   compress: true,
   generateEtags: true,
   productionBrowserSourceMaps: false,
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? { exclude: ["error", "warn"] }
+        : false,
+  },
   typescript: { ignoreBuildErrors: true },
   assetPrefix: useCdnPrefix ? cdnUrl : undefined,
   crossOrigin: useCdnPrefix ? "anonymous" : undefined,

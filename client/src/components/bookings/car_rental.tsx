@@ -33,13 +33,13 @@ const CarRental: React.FC = () => {
     const [pickupLocation, setPickupLocation] = useState('Mumbai Airport');
     const [dropoffLocation, setDropoffLocation] = useState('Mumbai Airport');
     const [sameDropoff, setSameDropoff] = useState(true);
-    const [pickupDate, setPickupDate] = useState('Fri, 12 Dec 2025');
+    const [pickupDate, _setPickupDate] = useState('Fri, 12 Dec 2025');
     const [pickupTime, setPickupTime] = useState('10:00 AM');
-    const [dropoffDate, setDropoffDate] = useState('Sun, 14 Dec 2025');
+    const [dropoffDate, _setDropoffDate] = useState('Sun, 14 Dec 2025');
     const [dropoffTime, setDropoffTime] = useState('10:00 AM');
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [cars, setCars] = useState<RentalCar[]>([]);
-    const [selectedCar, setSelectedCar] = useState<RentalCar | null>(null);
+    const [_selectedCar, _setSelectedCar] = useState<RentalCar | null>(null);
 
     // Filters
     const [filters, setFilters] = useState({

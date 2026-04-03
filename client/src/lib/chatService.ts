@@ -15,7 +15,6 @@ import {
   orderByChild,
   limitToLast,
   endBefore,
-  limitToFirst,
   onDisconnect,
   update
 } from 'firebase/database';
@@ -857,7 +856,7 @@ class ChatService {
         ...snapshot.val()
       };
       callback(message);
-    }, (error) => {
+    }, (_error) => {
       if ((process.env.NODE_ENV === "development")) {
         console.error('PERMISSION_DENIED: Check Firebase RTDB rules are deployed');
       }

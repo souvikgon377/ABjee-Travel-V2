@@ -42,7 +42,7 @@ const HotelList: React.FC = () => {
     const [checkOut, setCheckOut] = useState('Mon, 5 Jan 2026');
     const [roomsGuests, setRoomsGuests] = useState('1 Room, 2 Adults');
     const [rushDealTime, setRushDealTime] = useState({ hours: 8, minutes: 1, seconds: 42 });
-    const [showLongStayBenefits, setShowLongStayBenefits] = useState(true);
+    const [showLongStayBenefits, _setShowLongStayBenefits] = useState(true);
     const rushDealsRef = useRef<HTMLDivElement>(null);
 
     // Dropdown states
@@ -135,7 +135,7 @@ const HotelList: React.FC = () => {
     }, [activeDropdown]);
 
     // Filters
-    const [filters, setFilters] = useState({
+    const [_filters, _setFilters] = useState({
         rushDeal: false,
         lastMinuteDeals: false,
         freeCancellation: false,

@@ -196,7 +196,7 @@ export async function uploadImageToCloudinary(
  * DECISION: Use hash comparison to detect duplicates
  * NOTE: This requires backend API to search by hash in database
  */
-export async function checkImageDuplicate(hash: string): Promise<boolean> {
+export async function checkImageDuplicate(_hash: string): Promise<boolean> {
   try {
     // TODO: Implement backend API call to check if hash exists
     // const response = await fetch(`/api/images/check-duplicate/${hash}`);
@@ -238,7 +238,7 @@ export async function uploadMultipleImages(
  * WHY: Delete image from Cloudinary
  * NOTE: This requires backend implementation with API secret
  */
-export async function deleteImageFromCloudinary(publicId: string): Promise<void> {
+export async function deleteImageFromCloudinary(_publicId: string): Promise<void> {
   // TODO: Implement backend API call to delete image
   // This requires API secret and must be done server-side
   // const response = await fetch(`/api/images/delete/${publicId}`, { method: 'DELETE' });

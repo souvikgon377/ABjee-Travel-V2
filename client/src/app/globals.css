@@ -255,6 +255,17 @@ html {
   100% { background-position: 0% 50%; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .floating {
   animation: float 6s ease-in-out infinite;
 }

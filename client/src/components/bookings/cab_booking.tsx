@@ -27,7 +27,7 @@ const CarBooking: React.FC = () => {
     const [tripType, setTripType] = useState('outstation-oneway');
     const [fromCity, setFromCity] = useState('Mumbai');
     const [toCity, setToCity] = useState('Pune');
-    const [pickupDate, setPickupDate] = useState('Fri, 12 Dec 2025');
+    const [pickupDate, _setPickupDate] = useState('Fri, 12 Dec 2025');
     const [pickupTime, setPickupTime] = useState('10:00 AM');
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [cabs, setCabs] = useState<Cab[]>([]);

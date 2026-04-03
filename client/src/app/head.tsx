@@ -1,12 +1,35 @@
+const cdnUrl = (process.env.NEXT_PUBLIC_CDN_URL || "").trim();
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    if (!value) return null;
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const originSet = new Set<string>([
+  "https://firebasestorage.googleapis.com",
+  "https://www.googleapis.com",
+]);
+
+const cdnOrigin = normalizeOrigin(cdnUrl);
+if (cdnOrigin) {
+  originSet.add(cdnOrigin);
+}
+
+const origins = Array.from(originSet);
+
 export default function Head() {
   return (
     <>
-      <link rel="preconnect" href="https://pub-*.r2.dev" crossOrigin="anonymous" />
-      <link rel="dns-prefetch" href="https://r2.cloudflarestorage.com" />
-      <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossOrigin="anonymous" />
-      <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
-      <link rel="preconnect" href="https://www.googleapis.com" crossOrigin="anonymous" />
-      <link rel="dns-prefetch" href="https://www.googleapis.com" />
+      {origins.map((origin) => (
+        <link key={`preconnect-${origin}`} rel="preconnect" href={origin} crossOrigin="anonymous" />
+      ))}
+      {origins.map((origin) => (
+        <link key={`dns-${origin}`} rel="dns-prefetch" href={origin} />
+      ))}
     </>
   );
 }

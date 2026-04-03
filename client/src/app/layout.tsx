@@ -70,12 +70,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const showSpeedInsights = process.env.NODE_ENV === "production";
+
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body>
         <Providers>
           {children}
-          <SpeedInsights />
+          {showSpeedInsights ? <SpeedInsights /> : null}
         </Providers>
       </body>
     </html>

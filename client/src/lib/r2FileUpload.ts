@@ -17,7 +17,7 @@ export interface FileUploadOptions {
 
 // ==================== CONFIGURATION ====================
 
-const R2_BUCKET_NAME = process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'abjee-travel-storage';
+const _R2_BUCKET_NAME = process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'abjee-travel-storage';
 
 const DEFAULT_OPTIONS: FileUploadOptions = {
   folder: 'chat-attachments',
@@ -216,7 +216,7 @@ export class VoiceRecorder {
 
       // Start recording
       this.mediaRecorder.start();
-    } catch (error) {
+    } catch {
       throw new Error('Failed to access microphone. Please grant permission.');
     }
   }
