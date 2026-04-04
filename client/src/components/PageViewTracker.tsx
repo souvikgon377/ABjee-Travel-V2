@@ -11,11 +11,7 @@ export function PageViewTracker() {
 
   useEffect(() => {
     // Track page view
-    trackPageView(pathname).catch(err => {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error tracking page view:', err);
-      }
-    });
+    trackPageView(pathname).catch(() => {});
 
     // Update user activity if logged in
     if (currentUser?.uid) {

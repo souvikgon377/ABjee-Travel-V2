@@ -189,7 +189,7 @@ const PlaceCard: React.FC<{
       .writeText(shareText)
       .then(() => setCardShareMessage('Copied for Instagram'))
       .catch(() => setCardShareMessage('Copy failed for Instagram'));
-    setTimeout(() => setCardShareMessage(''), 2500);
+    setTimeout(() => setCardShareMessage(''), 1000);
   };
 
   return (
@@ -1078,7 +1078,7 @@ const ChatRoomsList: React.FC = () => {
     const inviteLink = chatService.getInviteLink(shareRoom.id, shareRoom.inviteToken);
     navigator.clipboard.writeText(inviteLink);
     setCopiedInvite(true);
-    setTimeout(() => setCopiedInvite(false), 2000);
+    setTimeout(() => setCopiedInvite(false), 1000);
   };
 
   // Copy room credentials
@@ -1088,7 +1088,7 @@ const ChatRoomsList: React.FC = () => {
     const credentials = `Community ID: ${shareRoom.id}\nPassword: ${shareRoom.password || 'N/A'}`;
     navigator.clipboard.writeText(credentials);
     setCopiedPassword(true);
-    setTimeout(() => setCopiedPassword(false), 2000);
+    setTimeout(() => setCopiedPassword(false), 1000);
   };
 
   const shareRoomOnSocial = (platform: 'facebook' | 'instagram' | 'whatsapp') => {
@@ -1114,7 +1114,7 @@ const ChatRoomsList: React.FC = () => {
       .writeText(shareText)
       .then(() => setSocialShareMessage('Invite copied. Paste it on Instagram in DM, bio, or story link.'))
       .catch(() => setSocialShareMessage('Could not auto-copy invite. Use the Copy button and paste it on Instagram.'));
-    setTimeout(() => setSocialShareMessage(''), 3500);
+    setTimeout(() => setSocialShareMessage(''), 1200);
   };
 
   const shareSelectedPlaceOnSocial = (platform: 'facebook' | 'instagram' | 'whatsapp') => {
@@ -1143,7 +1143,7 @@ const ChatRoomsList: React.FC = () => {
       .writeText(shareText)
       .then(() => setSelectedPlaceShareMessage('Place details copied. Paste it on Instagram in DM, bio, or story link.'))
       .catch(() => setSelectedPlaceShareMessage('Could not auto-copy place details. Please copy manually for Instagram.'));
-    setTimeout(() => setSelectedPlaceShareMessage(''), 3500);
+    setTimeout(() => setSelectedPlaceShareMessage(''), 1200);
   };
 
   // Delete community

@@ -957,7 +957,7 @@ const ChatRoom = () => {
       });
       setInvitedMemberIds(prev => new Set([...prev, member.id]));
       setAddMemberSuccess(`Invitation sent to ${member.firstName} ${member.lastName}`);
-      setTimeout(() => setAddMemberSuccess(null), 3000);
+      setTimeout(() => setAddMemberSuccess(null), 1000);
     } catch (error: any) {
       alert(error.message || 'Failed to send invitation');
     } finally {

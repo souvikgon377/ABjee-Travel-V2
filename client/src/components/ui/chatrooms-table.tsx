@@ -287,7 +287,10 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={handleRefresh} variant="outline" size="sm" disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className="h-4 w-4"
+              style={loading ? { animationDuration: '0.7s' } : undefined}
+            />
           </Button>
           <Button onClick={() => setShowAddDialog(true)} size="sm">
             <Plus className="h-4 w-4 mr-2" />
@@ -333,7 +336,10 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
       {/* Table */}
       {loading && rooms.length === 0 ? (
         <div className="text-center py-12">
-          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+          <RefreshCw
+            className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4"
+            style={{ animationDuration: '0.7s' }}
+          />
           <p className="text-muted-foreground">Loading chat communities...</p>
         </div>
       ) : (

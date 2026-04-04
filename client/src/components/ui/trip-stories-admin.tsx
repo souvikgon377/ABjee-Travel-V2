@@ -312,12 +312,12 @@ export function TripStoriesAdminPanel() {
       <motion.div
         className="pointer-events-none absolute -top-24 -left-16 h-56 w-56 rounded-full bg-blue-500/15 blur-3xl"
         animate={{ x: [0, 22, 0], y: [0, 20, 0], scale: [1, 1.09, 1] }}
-        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.div
         className="pointer-events-none absolute -right-20 top-24 h-64 w-64 rounded-full bg-rose-500/15 blur-3xl"
         animate={{ x: [0, -24, 0], y: [0, -18, 0], scale: [1, 1.11, 1] }}
-        transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       <motion.div
@@ -346,7 +346,7 @@ export function TripStoriesAdminPanel() {
       </motion.div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4 xl:gap-5">
-        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 }}>
+        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.01 }}>
         <Card className={PANEL_CARD_CLASS}>
           <CardHeader className="pb-2">
             <CardDescription>Total Stories</CardDescription>
@@ -357,7 +357,7 @@ export function TripStoriesAdminPanel() {
           </CardHeader>
         </Card>
         </motion.div>
-        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
+        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 }}>
         <Card className={PANEL_CARD_CLASS}>
           <CardHeader className="pb-2">
             <CardDescription>Total Likes</CardDescription>
@@ -368,7 +368,7 @@ export function TripStoriesAdminPanel() {
           </CardHeader>
         </Card>
         </motion.div>
-        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 }}>
         <Card className={PANEL_CARD_CLASS}>
           <CardHeader className="pb-2">
             <CardDescription>Total Comments</CardDescription>
@@ -379,7 +379,7 @@ export function TripStoriesAdminPanel() {
           </CardHeader>
         </Card>
         </motion.div>
-        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
+        <motion.div whileHover={{ y: -4 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
         <Card className={PANEL_CARD_CLASS}>
           <CardHeader className="pb-2">
             <CardDescription>Active Story Authors</CardDescription>
@@ -396,7 +396,7 @@ export function TripStoriesAdminPanel() {
         className="grid grid-cols-1 gap-3 lg:grid-cols-3 xl:gap-4"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.18 }}
+        transition={{ delay: 0.05 }}
       >
         <div className="rounded-xl border border-primary/15 bg-background/75 p-3 shadow-sm">
           <p className="text-xs text-muted-foreground">Engagement Per Story</p>
@@ -425,7 +425,7 @@ export function TripStoriesAdminPanel() {
         className="rounded-xl border border-primary/15 bg-background/70 p-3 shadow-sm xl:px-4 xl:py-3.5"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.22 }}
+        transition={{ delay: 0.06 }}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">

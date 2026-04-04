@@ -212,8 +212,6 @@ const AddHotel: React.FC = () => {
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 2000));
         setIsSubmitting(false);
         setSubmitSuccess(true);
     };
@@ -709,7 +707,7 @@ const AddHotel: React.FC = () => {
                             onChange={(e) => updateFormData('petsAllowed', e.target.checked)}
                             className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                         <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">Pets Allowed</span>
                     </label>
                 </div>
@@ -722,7 +720,7 @@ const AddHotel: React.FC = () => {
                             onChange={(e) => updateFormData('smokingAllowed', e.target.checked)}
                             className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                         <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">Smoking Allowed</span>
                     </label>
                 </div>
@@ -828,7 +826,7 @@ const AddHotel: React.FC = () => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => window.location.href = '/'}
-                className="px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-lg"
+                    className="px-8 py-3 bg-linear-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-lg"
             >
                 Back to Home
             </motion.button>
@@ -853,7 +851,7 @@ const AddHotel: React.FC = () => {
             <div className="h-20 bg-white dark:bg-black"></div>
 
             {/* Hero Section */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-12">
+            <div className="bg-linear-to-r from-blue-600 to-indigo-700 text-white py-12">
                 <div className="max-w-4xl mx-auto px-4 text-center">
                     <h1 className="text-3xl md:text-4xl font-bold mb-4">List Your Property</h1>
                     <p className="text-blue-100 text-lg">
@@ -934,7 +932,7 @@ const AddHotel: React.FC = () => {
                                 onClick={nextStep}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
-                                className="px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-lg shadow-md"
+                                className="px-8 py-3 bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-lg shadow-md"
                             >
                                 Next Step →
                             </motion.button>
@@ -945,7 +943,7 @@ const AddHotel: React.FC = () => {
                                 disabled={isSubmitting || formData.rooms.length === 0}
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
-                                className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold rounded-lg shadow-md flex items-center gap-2"
+                                className="px-8 py-3 bg-linear-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold rounded-lg shadow-md flex items-center gap-2"
                             >
                                 {isSubmitting ? (
                                     <>
@@ -965,9 +963,9 @@ const AddHotel: React.FC = () => {
                 </div>
 
                 {/* Help Section */}
-                <div className="mt-8 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl p-6">
+                <div className="mt-8 bg-linear-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl p-6">
                     <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center shrink-0">
                             <span className="text-2xl">💡</span>
                         </div>
                         <div>

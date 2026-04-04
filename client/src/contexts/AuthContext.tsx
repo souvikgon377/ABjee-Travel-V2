@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const failSafeTimer = setTimeout(() => {
       setLoading(false);
-    }, 8000);
+    }, 3000);
 
     return () => clearTimeout(failSafeTimer);
   }, []);

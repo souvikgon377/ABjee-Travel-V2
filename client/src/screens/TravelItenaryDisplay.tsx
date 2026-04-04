@@ -134,7 +134,7 @@ function TravelDetailModal({
 		}
 		await navigator.clipboard.writeText(url);
 		setCopied(true);
-		setTimeout(() => setCopied(false), 1600);
+		setTimeout(() => setCopied(false), 1000);
 	};
 
 	return (

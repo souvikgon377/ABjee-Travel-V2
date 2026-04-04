@@ -58,18 +58,13 @@ export async function trackPageView(pagePath: string) {
             }),
           },
           '/api/analytics/track-event'
-        );
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Error tracking page view:', error);
-        }
+        ).catch(() => null);
+      } finally {
+        pageViewDebounceTimer = null;
       }
-      pageViewDebounceTimer = null;
     }, 2000); // Batch within 2 seconds
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Error in trackPageView:', error);
-    }
+    void error;
   }
 }
 
@@ -153,16 +148,13 @@ export async function updateUserActivity(userId: string) {
     // Debounce activity updates - only send every 30 seconds
     activityDebounceTimer = setTimeout(async () => {
       try {
-        const token = await getAuthToken();
-        if (!token) return; // Skip if no auth
-
         await fetchDeduplicated(
           `activity:${userId}`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
+              'Authorization': `Bearer ${await getAuthToken()}`,
             },
             body: JSON.stringify({
               eventType: 'userActivity',
@@ -170,14 +162,11 @@ export async function updateUserActivity(userId: string) {
             }),
           },
           '/api/analytics/track-event'
-        );
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Error updating user activity:', error);
-        }
+        ).catch(() => null);
+      } finally {
+        activityDebounceTimer = null;
+        lastActivityUserId = null;
       }
-      activityDebounceTimer = null;
-      lastActivityUserId = null;
     }, 30000); // Debounce for 30 seconds
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {

@@ -31,7 +31,7 @@ export default function OfferSpotlightPopup({
 
   useEffect(() => {
     if (!activeOffers.length || typeof window === 'undefined') return;
-    const timer = window.setTimeout(() => setIsOpen(true), 1800);
+    const timer = window.setTimeout(() => setIsOpen(true), 250);
     return () => window.clearTimeout(timer);
   }, [activeOffers.length]);
 
@@ -39,7 +39,7 @@ export default function OfferSpotlightPopup({
     if (!isOpen || activeOffers.length <= 1) return;
     const rotator = window.setInterval(() => {
       setIndex((prev) => (prev + 1) % activeOffers.length);
-    }, 5200);
+    }, 4200);
 
     return () => window.clearInterval(rotator);
   }, [isOpen, activeOffers.length]);

@@ -418,7 +418,8 @@ export const DashboardHeader = memo(
                 disabled={isRefreshing}
               >
                 <RefreshCw
-                  className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                  className="mr-2 h-4 w-4"
+                  style={isRefreshing ? { animationDuration: '0.7s' } : undefined}
                 />
                 Refresh
               </Button>
@@ -476,7 +477,10 @@ export const DashboardHeader = memo(
                       onClick={fetchNotifications}
                       disabled={notificationLoading}
                     >
-                      <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
+                      <RefreshCw
+                        className="mr-1 h-3 w-3"
+                        style={notificationLoading ? { animationDuration: '0.7s' } : undefined}
+                      />
                       Refresh
                     </Button>
                     <Button
@@ -499,7 +503,7 @@ export const DashboardHeader = memo(
 
                   {!notificationError && notificationLoading && notifications.length === 0 && (
                     <div className="text-muted-foreground flex items-center justify-center gap-2 py-6 text-sm">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <RefreshCw className="h-4 w-4 animate-spin" style={{ animationDuration: '0.7s' }} />
                       Loading notifications...
                     </div>
                   )}

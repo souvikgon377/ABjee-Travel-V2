@@ -5,17 +5,23 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MessageCircle, Users, Camera, Map, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import Header1 from '@/components/mvpblocks/header-1'
-import GradientTypewriter from '@/components/mvpblocks/gradient-typewriter'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { firestoreDb } from '@/lib/firebaseFirestore'
 import { publicAsset } from '@/lib/publicAsset'
 
-const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'))
-const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3))
-const Faq3 = dynamic(() => import('@/components/mvpblocks/faq-3'))
-const Footer4Col = dynamic(() => import('@/components/mvpblocks/footer-4col'))
-const OfferSpotlightPopup = dynamic(() => import('@/components/ui/offer-spotlight-popup'))
+const Header1 = dynamic(() => import('@/components/mvpblocks/header-1'), {
+  ssr: false,
+  loading: () => <div className="h-16 w-full md:h-20" />,
+})
+const GradientTypewriter = dynamic(() => import('@/components/mvpblocks/gradient-typewriter'), {
+  ssr: false,
+  loading: () => <div className="min-h-14 w-full px-4 pt-9" />,
+})
+const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'), { ssr: false })
+const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3), { ssr: false })
+const Faq3 = dynamic(() => import('@/components/mvpblocks/faq-3'), { ssr: false })
+const Footer4Col = dynamic(() => import('@/components/mvpblocks/footer-4col'), { ssr: false })
+const OfferSpotlightPopup = dynamic(() => import('@/components/ui/offer-spotlight-popup'), { ssr: false })
 
 const landingHighlights = [
   {
@@ -70,7 +76,7 @@ function LandingPage() {
 
     const timer = window.setTimeout(() => {
       setShowCommunityPopup(true)
-    }, 1200)
+    }, 250)
 
     return () => window.clearTimeout(timer)
   }, [])

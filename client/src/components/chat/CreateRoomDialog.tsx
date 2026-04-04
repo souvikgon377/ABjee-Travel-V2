@@ -255,7 +255,7 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onFocus={() => setShowUserSearch(true)}
-                    onBlur={() => setTimeout(() => setShowUserSearch(false), 200)}
+                    onBlur={() => setTimeout(() => setShowUserSearch(false), 0)}
                     className="pl-10 border-2 border-blue-200 focus:border-blue-500"
                   />
                 </div>

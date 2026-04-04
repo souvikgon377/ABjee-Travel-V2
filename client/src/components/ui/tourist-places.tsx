@@ -291,8 +291,8 @@ export function TouristPlacesManager() {
   useEffect(() => { fetchPlaces(); }, [fetchPlaces]);
 
   const flash = (msg: string, type: 'success' | 'error') => {
-    if (type === 'success') { setSuccess(msg); setTimeout(() => setSuccess(''), 3500); }
-    else { setError(msg); setTimeout(() => setError(''), 6000); }
+    if (type === 'success') { setSuccess(msg); setTimeout(() => setSuccess(''), 1200); }
+    else { setError(msg); setTimeout(() => setError(''), 1800); }
   };
 
   const resetForm = () => {

@@ -774,7 +774,7 @@ function StoryModal({
     if (platform === 'copy') {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1000);
     } else if (platform === 'whatsapp') {
       window.open(`https://wa.me/?text=${encodeURIComponent(story.title + ' - ' + url)}`);
     } else if (platform === 'facebook') {
@@ -1341,8 +1341,7 @@ function SubmitStoryForm({
           errors.push(file.name);
         }
         onProgress(Math.round(((fi + 1) / Math.max(total, 1)) * 80), `Uploaded ${fi + 1} of ${total} photos`, false);
-        // small delay to avoid R2 rate limiting
-        if (fi < imageFiles.length - 1) await new Promise(r => setTimeout(r, 200));
+        if (fi < imageFiles.length - 1) await Promise.resolve();
       }
 
       if (total === 0) onProgress(80, 'Saving storyâ€¦', false);
@@ -1369,12 +1368,12 @@ function SubmitStoryForm({
           : 'Story published!',
         false
       );
-      await new Promise(r => setTimeout(r, 3000));
+      await Promise.resolve();
       onProgress(100, '', true);
     } catch (err: any) {
       console.error('Story submit error:', err);
       onProgress(100, `Error: ${err?.message || 'upload failed'}`, false);
-      await new Promise(r => setTimeout(r, 4000));
+      await Promise.resolve();
       onProgress(100, '', true);
     }
   };

@@ -28,6 +28,9 @@ const CardCarousel: React.FC<CarouselProps> = ({
   showPagination = true,
   showNavigation = true,
 }) => {
+  const shouldUseSwiper = images.length > 1
+  const shouldLoop = images.length > 2
+
   const swiperCss = `
     .swiper {
       width: 100%;
@@ -55,8 +58,8 @@ const CardCarousel: React.FC<CarouselProps> = ({
     <section className="w-full space-y-4 mt-15">
       <style>{swiperCss}</style>
 
-      <div className="w-full rounded-[24px] border border-black/5 p-2 shadow-sm md:rounded-t-[44px]">
-        <div className="relative mx-auto flex w-full flex-col rounded-[24px] border border-black/5 bg-neutral-800/5 p-2 shadow-sm md:items-start md:gap-8 md:rounded-b-[20px] md:rounded-t-[40px] md:p-2">
+      <div className="w-full rounded-3xl border border-black/5 p-2 shadow-sm md:rounded-t-[44px]">
+        <div className="relative mx-auto flex w-full flex-col rounded-3xl border border-black/5 bg-neutral-800/5 p-2 shadow-sm md:items-start md:gap-8 md:rounded-b-[20px] md:rounded-t-[40px] md:p-2">
           {/* Badge */}
           {/* <Badge
             variant="outline"
@@ -68,7 +71,7 @@ const CardCarousel: React.FC<CarouselProps> = ({
 
           {/* Title & Description */}
           <div className="flex flex-col items-center justify-center pb-2 pt-2 w-full">
-            <h3 className="bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-2xl md:text-4xl font-bold text-transparent mt-8 text-center w-full">
+            <h3 className="bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-2xl md:text-4xl font-bold text-transparent mt-8 text-center w-full">
               Different attractions over World
             </h3>
 
@@ -78,50 +81,64 @@ const CardCarousel: React.FC<CarouselProps> = ({
           {/* Swiper Carousel */}
           <div className="flex w-full items-center justify-center gap-4">
             <div className="w-full">
-              <Swiper
-                spaceBetween={50}
-                autoplay={{
-                  delay: autoplayDelay,
-                  disableOnInteraction: false,
-                }}
-                effect="coverflow"
-                grabCursor
-                centeredSlides
-                loop
-                slidesPerView="auto"
-                coverflowEffect={{
-                  rotate: 0,
-                  stretch: 0,
-                  depth: 100,
-                  modifier: 2.5,
-                }}
-                pagination={showPagination}
-                navigation={
-                  showNavigation
-                    ? {
-                        nextEl: ".swiper-button-next",
-                        prevEl: ".swiper-button-prev",
-                      }
-                    : undefined
-                }
-                modules={[EffectCoverflow, Autoplay, Pagination, Navigation]}
-              >
-                {images.map((image, index) => (
-                  <SwiperSlide key={index}>
-                    <div className="aspect-[4/3] w-full overflow-hidden rounded-xl">
-                      <img
-                        src={image.src}
-                        width={500}
-                        height={500}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-cover rounded-xl"
-                        alt={image.alt}
-                      />
-                    </div>
-                  </SwiperSlide>
-                ))}
-              </Swiper>
+              {shouldUseSwiper ? (
+                <Swiper
+                  spaceBetween={50}
+                  autoplay={{
+                    delay: autoplayDelay,
+                    disableOnInteraction: false,
+                  }}
+                  effect="coverflow"
+                  grabCursor
+                  centeredSlides
+                  loop={shouldLoop}
+                  slidesPerView="auto"
+                  coverflowEffect={{
+                    rotate: 0,
+                    stretch: 0,
+                    depth: 100,
+                    modifier: 2.5,
+                  }}
+                  pagination={showPagination}
+                  navigation={
+                    showNavigation
+                      ? {
+                          nextEl: ".swiper-button-next",
+                          prevEl: ".swiper-button-prev",
+                        }
+                      : undefined
+                  }
+                  modules={[EffectCoverflow, Autoplay, Pagination, Navigation]}
+                >
+                  {images.map((image, index) => (
+                    <SwiperSlide key={index}>
+                      <div className="aspect-4/3 w-full overflow-hidden rounded-xl">
+                        <img
+                          src={image.src}
+                          width={500}
+                          height={500}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover rounded-xl"
+                          alt={image.alt}
+                        />
+                      </div>
+                    </SwiperSlide>
+                  ))}
+                </Swiper>
+              ) : (
+                <div className="aspect-4/3 w-full overflow-hidden rounded-xl">
+                  <img
+                    src={images[0].src}
+                    width={500}
+                    height={500}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover rounded-xl"
+                    alt={images[0].alt}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

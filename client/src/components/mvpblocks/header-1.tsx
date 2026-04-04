@@ -98,6 +98,7 @@ export default function Header1() {
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsLoaded, setNotificationsLoaded] = useState(false);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -146,17 +147,21 @@ export default function Header1() {
       setNotificationError('Could not load notifications');
     } finally {
       setNotificationLoading(false);
+      setNotificationsLoaded(true);
     }
   }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) {
       setNotifications([]);
+      setNotificationsLoaded(false);
       return;
     }
 
-    fetchNotifications();
-  }, [currentUser, fetchNotifications]);
+    if (notificationsOpen && !notificationsLoaded && !notificationLoading) {
+      fetchNotifications();
+    }
+  }, [currentUser, notificationsOpen, notificationsLoaded, notificationLoading, fetchNotifications]);
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => item.status === 'pending').length,
