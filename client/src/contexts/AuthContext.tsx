@@ -220,7 +220,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...additionalData,
       });
 
-      setUserProfile(newProfile);
+      setUserProfile((prev) => {
+        // Preserve resolved fields (especially role) if fallback profile is incomplete.
+        const merged = {
+          ...(prev || {}),
+          ...(newProfile || {}),
+        };
+        return normalizeUserProfile(merged);
+      });
 
     } catch (error) {
       if ((process.env.NODE_ENV === "development")) {

@@ -1,6 +1,8 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ref, get, update, onValue } from 'firebase/database';
+import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { database } from '@/lib/firebase';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -39,6 +41,29 @@ const DIALOG_AVATAR_COLORS = [
 function getDialogAvatarBg(name: string): string {
   const hash = (name || '').split('').reduce((h: number, c: string) => c.charCodeAt(0) + ((h << 5) - h), 0);
   return DIALOG_AVATAR_COLORS[Math.abs(hash) % DIALOG_AVATAR_COLORS.length];
+}
+
+function pickDisplayName(data: Record<string, unknown> | null | undefined): string | null {
+  if (!data) return null;
+
+  const candidates = [
+    data.displayName,
+    data.username,
+    data.name,
+    data.firstName,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  if (typeof data.email === 'string' && data.email.includes('@')) {
+    return data.email.split('@')[0];
+  }
+
+  return null;
 }
 
 interface ChatRoomActionsDialogProps {
@@ -180,9 +205,10 @@ export const ChatRoomActionsDialog = memo(
             )
           );
           for (const { uid, val } of statusSnaps) {
-            if (val?.username) {
+            const displayName = pickDisplayName(val as Record<string, unknown>);
+            if (displayName) {
               nameMap[uid] = {
-                displayName: val.username,
+                displayName,
                 avatar: resolveAvatarUrl(val as Record<string, unknown>) || null,
               };
             }
@@ -192,13 +218,49 @@ export const ChatRoomActionsDialog = memo(
           const messagesData = roomDataRef.current?.messages;
           if (messagesData && typeof messagesData === 'object') {
             for (const msg of Object.values(messagesData) as any[]) {
-              if (msg?.userId && msg?.username && !nameMap[msg.userId]) {
+              const displayName = pickDisplayName(msg as Record<string, unknown>);
+              if (msg?.userId && displayName && !nameMap[msg.userId]) {
                 nameMap[msg.userId] = {
-                  displayName: msg.username,
+                  displayName,
                   avatar: resolveAvatarUrl(msg as Record<string, unknown>) || null,
                 };
               }
             }
+          }
+
+          // Source 3 — Firestore users collection by uid for unresolved names.
+          const unresolvedUids = participants.filter((uid) => !nameMap[uid]);
+          if (unresolvedUids.length > 0) {
+            const chunks: string[][] = [];
+            for (let i = 0; i < unresolvedUids.length; i += 10) {
+              chunks.push(unresolvedUids.slice(i, i + 10));
+            }
+
+            await Promise.all(
+              chunks.map(async (uidsChunk) => {
+                const usersQ = query(
+                  collection(firestoreDb, 'users'),
+                  where(documentId(), 'in', uidsChunk),
+                );
+                const usersSnap = await getDocs(usersQ);
+
+                usersSnap.forEach((docSnap) => {
+                  const uid = docSnap.id;
+                  if (nameMap[uid]) return;
+
+                  const data = docSnap.data() as Record<string, unknown>;
+                  const displayName = pickDisplayName(data);
+
+                  if (!displayName) return;
+                  nameMap[uid] = {
+                    displayName,
+                    avatar: resolveAvatarUrl(data) || null,
+                  };
+                });
+              })
+            ).catch(() => {
+              // Ignore profile lookup failures and fall back to uid.
+            });
           }
 
           setMembers(participants.map((uid: string) => ({
