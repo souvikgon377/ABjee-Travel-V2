@@ -12,26 +12,6 @@ const firebaseEnv = {
   NEXT_PUBLIC_FIREBASE_DATABASE_URL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
-const missingFirebaseEnv = Object.entries(firebaseEnv)
-  .filter(([, value]) => !value)
-  .map(([key]) => key);
-
-const isBuildTime = process.env.NEXT_PHASE === "phase-production-build";
-
-if (missingFirebaseEnv.length > 0 && !isBuildTime) {
-  throw new Error(
-    `Missing Firebase env vars: ${missingFirebaseEnv.join(', ')}. ` +
-      'Set them in Cloudflare environment variables or local .env files.'
-  );
-}
-
-if (missingFirebaseEnv.length > 0 && isBuildTime) {
-  console.warn(
-    `Firebase env vars missing during build: ${missingFirebaseEnv.join(', ')}. ` +
-      "Using placeholder config so prerender can complete."
-  );
-}
-
 const envOrPlaceholder = (value: string | undefined, fallback: string) =>
   (value && value.trim()) || fallback;
 
