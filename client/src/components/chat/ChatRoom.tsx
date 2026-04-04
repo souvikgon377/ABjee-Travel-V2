@@ -99,6 +99,10 @@ const isEmojiOnly = (text: string): boolean => {
   return emojiRegex.test(text.trim());
 };
 
+const isGeneralCommunityRoom = (room: RoomType | null): boolean => {
+  return typeof room?.name === 'string' && room.name.trim().toLowerCase() === 'general community chat';
+};
+
 const ChatRoom = () => {
   const params = useParams();
   const roomId = params.roomId as string;
@@ -255,12 +259,14 @@ const ChatRoom = () => {
         }
         
         setRoom(roomData);
+        const generalCommunity = isGeneralCommunityRoom(roomData);
+        const participants = Array.isArray(roomData.participants) ? roomData.participants : [];
         
         // Check if user is already a participant
-        const isParticipant = roomData.participants.includes(user.uid);
+        const isParticipant = participants.includes(user.uid);
         
         if (!isParticipant) {
-          if (!roomData.isPublic) {
+          if (!roomData.isPublic && !generalCommunity) {
             const privateRoomCount = await chatService.getUserPrivateRoomMembershipCount(user.uid);
             const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount);
 
@@ -284,7 +290,7 @@ const ChatRoom = () => {
               router.push('/chat');
               return;
             }
-          } else if (roomData.isPublic) {
+          } else if (roomData.isPublic || generalCommunity) {
             // For public rooms, join automatically without password
             try {
               await chatService.joinRoom(roomId, user.uid);
@@ -369,7 +375,7 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, router, searchParams, subscriptionInfo]);
+  }, [roomId, user, userProfile, router, searchParams, privateRoomAllowance.reason]);
 
   // Handle password submission
   const handlePasswordSubmit = async (e: React.FormEvent) => {

@@ -455,6 +455,10 @@ class ChatService {
     }
   }
 
+  private isGeneralCommunityRoom(room: Partial<ChatRoom> | null | undefined): boolean {
+    return typeof room?.name === 'string' && room.name.trim().toLowerCase() === 'general community chat';
+  }
+
   /**
    * WHY: Generate unique invite token for shareable links
    * DECISION: Simple random string that's hard to guess
@@ -563,14 +567,15 @@ class ChatService {
     
     const room = snapshot.val();
     const participants = room.participants || [];
+    const generalCommunity = this.isGeneralCommunityRoom(room);
     
     // If user is already a participant, allow them in
     if (participants.includes(userId)) {
       return;
     }
     
-    // For public rooms, skip password check
-    if (!room.isPublic) {
+    // For public rooms and General Community, skip private-membership checks
+    if (!room.isPublic && !generalCommunity) {
       await this.enforcePrivateRoomMembershipLimit(userId);
 
       // For private rooms, invite token is required unless user is already a participant
