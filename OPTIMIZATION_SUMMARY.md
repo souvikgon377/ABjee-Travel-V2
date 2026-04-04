@@ -4,7 +4,7 @@
 Comprehensive performance optimization implemented across the entire AbJee Travel application.
 
 ## 1. Service Worker Optimization
--  Cache-first strategy for images (7-day TTL)
+-  Cache-first strategy for images (7-day TTL) by checking
 -  Stale-while-revalidate for CSS/JS
 -  Network-first for HTML
 -  Runtime cache with auto-cleanup
