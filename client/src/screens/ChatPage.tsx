@@ -2890,7 +2890,7 @@ const ChatRoomsList: React.FC = () => {
                                     disableOnInteraction: false,
                                     pauseOnMouseEnter: false
                                   }}
-                                  loop={allImages.length > 1}
+                                  loop={allImages.length > 2}
                                   speed={1500}
                                   className="h-full w-full"
                                   allowTouchMove={false}
@@ -3134,7 +3134,7 @@ const ChatRoomsList: React.FC = () => {
                                     disableOnInteraction: false,
                                     pauseOnMouseEnter: false
                                   }}
-                                  loop={allImages.length > 1}
+                                  loop={allImages.length > 2}
                                   speed={1500}
                                   className="h-full w-full"
                                   allowTouchMove={false}
