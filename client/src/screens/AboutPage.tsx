@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useInView, type Variants } from 'framer-motion';
 import {
   Facebook,
@@ -198,7 +198,7 @@ function FounderSection({ founder }: { founder: AboutFounderContent }) {
 
 export default function AboutPage() {
   const [content, setContent] = useState<AboutPageContent>(DEFAULT_ABOUT_PAGE_CONTENT);
-  const isMobile = false;
+  const [isSmallMobile, setIsSmallMobile] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -214,6 +214,65 @@ export default function AboutPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 640px)');
+    const updateViewportFlag = () => setIsSmallMobile(mediaQuery.matches);
+    updateViewportFlag();
+    mediaQuery.addEventListener('change', updateViewportFlag);
+    return () => mediaQuery.removeEventListener('change', updateViewportFlag);
+  }, []);
+
+  const heroPlaneConfigs = useMemo(
+    () =>
+      isSmallMobile
+        ? [
+            { top: '12%', duration: 26, delay: 0, size: 24, color: 'rgba(244,63,94,0.28)', tilt: '-10deg' },
+            { top: '58%', duration: 30, delay: 13, size: 20, color: 'rgba(251,146,60,0.26)', tilt: '-9deg' },
+          ]
+        : [
+            { top: '10%', duration: 24, delay: 0, size: 30, color: 'rgba(244,63,94,0.30)', tilt: '-12deg' },
+            { top: '38%', duration: 34, delay: 11, size: 22, color: 'rgba(168,85,247,0.25)', tilt: '-8deg' },
+            { top: '63%', duration: 28, delay: 19, size: 25, color: 'rgba(251,146,60,0.28)', tilt: '-10deg' },
+          ],
+    [isSmallMobile],
+  );
+
+  const heroCloudConfigs = useMemo(
+    () =>
+      isSmallMobile
+        ? [
+            { top: '10%', duration: 66, delay: 0, scale: 0.75, opacity: 0.11 },
+            { top: '58%', duration: 58, delay: 14, scale: 0.55, opacity: 0.1 },
+          ]
+        : [
+            { top: '6%', duration: 60, delay: 0, scale: 1.1, opacity: 0.13 },
+            { top: '23%', duration: 75, delay: 18, scale: 0.75, opacity: 0.1 },
+            { top: '52%', duration: 50, delay: 7, scale: 0.55, opacity: 0.11 },
+            { top: '74%', duration: 68, delay: 28, scale: 0.85, opacity: 0.09 },
+          ],
+    [isSmallMobile],
+  );
+
+  const heroPins = useMemo(
+    () =>
+      isSmallMobile
+        ? [
+            { top: '20%', left: '72%', delay: 0, size: 16, color: 'rgba(244,63,94,0.34)' },
+            { top: '66%', left: '26%', delay: 3, size: 14, color: 'rgba(168,85,247,0.30)' },
+          ]
+        : [
+            { top: '18%', left: '72%', delay: 0, size: 18, color: 'rgba(244,63,94,0.38)' },
+            { top: '52%', left: '16%', delay: 2.5, size: 15, color: 'rgba(168,85,247,0.32)' },
+            { top: '68%', left: '60%', delay: 5, size: 20, color: 'rgba(251,146,60,0.35)' },
+            { top: '30%', left: '42%', delay: 3.5, size: 14, color: 'rgba(99,102,241,0.30)' },
+          ],
+    [isSmallMobile],
+  );
+
+  const slowParticleCount = isSmallMobile ? 30 : 80;
+  const fastParticleCount = isSmallMobile ? 22 : 70;
+  const glowParticleCount = isSmallMobile ? 8 : 20;
+
   const socialLinks = content.socialLinks;
   const youtubeVideos = content.youtubeVideos;
   const developers = content.developers;
@@ -225,29 +284,29 @@ export default function AboutPage() {
       {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           HERO  â€“  Dynamic animated background
          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      <section className={`relative w-full ${isMobile ? 'min-h-[78vh]' : 'h-screen'} flex items-center justify-center overflow-hidden`}>
+      <section className={`relative w-full ${isSmallMobile ? 'min-h-[88vh]' : 'h-screen'} flex items-center justify-center overflow-hidden`}>
 
         {/* â”€â”€ Base gradient â€” light: warm rose/violet, dark: deep slate/rose â”€â”€ */}
         <div className="absolute inset-0 bg-linear-to-br from-rose-50 via-violet-50/70 to-orange-50 dark:from-slate-950 dark:via-rose-950/60 dark:to-slate-900" />
 
         {/* â”€â”€ Aurora blobs â”€â”€ */}
         <motion.div
-          className="absolute -top-48 -left-48 w-175 h-175 rounded-full bg-rose-400/30 dark:bg-rose-500/25 blur-[130px] pointer-events-none"
+          className={`absolute -top-48 -left-48 rounded-full bg-rose-400/30 dark:bg-rose-500/25 pointer-events-none ${isSmallMobile ? 'w-120 h-120 blur-[90px]' : 'w-175 h-175 blur-[130px]'}`}
           animate={{ x: [0, 70, 20, 0], y: [0, 50, -20, 0], scale: [1, 1.12, 0.96, 1] }}
           transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
-          className="absolute top-1/4 -right-40 w-150 h-150 rounded-full bg-violet-400/25 dark:bg-violet-600/20 blur-[110px] pointer-events-none"
+          className={`absolute top-1/4 -right-40 rounded-full bg-violet-400/25 dark:bg-violet-600/20 pointer-events-none ${isSmallMobile ? 'w-100 h-100 blur-[80px]' : 'w-150 h-150 blur-[110px]'}`}
           animate={{ x: [0, -55, 10, 0], y: [0, 65, -25, 0], scale: [1, 1.15, 0.92, 1] }}
           transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
         />
         <motion.div
-          className="absolute -bottom-24 left-1/4 w-130 h-130 rounded-full bg-orange-400/25 dark:bg-orange-500/20 blur-[110px] pointer-events-none"
+          className={`absolute -bottom-24 left-1/4 rounded-full bg-orange-400/25 dark:bg-orange-500/20 pointer-events-none ${isSmallMobile ? 'w-90 h-90 blur-[80px]' : 'w-130 h-130 blur-[110px]'}`}
           animate={{ x: [0, 45, -15, 0], y: [0, -35, 15, 0], scale: [1, 1.08, 1.04, 1] }}
           transition={{ duration: 17, repeat: Infinity, ease: 'easeInOut', delay: 6 }}
         />
         <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-95 h-95 rounded-full bg-pink-400/20 dark:bg-pink-600/15 blur-[90px] pointer-events-none"
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-400/20 dark:bg-pink-600/15 pointer-events-none ${isSmallMobile ? 'w-70 h-70 blur-[70px]' : 'w-95 h-95 blur-[90px]'}`}
           animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0.9, 0.5] }}
           transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
         />
@@ -267,11 +326,7 @@ export default function AboutPage() {
             â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
 
         {/* â”€â”€ Flying planes (left â†’ right) â”€â”€ */}
-        {!isMobile && [
-          { top: '10%', duration: 24, delay: 0,  size: 30, color: 'rgba(244,63,94,0.30)',  tilt: '-12deg' },
-          { top: '38%', duration: 34, delay: 11, size: 22, color: 'rgba(168,85,247,0.25)', tilt: '-8deg'  },
-          { top: '63%', duration: 28, delay: 19, size: 25, color: 'rgba(251,146,60,0.28)', tilt: '-10deg' },
-        ].map((p, i) => (
+        {heroPlaneConfigs.map((p, i) => (
           <motion.div
             key={`plane-${i}`}
             className="absolute pointer-events-none"
@@ -288,12 +343,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Drifting clouds (right â†’ left, very slow) â”€â”€ */}
-        {!isMobile && [
-          { top: '6%',  duration: 60, delay: 0,  scale: 1.1,  opacity: 0.13 },
-          { top: '23%', duration: 75, delay: 18, scale: 0.75, opacity: 0.10 },
-          { top: '52%', duration: 50, delay: 7,  scale: 0.55, opacity: 0.11 },
-          { top: '74%', duration: 68, delay: 28, scale: 0.85, opacity: 0.09 },
-        ].map((c, i) => (
+        {heroCloudConfigs.map((c, i) => (
           <motion.div
             key={`cloud-${i}`}
             className="absolute pointer-events-none"
@@ -314,7 +364,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Floating hot air balloon â”€â”€ */}
-        {!isMobile && <motion.div
+        <motion.div
           className="absolute pointer-events-none"
           style={{ top: '12%', right: '10%', opacity: 0.22 }}
           animate={{ y: [0, -28, 0], rotate: [-2, 2, -2] }}
@@ -335,10 +385,10 @@ export default function AboutPage() {
             {/* basket */}
             <rect x="24" y="73" width="16" height="11" rx="3" fill="rgba(180,120,60,0.55)" />
           </svg>
-        </motion.div>}
+        </motion.div>
 
         {/* â”€â”€ Rotating compass â”€â”€ */}
-        {!isMobile && <motion.div
+        <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '28%', left: '7%', opacity: 0.18 }}
           animate={{ rotate: [0, 360] }}
@@ -356,15 +406,10 @@ export default function AboutPage() {
             {/* West */}
             <polygon points="5,26 24,29.5 22,26 24,22.5" fill="rgba(120,120,150,0.55)" />
           </svg>
-        </motion.div>}
+        </motion.div>
 
         {/* â”€â”€ Bouncing map pins â”€â”€ */}
-        {!isMobile && [
-          { top: '18%', left: '72%', delay: 0,   size: 18, color: 'rgba(244,63,94,0.38)'  },
-          { top: '52%', left: '16%', delay: 2.5, size: 15, color: 'rgba(168,85,247,0.32)' },
-          { top: '68%', left: '60%', delay: 5,   size: 20, color: 'rgba(251,146,60,0.35)' },
-          { top: '30%', left: '42%', delay: 3.5, size: 14, color: 'rgba(99,102,241,0.30)' },
-        ].map((pin, i) => (
+        {heroPins.map((pin, i) => (
           <motion.div
             key={`pin-${i}`}
             className="absolute pointer-events-none"
@@ -379,7 +424,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Rolling suitcase / luggage (left â†’ right, ground level) â”€â”€ */}
-        {!isMobile && <motion.div
+        <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '15%', left: 0, opacity: 0.18 }}
           animate={{ x: [-80, 2200] }}
@@ -388,13 +433,13 @@ export default function AboutPage() {
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="rgba(99,102,241,0.75)">
             <path d="M20 6h-2.18c.07-.44.18-.88.18-1.34C18 3 16.77 2 15.27 2H8.73C7.23 2 6 3 6 4.66c0 .46.11.9.18 1.34H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8.73 4h6.54c.41 0 .73.3.73.66 0 .38-.1.74-.18 1.1l-.08.24H8.26l-.08-.24C8.1 5.4 8 5.04 8 4.66 8 4.3 8.32 4 8.73 4z" />
           </svg>
-        </motion.div>}
+        </motion.div>
 
         {/* â”€â”€ Bottom page blend â”€â”€ */}
         <div className="absolute bottom-0 left-0 right-0 h-72 bg-linear-to-t from-background via-background/60 to-transparent pointer-events-none" />
 
         {/* â”€â”€ Floating micro-particles (layer 1 â€” slow drifters) â”€â”€ */}
-        {!isMobile && [...Array(80)].map((_, i) => (
+        {[...Array(slowParticleCount)].map((_, i) => (
           <motion.div
             key={`slow-${i}`}
             className="absolute rounded-full pointer-events-none"
@@ -426,7 +471,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Floating micro-particles (layer 2 â€” fast twinklers) â”€â”€ */}
-        {!isMobile && [...Array(70)].map((_, i) => (
+        {[...Array(fastParticleCount)].map((_, i) => (
           <motion.div
             key={`fast-${i}`}
             className="absolute rounded-full pointer-events-none"
@@ -455,7 +500,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Floating micro-particles (layer 3 â€” large glows) â”€â”€ */}
-        {!isMobile && [...Array(20)].map((_, i) => (
+        {[...Array(glowParticleCount)].map((_, i) => (
           <motion.div
             key={`glow-${i}`}
             className="absolute rounded-full pointer-events-none"
