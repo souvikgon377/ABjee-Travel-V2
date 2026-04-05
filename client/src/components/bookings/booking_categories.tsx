@@ -5,6 +5,8 @@ import Footer4Col from '../mvpblocks/footer-4col';
 import { GroupToursPopup } from './GroupToursPopup';
 import Header2 from '../mvpblocks/Header-2';
 import { publicAsset } from '@/lib/publicAsset';
+import { doc, getDoc } from 'firebase/firestore';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 // --- TYPE DEFINITIONS ---
 interface TourPackage {
@@ -97,6 +99,8 @@ const trendingHolidays: TrendingHoliday[] = [
 export default function BookingCategories() {
   
   const [isGroupToursOpen, setIsGroupToursOpen] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [bookingCategoriesEnabled, setBookingCategoriesEnabled] = useState(true);
   
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -135,6 +139,39 @@ export default function BookingCategories() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBookingCategoriesSetting = async () => {
+      try {
+        const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
+        const snapshot = await getDoc(settingsRef);
+        const enabledValue = snapshot.exists() ? snapshot.data()?.bookingCategoriesEnabled : true;
+
+        if (!isMounted) {
+          return;
+        }
+
+        setBookingCategoriesEnabled(enabledValue !== false);
+      } catch (error) {
+        console.error('Failed to load booking categories setting:', error);
+        if (isMounted) {
+          setBookingCategoriesEnabled(true);
+        }
+      } finally {
+        if (isMounted) {
+          setSettingsLoading(false);
+        }
+      }
+    };
+
+    loadBookingCategoriesSetting();
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -340,6 +377,39 @@ export default function BookingCategories() {
   const nextTestimonial = () => {
     setCurrentIndex((prev) => (prev === testimonials.length - 1 ? 0 : prev + 1));
   };
+
+  if (settingsLoading) {
+    return (
+      <div className="bg-white dark:bg-black font-sans">
+        <Header1/>
+        <div className="h-10 bg-white dark:bg-black"></div>
+        <Header2/>
+        <main className="mx-auto flex min-h-[50vh] max-w-3xl items-center justify-center px-4 py-20">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Loading booking categories...</p>
+        </main>
+        <Footer4Col/>
+      </div>
+    );
+  }
+
+  if (!bookingCategoriesEnabled) {
+    return (
+      <div className="bg-white dark:bg-black font-sans">
+        <Header1/>
+        <div className="h-10 bg-white dark:bg-black"></div>
+        <Header2/>
+        <main className="mx-auto flex min-h-[50vh] max-w-3xl items-center justify-center px-4 py-20">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-8 text-center dark:border-rose-900/40 dark:bg-rose-950/20">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Booking Categories is currently turned off</h1>
+            <p className="mt-3 text-sm text-gray-700 dark:text-gray-300">
+              This section has been disabled by the admin. Please check back later.
+            </p>
+          </div>
+        </main>
+        <Footer4Col/>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-black font-sans">

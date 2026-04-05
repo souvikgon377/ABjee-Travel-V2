@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, LayoutGroup } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 interface NavItem {
     id: string;
@@ -14,6 +16,7 @@ interface NavItem {
 
 const Header2: React.FC = () => {
     const [activeTab, setActiveTab] = useState('packages');
+    const [bookingCategoriesEnabled, setBookingCategoriesEnabled] = useState(true);
     const router = useRouter();
     const pathname = usePathname();
 
@@ -125,22 +128,55 @@ const Header2: React.FC = () => {
         // },
     ];
 
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadBookingCategoriesSetting = async () => {
+            try {
+                const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
+                const snapshot = await getDoc(settingsRef);
+                const enabledValue = snapshot.exists() ? snapshot.data()?.bookingCategoriesEnabled : true;
+
+                if (!isMounted) {
+                    return;
+                }
+
+                setBookingCategoriesEnabled(enabledValue !== false);
+            } catch {
+                if (isMounted) {
+                    setBookingCategoriesEnabled(true);
+                }
+            }
+        };
+
+        loadBookingCategoriesSetting();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const visibleNavItems = useMemo(
+        () => navItems.filter((item) => bookingCategoriesEnabled || item.href !== '/booking-categories'),
+        [bookingCategoriesEnabled],
+    );
+
     // Sync activeTab with current route
     useEffect(() => {
-        const matchingItem = navItems.find(item => item.href === pathname);
+        const matchingItem = visibleNavItems.find(item => item.href === pathname);
         if (matchingItem) {
             setActiveTab(matchingItem.id);
-        } else if (pathname === '/' || pathname === '/booking-categories') {
+        } else if (pathname === '/' || (pathname === '/booking-categories' && bookingCategoriesEnabled)) {
             setActiveTab('packages');
         }
-    }, [pathname]);
+    }, [bookingCategoriesEnabled, pathname, visibleNavItems]);
 
     return (
         <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700">
             <div className="max-w-7xl mx-auto px-4">
                 <LayoutGroup>
                 <nav className="flex items-center justify-center overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                    {navItems.map((item) => (
+                    {visibleNavItems.map((item) => (
                         <motion.button
                             key={item.id}
                             onClick={() => {

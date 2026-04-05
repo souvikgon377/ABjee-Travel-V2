@@ -3384,7 +3384,7 @@ const ChatPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
+    <div className="min-h-screen pt-16 md:pt-20 bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
       <Header />
       <OfferSpotlightPopup
         offers={offers}

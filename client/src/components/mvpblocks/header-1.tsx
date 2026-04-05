@@ -94,6 +94,8 @@ export default function Header1() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [homePageEnabled, setHomePageEnabled] = useState(true);
+  const [bookingCategoriesEnabled, setBookingCategoriesEnabled] = useState(true);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
@@ -112,6 +114,66 @@ export default function Header1() {
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname?.startsWith(href);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPublicSettings = async () => {
+      try {
+        const response = await fetch('/api/public/settings', {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        const payload = await response.json().catch(() => null);
+        const settings = payload?.success ? payload?.data : null;
+
+        if (!isMounted) {
+          return;
+        }
+
+        setHomePageEnabled(settings?.homePageEnabled !== false);
+        setBookingCategoriesEnabled(settings?.bookingCategoriesEnabled !== false);
+      } catch {
+        if (isMounted) {
+          setHomePageEnabled(true);
+          setBookingCategoriesEnabled(true);
+        }
+      }
+    };
+
+    loadPublicSettings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => {
+      if (!homePageEnabled && item.href === '/') {
+        return false;
+      }
+
+      if (!bookingCategoriesEnabled && item.href === '/booking-categories') {
+        return false;
+      }
+
+      return true;
+    }),
+    [bookingCategoriesEnabled, homePageEnabled],
+  );
+
+  const navGridStyle = useMemo(
+    () => ({
+      gridTemplateColumns: `repeat(${Math.max(visibleNavItems.length, 1)}, minmax(120px, 1fr))`,
+    }),
+    [visibleNavItems.length],
+  );
+
+  const navMaxWidthClass = useMemo(() => {
+    const hasBookingCategories = visibleNavItems.some((item) => item.href === '/booking-categories');
+    return hasBookingCategories ? 'max-w-3xl xl:max-w-4xl' : 'max-w-2xl';
+  }, [visibleNavItems]);
 
   const fetchNotifications = useCallback(async () => {
     if (!currentUser) {
@@ -198,43 +260,64 @@ export default function Header1() {
         'fixed left-0 right-0 top-0 z-50',
         'transition-[backdrop-filter,background-color,box-shadow] duration-300',
         isScrolled
-          ? 'backdrop-blur-xl bg-white/80 dark:bg-black/80 shadow-[0_8px_32px_rgba(0,0,0,0.1)]'
-          : 'backdrop-blur-none bg-transparent',
+          ? 'backdrop-blur-xl bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-border/50'
+          : 'backdrop-blur-md bg-background/45 border-b border-border/35',
       ].join(' ')}
       variants={headerVariants}
       initial="initial"
       animate="animate"
       transition={{ duration: 0.3, ease: 'easeInOut' }}
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between lg:h-20">
-          <motion.div
-            className="flex items-center space-x-2"
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 10 }}
-          >
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
-                <Image
-                  src={publicAsset('/logo.jpg')}
-                  alt="ABjee Travel"
-                  width={32}
-                  height={32}
-                  priority
-                  className="h-8 w-8 object-cover"
-                />
-              </div>
-              <span className="hidden bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent sm:inline">
-                ABjee Travel
-              </span>
-            </Link>
-          </motion.div>
+      <div className="w-full px-3 sm:px-5 lg:px-6 xl:px-8">
+        <div className="relative flex h-16 items-center lg:h-20">
+          <div className="flex shrink-0 items-center gap-4">
+            <motion.div
+              className="flex items-center space-x-2"
+              whileHover={{ scale: 1.05 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 10 }}
+            >
+              <Link href="/" className="flex items-center space-x-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
+                  <Image
+                    src={publicAsset('/logo.jpg')}
+                    alt="ABjee Travel"
+                    width={32}
+                    height={32}
+                    priority
+                    className="h-8 w-8 object-cover"
+                  />
+                </div>
+                <span className="hidden bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent sm:inline">
+                  ABjee Travel
+                </span>
+              </Link>
+            </motion.div>
 
-          <nav className="hidden items-center space-x-8 lg:flex">
-            {navItems.map((item) => (
+            {currentUser && userProfile?.role === 'admin' && (
+              <motion.div
+                className="hidden lg:block"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Link
+                  href="/admin"
+                  className="inline-flex items-center space-x-2 rounded-full bg-linear-to-r from-purple-500 to-purple-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                >
+                  <Shield className="h-4 w-4" />
+                  <span>Admin Dashboard</span>
+                </Link>
+              </motion.div>
+            )}
+          </div>
+
+          <nav
+            className={`absolute left-1/2 top-1/2 hidden w-full -translate-x-1/2 -translate-y-1/2 items-center lg:grid ${navMaxWidthClass}`}
+            style={navGridStyle}
+          >
+            {visibleNavItems.map((item) => (
               <div
                 key={item.name}
-                className="relative"
+                className="relative flex justify-center"
                 onMouseEnter={() =>
                   item.hasDropdown && setActiveDropdown(item.name)
                 }
@@ -242,7 +325,7 @@ export default function Header1() {
               >
                 <Link href={item.href!}
                   className={[
-                    'flex items-center space-x-1 font-medium transition-colors duration-200 hover:text-rose-500',
+                    'flex items-center space-x-1 whitespace-nowrap font-medium transition-colors duration-200 hover:text-rose-500',
                     isActive(item.href) ? 'text-rose-500' : 'text-foreground',
                   ].join(' ')}
                 >
@@ -289,20 +372,9 @@ export default function Header1() {
             ))}
           </nav>
 
-          <div className="hidden items-center space-x-4 lg:flex">
+          <div className="ml-auto hidden items-center space-x-3 lg:flex">
             {currentUser ? (
               <>
-                {userProfile?.role === 'admin' && (
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Link
-                      href="/admin"
-                      className="inline-flex items-center space-x-2 rounded-full bg-linear-to-r from-purple-500 to-purple-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
-                    >
-                      <Shield className="h-4 w-4" />
-                      <span>Admin Dashboard</span>
-                    </Link>
-                  </motion.div>
-                )}
                 <div className="flex items-center space-x-3">
                   <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
                     <PopoverTrigger asChild>
@@ -434,7 +506,7 @@ export default function Header1() {
           </div>
 
           {/* Mobile: Theme toggle + Hamburger */}
-          <div className="flex items-center space-x-2 lg:hidden">
+          <div className="ml-auto flex items-center space-x-2 lg:hidden">
             <ModeToggle />
             <motion.button
               className="rounded-lg p-2 transition-colors duration-200 hover:bg-muted"
@@ -461,7 +533,7 @@ export default function Header1() {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
               <div className="mt-4 space-y-2 rounded-xl border border-border bg-background/95 py-4 shadow-xl backdrop-blur-lg">
-                {navItems.map((item) => (
+                {visibleNavItems.map((item) => (
                   item.hasDropdown ? (
                     <div key={item.name} className="px-4 py-2">
                       <div className="font-medium text-foreground mb-2">{item.name}</div>

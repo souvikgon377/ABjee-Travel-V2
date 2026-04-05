@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCcw, Hotel, Car, Bike, ArrowRight, CalendarDays } from 'lucide-react';
-import { collection, getCountFromServer } from 'firebase/firestore';
+import { collection, doc, getCountFromServer, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { useRouter } from 'next/navigation';
 
@@ -26,6 +26,8 @@ export const BookingsOverview = memo(() => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [categoryToggleLoading, setCategoryToggleLoading] = useState(false);
+  const [bookingCategoriesEnabled, setBookingCategoriesEnabled] = useState(true);
   const [stats, setStats] = useState<BookingStats>(EMPTY_STATS);
 
   const fetchStats = useCallback(async () => {
@@ -51,12 +53,26 @@ export const BookingsOverview = memo(() => {
     });
   }, []);
 
+  const fetchBookingCategoriesSetting = useCallback(async () => {
+    try {
+      const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
+      const snapshot = await getDoc(settingsRef);
+      const enabledValue = snapshot.exists() ? snapshot.data()?.bookingCategoriesEnabled : true;
+      setBookingCategoriesEnabled(enabledValue !== false);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to load booking categories setting:', error);
+      }
+      setBookingCategoriesEnabled(true);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       setLoading(true);
       try {
-        await fetchStats();
+        await Promise.all([fetchStats(), fetchBookingCategoriesSetting()]);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -69,16 +85,39 @@ export const BookingsOverview = memo(() => {
     return () => {
       mounted = false;
     };
-  }, [fetchStats]);
+  }, [fetchBookingCategoriesSetting, fetchStats]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchStats();
+      await Promise.all([fetchStats(), fetchBookingCategoriesSetting()]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchStats]);
+  }, [fetchBookingCategoriesSetting, fetchStats]);
+
+  const handleToggleBookingCategories = useCallback(async () => {
+    setCategoryToggleLoading(true);
+    const nextValue = !bookingCategoriesEnabled;
+
+    try {
+      const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
+      await setDoc(
+        settingsRef,
+        {
+          bookingCategoriesEnabled: nextValue,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setBookingCategoriesEnabled(nextValue);
+    } catch (error) {
+      console.error('Failed to update booking categories status:', error);
+      alert('Unable to update booking categories status. Please try again.');
+    } finally {
+      setCategoryToggleLoading(false);
+    }
+  }, [bookingCategoriesEnabled]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -139,21 +178,46 @@ export const BookingsOverview = memo(() => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <motion.button
-          type="button"
-          onClick={() => router.push('/booking-categories')}
+        <motion.div
           whileHover={{ y: -2 }}
-          whileTap={{ scale: 0.98 }}
           className="rounded-xl border border-border bg-card/50 p-4 text-left transition-colors hover:border-primary/40"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Open Booking Categories</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Manage tour and package category pages.</p>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="font-semibold">Booking Categories</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Manage tour and package category pages.</p>
+              </div>
+              <Badge variant={bookingCategoriesEnabled ? 'secondary' : 'destructive'}>
+                {bookingCategoriesEnabled ? 'Live' : 'Off'}
+              </Badge>
             </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push('/booking-categories')}
+                disabled={!bookingCategoriesEnabled}
+              >
+                Open
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={bookingCategoriesEnabled ? 'destructive' : 'default'}
+                onClick={handleToggleBookingCategories}
+                disabled={categoryToggleLoading}
+              >
+                {categoryToggleLoading
+                  ? 'Saving...'
+                  : bookingCategoriesEnabled
+                    ? 'Turn Off'
+                    : 'Turn On'}
+              </Button>
+            </div>
           </div>
-        </motion.button>
+        </motion.div>
 
         <motion.button
           type="button"

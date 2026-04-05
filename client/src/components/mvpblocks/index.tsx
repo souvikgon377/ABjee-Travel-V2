@@ -16,6 +16,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { QuickActions } from '@/components/ui/quick-actions';
 import { DashboardHeader, DEFAULT_FILTERS, type DashboardFilters } from '@/components/ui/dashboard-header';
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
@@ -55,6 +57,8 @@ export default function AdminDashboard() {
   const { userProfile } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [homePageEnabled, setHomePageEnabled] = useState(true);
+  const [homePageToggleLoading, setHomePageToggleLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddUserDialog, setShowAddUserDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -97,8 +101,22 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const fetchHomePageSetting = useCallback(async () => {
+    try {
+      const response = await adminAPI.getSettings();
+      const enabledValue = response?.data?.data?.homePageEnabled;
+      setHomePageEnabled(enabledValue !== false);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to load home page setting:', error);
+      }
+      setHomePageEnabled(true);
+    }
+  }, []);
+
   useEffect(() => {
     fetchStats();
+    fetchHomePageSetting();
     
     // Poll stats every 30 seconds to get updated data
     const statsInterval = setInterval(() => {
@@ -110,13 +128,29 @@ export default function AdminDashboard() {
     }, 30000); // 30 seconds
 
     return () => clearInterval(statsInterval);
-  }, [fetchStats]);
+  }, [fetchHomePageSetting, fetchStats]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await fetchStats();
+    await Promise.all([fetchStats(), fetchHomePageSetting()]);
     setIsRefreshing(false);
-  }, [fetchStats]);
+  }, [fetchHomePageSetting, fetchStats]);
+
+  const handleToggleHomePage = useCallback(async () => {
+    setHomePageToggleLoading(true);
+    const nextValue = !homePageEnabled;
+
+    try {
+      const response = await adminAPI.updateSettings({ homePageEnabled: nextValue });
+      const savedValue = response?.data?.data?.homePageEnabled;
+      setHomePageEnabled(savedValue !== false);
+    } catch (error) {
+      console.error('Failed to update home page status:', error);
+      alert('Unable to update Home page status. Please try again.');
+    } finally {
+      setHomePageToggleLoading(false);
+    }
+  }, [homePageEnabled]);
 
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
@@ -174,6 +208,37 @@ export default function AdminDashboard() {
                 <DashboardCard key={stat.title} stat={stat} index={index} />
               ))}
             </div>
+
+            <motion.section
+              whileHover={{ y: -2 }}
+              className="rounded-2xl border border-border bg-card/50 p-4 sm:p-5 transition-colors hover:border-primary/40"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight">Home Page Control</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Turn off Home page and make Community the default landing page.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={homePageEnabled ? 'secondary' : 'destructive'}>
+                    {homePageEnabled ? 'Home Live' : 'Home Off'}
+                  </Badge>
+                  <Button
+                    type="button"
+                    onClick={handleToggleHomePage}
+                    disabled={homePageToggleLoading}
+                    variant={homePageEnabled ? 'destructive' : 'default'}
+                  >
+                    {homePageToggleLoading
+                      ? 'Saving...'
+                      : homePageEnabled
+                        ? 'Turn Off'
+                        : 'Turn On'}
+                  </Button>
+                </div>
+              </div>
+            </motion.section>
 
             <motion.section
               initial={{ opacity: 0, y: 14 }}
@@ -475,8 +540,20 @@ export default function AdminDashboard() {
           </div>
         );
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView, stats, userProfile, handleAddUser, handleExport, handleSettings, activeFilters, usersTableRefresh, searchQuery]);
+  }, [
+    currentView,
+    stats,
+    userProfile,
+    handleAddUser,
+    handleExport,
+    handleSettings,
+    handleToggleHomePage,
+    homePageEnabled,
+    homePageToggleLoading,
+    activeFilters,
+    usersTableRefresh,
+    searchQuery,
+  ]);
 
   return (
     <SidebarProvider>

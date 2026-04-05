@@ -123,6 +123,8 @@ export const subscriptionsAPI = {
 // Admin API
 export const adminAPI = {
   getStats: () => adminApiInstance.get('/admin/stats'),
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (data: any) => api.put('/admin/settings', data),
   getUsers: (params?: any) => api.get('/admin/users', { params }),
   getUser: (userId: string) => api.get(`/admin/users/${userId}`),
   createUser: (data: any) => api.post('/admin/users', data),

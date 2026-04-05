@@ -100,7 +100,7 @@ function LandingPage() {
   }
 
   return (
-    <main className="overflow-x-clip">
+    <main className="overflow-x-clip pt-16 md:pt-20">
       <Header1 />
       <GradientTypewriter/>
       <section className="w-full" aria-label="Featured travel video">

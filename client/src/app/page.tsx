@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import LandingPage from "@/screens/LandingPage";
+import HomeRouteGate from "@/components/home/home-route-gate";
 import { publicAsset } from "@/lib/publicAsset";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
@@ -66,7 +66,7 @@ export default function RootPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
       />
-      <LandingPage />
+      <HomeRouteGate />
     </>
   );
 }
