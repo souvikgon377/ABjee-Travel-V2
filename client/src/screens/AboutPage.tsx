@@ -198,6 +198,7 @@ function FounderSection({ founder }: { founder: AboutFounderContent }) {
 
 export default function AboutPage() {
   const [content, setContent] = useState<AboutPageContent>(DEFAULT_ABOUT_PAGE_CONTENT);
+  const isMobile = false;
 
   useEffect(() => {
     let mounted = true;
@@ -224,7 +225,7 @@ export default function AboutPage() {
       {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           HERO  â€“  Dynamic animated background
          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      <section className="relative w-full h-screen flex items-center justify-center overflow-hidden">
+      <section className={`relative w-full ${isMobile ? 'min-h-[78vh]' : 'h-screen'} flex items-center justify-center overflow-hidden`}>
 
         {/* â”€â”€ Base gradient â€” light: warm rose/violet, dark: deep slate/rose â”€â”€ */}
         <div className="absolute inset-0 bg-linear-to-br from-rose-50 via-violet-50/70 to-orange-50 dark:from-slate-950 dark:via-rose-950/60 dark:to-slate-900" />
@@ -266,7 +267,7 @@ export default function AboutPage() {
             â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
 
         {/* â”€â”€ Flying planes (left â†’ right) â”€â”€ */}
-        {[
+        {!isMobile && [
           { top: '10%', duration: 24, delay: 0,  size: 30, color: 'rgba(244,63,94,0.30)',  tilt: '-12deg' },
           { top: '38%', duration: 34, delay: 11, size: 22, color: 'rgba(168,85,247,0.25)', tilt: '-8deg'  },
           { top: '63%', duration: 28, delay: 19, size: 25, color: 'rgba(251,146,60,0.28)', tilt: '-10deg' },
@@ -287,7 +288,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Drifting clouds (right â†’ left, very slow) â”€â”€ */}
-        {[
+        {!isMobile && [
           { top: '6%',  duration: 60, delay: 0,  scale: 1.1,  opacity: 0.13 },
           { top: '23%', duration: 75, delay: 18, scale: 0.75, opacity: 0.10 },
           { top: '52%', duration: 50, delay: 7,  scale: 0.55, opacity: 0.11 },
@@ -313,7 +314,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Floating hot air balloon â”€â”€ */}
-        <motion.div
+        {!isMobile && <motion.div
           className="absolute pointer-events-none"
           style={{ top: '12%', right: '10%', opacity: 0.22 }}
           animate={{ y: [0, -28, 0], rotate: [-2, 2, -2] }}
@@ -334,10 +335,10 @@ export default function AboutPage() {
             {/* basket */}
             <rect x="24" y="73" width="16" height="11" rx="3" fill="rgba(180,120,60,0.55)" />
           </svg>
-        </motion.div>
+        </motion.div>}
 
         {/* â”€â”€ Rotating compass â”€â”€ */}
-        <motion.div
+        {!isMobile && <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '28%', left: '7%', opacity: 0.18 }}
           animate={{ rotate: [0, 360] }}
@@ -355,10 +356,10 @@ export default function AboutPage() {
             {/* West */}
             <polygon points="5,26 24,29.5 22,26 24,22.5" fill="rgba(120,120,150,0.55)" />
           </svg>
-        </motion.div>
+        </motion.div>}
 
         {/* â”€â”€ Bouncing map pins â”€â”€ */}
-        {[
+        {!isMobile && [
           { top: '18%', left: '72%', delay: 0,   size: 18, color: 'rgba(244,63,94,0.38)'  },
           { top: '52%', left: '16%', delay: 2.5, size: 15, color: 'rgba(168,85,247,0.32)' },
           { top: '68%', left: '60%', delay: 5,   size: 20, color: 'rgba(251,146,60,0.35)' },
@@ -378,7 +379,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Rolling suitcase / luggage (left â†’ right, ground level) â”€â”€ */}
-        <motion.div
+        {!isMobile && <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '15%', left: 0, opacity: 0.18 }}
           animate={{ x: [-80, 2200] }}
@@ -387,13 +388,13 @@ export default function AboutPage() {
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="rgba(99,102,241,0.75)">
             <path d="M20 6h-2.18c.07-.44.18-.88.18-1.34C18 3 16.77 2 15.27 2H8.73C7.23 2 6 3 6 4.66c0 .46.11.9.18 1.34H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8.73 4h6.54c.41 0 .73.3.73.66 0 .38-.1.74-.18 1.1l-.08.24H8.26l-.08-.24C8.1 5.4 8 5.04 8 4.66 8 4.3 8.32 4 8.73 4z" />
           </svg>
-        </motion.div>
+        </motion.div>}
 
         {/* â”€â”€ Bottom page blend â”€â”€ */}
         <div className="absolute bottom-0 left-0 right-0 h-72 bg-linear-to-t from-background via-background/60 to-transparent pointer-events-none" />
 
         {/* â”€â”€ Floating micro-particles (layer 1 â€” slow drifters) â”€â”€ */}
-        {[...Array(80)].map((_, i) => (
+        {!isMobile && [...Array(80)].map((_, i) => (
           <motion.div
             key={`slow-${i}`}
             className="absolute rounded-full pointer-events-none"
@@ -425,7 +426,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Floating micro-particles (layer 2 â€” fast twinklers) â”€â”€ */}
-        {[...Array(70)].map((_, i) => (
+        {!isMobile && [...Array(70)].map((_, i) => (
           <motion.div
             key={`fast-${i}`}
             className="absolute rounded-full pointer-events-none"
@@ -454,7 +455,7 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Floating micro-particles (layer 3 â€” large glows) â”€â”€ */}
-        {[...Array(20)].map((_, i) => (
+        {!isMobile && [...Array(20)].map((_, i) => (
           <motion.div
             key={`glow-${i}`}
             className="absolute rounded-full pointer-events-none"
@@ -647,12 +648,13 @@ export default function AboutPage() {
               >
                 <div className="relative aspect-video bg-black">
                   <iframe
-                    src={`https://www.youtube.com/embed/${video.id}`}
+                    src={`https://www.youtube-nocookie.com/embed/${video.id}`}
                     title={`Abjee Travel video ${i + 1}`}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowFullScreen
                     className="w-full h-full"
                     loading="lazy"
+                    referrerPolicy="strict-origin-when-cross-origin"
                   />
                 </div>
               </motion.div>
