@@ -2853,7 +2853,7 @@ const ChatRoomsList: React.FC = () => {
                   </span>
                 </div>
                 <motion.div 
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                  className="grid grid-cols-1 gap-6"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.5 }}
@@ -2870,7 +2870,7 @@ const ChatRoomsList: React.FC = () => {
                         layout
                       >
                         <Card
-                          className="cursor-pointer h-full border border-white/20 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden group relative"
+                          className="cursor-pointer h-full bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-3xl overflow-hidden group relative"
                           onClick={() => router.push(`/chat/room/${room.id}`)}
                         >
                           {/* Sliding Background Images Carousel */}
@@ -2955,7 +2955,18 @@ const ChatRoomsList: React.FC = () => {
                             
                             {/* Action buttons */}
                             {user && (
-                              <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
+                              <div className="flex items-center gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
+                                <Button
+                                  size="sm"
+                                  className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/chat/room/${room.id}`);
+                                  }}
+                                >
+                                  <MessageCircle className="h-4 w-4 mr-1.5" />
+                                  Chat Now
+                                </Button>
                                 {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) && (
                                   <Button
                                     variant="outline"

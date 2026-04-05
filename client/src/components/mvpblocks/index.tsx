@@ -73,8 +73,13 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   // Fetch all 4 sources in parallel — one failure never affects the rest
-  const fetchStats = useCallback(async () => {
-    setLoading(true);
+  const fetchStats = useCallback(async (options?: { withLoader?: boolean }) => {
+    const withLoader = options?.withLoader ?? false;
+
+    if (withLoader) {
+      setLoading(true);
+    }
+
     try {
       const response = await adminAPI.getStats();
       const data = response?.data?.data ?? {};
@@ -97,7 +102,9 @@ export default function AdminDashboard() {
       }
       setStats(STAT_DEFAULTS);
     } finally {
-      setLoading(false);
+      if (withLoader) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -115,7 +122,7 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchStats();
+    fetchStats({ withLoader: true });
     fetchHomePageSetting();
     
     // Poll stats every 30 seconds to get updated data

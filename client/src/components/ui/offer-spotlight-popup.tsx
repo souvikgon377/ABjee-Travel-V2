@@ -113,10 +113,10 @@ export default function OfferSpotlightPopup({
             <button
               type="button"
               onClick={closePopup}
-              className="absolute right-4 top-4 z-30 rounded-full border border-rose-300/60 bg-white/85 p-2 text-rose-700 shadow-lg transition-all hover:scale-105 hover:bg-white active:scale-95 dark:bg-black/40 dark:text-rose-200"
+              className="absolute right-4 top-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full border border-rose-300/60 bg-white/85 p-0 text-rose-700 leading-none shadow-lg transition-all hover:scale-105 hover:bg-white active:scale-95 dark:bg-black/40 dark:text-rose-200 sm:h-11 sm:w-11"
               aria-label="Close offer popup"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5 sm:h-4 sm:w-4" />
             </button>
 
             <div className="relative">
