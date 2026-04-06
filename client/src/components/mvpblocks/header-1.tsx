@@ -21,38 +21,27 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: 'Home', href: '/' },
-  // { name: 'Hotel/Hostel  Booking', href: '#hotel_booking' },
-  // { name: ' Bike/Car Rentals', href: '#hotel_booking' },
-  // { name: 'Customised Tour Packages', href: '#hotel_booking' },
   { name: 'Community', href: '/chat' },
   { name: 'Booking Categories', href: '/booking-categories' },
-  // {
-  //   name: 'Booking',
-  //   href: '',
-  //   hasDropdown: true,
-  //   dropdownItems: [
-  //     {
-  //       name: 'Hotel/Hostels or Tour Packages',
-  //       href: '/hotel-booking',
-  //       description: '🏨✈️ Book Custom Hotel & Tour Packages in One Click',
-  //     },
-  //     // {
-  //     //   name: 'Tour Packages',
-  //     //   href: '/',
-  //     //   description: 'Tour Packages with Customization',
-  //     // },
-      
-  //     { name: 'Car Rents',
-  //       href: '/car-rentals',
-  //        description: 'Car Rentals' },
-  //     { name: 'Bike Rents',
-  //       href: '/bike-rentals',
-  //        description: 'Book Your Personal Bike' },
-  //   ],
-  // },
   { name: 'About', href: '/about' },
   { name: 'Pricing', href: '/pricing' },
 ];
+
+// Move variants outside component to prevent re-creation
+const headerVariants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+};
+
+const mobileMenuVariants = {
+  closed: { opacity: 0, scaleY: 0, transformOrigin: 'top' },
+  open: { opacity: 1, scaleY: 1, transformOrigin: 'top' },
+};
+
+const dropdownVariants = {
+  hidden: { opacity: 0, y: -10, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1 },
+};
 
 type NotificationItem = {
   id: string;
@@ -249,30 +238,6 @@ export default function Header1() {
       if (scrollTimeout) clearTimeout(scrollTimeout);
     };
   }, []);
-
-  const headerVariants = {
-    initial: { y: -100, opacity: 0 },
-    animate: { y: 0, opacity: 1 },
-  };
-
-  const mobileMenuVariants = {
-    closed: { opacity: 0, scaleY: 0, transformOrigin: 'top' },
-    open: { opacity: 1, scaleY: 1, transformOrigin: 'top' },
-  };
-
-  const mobileMenuItemVariants = {
-    closed: { opacity: 0, x: -20 },
-    open: (i: number) => ({
-      opacity: 1,
-      x: 0,
-      transition: { delay: i * 0.08, duration: 0.25, ease: 'easeOut' },
-    }),
-  };
-
-  const dropdownVariants = {
-    hidden: { opacity: 0, y: -10, scale: 0.95 },
-    visible: { opacity: 1, y: 0, scale: 1 },
-  };
 
   return (
     <motion.header
