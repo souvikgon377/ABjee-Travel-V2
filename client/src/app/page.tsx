@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import HomeRouteGate from "@/components/home/home-route-gate";
+import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
+import LandingPage from "@/screens/LandingPage";
 import { publicAsset } from "@/lib/publicAsset";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
@@ -35,7 +37,34 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootPage() {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+
+export default async function RootPage() {
+  try {
+    const requestHeaders = await headers();
+    const host = requestHeaders.get('host');
+    const protocol = requestHeaders.get('x-forwarded-proto') ?? 'http';
+
+    const settingsResponse = await fetch(new URL('/api/public/settings', `${protocol}://${host}`), {
+      cache: 'no-store',
+    });
+
+    const settingsPayload = await settingsResponse.json().catch(() => null);
+    const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : true;
+
+    if (homePageEnabled === false) {
+      redirect('/chat');
+    }
+  } catch (error) {
+    // Re-throw Next.js redirect errors - check for digest which is how Next.js marks redirects
+    if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error;
+    }
+    // Fail open: if settings cannot be read, keep the home page accessible.
+  }
+
   const webSiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -66,7 +95,7 @@ export default function RootPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
       />
-      <HomeRouteGate />
+      <LandingPage />
     </>
   );
 }

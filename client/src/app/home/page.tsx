@@ -1,62 +1,34 @@
-"use client";
+import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
+import HomePage from '@/screens/HomePage';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import HomePage from "@/screens/HomePage";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
 
-export default function HomeRoute() {
-  const router = useRouter();
-  const [loadingSetting, setLoadingSetting] = useState(true);
-  const [homePageEnabled, setHomePageEnabled] = useState(true);
+export default async function HomeRoute() {
+  try {
+    const requestHeaders = await headers();
+    const host = requestHeaders.get('host');
+    const protocol = requestHeaders.get('x-forwarded-proto') ?? 'http';
 
-  useEffect(() => {
-    let isMounted = true;
+    const settingsResponse = await fetch(new URL('/api/public/settings', `${protocol}://${host}`), {
+      cache: 'no-store',
+    });
 
-    const loadHomePageSetting = async () => {
-      try {
-        const response = await fetch('/api/public/settings', {
-          method: 'GET',
-          cache: 'no-store',
-        });
+    const settingsPayload = await settingsResponse.json().catch(() => null);
+    const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : true;
 
-        const payload = await response.json().catch(() => null);
-        const enabledValue = payload?.success
-          ? payload?.data?.homePageEnabled
-          : true;
-
-        if (!isMounted) {
-          return;
-        }
-
-        setHomePageEnabled(enabledValue !== false);
-      } catch {
-        if (isMounted) {
-          setHomePageEnabled(true);
-        }
-      } finally {
-        if (isMounted) {
-          setLoadingSetting(false);
-        }
-      }
-    };
-
-    loadHomePageSetting();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!loadingSetting && !homePageEnabled) {
-      router.replace('/chat');
+    if (homePageEnabled === false) {
+      redirect('/chat');
     }
-  }, [homePageEnabled, loadingSetting, router]);
-
-  if (loadingSetting || !homePageEnabled) {
-    return null;
+  } catch (error) {
+    // Re-throw Next.js redirect errors - check for digest which is how Next.js marks redirects
+    if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error;
+    }
+    // Fail open if the setting cannot be read.
   }
 
   return <HomePage />;
 }
-
