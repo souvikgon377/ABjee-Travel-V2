@@ -232,11 +232,22 @@ export default function Header1() {
   const totalCount = notifications.length;
 
   useEffect(() => {
+    let scrollTimeout: NodeJS.Timeout | null = null;
+    
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
+      if (scrollTimeout) return;
+      
+      scrollTimeout = setTimeout(() => {
+        setIsScrolled(window.scrollY > 20);
+        scrollTimeout = null;
+      }, 50);
     };
+    
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+    };
   }, []);
 
   const headerVariants = {
@@ -245,8 +256,17 @@ export default function Header1() {
   };
 
   const mobileMenuVariants = {
-    closed: { opacity: 0, height: 0 },
-    open: { opacity: 1, height: 'auto' },
+    closed: { opacity: 0, scaleY: 0, transformOrigin: 'top' },
+    open: { opacity: 1, scaleY: 1, transformOrigin: 'top' },
+  };
+
+  const mobileMenuItemVariants = {
+    closed: { opacity: 0, x: -20 },
+    open: (i: number) => ({
+      opacity: 1,
+      x: 0,
+      transition: { delay: i * 0.08, duration: 0.25, ease: 'easeOut' },
+    }),
   };
 
   const dropdownVariants = {
@@ -259,6 +279,7 @@ export default function Header1() {
       className={[
         'fixed left-0 right-0 top-0 z-50',
         'transition-[backdrop-filter,background-color,box-shadow] duration-300',
+        'will-change-[background-color,backdrop-filter,box-shadow,transform]',
         isScrolled
           ? 'backdrop-blur-xl bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-border/50'
           : 'backdrop-blur-md bg-background/45 border-b border-border/35',
@@ -267,6 +288,7 @@ export default function Header1() {
       initial="initial"
       animate="animate"
       transition={{ duration: 0.3, ease: 'easeInOut' }}
+      style={{ perspective: '1000px', backfaceVisibility: 'hidden' }}
     >
       <div className="w-full px-3 sm:px-5 lg:px-6 xl:px-8">
         <div className="relative flex h-16 items-center lg:h-20">
@@ -340,12 +362,13 @@ export default function Header1() {
                   <AnimatePresence>
                     {activeDropdown === item.name && (
                       <motion.div
-                        className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-100 overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur-lg"
+                        className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-100 overflow-hidden rounded-xl border border-border bg-background/95 shadow-xl backdrop-blur-lg will-change-[transform,opacity]"
                         variants={dropdownVariants}
                         initial="hidden"
                         animate="visible"
                         exit="hidden"
-                        transition={{ duration: 0.2 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        style={{ backfaceVisibility: 'hidden' }}
                       >
                         {item.dropdownItems?.map((dropdownItem) => (
                           <Link
@@ -508,65 +531,78 @@ export default function Header1() {
           {/* Mobile: Theme toggle + Hamburger */}
           <div className="ml-auto flex items-center space-x-2 lg:hidden">
             <ModeToggle />
-            <motion.button
-              className="rounded-lg p-2 transition-colors duration-200 hover:bg-muted"
+            <button
+              className="rounded-lg p-2 transition-colors duration-200 hover:bg-muted active:scale-95"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              whileTap={{ scale: 0.95 }}
+              aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
                 <X className="h-6 w-6" />
               ) : (
                 <Menu className="h-6 w-6" />
               )}
-            </motion.button>
+            </button>
           </div>
         </div>
 
         <AnimatePresence>
           {isMobileMenuOpen && (
             <motion.div
-              className="overflow-hidden lg:hidden"
+              className="overflow-hidden lg:hidden will-change-[transform,opacity]"
               variants={mobileMenuVariants}
               initial="closed"
               animate="open"
               exit="closed"
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              transition={{ duration: 0.28, ease: 'easeInOut' }}
             >
-              <div className="mt-4 space-y-2 rounded-xl border border-border bg-background/95 py-4 shadow-xl backdrop-blur-lg">
-                {visibleNavItems.map((item) => (
-                  item.hasDropdown ? (
-                    <div key={item.name} className="px-4 py-2">
-                      <div className="font-medium text-foreground mb-2">{item.name}</div>
-                      <div className="pl-4 space-y-1">
-                        {item.dropdownItems?.map((dropdownItem) => (
-                          <Link
-                            key={dropdownItem.name}
-                            href={dropdownItem.href}
-                            className="block py-2 text-sm text-muted-foreground transition-colors duration-200 hover:text-rose-500"
-                            onClick={() => setIsMobileMenuOpen(false)}
-                          >
-                            {dropdownItem.name}
-                          </Link>
-                        ))}
+              <div className="mt-2 space-y-1 rounded-xl border border-border bg-background/95 py-3 shadow-xl backdrop-blur-lg">
+                {visibleNavItems.map((item, i) => (
+                  <motion.div
+                    key={item.name}
+                    custom={i}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={isMobileMenuOpen ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
+                    transition={{ delay: isMobileMenuOpen ? i * 0.06 : 0, duration: 0.25, ease: 'easeOut' }}
+                    className="will-change-[transform,opacity]"
+                  >
+                    {item.hasDropdown ? (
+                      <div className="px-4 py-2">
+                        <div className="font-medium text-foreground mb-2">{item.name}</div>
+                        <div className="pl-4 space-y-1">
+                          {item.dropdownItems?.map((dropdownItem) => (
+                            <Link
+                              key={dropdownItem.name}
+                              href={dropdownItem.href}
+                              className="block py-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-rose-500"
+                              onClick={() => setIsMobileMenuOpen(false)}
+                            >
+                              {dropdownItem.name}
+                            </Link>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={[
-                        'block px-4 py-3 font-medium transition-colors duration-200',
-                        isActive(item.href)
-                          ? 'text-rose-500 bg-rose-500/10 rounded-lg'
-                          : 'text-foreground hover:bg-muted',
-                      ].join(' ')}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      {item.name}
-                    </Link>
-                  )
+                    ) : (
+                      <Link
+                        href={item.href}
+                        className={[
+                          'block px-4 py-3 font-medium transition-colors duration-150',
+                          isActive(item.href)
+                            ? 'text-rose-500 bg-rose-500/10 rounded-lg'
+                            : 'text-foreground hover:bg-muted',
+                        ].join(' ')}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        {item.name}
+                      </Link>
+                    )}
+                  </motion.div>
                 ))}
-                <div className="space-y-2 px-4 py-2">
+                <motion.div
+                  className="space-y-2 px-4 py-2 will-change-[transform,opacity]"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={isMobileMenuOpen ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
+                  transition={{ delay: isMobileMenuOpen ? visibleNavItems.length * 0.06 : 0, duration: 0.25, ease: 'easeOut' }}
+                >
                   {currentUser ? (
                     <>
                       <div className="flex items-center space-x-3 px-4 py-3 bg-muted rounded-lg">
@@ -636,7 +672,7 @@ export default function Header1() {
                       </Link>
                     </>
                   )}
-                </div>
+                </motion.div>
               </div>
             </motion.div>
           )}

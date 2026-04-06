@@ -148,6 +148,53 @@ html {
   border-radius: 4px;
 }
 
+/* ========================================
+   HIGH REFRESH RATE OPTIMIZATION (120Hz+, 144Hz+)
+   ======================================== */
+
+/* GPU acceleration for animations */
+html {
+  scroll-behavior: smooth;
+  /* Enable GPU acceleration for smooth 120Hz/144Hz animations */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Optimize motion animations */
+@supports (animation-timeline: scroll()) {
+  * {
+    /* For high refresh rate displays, ensure smooth frame rates */
+    image-rendering: -webkit-optimize-contrast;
+  }
+}
+
+/* Prefer reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* GPU-accelerated transitions */
+.will-change-transform {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+body {
+  /* Enable sub-pixel rendering for high refresh rate displays */
+  -webkit-backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
