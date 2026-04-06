@@ -269,9 +269,9 @@ export default function AboutPage() {
     [isSmallMobile],
   );
 
-  const slowParticleCount = isSmallMobile ? 30 : 80;
-  const fastParticleCount = isSmallMobile ? 22 : 70;
-  const glowParticleCount = isSmallMobile ? 8 : 20;
+  const slowParticleCount = isSmallMobile ? 8 : 80;
+  const fastParticleCount = isSmallMobile ? 5 : 70;
+  const glowParticleCount = isSmallMobile ? 2 : 20;
 
   const socialLinks = content.socialLinks;
   const youtubeVideos = content.youtubeVideos;
@@ -284,7 +284,7 @@ export default function AboutPage() {
       {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           HERO  â€“  Dynamic animated background
          â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      <section className={`relative w-full ${isSmallMobile ? 'min-h-[88vh]' : 'h-screen'} flex items-center justify-center overflow-hidden`}>
+      <section className={`relative w-full ${isSmallMobile ? 'min-h-[90vh]' : 'h-screen'} flex flex-col items-center justify-center overflow-hidden pt-6 sm:pt-8 md:pt-0`}>
 
         {/* â”€â”€ Base gradient â€” light: warm rose/violet, dark: deep slate/rose â”€â”€ */}
         <div className="absolute inset-0 bg-linear-to-br from-rose-50 via-violet-50/70 to-orange-50 dark:from-slate-950 dark:via-rose-950/60 dark:to-slate-900" />
@@ -439,7 +439,7 @@ export default function AboutPage() {
         <div className="absolute bottom-0 left-0 right-0 h-72 bg-linear-to-t from-background via-background/60 to-transparent pointer-events-none" />
 
         {/* â”€â”€ Floating micro-particles (layer 1 â€” slow drifters) â”€â”€ */}
-        {[...Array(slowParticleCount)].map((_, i) => (
+        {!isSmallMobile && [...Array(slowParticleCount)].map((_, i) => (
           <motion.div
             key={`slow-${i}`}
             className="absolute rounded-full pointer-events-none"
@@ -530,14 +530,14 @@ export default function AboutPage() {
         ))}
 
         {/* â”€â”€ Hero copy â”€â”€ */}
-        <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
+        <div className="relative z-10 text-center px-4 sm:px-6 md:px-8 max-w-4xl mx-auto py-6 sm:py-0">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2 }}
-            className="mb-5"
+            className="mb-3 sm:mb-5"
           >
-            <span className="inline-block px-4 py-1.5 rounded-full bg-rose-500/10 dark:bg-primary/20 border border-rose-400/40 dark:border-primary/40 text-rose-600 dark:text-primary text-sm font-semibold tracking-widest uppercase backdrop-blur-sm">
+            <span className="inline-block px-4 py-1.5 rounded-full bg-rose-500/10 dark:bg-primary/20 border border-rose-400/40 dark:border-primary/40 text-rose-600 dark:text-primary text-xs sm:text-sm font-semibold tracking-widest uppercase backdrop-blur-sm">
               {content.hero.badge}
             </span>
           </motion.div>
@@ -546,7 +546,7 @@ export default function AboutPage() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.4 }}
-            className="text-5xl md:text-7xl font-black leading-tight tracking-tight mb-6 text-foreground"
+            className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black leading-tight tracking-tight mb-3 sm:mb-6 text-foreground"
           >
             {content.hero.titleLine1}
             <br />
@@ -557,7 +557,7 @@ export default function AboutPage() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.65 }}
-            className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
+            className="text-sm sm:text-base md:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
           >
             {content.hero.subtitle}
           </motion.p>
@@ -566,17 +566,17 @@ export default function AboutPage() {
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.9 }}
-            className="mt-8 flex gap-4 justify-center flex-wrap"
+            className="mt-4 sm:mt-8 flex gap-3 sm:gap-4 justify-center flex-wrap"
           >
             <a
               href="#videos"
-              className="px-7 py-3.5 bg-primary text-white rounded-full font-semibold hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-primary/30"
+              className="px-5 sm:px-7 py-2.5 sm:py-3.5 bg-primary text-white rounded-full font-semibold text-sm sm:text-base hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-primary/30"
             >
               {content.hero.primaryButtonLabel}
             </a>
             <a
               href="#team"
-              className="px-7 py-3.5 bg-foreground/8 dark:bg-white/10 border border-border dark:border-white/30 text-foreground rounded-full font-semibold hover:bg-foreground/12 dark:hover:bg-white/20 transition-all hover:scale-105 active:scale-95 backdrop-blur-sm"
+              className="px-5 sm:px-7 py-2.5 sm:py-3.5 bg-foreground/8 dark:bg-white/10 border border-border dark:border-white/30 text-foreground rounded-full font-semibold text-sm sm:text-base hover:bg-foreground/12 dark:hover:bg-white/20 transition-all hover:scale-105 active:scale-95 backdrop-blur-sm"
             >
               {content.hero.secondaryButtonLabel}
             </a>
