@@ -18,6 +18,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth } from '../../lib/firebase';
 import { useRouter } from 'next/navigation';
+import confetti from 'canvas-confetti';
 
 const plans = [
   {
@@ -82,6 +83,7 @@ export default function SimplePricing() {
   const [frequency, setFrequency] = useState<string>('monthly');
   const [mounted, setMounted] = useState(false);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
+  const [paymentConfirmation, setPaymentConfirmation] = useState<string | null>(null);
   const { currentUser, userProfile } = useAuth();
   const router = useRouter();
 
@@ -107,6 +109,55 @@ export default function SimplePricing() {
     return null;
   };
 
+  const triggerPaymentFireworks = useCallback(() => {
+    const duration = 5 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 };
+
+    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+    const interval = window.setInterval(() => {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        window.clearInterval(interval);
+        return;
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+      });
+
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+      });
+    }, 250);
+  }, []);
+
+  const lockBodyScroll = useCallback(() => {
+    if (typeof document === 'undefined') {
+      return () => {};
+    }
+
+    const body = document.body;
+    const previousOverflow = body.style.overflow;
+    const previousTouchAction = body.style.touchAction;
+
+    body.style.overflow = 'hidden';
+    body.style.touchAction = 'none';
+
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.style.touchAction = previousTouchAction;
+    };
+  }, []);
+
   const handleSubscribe = useCallback(async (planId: string) => {
     const planType = getPlanType(planId);
 
@@ -127,6 +178,8 @@ export default function SimplePricing() {
     }
 
     setProcessingPlan(planId);
+    let releaseBodyScrollLock: (() => void) | null = null;
+    let checkoutOpened = false;
 
     try {
       const scriptReady = await loadRazorpayScript();
@@ -155,6 +208,7 @@ export default function SimplePricing() {
       }
 
       const orderData = orderPayload.data;
+      releaseBodyScrollLock = lockBodyScroll();
 
       const checkout = new (window as any).Razorpay({
         key: orderData.keyId,
@@ -164,6 +218,11 @@ export default function SimplePricing() {
         description: `${orderData.planName} (${frequency})`,
         order_id: orderData.orderId,
         handler: async (response: any) => {
+          if (releaseBodyScrollLock) {
+            releaseBodyScrollLock();
+            releaseBodyScrollLock = null;
+          }
+
           try {
             const verifyRes = await fetch('/api/subscriptions/razorpay/verify', {
               method: 'POST',
@@ -183,8 +242,15 @@ export default function SimplePricing() {
               throw new Error(verifyPayload?.message || 'Payment verification failed');
             }
 
-            alert('Subscription activated successfully.');
-            router.push('/profile');
+            const currentScrollY = window.scrollY;
+            triggerPaymentFireworks();
+            setPaymentConfirmation('Payment confirmed successfully. Your subscription is now active.');
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: currentScrollY, behavior: 'auto' });
+            });
+            setTimeout(() => {
+              router.push('/profile');
+            }, 2200);
           } catch (error: any) {
             alert(error?.message || 'Payment verification failed. Please contact support.');
           }
@@ -198,18 +264,30 @@ export default function SimplePricing() {
         },
         modal: {
           ondismiss: () => {
+            if (releaseBodyScrollLock) {
+              releaseBodyScrollLock();
+              releaseBodyScrollLock = null;
+            }
             setProcessingPlan(null);
           },
         },
       });
 
+      checkoutOpened = true;
       checkout.open();
     } catch (error: any) {
+      if (releaseBodyScrollLock) {
+        releaseBodyScrollLock();
+        releaseBodyScrollLock = null;
+      }
       alert(error?.message || 'Failed to start payment. Please try again.');
     } finally {
+      if (!checkoutOpened && releaseBodyScrollLock) {
+        releaseBodyScrollLock();
+      }
       setProcessingPlan(null);
     }
-  }, [currentUser, frequency, loadRazorpayScript, razorpayKeyId, router, userProfile?.displayName, userProfile?.email]);
+  }, [currentUser, frequency, loadRazorpayScript, lockBodyScroll, razorpayKeyId, router, triggerPaymentFireworks, userProfile?.displayName, userProfile?.email]);
 
   useEffect(() => {
     setMounted(true);
@@ -285,6 +363,16 @@ export default function SimplePricing() {
             </TabsList>
           </Tabs>
         </motion.div>
+
+        {paymentConfirmation && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed left-1/2 top-24 z-120 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-3 text-sm font-medium text-emerald-800 shadow-lg"
+          >
+            {paymentConfirmation}
+          </motion.div>
+        )}
 
         <div className="mt-8 grid w-full max-w-6xl grid-cols-1 gap-6 md:grid-cols-3">
           {plans.map((plan, index) => (
