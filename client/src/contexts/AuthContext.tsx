@@ -62,6 +62,7 @@ interface UserProfile {
   zipCode?: string;
   username?: string;
   role?: string;
+  subscription?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -123,6 +124,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       zipCode: profile.zipCode,
       username: profile.username,
       role: profile.role,
+      subscription:
+        profile.subscription && typeof profile.subscription === 'object'
+          ? profile.subscription
+          : undefined,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     } as UserProfile;

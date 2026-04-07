@@ -145,16 +145,33 @@ export default function SimplePricing() {
       return () => {};
     }
 
+    const scrollY = window.scrollY;
     const body = document.body;
+    const html = document.documentElement;
     const previousOverflow = body.style.overflow;
+    const previousPosition = body.style.position;
+    const previousTop = body.style.top;
+    const previousWidth = body.style.width;
     const previousTouchAction = body.style.touchAction;
 
+    html.classList.add('payment-modal-open');
+    body.classList.add('payment-modal-open');
+
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
     body.style.overflow = 'hidden';
     body.style.touchAction = 'none';
 
     return () => {
+      body.style.position = previousPosition;
+      body.style.top = previousTop;
+      body.style.width = previousWidth;
       body.style.overflow = previousOverflow;
       body.style.touchAction = previousTouchAction;
+      html.classList.remove('payment-modal-open');
+      body.classList.remove('payment-modal-open');
+      window.scrollTo({ top: scrollY, behavior: 'auto' });
     };
   }, []);
 

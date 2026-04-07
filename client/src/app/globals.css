@@ -190,9 +190,15 @@ html {
 }
 
 body {
-  /* Enable sub-pixel rendering for high refresh rate displays */
-  -webkit-backface-visibility: hidden;
-  -webkit-perspective: 1000px;
+  /* Keep root layout stable for fixed-position popups (Razorpay, overlays). */
+  -webkit-backface-visibility: visible;
+}
+
+html.payment-modal-open,
+body.payment-modal-open {
+  scroll-behavior: auto !important;
+  transform: none !important;
+  perspective: none !important;
 }
 
 @layer base {
@@ -320,6 +326,7 @@ body {
 .hover-lift {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
+
 
 .hover-lift:hover {
   transform: translateY(-4px);

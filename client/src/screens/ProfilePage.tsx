@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Eye, EyeOff, Loader2, Upload, UserCircle2 } from 'lucide-react';
+import { Crown, Eye, EyeOff, Loader2, Upload, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/mvpblocks/header-1';
 import { usersAPI } from '../lib/api';
 import { uploadImageToR2 } from '../lib/r2Upload';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { getSubscriptionInfo, hasPaidAccess } from '../lib/subscriptionPolicy';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -106,6 +107,7 @@ export default function ProfilePage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [subscriptionSourceProfile, setSubscriptionSourceProfile] = useState<any>(userProfile || null);
   const isOnboarding = searchParams.get('onboarding') === '1';
 
   const derivedNamesFromGoogle = useMemo(() => {
@@ -134,6 +136,65 @@ export default function ProfilePage() {
   const profilePhoto = useMemo(() => {
     return imagePreviewUrl || resolveAvatarUrl(userProfile, currentUser as Record<string, unknown> | null | undefined) || '';
   }, [imagePreviewUrl, userProfile, currentUser]);
+
+  const subscriptionInfo = useMemo(() => getSubscriptionInfo(subscriptionSourceProfile), [subscriptionSourceProfile]);
+  const isPaidSubscription = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+
+  const subscriptionTypeLabel = useMemo(() => {
+    if (!subscriptionInfo.type || subscriptionInfo.type === 'free') {
+      return 'Free';
+    }
+
+    return subscriptionInfo.type === 'premium' ? 'Premium' : 'Paid';
+  }, [subscriptionInfo.type]);
+
+  const subscriptionValidityLabel = useMemo(() => {
+    if (!subscriptionInfo.isActive || subscriptionInfo.type === 'free') {
+      return 'No active paid subscription';
+    }
+
+    if (!subscriptionInfo.endDate) {
+      return 'Active';
+    }
+
+    return `Valid until ${subscriptionInfo.endDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })}`;
+  }, [subscriptionInfo.endDate, subscriptionInfo.isActive, subscriptionInfo.type]);
+
+  const subscriptionStartLabel = useMemo(() => {
+    if (!subscriptionInfo.startDate) {
+      return 'Not available';
+    }
+
+    return subscriptionInfo.startDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [subscriptionInfo.startDate]);
+
+  const subscriptionEndDateLabel = useMemo(() => {
+    if (!subscriptionInfo.endDate) {
+      return 'Not available';
+    }
+
+    return subscriptionInfo.endDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }, [subscriptionInfo.endDate]);
+
+  const subscriptionStatusLabel = useMemo(() => {
+    if (subscriptionInfo.type === 'free') {
+      return 'Free';
+    }
+
+    return subscriptionInfo.isActive && hasPaidAccess(subscriptionInfo) ? 'Active' : 'Inactive';
+  }, [subscriptionInfo]);
 
   useEffect(() => {
     if (!loading && !currentUser) {
@@ -169,13 +230,19 @@ export default function ProfilePage() {
         if (userProfile) {
           hydrateForm(userProfile);
           setSavedProfileDetails(mapSavedDetails(userProfile));
-          return;
+          setSubscriptionSourceProfile(userProfile);
+
+          const existingSubscription = (userProfile as any)?.subscription;
+          if (existingSubscription && typeof existingSubscription === 'object') {
+            return;
+          }
         }
 
         const response = await usersAPI.getProfile();
         const fetchedUser = response?.data?.data?.user || {};
         hydrateForm(fetchedUser);
         setSavedProfileDetails(mapSavedDetails(fetchedUser));
+        setSubscriptionSourceProfile(fetchedUser);
       } catch {
         const fallbackUser = {
           firstName: derivedNamesFromGoogle.firstName,
@@ -183,9 +250,11 @@ export default function ProfilePage() {
           city: userProfile?.city || '',
           address: userProfile?.address || '',
           zipCode: userProfile?.zipCode || '',
+          subscription: (userProfile as any)?.subscription,
         };
         hydrateForm(fallbackUser);
         setSavedProfileDetails(mapSavedDetails(fallbackUser));
+        setSubscriptionSourceProfile(fallbackUser);
         setError('Unable to load your profile right now. Please refresh and try again.');
       } finally {
         setPageLoading(false);
@@ -323,6 +392,7 @@ export default function ProfilePage() {
         .then((refreshed) => {
           const refreshedUser = refreshed?.data?.data?.user || {};
           setSavedProfileDetails(mapSavedDetails(refreshedUser));
+          setSubscriptionSourceProfile(refreshedUser);
         })
         .catch(() => {
           // Keep optimistic values if refresh fails.
@@ -372,10 +442,50 @@ export default function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{displayName}</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <span>{displayName}</span>
+              {isPaidSubscription && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                  <Crown className="h-3.5 w-3.5" />
+                  {subscriptionTypeLabel}
+                </span>
+              )}
+            </CardTitle>
             <CardDescription>{currentUser?.email}</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/10">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                Subscription Details
+              </h2>
+              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <div>
+                  <p className="text-muted-foreground">Subscription Type</p>
+                  <p className="font-medium text-foreground">{subscriptionTypeLabel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <p className="font-medium text-foreground">{subscriptionStatusLabel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Billing Cycle</p>
+                  <p className="font-medium text-foreground">{subscriptionInfo.interval}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Valid From</p>
+                  <p className="font-medium text-foreground">{subscriptionStartLabel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Valid Until</p>
+                  <p className="font-medium text-foreground">{subscriptionEndDateLabel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Validity</p>
+                  <p className="font-medium text-foreground">{subscriptionValidityLabel}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="mb-6 rounded-lg border bg-muted/40 p-4">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Saved Profile Details</h2>
               <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
