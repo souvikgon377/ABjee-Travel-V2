@@ -90,11 +90,16 @@ export default function Header1() {
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoaded, setNotificationsLoaded] = useState(false);
+  const [profileAvatarError, setProfileAvatarError] = useState(false);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
+
+  useEffect(() => {
+    setProfileAvatarError(false);
+  }, [profileAvatar]);
 
   const goToProfile = () => {
     setIsMobileMenuOpen(false);
@@ -444,12 +449,14 @@ export default function Header1() {
                     aria-label="Open profile"
                     title="Open profile"
                   >
-                    {profileAvatar ? (
+                    {profileAvatar && !profileAvatarError ? (
                       <img
                         src={profileAvatar}
                         alt="Profile"
                         className="w-8 h-8 rounded-full border-2 border-rose-500"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={() => setProfileAvatarError(true)}
                       />
                     ) : (
                       <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
@@ -578,11 +585,13 @@ export default function Header1() {
                           aria-label="Open profile"
                           title="Open profile"
                         >
-                          {profileAvatar ? (
+                          {profileAvatar && !profileAvatarError ? (
                             <img
                               src={profileAvatar}
                               alt="Profile"
                               className="w-10 h-10 rounded-full border-2 border-rose-500"
+                              referrerPolicy="no-referrer"
+                              onError={() => setProfileAvatarError(true)}
                             />
                           ) : (
                             <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white font-bold">

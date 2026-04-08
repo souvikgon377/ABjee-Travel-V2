@@ -459,6 +459,110 @@ const ChatRoomsList: React.FC = () => {
     () => resolveAvatarUrl(userProfile, user),
     [user, userProfile]
   );
+  const countryUsersCarousel = countryUsers.length > 0 ? (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45 }}
+      className="rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
+    >
+      <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
+        <div className="flex items-center gap-3">
+          <motion.div
+            className="p-2.5 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 shadow-lg"
+            animate={{ rotate: [-3, 3, -3] }}
+            transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <Users className="h-5 w-5 text-white" />
+          </motion.div>
+          <div>
+            <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight bg-linear-to-r from-cyan-700 via-sky-600 to-blue-600 bg-clip-text text-transparent">
+              Travelers From Different Countries
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+              Live user highlights pulled from database profiles
+            </p>
+          </div>
+        </div>
+
+        <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+          <Sparkles className="h-3.5 w-3.5" />
+          Live carousel
+        </div>
+      </div>
+
+      <div className="relative overflow-hidden px-3 sm:px-4 pb-5">
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-linear-to-r from-white dark:from-gray-900 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-linear-to-l from-white dark:from-gray-900 to-transparent" />
+
+        <motion.div
+          className="flex w-max items-center gap-4 px-2"
+          animate={{ x: ['0%', '-50%'] }}
+          transition={{
+            duration: Math.max(26, countryUsers.length * 2),
+            repeat: Infinity,
+            ease: 'linear',
+          }}
+        >
+          {[...countryUsers, ...countryUsers].map((countryUser, index) => {
+            const fallbackLetter = (countryUser.name[0] || countryUser.username[0] || 'U').toUpperCase();
+            const avatarSrc = resolveAvatarUrl(countryUser as Record<string, unknown>) || undefined;
+            return (
+              <motion.div
+                key={`${countryUser.id}-${countryUser.country}-${index}`}
+                className="relative flex min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
+                initial={{ opacity: 0.85, y: 4 }}
+                animate={{ opacity: 1, y: [0, -4, 0] }}
+                transition={{
+                  opacity: { duration: 0.35 },
+                  y: {
+                    duration: 3.2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    delay: (index % Math.max(1, countryUsers.length)) * 0.08,
+                  },
+                }}
+                whileHover={{ y: -8, scale: 1.02, transition: { duration: 0.2 } }}
+              >
+                <div className="absolute inset-0 rounded-2xl bg-linear-to-r from-cyan-500/0 via-cyan-500/5 to-blue-500/10 pointer-events-none" />
+
+                <Avatar className="h-14 w-14 border-2 border-cyan-300/80 dark:border-cyan-600/70 shadow-md shrink-0">
+                  <AvatarImage src={avatarSrc} alt={countryUser.name} className="object-cover" />
+                  <AvatarFallback className="bg-linear-to-br from-cyan-500 to-blue-600 text-white text-sm font-bold">
+                    {fallbackLetter}
+                  </AvatarFallback>
+                </Avatar>
+
+                <div className="min-w-0 relative z-10">
+                  <p className="text-base font-bold text-slate-800 dark:text-slate-100 truncate">
+                    {countryUser.name}
+                  </p>
+                  <p className="text-sm text-slate-500 dark:text-slate-300 truncate">
+                    @{countryUser.username}
+                  </p>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300 inline-flex items-center gap-1.5 truncate font-semibold mt-0.5">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-300" />
+                    <motion.span
+                      className="truncate"
+                      animate={{ opacity: [1, 0.45, 1], scale: [1, 1.03, 1] }}
+                      transition={{
+                        duration: 0.95,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                        delay: (index % Math.max(1, countryUsers.length)) * 0.04,
+                      }}
+                    >
+                      {countryUser.country}
+                    </motion.span>
+                  </p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+      </div>
+    </motion.div>
+  ) : null;
 
   useEffect(() => {
     const usersRef = collection(firestoreDb, 'users');
@@ -885,15 +989,18 @@ const ChatRoomsList: React.FC = () => {
 
   // Load chat communities
   useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
     try {
+      if (!user) {
+        setRooms([]);
+        setUserCreatedRoomsCount(0);
+        setUserCreatedPrivateRoomsCount(0);
+        setLoading(false);
+        return;
+      }
+
       const unsubscribe = chatService.listenToUserRooms((loadedRooms: ChatRoomType[]) => {
         setRooms(loadedRooms);
-        
+
         // Count rooms created by current user
         const createdByUser = loadedRooms.filter(room => room.createdBy === user.uid);
         setUserCreatedRoomsCount(createdByUser.length);
@@ -903,7 +1010,7 @@ const ChatRoomsList: React.FC = () => {
           room => !room.isPublic && (room.participants?.includes(user.uid) || room.createdBy === user.uid)
         ).length;
         setUserCreatedPrivateRoomsCount(privateMembershipCount);
-        
+
         setLoading(false);
       });
 
@@ -2797,8 +2904,37 @@ const ChatRoomsList: React.FC = () => {
           </div>
         </motion.div>
 
+        {!user && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="mb-8 rounded-3xl border border-rose-200/70 dark:border-rose-800/40 bg-linear-to-r from-rose-50 via-white to-orange-50 dark:from-rose-950/40 dark:via-slate-900/60 dark:to-orange-950/30 p-5 sm:p-6 shadow-xl"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-rose-300/60 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                  <Lock className="h-3.5 w-3.5" />
+                  Login required
+                </div>
+                <h2 className="mt-3 text-2xl font-bold text-foreground">
+                  Sign in to chat in General Community Chat
+                </h2>
+                <p className="mt-2 text-sm sm:text-base text-muted-foreground">
+                  The live community rooms are protected, so you need to log in before you can join the General Community Chat or see private communities.
+                </p>
+              </div>
+              <Button asChild className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-lg hover:from-rose-700 hover:to-pink-700">
+                <a href="/auth?redirect=%2Fchat">Login to Chat</a>
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {countryUsersCarousel}
+
         {/* Rooms Grid */}
-        {rooms.length === 0 ? (
+        {user && rooms.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -2988,7 +3124,7 @@ const ChatRoomsList: React.FC = () => {
               </div>
             )}
 
-            {publicRooms.length > 0 && privateRooms.length > 0 && countryUsers.length > 0 && (
+            {false && (
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}

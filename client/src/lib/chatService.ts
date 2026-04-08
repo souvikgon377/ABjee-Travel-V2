@@ -512,6 +512,35 @@ class ChatService {
   }
 
   /**
+   * Listen to public chat communities for signed-out visitors.
+   */
+  listenToPublicRooms(callback: (rooms: ChatRoom[]) => void) {
+    const roomsRef = ref(database, 'chatrooms');
+
+    return onValue(roomsRef, (snapshot) => {
+      const rooms: ChatRoom[] = [];
+
+      snapshot.forEach((childSnapshot) => {
+        const room = childSnapshot.val() as ChatRoom;
+        if (room?.isPublic) {
+          rooms.push({ id: childSnapshot.key!, ...room });
+        }
+      });
+
+      rooms.sort((a, b) =>
+        (b.lastMessage?.timestamp || b.createdAt) - (a.lastMessage?.timestamp || a.createdAt)
+      );
+
+      callback(rooms);
+    }, (error) => {
+      if ((process.env.NODE_ENV === "development")) {
+        console.error('Error listening to public chat communities:', error);
+      }
+      callback([]);
+    });
+  }
+
+  /**
    * WHY: Get single room details
    */
   async getRoom(roomId: string): Promise<ChatRoom | null> {

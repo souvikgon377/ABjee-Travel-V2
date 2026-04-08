@@ -10,11 +10,16 @@ import { resolveAvatarUrl } from '@/lib/avatar';
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
+  const [profileAvatarError, setProfileAvatarError] = useState(false);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const canAccessAdmin = userProfile?.role === 'admin' || userProfile?.role === 'owner';
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
+
+  useEffect(() => {
+    setProfileAvatarError(false);
+  }, [profileAvatar]);
 
   useEffect(() => {
     if (currentUser && canAccessAdmin) {
@@ -58,11 +63,13 @@ export default function AuthPage() {
             className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8 text-center"
           >
             <div className="mb-6">
-              {profileAvatar ? (
+              {profileAvatar && !profileAvatarError ? (
                 <img
                   src={profileAvatar}
                   alt="Profile"
                   className="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-blue-500"
+                  referrerPolicy="no-referrer"
+                  onError={() => setProfileAvatarError(true)}
                 />
               ) : (
                 <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center">
