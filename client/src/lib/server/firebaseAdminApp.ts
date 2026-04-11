@@ -47,6 +47,7 @@ const getServiceAccount = (): ServiceAccountShape | null => {
 const globalForFirebase = globalThis as unknown as { firebaseAdminApp?: App };
 
 const serviceAccount = getServiceAccount();
+const databaseUrl = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
 
 export const app =
   globalForFirebase.firebaseAdminApp ||
@@ -59,11 +60,11 @@ export const app =
             privateKey: serviceAccount.private_key,
           }),
           storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-          databaseURL: process.env.FIREBASE_DATABASE_URL,
+          databaseURL: databaseUrl,
         }
       : {
           storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-          databaseURL: process.env.FIREBASE_DATABASE_URL,
+          databaseURL: databaseUrl,
         }
   );
 

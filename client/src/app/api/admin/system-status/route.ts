@@ -6,7 +6,7 @@ import { fail, ok } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
-const SOURCE_TIMEOUT_MS = 8000;
+const SOURCE_TIMEOUT_MS = 15000;
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -51,9 +51,18 @@ export async function GET(req: NextRequest) {
     let rtdbMs = 0;
 
     try {
-      await withTimeout(getAdminRtdb().ref("status").limitToFirst(1).get(), "rtdb");
+      const rtdb = getAdminRtdb();
+
+      // Probe multiple lightweight paths and treat any successful read as healthy.
+      // This avoids false negatives when one path is slow or missing in production.
+      const probes = await Promise.allSettled([
+        withTimeout(rtdb.ref("status").limitToFirst(1).get(), "rtdb:status"),
+        withTimeout(rtdb.ref("analytics/pageViews").get(), "rtdb:analytics/pageViews"),
+        withTimeout(rtdb.ref("chatrooms").limitToFirst(1).get(), "rtdb:chatrooms"),
+      ]);
+
+      rtdbHealthy = probes.some((probe) => probe.status === "fulfilled");
       rtdbMs = Date.now() - rtdbStart;
-      rtdbHealthy = true;
     } catch {
       rtdbMs = Date.now() - rtdbStart;
       rtdbHealthy = false;
