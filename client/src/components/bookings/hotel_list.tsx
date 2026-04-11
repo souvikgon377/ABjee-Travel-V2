@@ -384,7 +384,8 @@ const HotelList: React.FC = () => {
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -10 }}
-                                        className="absolute top-full left-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden"
+                                        data-lenis-prevent
+                                        className="absolute top-full left-0 mt-2 w-96 max-h-96 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50 overflow-y-auto overflow-x-hidden"
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <div className="bg-red-800 text-white px-4 py-3 flex items-center justify-between">

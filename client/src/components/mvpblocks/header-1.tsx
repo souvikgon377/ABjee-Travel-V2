@@ -10,7 +10,6 @@ import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw } fro
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 
 interface NavItem {
   name: string;
@@ -49,6 +48,8 @@ type NotificationItem = {
   message: string;
   status: string;
   createdAt: string;
+  roomId?: string;
+  inviteToken?: string;
 };
 
 const toDate = (value: any): Date => {
@@ -77,6 +78,8 @@ const normalizeNotification = (raw: any): NotificationItem => ({
   message: String(raw?.message || 'You have a new notification.'),
   status: String(raw?.status || 'pending'),
   createdAt: toDate(raw?.createdAt).toISOString(),
+  roomId: raw?.roomId ? String(raw.roomId) : undefined,
+  inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
 });
 
 export default function Header1() {
@@ -90,6 +93,7 @@ export default function Header1() {
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoaded, setNotificationsLoaded] = useState(false);
+  const [notificationActionId, setNotificationActionId] = useState<string | null>(null);
   const [profileAvatarError, setProfileAvatarError] = useState(false);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
@@ -224,6 +228,149 @@ export default function Header1() {
     [notifications]
   );
   const totalCount = notifications.length;
+
+  const handleNotificationClick = useCallback((item: NotificationItem) => {
+    if (item.type !== 'room_invite' || !item.roomId) return;
+
+    const roomPath = item.inviteToken
+      ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+      : `/chat/room/${item.roomId}`;
+
+    setNotificationsOpen(false);
+    setIsMobileMenuOpen(false);
+    router.push(roomPath);
+  }, [router]);
+
+  const handleInvitationAction = useCallback(async (item: NotificationItem, action: 'accept' | 'reject') => {
+    if (notificationActionId) return;
+    if (item.type !== 'room_invite' || !item.roomId) return;
+
+    setNotificationActionId(item.id);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Authentication token missing');
+
+      const response = await fetch(`/api/notifications/${item.id}/${action}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const json = await response.json().catch(() => ({ success: false }));
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.message || `Failed to ${action} invitation`);
+      }
+
+      setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
+
+      if (action === 'accept') {
+        setNotificationsOpen(false);
+        const roomPath = item.inviteToken
+          ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+          : `/chat/room/${item.roomId}`;
+        setIsMobileMenuOpen(false);
+        router.push(roomPath);
+      }
+    } finally {
+      setNotificationActionId(null);
+    }
+  }, [notificationActionId, router]);
+
+  const renderNotificationPanel = (panelClassName: string) => (
+    <motion.div
+      initial={{ opacity: 0, y: -8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className={`absolute ${panelClassName} z-80 origin-top-right overflow-hidden rounded-xl border border-border bg-background shadow-xl`}
+    >
+      <div className="border-b px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Notification Centre</p>
+            <p className="text-[11px] text-muted-foreground">
+              {totalCount} total • {unreadCount} unread
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={fetchNotifications}
+            className="inline-flex items-center rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            disabled={notificationLoading}
+          >
+            <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="max-h-80 overflow-y-auto px-2 py-2">
+        {notificationError && (
+          <p className="px-2 py-2 text-xs text-destructive">{notificationError}</p>
+        )}
+
+        {!notificationError && notificationLoading && notifications.length === 0 && (
+          <p className="px-2 py-2 text-xs text-muted-foreground">Loading notifications...</p>
+        )}
+
+        {!notificationError && !notificationLoading && notifications.length === 0 && (
+          <p className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</p>
+        )}
+
+        {notifications.map((item) => {
+          const isInvite = item.type === 'room_invite' && Boolean(item.roomId);
+          return (
+            <div
+              key={item.id}
+              className={`mb-2 rounded-lg border border-border px-3 py-2 ${isInvite ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
+              onClick={isInvite ? () => handleNotificationClick(item) : undefined}
+              role={isInvite ? 'button' : undefined}
+              tabIndex={isInvite ? 0 : undefined}
+              onKeyDown={isInvite ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleNotificationClick(item);
+                }
+              } : undefined}
+            >
+              <div className="mb-1 flex items-center justify-between">
+                <p className="text-xs font-medium text-foreground capitalize">
+                  {item.type.replace('_', ' ')}
+                </p>
+                <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{item.message}</p>
+              {isInvite && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={notificationActionId === item.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleInvitationAction(item, 'accept');
+                    }}
+                    className="inline-flex items-center rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {notificationActionId === item.id ? 'Working...' : 'Accept'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={notificationActionId === item.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleInvitationAction(item, 'reject');
+                    }}
+                    className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
 
   useEffect(() => {
     let scrollTimeout: NodeJS.Timeout | null = null;
@@ -369,72 +516,25 @@ export default function Header1() {
             {currentUser ? (
               <>
                 <div className="flex items-center space-x-3">
-                  <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted"
-                        aria-label="Open notifications"
-                        title="Notifications"
-                      >
-                        <Bell className="h-4 w-4" />
-                        {totalCount > 0 && (
-                          <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
-                            {totalCount > 9 ? '9+' : totalCount}
-                          </span>
-                        )}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-80 p-0">
-                      <div className="border-b px-4 py-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold">Notification Centre</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {totalCount} total • {unreadCount} unread
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={fetchNotifications}
-                            className="inline-flex items-center rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            disabled={notificationLoading}
-                          >
-                            <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
-                            Refresh
-                          </button>
-                        </div>
-                      </div>
-                      <div className="max-h-80 overflow-y-auto px-2 py-2">
-                        {notificationError && (
-                          <p className="px-2 py-2 text-xs text-destructive">{notificationError}</p>
-                        )}
-
-                        {!notificationError && notificationLoading && notifications.length === 0 && (
-                          <p className="px-2 py-2 text-xs text-muted-foreground">Loading notifications...</p>
-                        )}
-
-                        {!notificationError && !notificationLoading && notifications.length === 0 && (
-                          <p className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</p>
-                        )}
-
-                        {notifications.map((item) => (
-                          <div
-                            key={item.id}
-                            className="mb-2 rounded-lg border border-border px-3 py-2"
-                          >
-                            <div className="mb-1 flex items-center justify-between">
-                              <p className="text-xs font-medium text-foreground capitalize">
-                                {item.type.replace('_', ' ')}
-                              </p>
-                              <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{item.message}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setNotificationsOpen((open) => !open)}
+                      className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted active:scale-95 touch-manipulation pointer-events-auto"
+                      aria-label="Open notifications"
+                      title="Notifications"
+                    >
+                      <Bell className="h-4 w-4" />
+                      {totalCount > 0 && (
+                        <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                          {totalCount > 9 ? '9+' : totalCount}
+                        </span>
+                      )}
+                    </button>
+                    <AnimatePresence>
+                      {notificationsOpen && renderNotificationPanel('right-0 top-full mt-2 w-80')}
+                    </AnimatePresence>
+                  </div>
 
                   <div className="text-right">
                     <p className="text-sm font-medium text-foreground">
@@ -500,8 +600,29 @@ export default function Header1() {
             <ModeToggle />
           </div>
 
-          {/* Mobile: Theme toggle + Hamburger */}
+          {/* Mobile: Notifications + Theme toggle + Hamburger */}
           <div className="ml-auto flex items-center space-x-2 lg:hidden">
+            {currentUser && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotificationsOpen((open) => !open)}
+                  className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted active:scale-95 touch-manipulation pointer-events-auto"
+                  aria-label="Open notifications"
+                  title="Notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                  {totalCount > 0 && (
+                    <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                      {totalCount > 9 ? '9+' : totalCount}
+                    </span>
+                  )}
+                </button>
+                <AnimatePresence>
+                  {notificationsOpen && renderNotificationPanel('right-0 top-full mt-2 w-[calc(100vw-1rem)] max-w-80')}
+                </AnimatePresence>
+              </div>
+            )}
             <ModeToggle />
             <button
               className="rounded-lg p-2 transition-colors duration-200 hover:bg-muted active:scale-95"

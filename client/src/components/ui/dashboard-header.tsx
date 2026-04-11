@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,6 +53,7 @@ type NotificationItem = {
   createdAt: string;
   status: string;
   roomId?: string;
+  inviteToken?: string;
 };
 
 const READ_NOTIFICATIONS_KEY = 'admin_dashboard_read_notifications';
@@ -95,6 +97,7 @@ function normalizeNotification(raw: any): NotificationItem {
     createdAt: created.toISOString(),
     status,
     roomId: raw?.roomId ? String(raw.roomId) : undefined,
+    inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
   };
 }
 
@@ -147,12 +150,14 @@ export const DashboardHeader = memo(
     activeFilters,
     onFilterChange,
   }: DashboardHeaderProps) => {
+    const router = useRouter();
     const [filterOpen, setFilterOpen] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [notificationLoading, setNotificationLoading] = useState(false);
     const [notificationError, setNotificationError] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [readIds, setReadIds] = useState<Set<string>>(new Set());
+    const [notificationActionId, setNotificationActionId] = useState<string | null>(null);
     const activeCount = countActiveFilters(activeFilters, currentView);
 
     useEffect(() => {
@@ -242,6 +247,50 @@ export const DashboardHeader = memo(
       const nextNotifications = notifications.filter((item) => !read.has(item.id));
       setNotifications(nextNotifications);
     }, [notifications, readIds]);
+
+    const handleNotificationClick = useCallback((item: NotificationItem) => {
+      if (item.type !== 'room_invite' || !item.roomId) return;
+
+      const roomPath = item.inviteToken
+        ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+        : `/chat/room/${item.roomId}`;
+
+      setNotificationsOpen(false);
+      router.push(roomPath);
+    }, [router]);
+
+    const handleInvitationAction = useCallback(async (item: NotificationItem, action: 'accept' | 'reject') => {
+      if (notificationActionId) return;
+      if (item.type !== 'room_invite' || !item.roomId) return;
+
+      setNotificationActionId(item.id);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Authentication token missing');
+
+        const response = await fetch(`/api/notifications/${item.id}/${action}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const json = await response.json().catch(() => ({ success: false }));
+        if (!response.ok || !json?.success) {
+          throw new Error(json?.message || `Failed to ${action} invitation`);
+        }
+
+        setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
+
+        if (action === 'accept') {
+          setNotificationsOpen(false);
+          const roomPath = item.inviteToken
+            ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+            : `/chat/room/${item.roomId}`;
+          router.push(roomPath);
+        }
+      } finally {
+        setNotificationActionId(null);
+      }
+    }, [notificationActionId, router]);
 
     const resetFilters = () => onFilterChange(DEFAULT_FILTERS);
 
@@ -517,8 +566,21 @@ export const DashboardHeader = memo(
 
                   {notifications.map((item) => {
                     const isUnread = !readIds.has(item.id);
+                    const isInvite = item.type === 'room_invite' && Boolean(item.roomId);
                     return (
-                      <div key={item.id} className="mb-1 rounded-md border p-2 last:mb-0">
+                      <div
+                        key={item.id}
+                        className={`mb-1 rounded-md border p-2 last:mb-0 ${isInvite ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
+                        onClick={isInvite ? () => handleNotificationClick(item) : undefined}
+                        role={isInvite ? 'button' : undefined}
+                        tabIndex={isInvite ? 0 : undefined}
+                        onKeyDown={isInvite ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleNotificationClick(item);
+                          }
+                        } : undefined}
+                      >
                         <div className="mb-1 flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium">{item.title}</p>
@@ -527,6 +589,32 @@ export const DashboardHeader = memo(
                           {isUnread && <span className="mt-1 h-2 w-2 rounded-full bg-blue-500" />}
                         </div>
                         <p className="text-muted-foreground line-clamp-2 text-xs">{item.message}</p>
+                        {isInvite && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={notificationActionId === item.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleInvitationAction(item, 'accept');
+                              }}
+                              className="inline-flex items-center rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {notificationActionId === item.id ? 'Working...' : 'Accept'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={notificationActionId === item.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleInvitationAction(item, 'reject');
+                              }}
+                              className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

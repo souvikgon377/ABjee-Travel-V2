@@ -418,6 +418,7 @@ const CarRental: React.FC = () => {
                                             initial={{ opacity: 0, y: -10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -10 }}
+                                            data-lenis-prevent
                                             className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 w-full max-h-64 overflow-y-auto border dark:border-gray-700"
                                         >
                                             {locations.map(loc => (
@@ -470,6 +471,7 @@ const CarRental: React.FC = () => {
                                                 initial={{ opacity: 0, y: -10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -10 }}
+                                                data-lenis-prevent
                                                 className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 w-full max-h-64 overflow-y-auto border dark:border-gray-700"
                                             >
                                                 {locations.map(loc => (

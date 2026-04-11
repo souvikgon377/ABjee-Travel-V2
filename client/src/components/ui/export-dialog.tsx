@@ -2428,7 +2428,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden gap-0 border-border">
+      <DialogContent className="max-w-lg p-0 overflow-y-auto gap-0 border-border">
         {/* ── Header ── */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}

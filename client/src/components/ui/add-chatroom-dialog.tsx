@@ -218,8 +218,8 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex w-[calc(100vw-1.5rem)] max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-125">
-        <DialogHeader className="border-b border-border px-6 pb-3 pt-6">
+      <DialogContent className="flex w-[calc(100vw-1.5rem)] max-h-[90vh] flex-col p-0 sm:max-w-125">
+        <DialogHeader className="border-b border-border px-6 pb-3 pt-6 shrink-0">
           <DialogTitle>Create New Chat Community</DialogTitle>
           <DialogDescription>Add a new chat community for users to join and communicate.</DialogDescription>
         </DialogHeader>

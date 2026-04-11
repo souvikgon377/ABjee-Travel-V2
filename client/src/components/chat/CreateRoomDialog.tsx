@@ -187,7 +187,7 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-106.25">
+      <DialogContent className="flex flex-col max-h-[90vh] overflow-y-auto sm:max-w-106.25">
         <DialogHeader>
           <DialogTitle>Create New Chat Community</DialogTitle>
           <DialogDescription>

@@ -8,6 +8,7 @@ const createNotificationData = (data: AnyObj): AnyObj => ({
   toUserId: data.toUserId || null,
   type: data.type || "room_invite",
   roomId: data.roomId || null,
+  inviteToken: data.inviteToken || null,
   roomName: data.roomName || "",
   status: data.status || "pending",
   message: data.message || "",
@@ -26,7 +27,13 @@ class NotificationService {
     return { id: ref.id, ...payload };
   }
 
-  async sendRoomInvitations(fromUserId: string, toUserIds: string[], roomId: string, roomName: string) {
+  async sendRoomInvitations(
+    fromUserId: string,
+    toUserIds: string[],
+    roomId: string,
+    roomName: string,
+    inviteToken?: string
+  ) {
     const batch = adminDb.batch();
     const notifications: AnyObj[] = [];
 
@@ -37,6 +44,7 @@ class NotificationService {
         toUserId,
         type: "room_invite",
         roomId,
+        inviteToken: inviteToken || null,
         roomName,
         status: "pending",
         message: `You've been invited to join the private community "${roomName}"`,

@@ -93,8 +93,9 @@ export default function OfferSpotlightPopup({
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 280, damping: 24 }}
             onClick={(e) => e.stopPropagation()}
-            className="fixed left-1/2 top-1/2 w-[min(92vw,48rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-rose-300/40 bg-linear-to-br from-rose-50/95 via-orange-50/95 to-amber-50/95 p-6 shadow-[0_32px_90px_rgba(0,0,0,0.4)] backdrop-blur-xl dark:from-rose-950/80 dark:via-orange-950/70 dark:to-amber-950/80 sm:p-8"
-            style={{ maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto' }}
+            data-lenis-prevent
+            className="fixed left-1/2 top-1/2 w-[min(92vw,48rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border border-rose-300/40 bg-linear-to-br from-rose-50/95 via-orange-50/95 to-amber-50/95 p-6 shadow-[0_32px_90px_rgba(0,0,0,0.4)] backdrop-blur-xl dark:from-rose-950/80 dark:via-orange-950/70 dark:to-amber-950/80 sm:p-8"
+            style={{ maxHeight: 'calc(100vh - 2rem)' }}
           >
             <motion.div
               className="pointer-events-none absolute -inset-20 bg-radial from-rose-400/20 to-transparent"

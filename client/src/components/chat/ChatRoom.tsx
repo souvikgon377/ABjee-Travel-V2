@@ -1645,6 +1645,7 @@ const ChatRoom = () => {
 
           {/* Messages */}
           <div 
+            data-lenis-prevent
             className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 space-y-3 sm:space-y-4 relative min-h-0"
             style={room.backgroundImage ? {
               backgroundImage: `url(${room.backgroundImage.url})`,

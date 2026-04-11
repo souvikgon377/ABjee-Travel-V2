@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { authenticateRequest, AuthError } from "@/lib/server/auth";
 import { fail, ok } from "@/lib/server/http";
 import { notificationService } from "@/services/notificationService";
+import { getAdminRtdb } from '@/lib/server/firebaseAdminRtdb';
 
 export const runtime = "nodejs";
 
@@ -15,11 +16,25 @@ export async function POST(req: NextRequest) {
       return fail("Missing required fields: roomId, roomName, memberIds", 400);
     }
 
+    let inviteToken: string | undefined;
+    try {
+      const roomSnapshot = await getAdminRtdb().ref(`chatrooms/${roomId}`).get();
+      if (roomSnapshot.exists()) {
+        const roomData = roomSnapshot.val() as { inviteToken?: string };
+        if (typeof roomData?.inviteToken === 'string' && roomData.inviteToken.trim().length > 0) {
+          inviteToken = roomData.inviteToken;
+        }
+      }
+    } catch {
+      // Continue sending notifications even if RTDB read fails.
+    }
+
     const notifications = await notificationService.sendRoomInvitations(
       user.firebaseUid || user.id,
       memberIds,
       roomId,
-      roomName
+      roomName,
+      inviteToken
     );
 
     return ok(

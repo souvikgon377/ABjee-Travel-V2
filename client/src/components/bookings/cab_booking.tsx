@@ -282,7 +282,8 @@ const CarBooking: React.FC = () => {
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -10 }}
-                                        className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 min-w-[200px] overflow-hidden"
+                                        data-lenis-prevent
+                                        className="absolute top-full left-0 mt-2 max-h-60 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 min-w-[200px] overflow-y-auto"
                                     >
                                         {tripTypes.map(type => (
                                             <div
@@ -313,6 +314,7 @@ const CarBooking: React.FC = () => {
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -10 }}
+                                        data-lenis-prevent
                                         className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 min-w-[200px] max-h-64 overflow-y-auto"
                                     >
                                         {cities.map(city => (
@@ -344,6 +346,7 @@ const CarBooking: React.FC = () => {
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -10 }}
+                                        data-lenis-prevent
                                         className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 min-w-[200px] max-h-64 overflow-y-auto"
                                     >
                                         {cities.map(city => (
@@ -398,6 +401,7 @@ const CarBooking: React.FC = () => {
                                         initial={{ opacity: 0, y: -10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -10 }}
+                                        data-lenis-prevent
                                         className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-50 min-w-[120px] max-h-64 overflow-y-auto"
                                     >
                                         {timeSlots.map(time => (
