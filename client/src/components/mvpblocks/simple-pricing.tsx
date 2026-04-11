@@ -278,23 +278,71 @@ export default function SimplePricing() {
       return;
     }
 
-    if (!razorpayKeyId) {
-      alert('Razorpay public key is missing. Please contact support.');
-      return;
-    }
-
     setProcessingPlan(planId);
     let releaseBodyScrollLock: (() => void) | null = null;
     let checkoutOpened = false;
 
     try {
+      const token = await auth.currentUser.getIdToken();
+
+      if (appliedCoupon) {
+        const validateRes = await fetch('/api/subscriptions/coupon/validate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            promoCode: appliedCoupon,
+            planType,
+            interval: frequency,
+          }),
+        });
+
+        const validatePayload = await validateRes.json().catch(() => ({}));
+        const finalAmount = Number(validatePayload?.data?.finalAmount ?? Number.NaN);
+
+        if (validateRes.ok && validatePayload?.success && Number.isFinite(finalAmount) && finalAmount <= 0) {
+          const redeemRes = await fetch('/api/subscriptions/coupon/redeem', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              promoCode: appliedCoupon,
+              planType,
+              interval: frequency,
+            }),
+          });
+
+          const redeemPayload = await redeemRes.json().catch(() => ({}));
+          if (!redeemRes.ok || !redeemPayload?.success) {
+            throw new Error(redeemPayload?.message || 'Failed to redeem coupon.');
+          }
+
+          const currentScrollY = window.scrollY;
+          triggerPaymentFireworks();
+          setPaymentConfirmation('Coupon applied successfully. Your subscription is now active.');
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: currentScrollY, behavior: 'auto' });
+          });
+          setTimeout(() => {
+            router.push('/profile');
+          }, 2200);
+          return;
+        }
+      }
+
+      if (!razorpayKeyId) {
+        alert('Razorpay public key is missing. Please contact support.');
+        return;
+      }
+
       const scriptReady = await loadRazorpayScript();
       if (!scriptReady) {
         alert('Unable to load Razorpay checkout. Please try again.');
         return;
       }
-
-      const token = await auth.currentUser.getIdToken();
 
       const orderRes = await fetch('/api/subscriptions/razorpay/order', {
         method: 'POST',
@@ -394,7 +442,7 @@ export default function SimplePricing() {
       }
       setProcessingPlan(null);
     }
-  }, [currentUser, frequency, loadRazorpayScript, lockBodyScroll, razorpayKeyId, router, triggerPaymentFireworks, userProfile?.displayName, userProfile?.email]);
+  }, [appliedCoupon, currentUser, frequency, loadRazorpayScript, lockBodyScroll, razorpayKeyId, router, triggerPaymentFireworks, userProfile?.displayName, userProfile?.email]);
 
   useEffect(() => {
     setMounted(true);
@@ -491,6 +539,7 @@ export default function SimplePricing() {
               <ConfettiButton
                 type="button"
                 variant="default"
+                options={{ origin: { x: 0.5, y: 0.5 } }}
                 onClick={() => validateCouponForCurrentFrequency(couponInput)}
                 disabled={applyingCoupon}
               >

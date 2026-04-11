@@ -15,6 +15,8 @@ const statsCache: {
   timestamp: 0,
 };
 
+let statsRefreshPromise: Promise<void> | null = null;
+
 const CACHE_TTL_MS = 30000; // Cache for 30 seconds
 const SOURCE_TIMEOUT_MS = 8000;
 
@@ -30,13 +32,29 @@ export async function GET(req: NextRequest) {
       return ok(statsCache.data);
     }
 
-    // First request or cache expired - fetch data and wait
-    await fetchStatsInBackground();
+    // Serve stale cache immediately and refresh in background to keep UI snappy.
+    if (statsCache.data) {
+      void refreshStats();
+      return ok(statsCache.data);
+    }
+
+    // Cold start: fetch once so we can return meaningful data.
+    await refreshStats();
     return ok(statsCache.data || getDefaultStats());
   } catch (error: any) {
     if (error instanceof AuthError) return fail(error.message, error.status);
     return fail("Failed to get dashboard statistics", 500);
   }
+}
+
+function refreshStats() {
+  if (!statsRefreshPromise) {
+    statsRefreshPromise = fetchStatsInBackground().finally(() => {
+      statsRefreshPromise = null;
+    });
+  }
+
+  return statsRefreshPromise;
 }
 
 /**

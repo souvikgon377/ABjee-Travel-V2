@@ -145,12 +145,14 @@ const ConfettiButtonComponent = ({
       const rect = target.getBoundingClientRect()
       const x = rect.left + rect.width / 2
       const y = rect.top + rect.height / 2
+      const origin = options?.origin ?? {
+        x: x / window.innerWidth,
+        y: y / window.innerHeight,
+      }
+
       await confetti({
         ...options,
-        origin: {
-          x: x / window.innerWidth,
-          y: y / window.innerHeight,
-        },
+        origin,
       })
     } catch (error) {
       console.error("Confetti button error:", error)

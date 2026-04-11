@@ -47,7 +47,30 @@ const getServiceAccount = (): ServiceAccountShape | null => {
 const globalForFirebase = globalThis as unknown as { firebaseAdminApp?: App };
 
 const serviceAccount = getServiceAccount();
-const databaseUrl = process.env.FIREBASE_DATABASE_URL || process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+
+const getDatabaseUrl = () => {
+  const configuredUrl =
+    process.env.FIREBASE_DATABASE_URL ||
+    process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
+
+  if (configuredUrl && configuredUrl.trim()) {
+    return configuredUrl.trim().replace(/\/$/, '');
+  }
+
+  const projectId =
+    serviceAccount?.project_id ||
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    return undefined;
+  }
+
+  // Default RTDB host pattern for Firebase projects.
+  return `https://${projectId}-default-rtdb.firebaseio.com`;
+};
+
+const databaseUrl = getDatabaseUrl();
 
 export const app =
   globalForFirebase.firebaseAdminApp ||

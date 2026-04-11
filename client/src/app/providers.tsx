@@ -11,6 +11,34 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    const isTouchDevice =
+      window.matchMedia("(pointer: coarse)").matches ||
+      window.matchMedia("(hover: none)").matches;
+
+    if (!isTouchDevice) {
+      return;
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length > 1) {
+        event.preventDefault();
+      }
+    };
+
+    const onGestureStart = (event: Event) => {
+      event.preventDefault();
+    };
+
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("gesturestart", onGestureStart, { passive: false } as AddEventListenerOptions);
+
+    return () => {
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("gesturestart", onGestureStart as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
 
