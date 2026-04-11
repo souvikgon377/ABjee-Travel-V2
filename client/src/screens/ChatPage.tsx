@@ -1260,6 +1260,19 @@ const ChatRoomsList: React.FC = () => {
   // Delete community
   const handleDeleteRoom = async (roomId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    const targetRoom = rooms.find((r) => r.id === roomId);
+    const normalizedRoomName = (targetRoom?.name || '').trim().toLowerCase();
+    const isGeneralCommunity =
+      normalizedRoomName === 'general community chat' ||
+      normalizedRoomName === 'general chat' ||
+      normalizedRoomName.startsWith('general chat') ||
+      normalizedRoomName.includes('general community');
+
+    if (isGeneralCommunity) {
+      alert('General Community Chat cannot be deleted from client side.');
+      return;
+    }
     
     if (!confirm('Are you sure you want to delete this community? This action cannot be undone.')) {
       return;
@@ -1792,7 +1805,7 @@ const ChatRoomsList: React.FC = () => {
                           <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 z-10 group-focus-within:text-rose-400 transition-colors duration-300" />
                           <input
                             type="text"
-                            placeholder="Search by place, area, state or country�"
+                            placeholder="Search by place, area, state, or country"
                             value={searchDestination}
                             onChange={(e) => setSearchDestination(e.target.value)}
                             className="w-full pl-12 pr-10 sm:pl-14 sm:pr-12 py-3.5 sm:py-4 rounded-full bg-white/95 backdrop-blur-xl text-gray-900 placeholder-gray-400 text-sm sm:text-base focus:outline-none shadow-2xl shadow-black/40 transition-all duration-300 focus:bg-white"
@@ -3107,7 +3120,11 @@ const ChatRoomsList: React.FC = () => {
                                   <MessageCircle className="h-4 w-4 mr-1.5" />
                                   Chat Now
                                 </Button>
-                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) && (
+                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) &&
+                                  !((room.name || '').trim().toLowerCase() === 'general community chat' ||
+                                    (room.name || '').trim().toLowerCase() === 'general chat' ||
+                                    (room.name || '').trim().toLowerCase().startsWith('general chat') ||
+                                    (room.name || '').trim().toLowerCase().includes('general community')) && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -3356,7 +3373,22 @@ const ChatRoomsList: React.FC = () => {
                             {/* Action buttons */}
                             {user && (
                               <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) && (
+                                <Button
+                                  size="sm"
+                                  className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/chat/room/${room.id}`);
+                                  }}
+                                >
+                                  <MessageCircle className="h-4 w-4 mr-1.5" />
+                                  Chat Now
+                                </Button>
+                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) &&
+                                  !((room.name || '').trim().toLowerCase() === 'general community chat' ||
+                                    (room.name || '').trim().toLowerCase() === 'general chat' ||
+                                    (room.name || '').trim().toLowerCase().startsWith('general chat') ||
+                                    (room.name || '').trim().toLowerCase().includes('general community')) && (
                                   <Button
                                     variant="outline"
                                     size="sm"

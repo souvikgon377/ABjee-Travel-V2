@@ -261,6 +261,18 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
   const handleRefresh      = useCallback(() => fetchRooms(), [fetchRooms]);
 
   const handleDeleteRoom = useCallback(async (room: any) => {
+    const normalizedRoomName = (room?.name || '').trim().toLowerCase();
+    const isGeneralCommunity =
+      normalizedRoomName === 'general community chat' ||
+      normalizedRoomName === 'general chat' ||
+      normalizedRoomName.startsWith('general chat') ||
+      normalizedRoomName.includes('general community');
+
+    if (isGeneralCommunity) {
+      alert('General Community Chat cannot be deleted from client side.');
+      return;
+    }
+
     if (!confirm(`Delete "${room.name}"? This will remove all messages and cannot be undone.`)) return;
     try {
       await remove(ref(database, `chatrooms/${room.id}`));
@@ -479,14 +491,19 @@ const RoomCard = memo(({ room, onManage, onDelete }: RoomCardProps) => {
 
         {/* Actions */}
         <div className="shrink-0 flex items-center gap-1">
-          <Button
-            variant="ghost" size="sm"
-            onClick={() => onDelete(room)}
-            className="text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 w-8 p-0"
-            title="Delete community"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {!(((room.name || '').trim().toLowerCase() === 'general community chat') ||
+            ((room.name || '').trim().toLowerCase() === 'general chat') ||
+            ((room.name || '').trim().toLowerCase().startsWith('general chat')) ||
+            ((room.name || '').trim().toLowerCase().includes('general community'))) && (
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => onDelete(room)}
+              className="text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 w-8 p-0"
+              title="Delete community"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => onManage(room)} className="h-8 w-8 p-0" title="Manage community">
             <MoreHorizontal className="h-4 w-4" />
           </Button>

@@ -625,6 +625,50 @@ class ChatService {
   }
 
   /**
+   * WHY: Allow a member to exit a private community
+   * DECISION: Public/community-wide rooms are not modified by this method
+   */
+  async leaveRoom(roomId: string, userId: string) {
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const snapshot = await get(roomRef);
+
+    if (!snapshot.exists()) {
+      throw new Error('Community not found');
+    }
+
+    const room = snapshot.val() as ChatRoom;
+    const generalCommunity = this.isGeneralCommunityRoom(room);
+
+    // Exit action is only for private communities.
+    if (room.isPublic || generalCommunity) {
+      return;
+    }
+
+    if (room.createdBy === userId) {
+      throw new Error('Community creator cannot exit. Delete the community instead.');
+    }
+
+    const participants = Array.isArray(room.participants) ? room.participants : [];
+    if (!participants.includes(userId)) {
+      return;
+    }
+
+    const updates: Record<string, unknown> = {
+      participants: participants.filter((id) => id !== userId),
+    };
+
+    if (Array.isArray(room.pendingInvites)) {
+      updates.pendingInvites = room.pendingInvites.filter((id) => id !== userId);
+    }
+
+    if (Array.isArray(room.joinRequests)) {
+      updates.joinRequests = room.joinRequests.filter((id) => id !== userId);
+    }
+
+    await update(roomRef, updates);
+  }
+
+  /**
    * WHY: Get shareable invite link for a room
    * DECISION: Returns URL with invite token that bypasses password
    */

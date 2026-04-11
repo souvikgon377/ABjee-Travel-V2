@@ -10,23 +10,35 @@ export async function POST(req: NextRequest) {
   try {
     const user = await authenticateRequest(req);
     const body = await req.json();
-    const { roomId, roomName, memberIds } = body || {};
+    const { roomId, roomName, memberIds, inviteToken: providedInviteToken } = body || {};
 
     if (!roomId || !roomName || !Array.isArray(memberIds)) {
       return fail("Missing required fields: roomId, roomName, memberIds", 400);
     }
 
-    let inviteToken: string | undefined;
-    try {
-      const roomSnapshot = await getAdminRtdb().ref(`chatrooms/${roomId}`).get();
-      if (roomSnapshot.exists()) {
-        const roomData = roomSnapshot.val() as { inviteToken?: string };
-        if (typeof roomData?.inviteToken === 'string' && roomData.inviteToken.trim().length > 0) {
-          inviteToken = roomData.inviteToken;
+    let inviteToken: string | undefined =
+      typeof providedInviteToken === 'string' && providedInviteToken.trim().length > 0
+        ? providedInviteToken.trim()
+        : undefined;
+
+    if (!inviteToken) {
+      try {
+        const roomSnapshot = await Promise.race([
+          getAdminRtdb().ref(`chatrooms/${roomId}`).get(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('RTDB lookup timed out')), 1500);
+          }),
+        ]);
+
+        if (roomSnapshot.exists()) {
+          const roomData = roomSnapshot.val() as { inviteToken?: string };
+          if (typeof roomData?.inviteToken === 'string' && roomData.inviteToken.trim().length > 0) {
+            inviteToken = roomData.inviteToken;
+          }
         }
+      } catch {
+        // Continue sending notifications even if RTDB read fails.
       }
-    } catch {
-      // Continue sending notifications even if RTDB read fails.
     }
 
     const notifications = await notificationService.sendRoomInvitations(

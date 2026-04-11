@@ -17,7 +17,7 @@ import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --------------------------- Types ---------------------------
 
 interface VideoEmbed {
   url: string;
@@ -68,7 +68,7 @@ interface TripStory {
   lng?: number;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Utility helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ----------------------- Utility Helpers ---------------------
 
 function parseVideoEmbed(url: string): VideoEmbed {
   const trimmed = url.trim();
@@ -112,7 +112,7 @@ function PlatformIcon({ platform }: { platform: string }) {
 }
 
 // Facebook videos cannot be reliably embedded via iframe (requires registered app domain,
-// public video, and canonical URL â€” share/v/ shortlinks are unsupported by the plugin).
+// public video, and canonical URL - share/v/ shortlinks are unsupported by the plugin).
 // Show a branded card that opens the video on Facebook instead.
 function FacebookCard({ url, title }: { url: string; title: string }) {
   return (
@@ -187,9 +187,9 @@ function YouTubeFacade({ embedUrl, title }: { embedUrl: string; title: string })
           <p className="text-xs text-white/60 text-center px-4 line-clamp-2">{title}</p>
         </div>
       )}
-      {/* Subtle dark overlay â€” lighter so play button stays visible */}
+      {/* Subtle dark overlay - lighter so play button stays visible */}
       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-      {/* Play button â€” always on top */}
+      {/* Play button - always on top */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
           <Play className="w-7 h-7 text-white ml-1" fill="white" />
@@ -232,12 +232,12 @@ const SAMPLE_STORIES: TripStory[] = [
     tripHighlights: 'Pangong Lake, Nubra Valley, Magnetic Hill, Hemis Monastery',
     dayByDay: 'Day 1: Leh Acclimatization\nDay 2: Local sightseeing\nDay 3-4: Nubra Valley via Khardung La\nDay 5-7: Pangong Tso\nDay 8-9: Tso Moriri\nDay 10: Departure',
     bestPlaces: 'Pangong Lake, Nubra Valley sand dunes, Hemis National Park',
-    localFood: 'Thukpa, Momos, Skyu, Butter Tea â€“ must-try dishes that warmed our souls at 11,500 ft',
+    localFood: 'Thukpa, Momos, Skyu, Butter Tea - must-try dishes that warmed our souls at 11,500 ft',
     travelTips: 'Acclimatize for at least 2 days. Carry altitude sickness medicine. Book accommodation in advance during summer.',
     startDate: '2025-08-01',
     endDate: '2025-08-10',
     duration: '10 Days',
-    budget: 'â‚¹45,000',
+    budget: 'Rs 45,000',
     travelType: 'Solo',
     photos: [
       { url: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=600&q=80', caption: 'Pangong Lake at sunrise' },
@@ -260,7 +260,7 @@ const SAMPLE_STORIES: TripStory[] = [
     coverImage: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&q=80',
     description: 'Drifting through emerald canals, savoring fish curry, and watching the golden sunset from our private houseboat.',
     duration: '5 Days',
-    budget: 'â‚¹22,000',
+    budget: 'Rs 22,000',
     travelType: 'Couple',
     photos: [],
     videos: [],
@@ -275,12 +275,12 @@ const SAMPLE_STORIES: TripStory[] = [
   {
     id: 'sample-3',
     title: 'Rajasthan Royal Road Trip',
-    destination: 'Jaipur â€“ Udaipur â€“ Jodhpur',
+    destination: 'Jaipur - Udaipur - Jodhpur',
     authorName: 'Rohit Meena',
     coverImage: 'https://images.unsplash.com/photo-1599408572904-e0cf8dd6ada6?w=800&q=80',
-    description: 'An epic family road trip through the Land of Kings â€” palaces, deserts, camels, and colours you can\'t believe.',
+    description: 'An epic family road trip through the Land of Kings - palaces, deserts, camels, and colours you can\'t believe.',
     duration: '8 Days',
-    budget: 'â‚¹60,000',
+    budget: 'Rs 60,000',
     travelType: 'Family',
     photos: [],
     videos: [],
@@ -298,9 +298,9 @@ const SAMPLE_STORIES: TripStory[] = [
     destination: 'Coorg, Karnataka',
     authorName: 'Sneha Doshi',
     coverImage: 'https://images.unsplash.com/photo-1619963647249-9b32b36ad40c?w=800&q=80',
-    description: 'Misty mornings, cascading waterfalls, and the intoxicating aroma of fresh coffee â€” Coorg is a quiet paradise.',
+    description: 'Misty mornings, cascading waterfalls, and the intoxicating aroma of fresh coffee - Coorg is a quiet paradise.',
     duration: '3 Days',
-    budget: 'â‚¹12,000',
+    budget: 'Rs 12,000',
     travelType: 'Group',
     photos: [],
     videos: [],
@@ -318,9 +318,9 @@ const SAMPLE_STORIES: TripStory[] = [
     destination: 'Spiti, Himachal Pradesh',
     authorName: 'Vikram Singh',
     coverImage: 'https://images.unsplash.com/photo-1585123388867-3bfe6dd4bdbf?w=800&q=80',
-    description: 'The cold desert of Spiti Valley is where time stands still â€” ancient forts, vibrant monasteries, and starry nights.',
+    description: 'The cold desert of Spiti Valley is where time stands still - ancient forts, vibrant monasteries, and starry nights.',
     duration: '7 Days',
-    budget: 'â‚¹35,000',
+    budget: 'Rs 35,000',
     travelType: 'Group',
     photos: [],
     videos: [],
@@ -334,7 +334,7 @@ const SAMPLE_STORIES: TripStory[] = [
   },
 ];
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ----------------------- Sub-components ----------------------
 
 // Story Card
 function StoryCard({
@@ -804,7 +804,7 @@ function StoryModal({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Hero Banner â€” auto-advancing slideshow */}
+            {/* Hero Banner - auto-advancing slideshow */}
             <div className="relative h-72 md:h-96 overflow-hidden">
               <AnimatePresence initial={false} custom={heroDir}>
                 <motion.img
@@ -856,7 +856,7 @@ function StoryModal({
                         disabled={deleting}
                         className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                       >
-                        {deleting ? 'Deletingâ€¦' : 'Yes, delete'}
+                        {deleting ? 'Deleting...' : 'Yes, delete'}
                       </button>
                       <button
                         onClick={() => setConfirmDelete(false)}
@@ -892,7 +892,7 @@ function StoryModal({
                 </div>
                 <h1 className="text-white text-2xl md:text-3xl font-bold leading-tight mb-2">{story.title}</h1>
                 <div className="flex flex-wrap items-center gap-4 text-gray-300 text-sm">
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{story.startDate} â†’ {story.endDate}</span>
+                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{story.startDate} {'->'} {story.endDate}</span>
                   <span>by <strong className="text-white">{story.authorName}</strong></span>
                 </div>
               </div>
@@ -1093,7 +1093,7 @@ function StoryModal({
                     >
                       <Heart className={`w-5 h-5 ${liked ? 'fill-rose-500' : ''}`} />
                     </motion.div>
-                    {liked ? 'Liked' : 'Like'} Â· {story.likes.length}
+                    {liked ? 'Liked' : 'Like'} - {story.likes.length}
                   </motion.button>
                 </div>
 
@@ -1153,7 +1153,7 @@ function StoryModal({
                 </section>
               </div>
 
-              {/* Sidebar â€“ Trip Info */}
+              {/* Sidebar - Trip Info */}
               <div className="space-y-4">
                 <div className="bg-linear-to-br from-rose-50 dark:from-rose-500/10 to-orange-50 dark:to-orange-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl p-5 sticky top-4">
                   <h3 className="font-bold text-foreground mb-4 text-base">Trip Information</h3>
@@ -1169,7 +1169,7 @@ function StoryModal({
                       <Calendar className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
                       <div>
                         <p className="text-xs text-muted-foreground">Travel Dates</p>
-                        <p className="text-sm font-semibold text-foreground">{story.startDate} â€“ {story.endDate}</p>
+                        <p className="text-sm font-semibold text-foreground">{story.startDate} - {story.endDate}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
@@ -1317,9 +1317,9 @@ function SubmitStoryForm({
       return;
     }
     setSubmitError('');
-    // Close the modal immediately â€” upload continues in background
+    // Close the modal immediately - upload continues in background
     onClose();
-    onProgress(0, 'Preparing uploadâ€¦', false);
+    onProgress(0, 'Preparing upload...', false);
     try {
       const photos: StoryPhoto[] = [];
       const errors: string[] = [];
@@ -1327,7 +1327,7 @@ function SubmitStoryForm({
 
       for (let fi = 0; fi < imageFiles.length; fi++) {
         const file = imageFiles[fi];
-        onProgress(Math.round((fi / Math.max(total, 1)) * 80), `Uploading photo ${fi + 1} of ${total}â€¦`, false);
+        onProgress(Math.round((fi / Math.max(total, 1)) * 80), `Uploading photo ${fi + 1} of ${total}...`, false);
         const fd = new FormData();
         fd.append('file', file);
         fd.append('folder', 'trip-stories');
@@ -1344,13 +1344,13 @@ function SubmitStoryForm({
         if (fi < imageFiles.length - 1) await Promise.resolve();
       }
 
-      if (total === 0) onProgress(80, 'Saving storyâ€¦', false);
+      if (total === 0) onProgress(80, 'Saving story...', false);
 
       const videos = videoLinks.filter(v => v.trim()).map(v => parseVideoEmbed(v));
       const allPhotos: StoryPhoto[] = [...existingPhotos, ...photos];
       const coverImage = allPhotos.length > 0 ? allPhotos[0].url : (initialData?.coverImage ?? '');
 
-      onProgress(90, 'Saving storyâ€¦', false);
+      onProgress(90, 'Saving story...', false);
 
       await onSubmit({
         ...form,
@@ -1364,7 +1364,7 @@ function SubmitStoryForm({
       onProgress(
         100,
         errors.length > 0
-          ? `Saved! ${photos.length} photo(s) uploaded â€” ${errors.length} failed`
+          ? `Saved! ${photos.length} photo(s) uploaded - ${errors.length} failed`
           : 'Story published!',
         false
       );
@@ -1417,7 +1417,7 @@ function SubmitStoryForm({
                 { name: 'destination', label: 'Destination *', placeholder: 'Ladakh, India', type: 'text' },
                 { name: 'title', label: 'Story Title *', placeholder: 'My Unforgettable Trek...', type: 'text' },
                 { name: 'duration', label: 'Trip Duration', placeholder: '7 Days', type: 'text' },
-                { name: 'budget', label: 'Approx Budget', placeholder: 'â‚¹30,000', type: 'text' },
+                { name: 'budget', label: 'Approx Budget', placeholder: 'Rs 30,000', type: 'text' },
                 { name: 'startDate', label: 'Start Date', placeholder: '', type: 'date' },
                 { name: 'endDate', label: 'End Date', placeholder: '', type: 'date' },
               ].map(field => (
@@ -1482,7 +1482,7 @@ function SubmitStoryForm({
               {/* Existing photos in edit mode */}
               {isEdit && existingPhotos.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-2">Current photos (click Ã— to remove):</p>
+                  <p className="text-xs text-muted-foreground mb-2">Current photos (click x to remove):</p>
                   <div className="grid grid-cols-3 gap-2">
                     {existingPhotos.map((photo, i) => (
                       <div key={i} className="relative aspect-square">
@@ -1510,7 +1510,7 @@ function SubmitStoryForm({
                 {isCompressing ? (
                   <>
                     <div className="w-8 h-8 mx-auto mb-2 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-muted-foreground">Compressing photosâ€¦</p>
+                    <p className="text-sm text-muted-foreground">Compressing photos...</p>
                   </>
                 ) : (
                   <>
@@ -1518,7 +1518,7 @@ function SubmitStoryForm({
                     <p className="text-sm text-muted-foreground">
                       {imageFiles.length >= 5 ? 'Maximum 5 photos reached' : `Click to upload photos (${5 - imageFiles.length} remaining)`}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">Any size â€” auto-compressed before upload</p>
+                    <p className="text-xs text-muted-foreground mt-1">Any size - auto-compressed before upload</p>
                   </>
                 )}
               </div>
@@ -1606,7 +1606,7 @@ function SubmitStoryForm({
   );
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -------------------------- Main Page ------------------------
 
 export default function TripStoriesPage() {
   const { currentUser } = useAuth();
@@ -1757,7 +1757,7 @@ export default function TripStoriesPage() {
       {/* Hero Section */}
       <section ref={heroRef} className="relative pt-16 h-[85vh] min-h-137.5 flex items-center justify-center overflow-hidden">
 
-        {/* â”€â”€ Background image â€” both modes â”€â”€ */}
+        {/* Background image - both modes */}
         <div className="absolute inset-0">
           <img
             src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1600&q=80"
@@ -1767,10 +1767,10 @@ export default function TripStoriesPage() {
           <div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/40 to-black/30" />
         </div>
 
-        {/* â”€â”€ Bottom page blend â”€â”€ */}
+        {/* Bottom page blend */}
         <div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-background via-background/55 to-transparent pointer-events-none" />
 
-        {/* â”€â”€ Floating particles â”€â”€ */}
+        {/* Floating particles */}
         {[...Array(60)].map((_, i) => (
           <motion.div
             key={`p-${i}`}
@@ -1796,7 +1796,7 @@ export default function TripStoriesPage() {
           />
         ))}
 
-        {/* â”€â”€ Hero copy â”€â”€ */}
+        {/* Hero copy */}
         <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -1931,8 +1931,8 @@ export default function TripStoriesPage() {
                       className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30"
                     >
                       <option value="">Any Duration</option>
-                      <option value="short">Short (1â€“3 days)</option>
-                      <option value="medium">Medium (4â€“7 days)</option>
+                      <option value="short">Short (1-3 days)</option>
+                      <option value="medium">Medium (4-7 days)</option>
                       <option value="long">Long (8+ days)</option>
                     </select>
                   </div>
@@ -2019,7 +2019,7 @@ export default function TripStoriesPage() {
         )}
       </AnimatePresence>
 
-      {/* Related Stories inside modal (appended to modal via portal approach is complex â€“ shown inline) */}
+      {/* Related Stories inside modal (appended to modal via portal approach is complex - shown inline) */}
       {/* Edit Story Form */}
       <AnimatePresence>
         {editingStory && (
@@ -2056,7 +2056,7 @@ export default function TripStoriesPage() {
               <p className="text-sm font-semibold text-foreground truncate">
                 {globalUploadProgress === 100
                   ? (globalUploadStatus.startsWith('Error') ? 'Upload failed' : 'Story Published!')
-                  : 'Publishing your storyâ€¦'}
+                  : 'Publishing your story...'}
               </p>
               <p className={`text-xs truncate ${globalUploadStatus.startsWith('Error') || globalUploadStatus.includes('failed') ? 'text-red-500' : 'text-muted-foreground'}`}>
                 {globalUploadStatus}
@@ -2088,7 +2088,7 @@ export default function TripStoriesPage() {
       {/* Footer */}
       <footer className="border-t border-border/40 py-8 text-center">
         <p className="text-muted-foreground text-sm">
-          Â© {new Date().getFullYear()} ABjee Travel Â· All travel stories are shared by community members
+          (c) {new Date().getFullYear()} ABjee Travel - All travel stories are shared by community members
         </p>
       </footer>
     </div>

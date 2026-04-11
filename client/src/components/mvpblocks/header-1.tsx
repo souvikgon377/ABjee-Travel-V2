@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { publicAsset } from '@/lib/publicAsset';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw } from 'lucide-react';
+import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { firestoreDb } from '@/lib/firebaseFirestore';
 
 interface NavItem {
   name: string;
@@ -95,6 +97,8 @@ export default function Header1() {
   const [notificationsLoaded, setNotificationsLoaded] = useState(false);
   const [notificationActionId, setNotificationActionId] = useState<string | null>(null);
   const [profileAvatarError, setProfileAvatarError] = useState(false);
+  const desktopNotificationsRef = useRef<HTMLDivElement | null>(null);
+  const mobileNotificationsRef = useRef<HTMLDivElement | null>(null);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -218,10 +222,43 @@ export default function Header1() {
       return;
     }
 
-    if (notificationsOpen && !notificationsLoaded && !notificationLoading) {
-      fetchNotifications();
+    // Load notification count in the background so the badge is visible
+    // even before the notification panel is opened.
+    if (!notificationsLoaded && !notificationLoading) {
+      void fetchNotifications();
     }
-  }, [currentUser, notificationsOpen, notificationsLoaded, notificationLoading, fetchNotifications]);
+  }, [currentUser, notificationsLoaded, notificationLoading, fetchNotifications]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      return;
+    }
+
+    const notificationsQuery = query(
+      collection(firestoreDb, 'notifications'),
+      where('toUserId', '==', currentUser.uid),
+      limit(50),
+    );
+
+    const unsubscribe = onSnapshot(
+      notificationsQuery,
+      (snapshot) => {
+        const items = snapshot.docs.map((doc) => normalizeNotification({ id: doc.id, ...doc.data() }));
+        items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setNotifications(items);
+        setNotificationError(null);
+        setNotificationsLoaded(true);
+      },
+      () => {
+        // Keep API fetch as fallback if realtime listener fails.
+        void fetchNotifications();
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentUser?.uid, fetchNotifications]);
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => item.status === 'pending').length,
@@ -274,6 +311,36 @@ export default function Header1() {
       setNotificationActionId(null);
     }
   }, [notificationActionId, router]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+
+      const clickedDesktop = desktopNotificationsRef.current?.contains(target) ?? false;
+      const clickedMobile = mobileNotificationsRef.current?.contains(target) ?? false;
+
+      if (!clickedDesktop && !clickedMobile) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [notificationsOpen]);
 
   const renderNotificationPanel = (panelClassName: string) => (
     <motion.div
@@ -516,7 +583,7 @@ export default function Header1() {
             {currentUser ? (
               <>
                 <div className="flex items-center space-x-3">
-                  <div className="relative">
+                  <div className="relative" ref={desktopNotificationsRef}>
                     <button
                       type="button"
                       onClick={() => setNotificationsOpen((open) => !open)}
@@ -603,7 +670,7 @@ export default function Header1() {
           {/* Mobile: Notifications + Theme toggle + Hamburger */}
           <div className="ml-auto flex items-center space-x-2 lg:hidden">
             {currentUser && (
-              <div className="relative">
+              <div className="relative" ref={mobileNotificationsRef}>
                 <button
                   type="button"
                   onClick={() => setNotificationsOpen((open) => !open)}

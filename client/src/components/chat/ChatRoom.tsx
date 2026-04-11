@@ -12,7 +12,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2 } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -498,9 +498,26 @@ const ChatRoom = () => {
       clearTimeout(typingTimeoutRef.current);
     }
     await chatService.stopTyping(roomId).catch(() => {});
-    
+
+    try {
+      // For private communities, perform an actual membership exit.
+      if (room && !room.isPublic && user?.uid) {
+        const confirmed = window.confirm(`Exit private community "${room.name}"?`);
+        if (!confirmed) {
+          return;
+        }
+        await chatService.leaveRoom(roomId, user.uid);
+      }
+
+      router.push('/chat');
+    } catch (error: any) {
+      alert(error?.message || 'Failed to exit community');
+    }
+  }, [roomId, room, user, router]);
+
+  const handleBackToChat = useCallback(() => {
     router.push('/chat');
-  }, [roomId, router]);
+  }, [router]);
 
   const handleDeleteForMe = useCallback(async (message: ChatMessage) => {
     if (!roomId || !message.id) return;
@@ -941,26 +958,46 @@ const ChatRoom = () => {
   const handleInviteMember = useCallback(async (member: any) => {
     if (!roomId || !room || !user) return;
     setAddingMemberId(member.id);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
       const token = localStorage.getItem('token');
-      await fetch('/api/notifications/send-invitations', {
+      const response = await fetch('/api/notifications/send-invitations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        signal: controller.signal,
         body: JSON.stringify({
           roomId,
           roomName: room.name,
+          inviteToken: room.inviteToken,
           memberIds: [member.id]
         })
       });
+
+      if (!response.ok) {
+        let message = 'Failed to send invitation';
+        try {
+          const payload = await response.json();
+          if (payload?.error && typeof payload.error === 'string') {
+            message = payload.error;
+          }
+        } catch {
+          // Ignore JSON parse errors and use default message.
+        }
+        throw new Error(message);
+      }
+
       setInvitedMemberIds(prev => new Set([...prev, member.id]));
       setAddMemberSuccess(`Invitation sent to ${member.firstName} ${member.lastName}`);
       setTimeout(() => setAddMemberSuccess(null), 1000);
     } catch (error: any) {
-      alert(error.message || 'Failed to send invitation');
+      const isTimeout = error?.name === 'AbortError';
+      alert(isTimeout ? 'Invite request timed out. Please try again.' : (error?.message || 'Failed to send invitation'));
     } finally {
+      clearTimeout(timeoutId);
       setAddingMemberId(null);
     }
   }, [roomId, room, user]);
@@ -1575,6 +1612,15 @@ const ChatRoom = () => {
               borderBottomColor: `${imageColors.primary}40`
             } : { backgroundColor: 'hsl(var(--card) / 0.8)' }}
           >
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleBackToChat}
+              title="Back to chats"
+              className="group h-8 w-8 sm:h-9 sm:w-9 shrink-0"
+            >
+              <ArrowLeft className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-x-0.5 group-active:scale-90" />
+            </Button>
             <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden">
               {/* Room Icon */}
               {room.iconImage ? (
@@ -1636,7 +1682,7 @@ const ChatRoom = () => {
                 className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 shrink-0"
               >
                 <span className="text-[10px] sm:text-xs md:text-sm font-medium">
-                  <span className="hidden sm:inline">Leave Room</span>
+                  <span className="hidden sm:inline">{room.isPublic ? 'Leave Room' : 'Exit Community'}</span>
                   <span className="sm:hidden">Leave</span>
                 </span>
               </Button>
