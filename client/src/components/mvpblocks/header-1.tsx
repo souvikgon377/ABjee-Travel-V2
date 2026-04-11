@@ -466,8 +466,8 @@ export default function Header1() {
         'transition-[backdrop-filter,background-color,box-shadow] duration-300',
         'will-change-[background-color,backdrop-filter,box-shadow,transform]',
         isScrolled
-          ? 'backdrop-blur-xl bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-border/50'
-          : 'backdrop-blur-md bg-background/45 border-b border-border/35',
+          ? 'backdrop-blur-xl bg-background dark:bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-border/50'
+          : 'backdrop-blur-md bg-background dark:bg-background/45 border-b border-border/35',
       ].join(' ')}
       variants={headerVariants}
       initial="initial"
