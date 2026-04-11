@@ -10,6 +10,7 @@
 export interface ImageUploadResult {
   url: string;
   key: string;
+  publicId: string;
   hash: string;
   width: number;
   height: number;
@@ -186,6 +187,7 @@ export async function uploadImageToR2(
     return {
       url: data.url,
       key: data.key,
+      publicId: data.key,
       hash: hash,
       width: dimensions.width,
       height: dimensions.height,

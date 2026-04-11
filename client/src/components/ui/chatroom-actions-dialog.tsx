@@ -471,7 +471,7 @@ export const ChatRoomActionsDialog = memo(
             </div>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="min-h-0 flex-1 w-full overflow-y-auto px-6 pb-6 pt-4">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="flex min-h-0 flex-1 w-full flex-col px-6 pb-6 pt-4">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="details" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
@@ -492,7 +492,7 @@ export const ChatRoomActionsDialog = memo(
             </TabsList>
 
             {/* Details Tab */}
-            <TabsContent value="details" className="space-y-4 mt-4">
+            <TabsContent value="details" className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               <div className="space-y-2">
                 <Label htmlFor="edit-name">Community Name *</Label>
                 <Input
@@ -680,7 +680,7 @@ export const ChatRoomActionsDialog = memo(
             </TabsContent>
 
             {/* Members Tab */}
-            <TabsContent value="members" className="space-y-4 mt-4">
+            <TabsContent value="members" className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               {visitedTabs.has('members') && <>
               {loadingMembers ? (
                 <div className="text-center py-8">
@@ -691,7 +691,7 @@ export const ChatRoomActionsDialog = memo(
                   <p className="text-muted-foreground">No members in this community yet</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-100 overflow-y-auto">
+                <div className="space-y-2">
                   {members.map((member) => (
                     <div
                       key={member.id}
@@ -745,7 +745,7 @@ export const ChatRoomActionsDialog = memo(
             </TabsContent>
 
             {/* Messages Tab */}
-            <TabsContent value="messages" className="space-y-3 mt-4">
+            <TabsContent value="messages" className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               {visitedTabs.has('messages') && <>
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">
@@ -772,7 +772,7 @@ export const ChatRoomActionsDialog = memo(
                   <p>No messages in this community yet</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-100 overflow-y-auto pr-1">
+                <div className="space-y-2">
                   {messages.map((msg) => {
                     const messageAvatar = resolveAvatarUrl(msg as Record<string, unknown>);
                     return (
@@ -817,7 +817,7 @@ export const ChatRoomActionsDialog = memo(
             </TabsContent>
 
             {/* Statistics Tab */}
-            <TabsContent value="stats" className="space-y-4 mt-4">
+            <TabsContent value="stats" className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               {visitedTabs.has('stats') && <>
               {/* Community images */}
               {(iconUrl || (room.backgroundImage?.url)) && (

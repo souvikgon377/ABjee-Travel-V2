@@ -28,6 +28,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import Header from '@/components/mvpblocks/header-1';
+import Footer4Col from '@/components/mvpblocks/footer-4col';
 import OfferSpotlightPopup from '@/components/ui/offer-spotlight-popup';
 
 
@@ -422,6 +423,9 @@ const ChatRoomsList: React.FC = () => {
     const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
     return role === 'admin' || role === 'owner';
   }, [userProfile?.role]);
+  const canCreatePrivateCommunity = useMemo(() => {
+    return isAdminOrOwner || paidMember;
+  }, [isAdminOrOwner, paidMember]);
   const hasSearchQuery = normalizedSearchDestination.length > 0;
   const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
 
@@ -1089,8 +1093,8 @@ const ChatRoomsList: React.FC = () => {
       return;
     }
 
-    if (!isAdminOrOwner) {
-      alert('Only admins can create community chat.');
+    if (!canCreatePrivateCommunity) {
+      alert('Only subscribed users can create private community chat.');
       return;
     }
 
@@ -1109,7 +1113,7 @@ const ChatRoomsList: React.FC = () => {
       // Upload background image if selected
       if (backgroundImageFile) {
         try {
-          backgroundImageData = await uploadImageToCloudinary(backgroundImageFile, {
+          backgroundImageData = await uploadImageToR2(backgroundImageFile, {
             folder: 'chat-rooms/backgrounds'
           });
         } catch (error: any) {
@@ -1120,7 +1124,7 @@ const ChatRoomsList: React.FC = () => {
       // Upload icon image if selected
       if (iconImageFile) {
         try {
-          iconImageData = await uploadImageToCloudinary(iconImageFile, {
+          iconImageData = await uploadImageToR2(iconImageFile, {
             folder: 'chat-rooms/icons'
           });
         } catch (error: any) {
@@ -2694,16 +2698,16 @@ const ChatRoomsList: React.FC = () => {
         
             <Dialog
               open={showCreateDialog}
-              onOpenChange={(open) => setShowCreateDialog(isAdminOrOwner ? open : false)}
+              onOpenChange={(open) => setShowCreateDialog(canCreatePrivateCommunity ? open : false)}
             >
               <DialogTrigger asChild>
                 <Button 
                   size="lg"
-                  disabled={!isAdminOrOwner}
+                  disabled={!canCreatePrivateCommunity}
                   className="w-full sm:w-auto bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
                 >
                   <Plus className="h-6 w-6 mr-2" />
-                  {isAdminOrOwner ? 'Create New Community' : 'Admin Only'}
+                  {canCreatePrivateCommunity ? 'Create New Community' : 'Subscribers Only'}
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </DialogTrigger>
@@ -3538,6 +3542,7 @@ const ChatPage: React.FC = () => {
         contextLabel="Community Offers"
       />
       <ChatRoomsList />
+      <Footer4Col />
     </div>
   );
 };
