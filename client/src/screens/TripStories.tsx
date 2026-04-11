@@ -789,7 +789,8 @@ function StoryModal({
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm"
+        data-lenis-prevent
+        className="fixed inset-0 z-50 overflow-y-auto overscroll-contain touch-pan-y bg-black/80 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -1381,7 +1382,8 @@ function SubmitStoryForm({
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 backdrop-blur-sm overflow-y-auto py-8 px-4"
+        data-lenis-prevent
+        className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain touch-pan-y py-8 px-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

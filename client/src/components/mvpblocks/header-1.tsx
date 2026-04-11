@@ -349,7 +349,7 @@ export default function Header1() {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.96 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      className={`absolute ${panelClassName} z-80 origin-top-right overflow-hidden rounded-xl border border-border bg-background shadow-xl`}
+      className={`${panelClassName} z-80 overflow-hidden rounded-xl border border-border bg-background shadow-xl`}
     >
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between gap-3">
@@ -600,7 +600,7 @@ export default function Header1() {
                       )}
                     </button>
                     <AnimatePresence>
-                      {notificationsOpen && renderNotificationPanel('right-0 top-full mt-2 w-80')}
+                      {notificationsOpen && renderNotificationPanel('absolute right-0 top-full mt-2 w-80 origin-top-right')}
                     </AnimatePresence>
                   </div>
 
@@ -687,7 +687,7 @@ export default function Header1() {
                   )}
                 </button>
                 <AnimatePresence>
-                  {notificationsOpen && renderNotificationPanel('right-0 top-full mt-2 w-[calc(100vw-1rem)] max-w-80')}
+                  {notificationsOpen && renderNotificationPanel('fixed left-1/2 top-[4.5rem] w-[calc(100vw-1rem)] max-w-sm -translate-x-1/2 origin-top')}
                 </AnimatePresence>
               </div>
             )}

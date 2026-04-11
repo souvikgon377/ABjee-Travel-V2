@@ -68,10 +68,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    const disableLenisOnRoute =
-      pathname === "/trip-stories" ||
-      pathname === "/travel-itinerary";
-
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isTouchDevice =
       window.matchMedia("(pointer: coarse)").matches ||
@@ -81,7 +77,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const disableLenisOnMobile = isTouchDevice || (isSmallViewport && hasTouchPoints);
 
     // Touch devices generally feel smoother with native scrolling than JS-driven smoothing.
-    if (disableLenisOnRoute || prefersReducedMotion || disableLenisOnMobile) {
+    if (prefersReducedMotion || disableLenisOnMobile) {
       return;
     }
 
