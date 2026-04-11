@@ -71,7 +71,7 @@ const CommunityHeader: React.FC = () => {
   };
 
   return (
-    <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-16 z-40">
+    <header className="glass sticky top-16 lg:top-20 z-40 border-b border-white/25 dark:border-white/10 backdrop-blur-xl supports-backdrop-filter:bg-white/12 dark:supports-backdrop-filter:bg-black/25 shadow-[0_8px_26px_rgba(15,23,42,0.28)]">
       <div className="max-w-7xl mx-auto px-4">
         <LayoutGroup>
           <nav className="flex items-center justify-center overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">

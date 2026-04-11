@@ -443,7 +443,7 @@ export default function TravelItenaryDisplay() {
 	}, [allResults, search.query, filterDestination, filterDuration]);
 
 	return (
-		<div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:bg-background">
+		<div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
 			<Header1 />
 			<CommunityHeader />
 

@@ -7,15 +7,17 @@ import {
   MapPin,
   Phone,
   Twitter,
+  YoutubeIcon,
 } from 'lucide-react';
 import { publicAsset } from '@/lib/publicAsset';
 
 const data = {
-  facebookLink: 'https://facebook.com/ABjee Travel',
-  instaLink: 'https://instagram.com/ABjee Travel',
-  twitterLink: 'https://twitter.com/ABjee Travel',
-  githubLink: 'https://github.com/ABjee Travel',
-  dribbbleLink: 'https://dribbble.com/ABjee Travel',
+  facebookLink: 'https://www.facebook.com/profile.php?id=61551098648104',
+  instaLink: 'https://www.instagram.com/abjeetravel.youtuber/',
+  youtubeLink: 'https://www.youtube.com/c/ABjeeTravel',
+  // twitterLink: 'https://twitter.com/ABjee Travel',
+  // githubLink: 'https://github.com/ABjee Travel',
+  // dribbbleLink: 'https://dribbble.com/ABjee Travel',
   services: {
     webdev: '/web-development',
     webdesign: '/web-design',
@@ -34,14 +36,14 @@ const data = {
     livechat: '/live-chat',
   },
   contact: {
-    email: 'mailto:hello@ABjee Travel.com',
-    phone: 'tel:+919800247262',
+    email: 'mailto:abjeetourism@gmail.com',
+    phone: 'tel:+91 9830683893',
     address: 'Kolkata, West Bengal, India',
   },
   company: {
     name: 'ABjee Travel',
     description:
-      'Building beautiful and functional web experiences with modern technologies. We help startups and businesses create their digital presence.',
+      'Discover the world with ABjee Travel, meet fellow travellors, share thoughts and much more.',
     logo: publicAsset('/logo.jpg'),
   },
 };
@@ -49,9 +51,10 @@ const data = {
 const socialLinks = [
   { icon: Facebook, label: 'Facebook', href: data.facebookLink },
   { icon: Instagram, label: 'Instagram', href: data.instaLink },
-  { icon: Twitter, label: 'Twitter', href: data.twitterLink },
-  { icon: Github, label: 'GitHub', href: data.githubLink },
-  { icon: Dribbble, label: 'Dribbble', href: data.dribbbleLink },
+  { icon: YoutubeIcon, label: 'Youtube', href: data.youtubeLink },
+  // { icon: Twitter, label: 'Twitter', href: data.twitterLink },
+  // { icon: Github, label: 'GitHub', href: data.githubLink },
+  // { icon: Dribbble, label: 'Dribbble', href: data.dribbbleLink },
 ];
 
 const aboutLinks = [

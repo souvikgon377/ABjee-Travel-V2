@@ -116,7 +116,21 @@
 
 /* Smooth scrolling */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
+}
+
+/* Lenis integration */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
 }
 
 /* Hidden scrollbar (keep scrolling seamless) */
@@ -154,7 +168,7 @@ html {
 
 /* GPU acceleration for animations */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   /* Enable GPU acceleration for smooth 120Hz/144Hz animations */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useInView, type Variants } from 'framer-motion';
+import { motion, useInView, useReducedMotion, type Variants } from 'framer-motion';
 import {
   Facebook,
   Instagram,
@@ -199,6 +199,8 @@ function FounderSection({ founder }: { founder: AboutFounderContent }) {
 export default function AboutPage() {
   const [content, setContent] = useState<AboutPageContent>(DEFAULT_ABOUT_PAGE_CONTENT);
   const [isSmallMobile, setIsSmallMobile] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+  const shouldAnimateHero = !isSmallMobile && !prefersReducedMotion;
 
   useEffect(() => {
     let mounted = true;
@@ -224,54 +226,52 @@ export default function AboutPage() {
 
   const heroPlaneConfigs = useMemo(
     () =>
-      isSmallMobile
+      !shouldAnimateHero
+        ? []
+        : isSmallMobile
         ? [
-            { top: '12%', duration: 26, delay: 0, size: 24, color: 'rgba(244,63,94,0.28)', tilt: '-10deg' },
-            { top: '58%', duration: 30, delay: 13, size: 20, color: 'rgba(251,146,60,0.26)', tilt: '-9deg' },
+            { top: '18%', duration: 34, delay: 0, size: 20, color: 'rgba(244,63,94,0.22)', tilt: '-10deg' },
           ]
         : [
-            { top: '10%', duration: 24, delay: 0, size: 30, color: 'rgba(244,63,94,0.30)', tilt: '-12deg' },
-            { top: '38%', duration: 34, delay: 11, size: 22, color: 'rgba(168,85,247,0.25)', tilt: '-8deg' },
-            { top: '63%', duration: 28, delay: 19, size: 25, color: 'rgba(251,146,60,0.28)', tilt: '-10deg' },
+            { top: '16%', duration: 34, delay: 0, size: 24, color: 'rgba(244,63,94,0.24)', tilt: '-12deg' },
+            { top: '58%', duration: 40, delay: 14, size: 20, color: 'rgba(251,146,60,0.20)', tilt: '-10deg' },
           ],
-    [isSmallMobile],
+    [isSmallMobile, prefersReducedMotion, shouldAnimateHero],
   );
 
   const heroCloudConfigs = useMemo(
     () =>
-      isSmallMobile
+      !shouldAnimateHero
+        ? []
+        : isSmallMobile
         ? [
-            { top: '10%', duration: 66, delay: 0, scale: 0.75, opacity: 0.11 },
-            { top: '58%', duration: 58, delay: 14, scale: 0.55, opacity: 0.1 },
+            { top: '16%', duration: 80, delay: 0, scale: 0.62, opacity: 0.08 },
           ]
         : [
-            { top: '6%', duration: 60, delay: 0, scale: 1.1, opacity: 0.13 },
-            { top: '23%', duration: 75, delay: 18, scale: 0.75, opacity: 0.1 },
-            { top: '52%', duration: 50, delay: 7, scale: 0.55, opacity: 0.11 },
-            { top: '74%', duration: 68, delay: 28, scale: 0.85, opacity: 0.09 },
+            { top: '12%', duration: 82, delay: 0, scale: 0.92, opacity: 0.08 },
+            { top: '56%', duration: 88, delay: 22, scale: 0.62, opacity: 0.07 },
           ],
-    [isSmallMobile],
+    [isSmallMobile, prefersReducedMotion, shouldAnimateHero],
   );
 
   const heroPins = useMemo(
     () =>
-      isSmallMobile
+      !shouldAnimateHero
+        ? []
+        : isSmallMobile
         ? [
-            { top: '20%', left: '72%', delay: 0, size: 16, color: 'rgba(244,63,94,0.34)' },
-            { top: '66%', left: '26%', delay: 3, size: 14, color: 'rgba(168,85,247,0.30)' },
+            { top: '24%', left: '72%', delay: 0, size: 14, color: 'rgba(244,63,94,0.26)' },
           ]
         : [
-            { top: '18%', left: '72%', delay: 0, size: 18, color: 'rgba(244,63,94,0.38)' },
-            { top: '52%', left: '16%', delay: 2.5, size: 15, color: 'rgba(168,85,247,0.32)' },
-            { top: '68%', left: '60%', delay: 5, size: 20, color: 'rgba(251,146,60,0.35)' },
-            { top: '30%', left: '42%', delay: 3.5, size: 14, color: 'rgba(99,102,241,0.30)' },
+            { top: '22%', left: '72%', delay: 0, size: 16, color: 'rgba(244,63,94,0.28)' },
+            { top: '60%', left: '18%', delay: 4, size: 14, color: 'rgba(168,85,247,0.22)' },
           ],
-    [isSmallMobile],
+    [isSmallMobile, prefersReducedMotion, shouldAnimateHero],
   );
 
-  const slowParticleCount = isSmallMobile ? 8 : 80;
-  const fastParticleCount = isSmallMobile ? 5 : 70;
-  const glowParticleCount = isSmallMobile ? 2 : 20;
+  const slowParticleCount = shouldAnimateHero ? (isSmallMobile ? 4 : 18) : 0;
+  const fastParticleCount = shouldAnimateHero ? (isSmallMobile ? 3 : 16) : 0;
+  const glowParticleCount = shouldAnimateHero ? (isSmallMobile ? 1 : 6) : 0;
 
   const socialLinks = content.socialLinks;
   const youtubeVideos = content.youtubeVideos;
@@ -292,23 +292,23 @@ export default function AboutPage() {
         {/* â”€â”€ Aurora blobs â”€â”€ */}
         <motion.div
           className={`absolute -top-48 -left-48 rounded-full bg-rose-400/30 dark:bg-rose-500/25 pointer-events-none ${isSmallMobile ? 'w-120 h-120 blur-[90px]' : 'w-175 h-175 blur-[130px]'}`}
-          animate={{ x: [0, 70, 20, 0], y: [0, 50, -20, 0], scale: [1, 1.12, 0.96, 1] }}
-          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+          animate={shouldAnimateHero ? { x: [0, 50, 0], y: [0, 26, 0], scale: [1, 1.06, 1] } : undefined}
+          transition={shouldAnimateHero ? { duration: 28, repeat: Infinity, ease: 'easeInOut' } : undefined}
         />
         <motion.div
           className={`absolute top-1/4 -right-40 rounded-full bg-violet-400/25 dark:bg-violet-600/20 pointer-events-none ${isSmallMobile ? 'w-100 h-100 blur-[80px]' : 'w-150 h-150 blur-[110px]'}`}
-          animate={{ x: [0, -55, 10, 0], y: [0, 65, -25, 0], scale: [1, 1.15, 0.92, 1] }}
-          transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+          animate={shouldAnimateHero ? { x: [0, -40, 0], y: [0, 28, 0], scale: [1, 1.05, 1] } : undefined}
+          transition={shouldAnimateHero ? { duration: 32, repeat: Infinity, ease: 'easeInOut', delay: 4 } : undefined}
         />
         <motion.div
           className={`absolute -bottom-24 left-1/4 rounded-full bg-orange-400/25 dark:bg-orange-500/20 pointer-events-none ${isSmallMobile ? 'w-90 h-90 blur-[80px]' : 'w-130 h-130 blur-[110px]'}`}
-          animate={{ x: [0, 45, -15, 0], y: [0, -35, 15, 0], scale: [1, 1.08, 1.04, 1] }}
-          transition={{ duration: 17, repeat: Infinity, ease: 'easeInOut', delay: 6 }}
+          animate={shouldAnimateHero ? { x: [0, 28, 0], y: [0, -18, 0], scale: [1, 1.03, 1] } : undefined}
+          transition={shouldAnimateHero ? { duration: 26, repeat: Infinity, ease: 'easeInOut', delay: 7 } : undefined}
         />
         <motion.div
           className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-400/20 dark:bg-pink-600/15 pointer-events-none ${isSmallMobile ? 'w-70 h-70 blur-[70px]' : 'w-95 h-95 blur-[90px]'}`}
-          animate={{ scale: [1, 1.35, 1], opacity: [0.5, 0.9, 0.5] }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+          animate={shouldAnimateHero ? { scale: [1, 1.18, 1], opacity: [0.45, 0.75, 0.45] } : undefined}
+          transition={shouldAnimateHero ? { duration: 14, repeat: Infinity, ease: 'easeInOut', delay: 1 } : undefined}
         />
 
         {/* â”€â”€ Subtle dot-mesh texture â”€â”€ */}
@@ -331,8 +331,8 @@ export default function AboutPage() {
             key={`plane-${i}`}
             className="absolute pointer-events-none"
             style={{ top: p.top, left: 0, color: p.color }}
-            animate={{ x: [-180, 2200] }}
-            transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: 'linear', repeatDelay: (i * 3 + 2) }}
+            animate={shouldAnimateHero ? { x: [-160, 2200] } : undefined}
+            transition={shouldAnimateHero ? { duration: p.duration, repeat: Infinity, delay: p.delay, ease: 'linear', repeatDelay: (i * 6 + 5) } : undefined}
           >
             {/* airplane silhouette pointing right */}
             <svg xmlns="http://www.w3.org/2000/svg" width={p.size} height={p.size} viewBox="0 0 24 24" fill="currentColor"
@@ -348,8 +348,8 @@ export default function AboutPage() {
             key={`cloud-${i}`}
             className="absolute pointer-events-none"
             style={{ top: c.top, left: 0 }}
-            animate={{ x: [2300, -450] }}
-            transition={{ duration: c.duration, repeat: Infinity, delay: c.delay, ease: 'linear' }}
+            animate={shouldAnimateHero ? { x: [2200, -350] } : undefined}
+            transition={shouldAnimateHero ? { duration: c.duration, repeat: Infinity, delay: c.delay, ease: 'linear' } : undefined}
           >
             <svg xmlns="http://www.w3.org/2000/svg"
               width={130 * c.scale} height={75 * c.scale}
@@ -367,8 +367,8 @@ export default function AboutPage() {
         <motion.div
           className="absolute pointer-events-none"
           style={{ top: '12%', right: '10%', opacity: 0.22 }}
-          animate={{ y: [0, -28, 0], rotate: [-2, 2, -2] }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+          animate={shouldAnimateHero ? { y: [0, -14, 0], rotate: [-1, 1, -1] } : undefined}
+          transition={shouldAnimateHero ? { duration: 14, repeat: Infinity, ease: 'easeInOut' } : undefined}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="64" height="88" viewBox="0 0 64 88" fill="none">
             {/* balloon body */}
@@ -391,8 +391,8 @@ export default function AboutPage() {
         <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '28%', left: '7%', opacity: 0.18 }}
-          animate={{ rotate: [0, 360] }}
-          transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}
+          animate={shouldAnimateHero ? { rotate: [0, 360] } : undefined}
+          transition={shouldAnimateHero ? { duration: 36, repeat: Infinity, ease: 'linear' } : undefined}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52" fill="none">
             <circle cx="26" cy="26" r="23" stroke="rgba(99,102,241,0.65)" strokeWidth="2" fill="none" />
@@ -414,8 +414,8 @@ export default function AboutPage() {
             key={`pin-${i}`}
             className="absolute pointer-events-none"
             style={{ top: pin.top, left: pin.left, color: pin.color }}
-            animate={{ y: [0, -14, 0], opacity: [0.45, 1, 0.45] }}
-            transition={{ duration: 2.5 + i * 0.7, repeat: Infinity, delay: pin.delay, ease: 'easeInOut' }}
+            animate={shouldAnimateHero ? { y: [0, -8, 0], opacity: [0.5, 0.9, 0.5] } : undefined}
+            transition={shouldAnimateHero ? { duration: 4.5 + i * 1.2, repeat: Infinity, delay: pin.delay, ease: 'easeInOut' } : undefined}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width={pin.size} height={pin.size} viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
@@ -427,8 +427,8 @@ export default function AboutPage() {
         <motion.div
           className="absolute pointer-events-none"
           style={{ bottom: '15%', left: 0, opacity: 0.18 }}
-          animate={{ x: [-80, 2200] }}
-          transition={{ duration: 44, repeat: Infinity, delay: 6, ease: 'linear' }}
+          animate={shouldAnimateHero ? { x: [-80, 2200] } : undefined}
+          transition={shouldAnimateHero ? { duration: 60, repeat: Infinity, delay: 8, ease: 'linear' } : undefined}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="rgba(99,102,241,0.75)">
             <path d="M20 6h-2.18c.07-.44.18-.88.18-1.34C18 3 16.77 2 15.27 2H8.73C7.23 2 6 3 6 4.66c0 .46.11.9.18 1.34H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM8.73 4h6.54c.41 0 .73.3.73.66 0 .38-.1.74-.18 1.1l-.08.24H8.26l-.08-.24C8.1 5.4 8 5.04 8 4.66 8 4.3 8.32 4 8.73 4z" />
@@ -586,8 +586,8 @@ export default function AboutPage() {
         {/* â”€â”€ Scroll indicator â”€â”€ */}
         <motion.div
           className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-foreground/40 text-xs"
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 1.6, repeat: Infinity }}
+          animate={shouldAnimateHero ? { y: [0, -8, 0] } : undefined}
+          transition={shouldAnimateHero ? { duration: 1.6, repeat: Infinity } : undefined}
         >
           <span className="tracking-widest uppercase text-[10px]">Scroll</span>
           <div className="w-px h-8 bg-linear-to-b from-foreground/40 to-transparent" />
