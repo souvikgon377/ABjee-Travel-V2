@@ -20,6 +20,7 @@ import { auth } from '../../lib/firebase';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
+import { ConfettiButton } from '@/components/ui/confetti';
 
 const plans = [
   {
@@ -126,7 +127,7 @@ export default function SimplePricing() {
       setAppliedCoupon(null);
       setCouponPreviewByPlan({});
       setCouponError(null);
-      return;
+      return false;
     }
 
     setApplyingCoupon(true);
@@ -180,10 +181,12 @@ export default function SimplePricing() {
       setCouponPreviewByPlan(previews);
       setCouponInput(normalizedCode);
       setCouponError(null);
+      return true;
     } catch (error: any) {
       setAppliedCoupon(null);
       setCouponPreviewByPlan({});
       setCouponError(error?.message || 'Unable to validate coupon right now.');
+      return false;
     } finally {
       setApplyingCoupon(false);
     }
@@ -485,14 +488,14 @@ export default function SimplePricing() {
               />
             </div>
             <div className="flex gap-2">
-              <Button
+              <ConfettiButton
                 type="button"
                 variant="default"
                 onClick={() => validateCouponForCurrentFrequency(couponInput)}
                 disabled={applyingCoupon}
               >
                 {applyingCoupon ? 'Applying...' : 'Apply Coupon'}
-              </Button>
+              </ConfettiButton>
               {appliedCoupon && (
                 <Button
                   type="button"

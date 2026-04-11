@@ -115,11 +115,34 @@ interface ConfettiButtonProps extends React.ComponentProps<"button"> {
 const ConfettiButtonComponent = ({
   options,
   children,
+  onClick,
   ...props
 }: ConfettiButtonProps) => {
   const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    const target = event.currentTarget
+
+    let shouldFire = true
+
+    if (onClick) {
+      try {
+        const onClickResult = await onClick(event)
+        shouldFire = onClickResult !== false
+      } catch (error) {
+        console.error("Confetti button action error:", error)
+        shouldFire = false
+      }
+    }
+
+    if (!shouldFire) {
+      return
+    }
+
     try {
-      const rect = event.currentTarget.getBoundingClientRect()
+      if (!target) {
+        return
+      }
+
+      const rect = target.getBoundingClientRect()
       const x = rect.left + rect.width / 2
       const y = rect.top + rect.height / 2
       await confetti({
