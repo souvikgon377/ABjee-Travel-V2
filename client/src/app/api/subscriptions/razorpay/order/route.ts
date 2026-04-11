@@ -8,6 +8,7 @@ import {
   isValidPaidPlan,
   SUBSCRIPTION_PLANS,
 } from '@/lib/server/subscriptionPlans';
+import { getCouponPricing } from '@/lib/server/couponPricing';
 
 export const runtime = 'nodejs';
 
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const planType = body.planType;
     const interval = body.interval;
+    const promoCode = String(body.promoCode || '').trim();
 
     if (!isValidPaidPlan(planType)) {
       return fail('Invalid plan type', 400);
@@ -52,7 +54,13 @@ export async function POST(req: NextRequest) {
     }
 
     const selectedPrice = getPlanByInterval(planType, interval);
-    const amountInPaise = Math.round(selectedPrice.amount * 100);
+    const couponPricing = await getCouponPricing({
+      promoCode,
+      planType,
+      interval,
+      baseAmount: selectedPrice.amount,
+    });
+    const amountInPaise = Math.round(couponPricing.finalAmount * 100);
     if (!Number.isFinite(amountInPaise) || amountInPaise <= 0) {
       return fail('Invalid amount', 400);
     }
@@ -75,6 +83,8 @@ export async function POST(req: NextRequest) {
           planType,
           interval,
           planName: SUBSCRIPTION_PLANS[planType].name,
+          promoCode: couponPricing.promoCode || '',
+          discountPercent: String(couponPricing.discountPercent),
         },
       }),
     });
@@ -93,7 +103,11 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       planType,
       interval,
-      amount: selectedPrice.amount,
+      amount: couponPricing.finalAmount,
+      baseAmount: selectedPrice.amount,
+      discountAmount: couponPricing.discountAmount,
+      discountPercent: couponPricing.discountPercent,
+      promoCode: couponPricing.promoCode,
       amountInPaise,
       currency: selectedPrice.currency,
       status: 'created',
@@ -110,6 +124,11 @@ export async function POST(req: NextRequest) {
       planType,
       interval,
       planName: SUBSCRIPTION_PLANS[planType].name,
+      baseAmount: selectedPrice.amount,
+      finalAmount: couponPricing.finalAmount,
+      discountAmount: couponPricing.discountAmount,
+      discountPercent: couponPricing.discountPercent,
+      promoCode: couponPricing.promoCode,
     });
   } catch (error: any) {
     if (error instanceof AuthError) {

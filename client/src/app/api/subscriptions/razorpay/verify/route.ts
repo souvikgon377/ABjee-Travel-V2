@@ -99,6 +99,10 @@ export async function POST(req: NextRequest) {
 
     const selectedPlan = SUBSCRIPTION_PLANS[planType];
     const selectedPrice = getPlanByInterval(planType, interval);
+    const appliedPromoCode = typeof paymentData.promoCode === 'string' ? paymentData.promoCode : null;
+    const discountPercent = Number(paymentData.discountPercent || 0);
+    const discountAmount = Number(paymentData.discountAmount || 0);
+    const finalAmount = Number(paymentData.amount || selectedPrice.amount);
     const startDate = new Date();
     const endDate = getIntervalEndDate(interval, startDate);
 
@@ -113,7 +117,7 @@ export async function POST(req: NextRequest) {
     features.maxPrivateChats = interval === 'yearly' ? 10 : 3;
 
     const billingEntry = {
-      amount: plan.price.amount,
+      amount: finalAmount,
       currency: plan.price.currency,
       status: 'paid',
       description: `${selectedPlan.name} - ${interval} subscription`,
@@ -122,6 +126,9 @@ export async function POST(req: NextRequest) {
       paymentGateway: 'razorpay',
       razorpayOrderId,
       razorpayPaymentId,
+      promoCode: appliedPromoCode,
+      discountPercent,
+      discountAmount,
     };
 
     if (!subscription) {
@@ -138,6 +145,7 @@ export async function POST(req: NextRequest) {
           orderId: razorpayOrderId,
           paymentId: razorpayPaymentId,
         },
+        promoCode: appliedPromoCode,
         billingHistory: [billingEntry],
       });
     } else {
@@ -155,6 +163,7 @@ export async function POST(req: NextRequest) {
           orderId: razorpayOrderId,
           paymentId: razorpayPaymentId,
         },
+        promoCode: appliedPromoCode,
         billingHistory: [...(subscription.billingHistory || []), billingEntry],
       });
     }

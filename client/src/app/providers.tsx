@@ -2,18 +2,63 @@
 
 import { useEffect } from "react";
 import Lenis from "lenis";
+import { usePathname } from "next/navigation";
 import { ThemeProvider } from "@/components/mvpblocks/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PageViewTracker } from "@/components/PageViewTracker";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const html = document.documentElement;
+    const body = document.body;
+
+    // Defensive cleanup for stale locks left by interrupted modal/checkout flows.
+    html.classList.remove("payment-modal-open", "lenis-stopped");
+    body.classList.remove("payment-modal-open");
+
+    if (body.style.position === "fixed") {
+      body.style.position = "";
+    }
+
+    if (body.style.top) {
+      body.style.top = "";
+    }
+
+    if (body.style.width) {
+      body.style.width = "";
+    }
+
+    if (body.style.touchAction === "none") {
+      body.style.touchAction = "";
+    }
+
+    if (body.style.overflow === "hidden") {
+      body.style.overflow = "";
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    const disableLenisOnRoute =
+      pathname === "/trip-stories" ||
+      pathname === "/travel-itinerary";
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isTouchDevice =
+      window.matchMedia("(pointer: coarse)").matches ||
+      window.matchMedia("(hover: none)").matches;
+    const isSmallViewport = window.matchMedia("(max-width: 1024px)").matches;
+    const hasTouchPoints = navigator.maxTouchPoints > 0;
+    const disableLenisOnMobile = isTouchDevice || (isSmallViewport && hasTouchPoints);
+
+    // Touch devices generally feel smoother with native scrolling than JS-driven smoothing.
+    if (disableLenisOnRoute || prefersReducedMotion || disableLenisOnMobile) {
       return;
     }
 
     const lenis = new Lenis({
-      duration: 1,
+      duration: 0.9,
       smoothWheel: true,
       syncTouch: true,
       prevent: (node) => {
@@ -38,7 +83,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       window.cancelAnimationFrame(rafId);
       lenis.destroy();
     };
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {

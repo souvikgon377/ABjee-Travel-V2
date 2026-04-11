@@ -742,7 +742,7 @@ function StoryModal({
     const colRef = collection(firestoreDb, `stories/${story.id}/comments`);
     const q = query(colRef, orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
-      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Comment)));
+      setComments(snap.docs.map(d => ({ ...(d.data() as Comment), id: d.id })));
     });
     return unsub;
   }, [story.id]);
@@ -1647,7 +1647,7 @@ export default function TripStoriesPage() {
   useEffect(() => {
     const q = query(collection(firestoreDb, 'stories'), orderBy('createdAt', 'desc'), limit(50));
     const unsub = onSnapshot(q, snap => {
-      const firestoreStories = snap.docs.map(d => ({ id: d.id, ...d.data() } as TripStory));
+      const firestoreStories = snap.docs.map(d => ({ ...(d.data() as TripStory), id: d.id }));
       setStories([...firestoreStories, ...SAMPLE_STORIES]);
     }, () => {
       // Firestore unavailable, use samples

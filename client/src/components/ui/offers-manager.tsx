@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,22 @@ type OfferDoc = {
 
 type OfferForm = Omit<OfferDoc, 'id' | 'updatedAt' | 'createdAt'>;
 
+type CouponAppliesTo = 'all' | 'pro' | 'premium';
+
+type CouponDoc = {
+  id: string;
+  code: string;
+  discountPercent: number;
+  appliesTo: CouponAppliesTo;
+  isActive: boolean;
+  validFrom?: number;
+  validUntil?: number;
+  updatedAt?: number;
+  createdAt?: number;
+};
+
+type CouponForm = Omit<CouponDoc, 'id' | 'updatedAt' | 'createdAt'>;
+
 const EMPTY_FORM: OfferForm = {
   title: '',
   description: '',
@@ -36,9 +52,33 @@ const EMPTY_FORM: OfferForm = {
   priority: 10,
 };
 
+const EMPTY_COUPON_FORM: CouponForm = {
+  code: '',
+  discountPercent: 10,
+  appliesTo: 'all',
+  isActive: true,
+  validFrom: undefined,
+  validUntil: undefined,
+};
+
+const toDateTimeInputValue = (timestamp?: number) => {
+  if (!timestamp || !Number.isFinite(timestamp)) return '';
+  const date = new Date(timestamp);
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const fromDateTimeInputValue = (value: string) => {
+  if (!value.trim()) return undefined;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 export function OffersManager() {
   const [offers, setOffers] = useState<OfferDoc[]>([]);
   const [form, setForm] = useState<OfferForm>(EMPTY_FORM);
+  const [coupons, setCoupons] = useState<CouponDoc[]>([]);
+  const [couponForm, setCouponForm] = useState<CouponForm>(EMPTY_COUPON_FORM);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -52,6 +92,18 @@ export function OffersManager() {
           return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
         });
       setOffers(rows);
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const couponsRef = collection(firestoreDb, 'coupons');
+    const unsub = onSnapshot(couponsRef, (snapshot) => {
+      const rows = snapshot.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<CouponDoc, 'id'>) }))
+        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+      setCoupons(rows);
     });
 
     return () => unsub();
@@ -98,6 +150,57 @@ export function OffersManager() {
   const removeOffer = async (id: string) => {
     if (!confirm('Delete this offer?')) return;
     await deleteDoc(doc(firestoreDb, 'offers', id));
+  };
+
+  const addCoupon = async () => {
+    const code = couponForm.code.trim().toUpperCase();
+    const discountPercent = Number(couponForm.discountPercent);
+
+    if (!code) {
+      alert('Coupon code is required.');
+      return;
+    }
+
+    if (!Number.isFinite(discountPercent) || discountPercent <= 0 || discountPercent > 100) {
+      alert('Discount percent must be between 1 and 100.');
+      return;
+    }
+
+    if (couponForm.validFrom && couponForm.validUntil && couponForm.validFrom > couponForm.validUntil) {
+      alert('Valid from date cannot be later than valid until date.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const now = Date.now();
+      await setDoc(doc(firestoreDb, 'coupons', code), {
+        code,
+        discountPercent,
+        appliesTo: couponForm.appliesTo,
+        isActive: couponForm.isActive,
+        validFrom: couponForm.validFrom ?? null,
+        validUntil: couponForm.validUntil ?? null,
+        createdAt: now,
+        updatedAt: now,
+      }, { merge: true });
+
+      setCouponForm(EMPTY_COUPON_FORM);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateCoupon = async (id: string, patch: Partial<CouponForm>) => {
+    await updateDoc(doc(firestoreDb, 'coupons', id), {
+      ...patch,
+      updatedAt: Date.now(),
+    });
+  };
+
+  const removeCoupon = async (id: string) => {
+    if (!confirm('Delete this coupon?')) return;
+    await deleteDoc(doc(firestoreDb, 'coupons', id));
   };
 
   return (
@@ -230,6 +333,152 @@ export function OffersManager() {
                 onChange={(e) => setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, description: e.target.value } : o)))}
                 rows={2}
               />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-emerald-200/60 bg-linear-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20">
+        <CardHeader>
+          <CardTitle className="text-xl">Add Coupon</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <Label>Coupon Code *</Label>
+              <Input
+                value={couponForm.code}
+                onChange={(e) => setCouponForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                placeholder="SAVE20"
+                className="uppercase"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Discount % *</Label>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                value={couponForm.discountPercent}
+                onChange={(e) => setCouponForm((prev) => ({ ...prev, discountPercent: Number(e.target.value || 0) }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Applies To</Label>
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={couponForm.appliesTo}
+                onChange={(e) => setCouponForm((prev) => ({ ...prev, appliesTo: e.target.value as CouponAppliesTo }))}
+              >
+                <option value="all">All Paid Plans</option>
+                <option value="pro">Paid</option>
+                <option value="premium">Premium</option>
+              </select>
+            </div>
+            <div className="flex items-end gap-3">
+              <Switch
+                checked={couponForm.isActive}
+                onCheckedChange={(value) => setCouponForm((prev) => ({ ...prev, isActive: value }))}
+              />
+              <span className="text-sm text-muted-foreground">Active</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Valid From (optional)</Label>
+              <Input
+                type="datetime-local"
+                value={toDateTimeInputValue(couponForm.validFrom)}
+                onChange={(e) => setCouponForm((prev) => ({ ...prev, validFrom: fromDateTimeInputValue(e.target.value) }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Valid Until (optional)</Label>
+              <Input
+                type="datetime-local"
+                value={toDateTimeInputValue(couponForm.validUntil)}
+                onChange={(e) => setCouponForm((prev) => ({ ...prev, validUntil: fromDateTimeInputValue(e.target.value) }))}
+              />
+            </div>
+          </div>
+
+          <Button onClick={addCoupon} disabled={saving}>
+            <Plus className="mr-2 h-4 w-4" />
+            {saving ? 'Saving...' : 'Add Coupon'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Current Coupons ({coupons.length})</CardTitle>
+          <p className="text-sm text-muted-foreground">Manage coupon codes and discount percentages used on pricing checkout.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {coupons.length === 0 && <p className="text-sm text-muted-foreground">No coupons yet.</p>}
+
+          {coupons.map((coupon) => (
+            <div key={coupon.id} className="rounded-xl border border-border p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-start">
+                <Input
+                  className="md:col-span-3 uppercase"
+                  value={coupon.code}
+                  onChange={(e) => setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, code: e.target.value.toUpperCase() } : c)))}
+                />
+                <Input
+                  className="md:col-span-2"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={coupon.discountPercent}
+                  onChange={(e) => setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, discountPercent: Number(e.target.value || 0) } : c)))}
+                />
+                <div className="md:col-span-2">
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={coupon.appliesTo || 'all'}
+                    onChange={(e) => setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, appliesTo: e.target.value as CouponAppliesTo } : c)))}
+                  >
+                    <option value="all">All Paid Plans</option>
+                    <option value="pro">Paid</option>
+                    <option value="premium">Premium</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <Input
+                    type="datetime-local"
+                    value={toDateTimeInputValue(coupon.validUntil)}
+                    onChange={(e) => setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, validUntil: fromDateTimeInputValue(e.target.value) } : c)))}
+                  />
+                </div>
+                <div className="md:col-span-3 flex items-center justify-end gap-2">
+                  <Switch
+                    checked={coupon.isActive}
+                    onCheckedChange={(value) => setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, isActive: value } : c)))}
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() =>
+                      updateCoupon(coupon.id, {
+                        code: coupon.code.trim().toUpperCase(),
+                        discountPercent: Number(coupon.discountPercent || 0),
+                        appliesTo: coupon.appliesTo || 'all',
+                        isActive: coupon.isActive,
+                        validFrom: coupon.validFrom,
+                        validUntil: coupon.validUntil,
+                      })
+                    }
+                    title="Save"
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                  <Button variant="destructive" size="icon" onClick={() => removeCoupon(coupon.id)} title="Delete">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
           ))}
         </CardContent>

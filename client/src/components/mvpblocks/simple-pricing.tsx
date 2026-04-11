@@ -19,6 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { auth } from '../../lib/firebase';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
+import { Input } from '@/components/ui/input';
 
 const plans = [
   {
@@ -84,6 +85,16 @@ export default function SimplePricing() {
   const [mounted, setMounted] = useState(false);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [paymentConfirmation, setPaymentConfirmation] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponPreviewByPlan, setCouponPreviewByPlan] = useState<Record<string, {
+    discountPercent: number;
+    discountAmount: number;
+    finalAmount: number;
+    currency: string;
+  }>>({});
   const { currentUser, userProfile } = useAuth();
   const router = useRouter();
 
@@ -108,6 +119,81 @@ export default function SimplePricing() {
     if (planId === 'enterprise') return 'premium';
     return null;
   };
+
+  const validateCouponForCurrentFrequency = useCallback(async (rawCouponCode: string) => {
+    const normalizedCode = rawCouponCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setAppliedCoupon(null);
+      setCouponPreviewByPlan({});
+      setCouponError(null);
+      return;
+    }
+
+    setApplyingCoupon(true);
+    setCouponError(null);
+
+    try {
+      const paidPlans = plans.filter((plan) => plan.id === 'pro' || plan.id === 'enterprise');
+      const previews: Record<string, {
+        discountPercent: number;
+        discountAmount: number;
+        finalAmount: number;
+        currency: string;
+      }> = {};
+
+      await Promise.all(
+        paidPlans.map(async (plan) => {
+          const planType = getPlanType(plan.id);
+          if (!planType) return;
+
+          const res = await fetch('/api/subscriptions/coupon/validate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              promoCode: normalizedCode,
+              planType,
+              interval: frequency,
+            }),
+          });
+
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || !payload?.success) {
+            return;
+          }
+
+          previews[plan.id] = {
+            discountPercent: Number(payload.data.discountPercent || 0),
+            discountAmount: Number(payload.data.discountAmount || 0),
+            finalAmount: Number(payload.data.finalAmount || 0),
+            currency: String(payload.data.currency || 'INR'),
+          };
+        }),
+      );
+
+      if (Object.keys(previews).length === 0) {
+        throw new Error('Coupon is not valid for current paid plans.');
+      }
+
+      setAppliedCoupon(normalizedCode);
+      setCouponPreviewByPlan(previews);
+      setCouponInput(normalizedCode);
+      setCouponError(null);
+    } catch (error: any) {
+      setAppliedCoupon(null);
+      setCouponPreviewByPlan({});
+      setCouponError(error?.message || 'Unable to validate coupon right now.');
+    } finally {
+      setApplyingCoupon(false);
+    }
+  }, [frequency]);
+
+  useEffect(() => {
+    if (!appliedCoupon) return;
+
+    validateCouponForCurrentFrequency(appliedCoupon);
+  }, [appliedCoupon, frequency, validateCouponForCurrentFrequency]);
 
   const triggerPaymentFireworks = useCallback(() => {
     const duration = 5 * 1000;
@@ -216,6 +302,7 @@ export default function SimplePricing() {
         body: JSON.stringify({
           planType,
           interval: frequency,
+          promoCode: appliedCoupon,
         }),
       });
 
@@ -381,6 +468,57 @@ export default function SimplePricing() {
           </Tabs>
         </motion.div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.25 }}
+          className="w-full max-w-2xl rounded-xl border border-primary/20 bg-card/70 p-4 text-left"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="w-full space-y-1">
+              <label className="text-sm font-medium">Have a coupon code?</label>
+              <Input
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                placeholder="Enter coupon code"
+                className="uppercase"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => validateCouponForCurrentFrequency(couponInput)}
+                disabled={applyingCoupon}
+              >
+                {applyingCoupon ? 'Applying...' : 'Apply Coupon'}
+              </Button>
+              {appliedCoupon && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setAppliedCoupon(null);
+                    setCouponPreviewByPlan({});
+                    setCouponInput('');
+                    setCouponError(null);
+                  }}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+          {appliedCoupon && (
+            <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
+              Coupon {appliedCoupon} applied to eligible paid plans.
+            </p>
+          )}
+          {couponError && (
+            <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">{couponError}</p>
+          )}
+        </motion.div>
+
         {paymentConfirmation && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -458,11 +596,21 @@ export default function SimplePricing() {
                               maximumFractionDigits: 0,
                             }}
                             value={
-                              plan.price[
-                                frequency as keyof typeof plan.price
-                              ] as number
+                              (couponPreviewByPlan[plan.id]?.finalAmount ??
+                                (plan.price[
+                                  frequency as keyof typeof plan.price
+                                ] as number))
                             }
                           />
+                          {couponPreviewByPlan[plan.id] && (
+                            <span className="ml-2 text-sm text-muted-foreground line-through">
+                              {new Intl.NumberFormat('en-IN', {
+                                style: 'currency',
+                                currency: couponPreviewByPlan[plan.id].currency,
+                                maximumFractionDigits: 0,
+                              }).format(plan.price[frequency as keyof typeof plan.price] as number)}
+                            </span>
+                          )}
                           <span className="ml-1 text-sm text-muted-foreground">
                             /month, billed {frequency}
                           </span>
@@ -536,6 +684,13 @@ export default function SimplePricing() {
                   </>
                 ) : (
                   <div className="pointer-events-none absolute inset-0 rounded-lg border border-transparent opacity-0 transition-opacity duration-300 hover:border-primary/10 hover:opacity-100" />
+                )}
+                {couponPreviewByPlan[plan.id] && (
+                  <div className="absolute right-3 top-3">
+                    <Badge variant="secondary" className="border border-emerald-400/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                      -{couponPreviewByPlan[plan.id].discountPercent}%
+                    </Badge>
+                  </div>
                 )}
               </Card>
             </motion.div>
