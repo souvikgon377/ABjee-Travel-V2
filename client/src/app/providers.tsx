@@ -16,6 +16,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       duration: 1,
       smoothWheel: true,
       syncTouch: true,
+      prevent: (node) => {
+        if (!(node instanceof HTMLElement)) {
+          return false;
+        }
+
+        return node.closest('[data-lenis-prevent]') !== null;
+      },
     });
 
     let rafId = 0;

@@ -113,7 +113,7 @@ export const AdminSidebar = memo(({ currentView, onViewChange }: AdminSidebarPro
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent className="flex-1 overflow-y-auto py-2">
+      <SidebarContent data-lenis-prevent className="flex-1 overflow-y-auto py-2">
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
