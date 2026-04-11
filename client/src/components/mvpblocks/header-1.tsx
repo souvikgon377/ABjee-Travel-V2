@@ -344,6 +344,7 @@ export default function Header1() {
 
   const renderNotificationPanel = (panelClassName: string) => (
     <motion.div
+      data-lenis-prevent
       initial={{ opacity: 0, y: -8, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.96 }}
@@ -370,7 +371,7 @@ export default function Header1() {
         </div>
       </div>
 
-      <div className="max-h-80 overflow-y-auto px-2 py-2">
+      <div data-lenis-prevent className="max-h-80 overflow-y-auto overscroll-contain px-2 py-2 touch-pan-y">
         {notificationError && (
           <p className="px-2 py-2 text-xs text-destructive">{notificationError}</p>
         )}

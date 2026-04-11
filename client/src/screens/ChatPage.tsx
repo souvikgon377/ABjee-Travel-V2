@@ -2713,17 +2713,28 @@ const ChatRoomsList: React.FC = () => {
               open={showCreateDialog}
               onOpenChange={(open) => setShowCreateDialog(canCreatePrivateCommunity ? open : false)}
             >
-              <DialogTrigger asChild>
-                <Button 
+              {canCreatePrivateCommunity ? (
+                <DialogTrigger asChild>
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
+                  >
+                    <Plus className="h-6 w-6 mr-2" />
+                    Create New Community
+                    <Sparkles className="h-5 w-5 ml-2" />
+                  </Button>
+                </DialogTrigger>
+              ) : (
+                <Button
                   size="lg"
-                  disabled={!canCreatePrivateCommunity}
+                  onClick={() => router.push('/pricing')}
                   className="w-full sm:w-auto bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl px-5 sm:px-8 py-4 sm:py-6 text-base sm:text-lg font-semibold"
                 >
                   <Plus className="h-6 w-6 mr-2" />
-                  {canCreatePrivateCommunity ? 'Create New Community' : 'Subscribers Only'}
+                  Subscribe Now
                   <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
-              </DialogTrigger>
+              )}
               <DialogContent className="w-[95vw] sm:max-w-137.5 max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-bold bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent">

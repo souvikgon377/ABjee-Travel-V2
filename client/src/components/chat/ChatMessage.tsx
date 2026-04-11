@@ -184,7 +184,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
         )}
 
         {/* Message Content */}
-        <div className={`${isOwnMessage ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg px-3 py-2 inline-block max-w-[70%]`}>
+        <div className={`${isOwnMessage ? 'bg-primary text-black dark:text-primary-foreground' : 'bg-muted text-black dark:text-foreground'} rounded-lg px-3 py-2 inline-block max-w-[70%]`}>
           {message.type === 'travel_request' ? (
             <div className="space-y-2">
               <div className="font-medium">=��� Travel Partner Request</div>

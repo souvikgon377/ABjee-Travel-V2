@@ -1802,16 +1802,13 @@ const ChatRoom = () => {
                               className={isOnlyEmoji ? 'text-2xl sm:text-3xl md:text-4xl animate-bounce-in' : `rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 backdrop-blur-sm shadow-md ${
                                 isDeleted 
                                   ? 'bg-muted/70 text-muted-foreground italic'
-                                  : isOwnMessage 
-                                  ? 'text-white' 
-                                  : ''
+                                  : 'text-black dark:text-white'
                               }`}
                               style={!isDeleted && !isOnlyEmoji && isOwnMessage && imageColors ? {
                                 background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
                                 opacity: 0.95
                               } : !isDeleted && !isOnlyEmoji && !isOwnMessage && imageColors ? {
                                 background: `linear-gradient(135deg, ${imageColors.secondary}DD 0%, ${imageColors.accent}CC 100%)`,
-                                color: '#ffffff',
                                 opacity: 0.9
                               } : !isDeleted && !isOnlyEmoji && !isOwnMessage ? {
                                 backgroundColor: 'hsl(var(--card) / 0.9)'
