@@ -10,7 +10,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await authenticateRequest(req);
     const body = await req.json();
-    const { roomId, roomName, memberIds, inviteToken: providedInviteToken } = body || {};
+    const {
+      roomId,
+      roomName,
+      memberIds,
+      inviteToken: providedInviteToken,
+      inviterName,
+      inviterEmail,
+    } = body || {};
 
     if (!roomId || !roomName || !Array.isArray(memberIds)) {
       return fail("Missing required fields: roomId, roomName, memberIds", 400);
@@ -46,7 +53,9 @@ export async function POST(req: NextRequest) {
       memberIds,
       roomId,
       roomName,
-      inviteToken
+      inviteToken,
+      typeof inviterName === 'string' ? inviterName : (user.displayName || user.username || user.email || 'Community admin'),
+      typeof inviterEmail === 'string' ? inviterEmail : (user.email || '')
     );
 
     return ok(

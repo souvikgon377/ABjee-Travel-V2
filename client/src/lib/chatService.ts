@@ -872,6 +872,25 @@ class ChatService {
    */
   async sendMessage(roomId: string, text: string, attachment?: MessageAttachment) {
     const user = this.getCurrentUser();
+
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+    const roomSnapshot = await get(roomRef);
+    if (!roomSnapshot.exists()) {
+      throw new Error('Community not found');
+    }
+
+    const room = roomSnapshot.val() as ChatRoom;
+    const participants = Array.isArray(room.participants) ? room.participants : [];
+    const isAllowedToMessage =
+      room.isPublic ||
+      this.isGeneralCommunityRoom(room) ||
+      room.createdBy === user.uid ||
+      participants.includes(user.uid);
+
+    if (!isAllowedToMessage) {
+      throw new Error('You can send messages only after your join request is approved.');
+    }
+
     const trimmedText = text.trim();
     await this.enforcePublicRoomContentPolicy(roomId, trimmedText);
     await this.enforcePublicRoomImagePolicy(roomId, attachment);
@@ -893,12 +912,12 @@ class ChatService {
     await set(newMessageRef, message);
     
     // Update room's last message
-    const roomRef = ref(database, `chatrooms/${roomId}/lastMessage`);
+    const lastMessageRef = ref(database, `chatrooms/${roomId}/lastMessage`);
     const lastMessageText = attachment 
       ? `📎 ${attachment.type === 'voice' ? 'Voice message' : attachment.name}`
       : trimmedText.substring(0, 100);
     
-    await set(roomRef, {
+    await set(lastMessageRef, {
       text: lastMessageText,
       timestamp: Date.now(),
       userId: user.uid

@@ -104,6 +104,21 @@ const isGeneralCommunityRoom = (room: RoomType | null): boolean => {
   return typeof room?.name === 'string' && room.name.trim().toLowerCase() === 'general community chat';
 };
 
+type JoinRequestUser = {
+  id: string;
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  email?: string;
+  avatar?: string;
+  avatarUrl?: string;
+  photoURL?: string;
+  profileImage?: string;
+  profilePicture?: string;
+  imageUrl?: string;
+};
+
 const ChatRoom = () => {
   const params = useParams();
   const roomId = params.roomId as string;
@@ -147,6 +162,7 @@ const ChatRoom = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [processingJoinRequestUserId, setProcessingJoinRequestUserId] = useState<string | null>(null);
+  const [joinRequestUsersMap, setJoinRequestUsersMap] = useState<Record<string, JoinRequestUser>>({});
   const [voiceRecorder] = useState(() => new VoiceRecorder());
   const privateRoomAllowance = useMemo(
     () => getPrivateRoomParticipationAllowance(userProfile, 0),
@@ -159,6 +175,13 @@ const ChatRoom = () => {
   const canManageCurrentCommunity = Boolean(
     user && room && ((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid))
   );
+  const hasMessageAccess = useMemo(() => {
+    if (!user || !room) return false;
+    if (room.isPublic || isGeneralCommunityRoom(room)) return true;
+
+    const participants = Array.isArray(room.participants) ? room.participants : [];
+    return room.createdBy === user.uid || participants.includes(user.uid);
+  }, [room, user]);
 
   // Add Members dialog state
   const [addMembersDialogOpen, setAddMembersDialogOpen] = useState(false);
@@ -274,6 +297,9 @@ const ChatRoom = () => {
 
     const init = async () => {
       try {
+        setMessages([]);
+        setHasMoreMessages(true);
+
         // Get room details
         const roomData = await chatService.getRoom(roomId);
         if (!roomData) {
@@ -329,6 +355,7 @@ const ChatRoom = () => {
               const alreadyRequested = (roomData.joinRequests || []).includes(user.uid);
               setJoinRequestPending(alreadyRequested);
               setShowJoinRequestDialog(true);
+              setMessages([]);
             } else {
               alert('This private community is invite-only. Ask the admin for an invite link.');
               router.push('/chat');
@@ -445,6 +472,7 @@ const ChatRoom = () => {
               roomId,
               requesterName:
                 userProfile?.displayName || user.displayName || user.email || 'A user',
+              requesterEmail: userProfile?.email || user.email || '',
             }),
           });
 
@@ -481,6 +509,10 @@ const ChatRoom = () => {
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!newMessage.trim() && !attachmentFile) || !roomId || !user) return;
+    if (!hasMessageAccess) {
+      alert('You can send messages only after your join request is approved.');
+      return;
+    }
 
     const messageText = newMessage.trim();
     const fileToSend = attachmentFile;
@@ -522,10 +554,10 @@ const ChatRoom = () => {
       setUploadingAttachment(false);
       alert(`Failed to send message: ${error.message || 'Please try again.'}`);
     }
-  }, [newMessage, attachmentFile, roomId, user]);
+  }, [newMessage, attachmentFile, roomId, user, hasMessageAccess]);
 
   const handleTyping = useCallback(() => {
-    if (!roomId || !user) return;
+    if (!roomId || !user || !hasMessageAccess) return;
 
     // Start typing
     chatService.startTyping(roomId);
@@ -539,7 +571,7 @@ const ChatRoom = () => {
     typingTimeoutRef.current = setTimeout(() => {
       chatService.stopTyping(roomId);
     }, 3000);
-  }, [roomId, user]);
+  }, [roomId, user, hasMessageAccess]);
 
   const handleLeaveRoom = useCallback(async () => {
     if (!roomId) return;
@@ -890,7 +922,7 @@ const ChatRoom = () => {
   }, []);
 
   const handleLoadMoreMessages = useCallback(async () => {
-    if (!roomId || loadingMore || !hasMoreMessages || messages.length === 0) return;
+    if (!roomId || !hasMessageAccess || loadingMore || !hasMoreMessages || messages.length === 0) return;
     
     setLoadingMore(true);
     try {
@@ -920,7 +952,7 @@ const ChatRoom = () => {
     } finally {
       setLoadingMore(false);
     }
-  }, [roomId, loadingMore, hasMoreMessages, messages]);
+  }, [roomId, hasMessageAccess, loadingMore, hasMoreMessages, messages]);
 
   const handleApproveJoinRequest = useCallback(async (requestUserId: string) => {
     if (!roomId || !user || !room || room.createdBy !== user.uid) return;
@@ -995,12 +1027,58 @@ const ChatRoom = () => {
     }
   }, [room?.participants, user?.uid]);
 
+  const loadJoinRequestUsers = useCallback(async () => {
+    const joinRequestIds = Array.isArray(room?.joinRequests) ? room.joinRequests : [];
+    if (joinRequestIds.length === 0) {
+      setJoinRequestUsersMap({});
+      return;
+    }
+
+    try {
+      const response = await usersAPI.searchUsers({ q: '', limit: 500 });
+      const users = response.data?.data?.users || [];
+      const nextMap: Record<string, JoinRequestUser> = {};
+
+      for (const rawUser of users) {
+        const userId = String(rawUser?._id || rawUser?.id || '').trim();
+        if (!userId || !joinRequestIds.includes(userId)) continue;
+
+        nextMap[userId] = {
+          id: userId,
+          displayName: typeof rawUser?.displayName === 'string' ? rawUser.displayName : '',
+          firstName: typeof rawUser?.firstName === 'string' ? rawUser.firstName : '',
+          lastName: typeof rawUser?.lastName === 'string' ? rawUser.lastName : '',
+          username: typeof rawUser?.username === 'string' ? rawUser.username : '',
+          email: typeof rawUser?.email === 'string' ? rawUser.email : '',
+          avatar: rawUser?.avatar,
+          avatarUrl: rawUser?.avatarUrl,
+          photoURL: rawUser?.photoURL,
+          profileImage: rawUser?.profileImage,
+          profilePicture: rawUser?.profilePicture,
+          imageUrl: rawUser?.imageUrl,
+        };
+      }
+
+      setJoinRequestUsersMap(nextMap);
+    } catch {
+      // Keep UID-only fallback view if requester details cannot be loaded.
+    }
+  }, [room?.joinRequests]);
+
   // Auto-load all users when dialog opens
   useEffect(() => {
     if (addMembersDialogOpen) {
       loadAllUsersForRoom();
     }
   }, [addMembersDialogOpen, loadAllUsersForRoom]);
+
+  useEffect(() => {
+    if (!settingsDialogOpen) return;
+    if (!room || !user || room.createdBy !== user.uid) return;
+    if (room.isPublic || room.visibility !== 'exposed') return;
+
+    void loadJoinRequestUsers();
+  }, [settingsDialogOpen, room, user, loadJoinRequestUsers]);
 
   // Client-side filter as user types
   const searchUsersForRoom = useCallback((query: string) => {
@@ -1035,7 +1113,9 @@ const ChatRoom = () => {
           roomId,
           roomName: room.name,
           inviteToken: room.inviteToken,
-          memberIds: [member.id]
+          memberIds: [member.id],
+          inviterName: userProfile?.displayName || user.displayName || user.email || 'Community admin',
+          inviterEmail: userProfile?.email || user.email || '',
         })
       });
 
@@ -1606,13 +1686,41 @@ const ChatRoom = () => {
                 {room.joinRequests && room.joinRequests.length > 0 ? (
                   <div className="space-y-2 max-h-56 overflow-y-auto">
                     {room.joinRequests.map((requestUserId) => (
+                      (() => {
+                        const requester = joinRequestUsersMap[requestUserId];
+                        const requesterDisplayName =
+                          requester?.displayName?.trim() ||
+                          `${requester?.firstName || ''} ${requester?.lastName || ''}`.trim() ||
+                          requester?.username?.trim() ||
+                          requester?.email?.trim() ||
+                          requestUserId;
+                        const requesterAvatar = resolveAvatarUrl(requester);
+
+                        return (
                       <div
                         key={requestUserId}
                         className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
                       >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">User ID: {requestUserId}</p>
-                          <p className="text-xs text-muted-foreground">Requested access to this room</p>
+                        <div className="min-w-0 flex items-start gap-3">
+                          <Avatar className="h-9 w-9 shrink-0 border border-border/70">
+                            {requesterAvatar ? (
+                              <AvatarImage src={requesterAvatar} alt={requesterDisplayName} />
+                            ) : null}
+                            <AvatarFallback>
+                              {requesterDisplayName.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 space-y-0.5">
+                            <p className="text-sm font-medium truncate">{requesterDisplayName}</p>
+                            {requester?.username && (
+                              <p className="text-xs text-muted-foreground truncate">Username: {requester.username}</p>
+                            )}
+                            {requester?.email && (
+                              <p className="text-xs text-muted-foreground truncate">Email: {requester.email}</p>
+                            )}
+                            <p className="text-xs text-muted-foreground truncate">User ID: {requestUserId}</p>
+                            <p className="text-xs text-muted-foreground">Requested access to this room</p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Button
@@ -1638,6 +1746,8 @@ const ChatRoom = () => {
                           </Button>
                         </div>
                       </div>
+                        );
+                      })()
                     ))}
                   </div>
                 ) : (
@@ -1793,8 +1903,16 @@ const ChatRoom = () => {
           >
             {/* Messages content with higher z-index */}
             <div className="relative z-10 space-y-3 sm:space-y-4">
+            {!hasMessageAccess && (
+              <div className="mx-auto max-w-lg rounded-xl border border-border bg-card/90 p-4 text-center shadow-sm">
+                <p className="text-sm font-semibold">Join request pending approval</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  You cannot view or send messages in this community until the admin approves your request.
+                </p>
+              </div>
+            )}
             {/* Load More Button */}
-            {hasMoreMessages && messages.length >= 50 && (
+            {hasMessageAccess && hasMoreMessages && messages.length >= 50 && (
               <div className="flex justify-center mb-3 sm:mb-4">
                 <Button
                   variant="outline"
@@ -1825,7 +1943,7 @@ const ChatRoom = () => {
               </div>
             )}
 
-            {filteredMessages.map((message) => {
+            {(hasMessageAccess ? filteredMessages : []).map((message) => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
@@ -2054,7 +2172,7 @@ const ChatRoom = () => {
               })}
             
             {/* Typing Indicator */}
-            {typingUsers.length > 0 && (
+            {hasMessageAccess && typingUsers.length > 0 && (
               <div 
                 className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
                 style={imageColors ? { color: imageColors.primary } : { color: 'hsl(var(--muted-foreground))' }}
@@ -2203,7 +2321,7 @@ const ChatRoom = () => {
                 variant="outline" 
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isRecording || uploadingAttachment}
+                disabled={!hasMessageAccess || isRecording || uploadingAttachment}
                 className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
               >
                 <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -2215,7 +2333,7 @@ const ChatRoom = () => {
                 variant="outline" 
                 size="icon"
                 onClick={isRecording ? handleStopRecording : handleStartRecording}
-                disabled={!!attachmentFile || uploadingAttachment}
+                disabled={!hasMessageAccess || !!attachmentFile || uploadingAttachment}
                 className={`h-8 w-8 sm:h-9 sm:w-9 shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
               >
                 <Mic className={`h-4 w-4 sm:h-5 sm:w-5 ${isRecording ? 'text-red-500' : ''}`} />
@@ -2227,12 +2345,13 @@ const ChatRoom = () => {
                   setNewMessage(e.target.value);
                   handleTyping();
                 }}
-                placeholder="Type a message..."
+                placeholder={hasMessageAccess ? 'Type a message...' : 'Waiting for admin approval...'}
+                disabled={!hasMessageAccess}
                 className="flex-1 min-w-0 text-sm sm:text-base h-8 sm:h-9"
               />
               <Button 
                 type="submit" 
-                disabled={(!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
+                disabled={!hasMessageAccess || (!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
                 className="hover:shadow-lg transition-all text-xs sm:text-sm px-2 sm:px-4 h-8 sm:h-9 shrink-0"
                 style={imageColors ? {
                   background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
@@ -2245,6 +2364,12 @@ const ChatRoom = () => {
                 </span>
               </Button>
             </div>
+
+            {!hasMessageAccess && !room.isPublic && (
+              <p className="mt-2 text-[11px] sm:text-xs text-muted-foreground">
+                Access is granted only after the admin approves your join request.
+              </p>
+            )}
 
             {room.isPublic && (
               <p className="mt-2 text-[11px] sm:text-xs text-amber-700 dark:text-amber-400">

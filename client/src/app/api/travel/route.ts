@@ -8,6 +8,35 @@ interface TravelDestinationDoc {
   [key: string]: unknown;
 }
 
+const toStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+};
+
+const toRoutePoints = (value: unknown): Array<{ name: string; lat?: number; lng?: number }> => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const candidate = item as Record<string, unknown>;
+      const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+      if (!name) return null;
+
+      const lat = typeof candidate.lat === 'number' ? candidate.lat : undefined;
+      const lng = typeof candidate.lng === 'number' ? candidate.lng : undefined;
+
+      return {
+        name,
+        ...(typeof lat === 'number' ? { lat } : {}),
+        ...(typeof lng === 'number' ? { lng } : {}),
+      };
+    })
+    .filter((item): item is { name: string; lat?: number; lng?: number } => item !== null);
+};
+
 // GET: Search or list all travel data
 export async function GET(req: NextRequest) {
   try {
@@ -60,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { place, country, itinerary, places, restaurants, hotels, budget, images, videos, map } = body;
+    const { place, country, itinerary, places, restaurants, hotels, budget, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
 
     // Validate required fields
     if (!place || !country || !budget) {
@@ -71,13 +100,21 @@ export async function POST(req: NextRequest) {
       place: place.trim(),
       country: country.trim(),
       itinerary: (itinerary || '').trim(),
-      places: Array.isArray(places) ? places.filter((p: string) => p.trim()) : [],
-      restaurants: Array.isArray(restaurants) ? restaurants.filter((r: string) => r.trim()) : [],
-      hotels: Array.isArray(hotels) ? hotels.filter((h: string) => h.trim()) : [],
+      places: toStringArray(places),
+      restaurants: toStringArray(restaurants),
+      hotels: toStringArray(hotels),
       budget: budget.trim(),
       images: Array.isArray(images) ? images : [],
       videos: Array.isArray(videos) ? videos : [],
       map: map || null,
+      overview: typeof overview === 'string' ? overview.trim() : '',
+      durationText: typeof durationText === 'string' ? durationText.trim() : '',
+      budgetEstimate: typeof budgetEstimate === 'string' ? budgetEstimate.trim() : '',
+      travelTips: toStringArray(travelTips),
+      localInsights: toStringArray(localInsights),
+      routeFlow: typeof routeFlow === 'string' ? routeFlow.trim() : '',
+      routePoints: toRoutePoints(routePoints),
+      generatedBy: generatedBy === 'gemini' ? 'gemini' : 'system',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

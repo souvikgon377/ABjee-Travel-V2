@@ -20,6 +20,7 @@ import {
 	Image as ImageIcon,
 	Sparkles,
 	Loader2,
+	Sailboat,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -39,7 +40,7 @@ interface SearchState {
 }
 
 const getDurationText = (result: TravelData) => {
-    if (result.durationText) return result.durationText;
+	if (result.durationText) return result.durationText;
 	const dayMatches = result.itinerary?.match(/Day\s*\d+/gi) || [];
 	if (dayMatches.length > 0) return `${dayMatches.length} Days`;
 	const estimated = Math.max(2, Math.min(10, Math.ceil((result.places.length + result.hotels.length) / 2)));
@@ -301,9 +302,11 @@ const buildGeneratedTravelData = (
 
 function TravelDetailModal({
 	result,
+	shareStoryId,
 	onClose,
 }: {
 	result: TravelData;
+	shareStoryId: string;
 	onClose: () => void;
 }) {
 	const [liked, setLiked] = useState(false);
@@ -330,7 +333,7 @@ function TravelDetailModal({
 	};
 
 	const handleShare = async (type: 'whatsapp' | 'facebook' | 'copy') => {
-		const url = `${window.location.origin}/travel-destinations?place=${encodeURIComponent(result.place)}`;
+		const url = `${window.location.origin}/travel-destinations?story=${encodeURIComponent(shareStoryId)}`;
 		if (type === 'whatsapp') {
 			window.open(`https://wa.me/?text=${encodeURIComponent(`${result.place} Travel Itinerary - ${url}`)}`);
 			return;
@@ -403,21 +406,21 @@ function TravelDetailModal({
 									<p className="text-muted-foreground text-sm leading-relaxed">{getPreviewText(result)}</p>
 								</section>
 
-									{result.overview && result.overview !== getPreviewText(result) && (
-										<section>
-											<h3 className="text-xl font-bold text-foreground mb-3">Itinerary Overview</h3>
-											<p className="text-muted-foreground text-sm leading-relaxed">{result.overview}</p>
-										</section>
-									)}
+								{result.overview && result.overview !== getPreviewText(result) && (
+									<section>
+										<h3 className="text-xl font-bold text-foreground mb-3">Itinerary Overview</h3>
+										<p className="text-muted-foreground text-sm leading-relaxed">{result.overview}</p>
+									</section>
+								)}
 
 								{result.itinerary && (
 									<section>
 										<h3 className="text-xl font-bold text-foreground mb-3">Travel Itinerary</h3>
-									<div className="space-y-1">
-										{renderFormattedItinerary(result.itinerary)}
-									</div>
-								</section>
-							)}
+										<div className="space-y-1">
+											{renderFormattedItinerary(result.itinerary)}
+										</div>
+									</section>
+								)}
 
 								{result.travelTips && result.travelTips.length > 0 && (
 										<section>
@@ -619,13 +622,22 @@ export default function TravelItenaryDisplay() {
 	const [filterDestination, setFilterDestination] = useState('');
 	const [filterDuration, setFilterDuration] = useState('');
 	const [showFilters, setShowFilters] = useState(false);
+	const [showAiGenerator, setShowAiGenerator] = useState(false);
 	const [selectedResult, setSelectedResult] = useState<TravelData | null>(null);
+	const [hasHandledInitialStoryLink, setHasHandledInitialStoryLink] = useState(false);
 	const [geminiForm, setGeminiForm] = useState<GeminiItineraryFormState>(DEFAULT_GEMINI_FORM);
 	const [generatedItinerary, setGeneratedItinerary] = useState<TravelData | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [generationError, setGenerationError] = useState<string | null>(null);
 	const heroRef = useRef<HTMLElement | null>(null);
+	const generatorRef = useRef<HTMLElement | null>(null);
 	const resultsRef = useRef<HTMLElement | null>(null);
+
+	useEffect(() => {
+		if (showAiGenerator) {
+			generatorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}
+	}, [showAiGenerator]);
 
 	const loadItineraries = useCallback(async () => {
 		setSearch(prev => ({ ...prev, loading: true, error: null }));
@@ -645,6 +657,46 @@ export default function TravelItenaryDisplay() {
 	useEffect(() => {
 		loadItineraries();
 	}, [loadItineraries]);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return;
+		if (hasHandledInitialStoryLink) return;
+		if (search.loading) return;
+
+		const params = new URLSearchParams(window.location.search);
+		const storyId = params.get('story');
+		const place = params.get('place');
+
+		let matchedStory: TravelData | undefined;
+		if (storyId) {
+			matchedStory = allResults.find((item) => item.id === storyId);
+		}
+
+		if (!matchedStory && place) {
+			const normalizedPlace = place.trim().toLowerCase();
+			matchedStory = allResults.find((item) => item.place.trim().toLowerCase() === normalizedPlace);
+		}
+
+		if (matchedStory) {
+			setSelectedResult(matchedStory);
+		}
+
+		setHasHandledInitialStoryLink(true);
+	}, [allResults, hasHandledInitialStoryLink, search.loading]);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return;
+
+		const url = new URL(window.location.href);
+		if (selectedResult?.id) {
+			url.searchParams.set('story', selectedResult.id);
+			url.searchParams.delete('place');
+		} else {
+			url.searchParams.delete('story');
+		}
+
+		window.history.replaceState({}, '', url.toString());
+	}, [selectedResult]);
 
 	const handleGenerateItinerary = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -685,9 +737,45 @@ export default function TravelItenaryDisplay() {
 				structured: data?.data?.structured || data?.structured || null,
 			});
 
-			setGeneratedItinerary(generated);
-			setSelectedResult(generated);
-			setAllResults(prev => [generated, ...prev.filter(item => item.id !== generated.id)]);
+			const saveRes = await fetch('/api/travel', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					place: generated.place,
+					country: generated.country,
+					itinerary: generated.itinerary,
+					places: generated.places,
+					restaurants: generated.restaurants,
+					hotels: generated.hotels,
+					budget: generated.budget,
+					images: generated.images,
+					videos: generated.videos,
+					map: generated.map,
+					overview: generated.overview,
+					durationText: generated.durationText,
+					budgetEstimate: generated.budgetEstimate,
+					travelTips: generated.travelTips,
+					localInsights: generated.localInsights,
+					routeFlow: generated.routeFlow,
+					routePoints: generated.routePoints,
+					generatedBy: generated.generatedBy,
+				}),
+			});
+
+			const savedData = await saveRes.json();
+			if (!saveRes.ok) {
+				throw new Error(savedData?.message || 'Failed to save generated itinerary');
+			}
+
+			const savedGenerated: TravelData = {
+				...generated,
+				...(savedData?.data || savedData || {}),
+				id: savedData?.data?.id || savedData?.id || generated.id,
+			};
+
+			setGeneratedItinerary(savedGenerated);
+			setSelectedResult(savedGenerated);
+			setAllResults(prev => [savedGenerated, ...prev.filter(item => item.id !== savedGenerated.id)]);
 			resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		} catch (error: any) {
 			setGenerationError(error?.message || 'Unable to generate itinerary. Please try again.');
@@ -756,7 +844,7 @@ export default function TravelItenaryDisplay() {
 								<Search className="w-5 h-5 text-white/60 shrink-0" />
 								<input type="text" value={search.query} onChange={e => setSearch(prev => ({ ...prev, query: e.target.value }))} placeholder="Search destinations or countries..." className="flex-1 bg-transparent text-white placeholder:text-white/50 focus:outline-none text-sm" />
 							</div>
-							<Button onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="px-6 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25">Explore</Button>
+							<Button onClick={() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' })} className="px-6 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25">Search</Button>
 						</div>
 						<div className="mt-5 flex flex-wrap items-center justify-center gap-3">
 							<Button variant="outline" className="rounded-2xl border-white/30 text-white hover:bg-white/10" onClick={() => setSearch(prev => ({ ...prev, query: '', hasSearched: false }))}>Clear</Button>
@@ -767,69 +855,6 @@ export default function TravelItenaryDisplay() {
 
 			<main ref={resultsRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 				{search.error && <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg"><p className="text-red-800 dark:text-red-200 font-medium">{search.error}</p></motion.div>}
-
-				<section className="mb-8">
-					<Card className="overflow-hidden border border-border bg-card/80 shadow-lg shadow-black/5">
-						<div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]">
-							<div className="p-6 md:p-8 space-y-4 bg-linear-to-br from-rose-500/10 via-background to-orange-500/10">
-								<div className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-200">
-									<Sparkles className="h-3.5 w-3.5" /> Gemini Itinerary Generator
-								</div>
-								<h2 className="text-2xl md:text-3xl font-black text-foreground">Build a trip plan from basic details</h2>
-								<p className="text-sm md:text-base text-muted-foreground max-w-2xl">Fill in the destination and a few preferences. Gemini will create a day-wise itinerary with practical suggestions, tips, and a travel budget estimate.</p>
-								<form onSubmit={handleGenerateItinerary} className="space-y-4 pt-2">
-									<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-										<Input value={geminiForm.place} onChange={(e) => setGeminiForm(prev => ({ ...prev, place: e.target.value }))} placeholder="Destination place, e.g. Goa" className="rounded-xl" />
-										<Input value={geminiForm.country} onChange={(e) => setGeminiForm(prev => ({ ...prev, country: e.target.value }))} placeholder="Country, e.g. India" className="rounded-xl" />
-									</div>
-									<Textarea value={geminiForm.interest} onChange={(e) => setGeminiForm(prev => ({ ...prev, interest: e.target.value }))} placeholder="Interests like beaches, family trip, honeymoon, food, adventure..." rows={3} className="rounded-xl resize-none" />
-									<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-										<Input value={geminiForm.duration} onChange={(e) => setGeminiForm(prev => ({ ...prev, duration: e.target.value }))} placeholder="Duration, e.g. 5 days" className="rounded-xl" />
-										<Input value={geminiForm.budget} onChange={(e) => setGeminiForm(prev => ({ ...prev, budget: e.target.value }))} placeholder="Budget, e.g. ₹25,000" className="rounded-xl" />
-										<Input value={geminiForm.travelers} onChange={(e) => setGeminiForm(prev => ({ ...prev, travelers: e.target.value }))} placeholder="Travelers, e.g. 2 adults" className="rounded-xl" />
-									</div>
-									<Input value={geminiForm.travelStyle} onChange={(e) => setGeminiForm(prev => ({ ...prev, travelStyle: e.target.value }))} placeholder="Travel style, e.g. relaxed, luxury, backpacking, family-friendly" className="rounded-xl" />
-									{generationError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{generationError}</div>}
-									<div className="flex flex-wrap items-center gap-3">
-										<Button type="submit" disabled={isGenerating} className="rounded-xl bg-linear-to-r from-rose-500 to-orange-500 px-5 py-2.5 font-semibold text-white hover:opacity-90">
-											{isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-											{isGenerating ? 'Generating...' : 'Generate Itinerary'}
-										</Button>
-										<Button type="button" variant="outline" className="rounded-xl" onClick={() => setGeminiForm(DEFAULT_GEMINI_FORM)}>Clear</Button>
-									</div>
-								</form>
-							</div>
-							<div className="p-6 md:p-8 border-t lg:border-t-0 lg:border-l border-border bg-background/60 space-y-4">
-								<div className="rounded-2xl border border-dashed border-border bg-muted/40 p-5">
-									<p className="text-sm font-semibold text-foreground mb-2">What Gemini creates</p>
-									<ul className="space-y-2 text-sm text-muted-foreground">
-										<li>• Day-wise plan</li>
-										<li>• Budget estimate</li>
-										<li>• Travel tips and local insights</li>
-										<li>• Route points for map planning</li>
-									</ul>
-								</div>
-								{generatedItinerary ? (
-									<div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 dark:border-emerald-900 dark:bg-emerald-950/20">
-										<p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-2">Latest Gemini Result</p>
-										<h3 className="text-lg font-bold text-foreground">{generatedItinerary.place}, {generatedItinerary.country}</h3>
-										<p className="mt-2 text-sm text-muted-foreground line-clamp-4">{getPreviewText(generatedItinerary)}</p>
-										<div className="mt-4 flex flex-wrap gap-2 text-xs">
-											<Badge className="rounded-full bg-emerald-600 text-white">{getDurationText(generatedItinerary)}</Badge>
-											<Badge variant="outline" className="rounded-full">{getBudgetDisplayText(generatedItinerary)}</Badge>
-										</div>
-										<Button type="button" className="mt-4 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => setSelectedResult(generatedItinerary)}>Open generated itinerary</Button>
-									</div>
-								) : (
-									<div className="rounded-2xl border border-border bg-card p-5">
-										<p className="text-sm font-semibold text-foreground mb-2">Tip</p>
-										<p className="text-sm text-muted-foreground">Use simple inputs. Gemini will turn them into a clean itinerary you can read, share, and open in the full travel card.</p>
-									</div>
-								)}
-							</div>
-						</div>
-					</Card>
-				</section>
 
 				{search.loading && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-center py-12"><div className="animate-spin"><div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-700 border-t-rose-500 dark:border-t-orange-400 rounded-full" /></div></motion.div>}
 
@@ -897,8 +922,57 @@ export default function TravelItenaryDisplay() {
 						<MapPin className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
 						<h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">No Results Found</h3>
 						<p className="text-slate-500 dark:text-slate-400">Try searching with different keywords or check the spelling</p>
+						<Button
+							onClick={() => setShowAiGenerator(true)}
+							className="mt-6 rounded-2xl bg-linear-to-r from-rose-500 to-orange-500 px-6 py-3 font-semibold text-white hover:opacity-90"
+						>
+							Generate Your Itenary using AI
+						</Button>
 					</motion.div>
 				)}
+
+				<AnimatePresence>
+					{!search.loading && search.hasSearched && search.results.length === 0 && !search.error && showAiGenerator && (
+						<motion.section
+							ref={generatorRef}
+							initial={{ opacity: 0, y: 20, height: 0 }}
+							animate={{ opacity: 1, y: 0, height: 'auto' }}
+							exit={{ opacity: 0, y: 20, height: 0 }}
+							className="mb-8 overflow-hidden"
+						>
+							<Card className="overflow-hidden border border-border bg-card/80 shadow-lg shadow-black/5">
+								<div className="p-6 md:p-8 space-y-4 bg-linear-to-br from-rose-500/10 via-background to-orange-500/10">
+									<div className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-200">
+										<Sparkles className="h-3.5 w-3.5" /> Abjee AI Itinerary Generator
+									</div>
+									<h2 className="text-2xl md:text-3xl font-black text-foreground">Build a trip plan from basic details</h2>
+									<p className="text-sm md:text-base text-muted-foreground max-w-2xl">Fill in destination and preferences. AI will create an itinerary and save it to Firebase automatically.</p>
+									<form onSubmit={handleGenerateItinerary} className="space-y-4 pt-2">
+										<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+											<Input value={geminiForm.place} onChange={(e) => setGeminiForm(prev => ({ ...prev, place: e.target.value }))} placeholder="Destination place, e.g. Goa" className="rounded-xl" />
+											<Input value={geminiForm.country} onChange={(e) => setGeminiForm(prev => ({ ...prev, country: e.target.value }))} placeholder="Country, e.g. India" className="rounded-xl" />
+										</div>
+										<Textarea value={geminiForm.interest} onChange={(e) => setGeminiForm(prev => ({ ...prev, interest: e.target.value }))} placeholder="Interests like beaches, family trip, honeymoon, food, adventure..." rows={3} className="rounded-xl resize-none" />
+										<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+											<Input value={geminiForm.duration} onChange={(e) => setGeminiForm(prev => ({ ...prev, duration: e.target.value }))} placeholder="Duration, e.g. 5 days" className="rounded-xl" />
+											<Input value={geminiForm.budget} onChange={(e) => setGeminiForm(prev => ({ ...prev, budget: e.target.value }))} placeholder="Budget, e.g. ₹25,000" className="rounded-xl" />
+											<Input value={geminiForm.travelers} onChange={(e) => setGeminiForm(prev => ({ ...prev, travelers: e.target.value }))} placeholder="Travelers, e.g. 2 adults" className="rounded-xl" />
+										</div>
+										<Input value={geminiForm.travelStyle} onChange={(e) => setGeminiForm(prev => ({ ...prev, travelStyle: e.target.value }))} placeholder="Travel style, e.g. relaxed, luxury, backpacking" className="rounded-xl" />
+										{generationError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">{generationError}</div>}
+										<div className="flex flex-wrap items-center gap-3">
+											<Button type="submit" disabled={isGenerating} className="rounded-xl bg-linear-to-r from-rose-500 to-orange-500 px-5 py-2.5 font-semibold text-white hover:opacity-90">
+												{isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sailboat className="mr-2 h-4 w-4" />}
+												{isGenerating ? 'Generating...' : 'Generate Itinerary'}
+											</Button>
+											<Button type="button" variant="outline" className="rounded-xl" onClick={() => setGeminiForm(DEFAULT_GEMINI_FORM)}>Clear</Button>
+										</div>
+									</form>
+								</div>
+							</Card>
+						</motion.section>
+					)}
+				</AnimatePresence>
 
 				{!search.loading && search.results.length > 0 && (
 					<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -944,7 +1018,13 @@ export default function TravelItenaryDisplay() {
 			</main>
 
 			<AnimatePresence>
-				{selectedResult && <TravelDetailModal result={selectedResult} onClose={() => setSelectedResult(null)} />}
+				{selectedResult && (
+					<TravelDetailModal
+						result={selectedResult}
+						shareStoryId={selectedResult.id}
+						onClose={() => setSelectedResult(null)}
+					/>
+				)}
 			</AnimatePresence>
 		</div>
 	);

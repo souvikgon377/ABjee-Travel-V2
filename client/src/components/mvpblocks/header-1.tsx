@@ -51,7 +51,12 @@ type NotificationItem = {
   status: string;
   createdAt: string;
   roomId?: string;
+  roomName?: string;
+  roomVisibility?: string;
   inviteToken?: string;
+  fromUserName?: string;
+  fromUserEmail?: string;
+  details?: Record<string, unknown>;
 };
 
 const toDate = (value: any): Date => {
@@ -81,8 +86,42 @@ const normalizeNotification = (raw: any): NotificationItem => ({
   status: String(raw?.status || 'pending'),
   createdAt: toDate(raw?.createdAt).toISOString(),
   roomId: raw?.roomId ? String(raw.roomId) : undefined,
+  roomName: raw?.roomName ? String(raw.roomName) : undefined,
+  roomVisibility: raw?.roomVisibility ? String(raw.roomVisibility) : undefined,
   inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
+  fromUserName: raw?.fromUserName ? String(raw.fromUserName) : undefined,
+  fromUserEmail: raw?.fromUserEmail ? String(raw.fromUserEmail) : undefined,
+  details: raw?.details && typeof raw.details === 'object' ? (raw.details as Record<string, unknown>) : undefined,
 });
+
+const getNotificationDetailLines = (item: NotificationItem): string[] => {
+  const details = item.details || {};
+  const inviterName =
+    typeof details.inviterName === 'string' && details.inviterName.trim().length > 0
+      ? details.inviterName.trim()
+      : item.fromUserName;
+  const requesterName =
+    typeof details.requesterName === 'string' && details.requesterName.trim().length > 0
+      ? details.requesterName.trim()
+      : item.fromUserName;
+  const visibility =
+    typeof details.roomVisibility === 'string' && details.roomVisibility.trim().length > 0
+      ? details.roomVisibility.trim()
+      : item.roomVisibility;
+  const roomName =
+    typeof details.roomName === 'string' && details.roomName.trim().length > 0
+      ? details.roomName.trim()
+      : item.roomName;
+
+  const lines: string[] = [];
+  if (roomName) lines.push(`Community: ${roomName}`);
+  if (item.type === 'room_invite' && inviterName) lines.push(`Invited by: ${inviterName}`);
+  if (item.type === 'private_room_join_request' && requesterName) lines.push(`Requested by: ${requesterName}`);
+  if (visibility) lines.push(`Visibility: ${visibility}`);
+  if (item.roomId) lines.push(`Community ID: ${item.roomId}`);
+
+  return lines;
+};
 
 const isRoomNavigableNotification = (item: NotificationItem): boolean => {
   if (!item.roomId) return false;
@@ -425,6 +464,15 @@ export default function Header1() {
                 <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
               </div>
               <p className="text-xs text-muted-foreground">{item.message}</p>
+              {getNotificationDetailLines(item).length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {getNotificationDetailLines(item).map((line) => (
+                    <p key={`${item.id}-${line}`} className="text-[11px] text-foreground/80">
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              )}
               {isActionable && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button

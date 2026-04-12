@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const roomId = typeof body?.roomId === "string" ? body.roomId.trim() : "";
     const requesterName = typeof body?.requesterName === "string" ? body.requesterName.trim() : "";
+    const requesterEmail = typeof body?.requesterEmail === "string" ? body.requesterEmail.trim() : "";
 
     if (!roomId) {
       return fail("Missing required field: roomId", 400);
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     const roomName = typeof room?.name === "string" ? room.name : "Private community";
     const creatorId = typeof room?.createdBy === "string" ? room.createdBy : "";
     const requesterId = user.firebaseUid || user.id;
+    const roomVisibility = typeof room?.visibility === "string" ? room.visibility : "private";
 
     if (!creatorId) {
       return fail("Community creator not found", 400);
@@ -50,7 +52,9 @@ export async function POST(req: NextRequest) {
       toUserId: creatorId,
       roomId,
       roomName,
-      requesterName,
+      requesterName: requesterName || user.displayName || user.username || user.email || "A user",
+      requesterEmail: requesterEmail || user.email || "",
+      roomVisibility,
     });
 
     return ok({ notification }, 200);

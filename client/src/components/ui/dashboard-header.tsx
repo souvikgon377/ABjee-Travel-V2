@@ -54,7 +54,12 @@ type NotificationItem = {
   createdAt: string;
   status: string;
   roomId?: string;
+  roomName?: string;
+  roomVisibility?: string;
   inviteToken?: string;
+  fromUserName?: string;
+  fromUserEmail?: string;
+  details?: Record<string, unknown>;
 };
 
 const READ_NOTIFICATIONS_KEY = 'admin_dashboard_read_notifications';
@@ -85,9 +90,16 @@ function normalizeNotification(raw: any): NotificationItem {
   const status = String(raw?.status || 'pending');
   const roomName = String(raw?.roomName || '').trim();
   const isInvitation = type === 'room_invite';
-  const title = isInvitation ? 'Community Invitation' : 'Notification';
+  const isJoinRequest = type === 'private_room_join_request';
+  const title = isInvitation
+    ? 'Community Invitation'
+    : isJoinRequest
+      ? 'Join Request'
+      : 'Notification';
   const fallbackMessage = isInvitation
     ? `You have an invitation${roomName ? ` to join community "${roomName}"` : ''}.`
+    : isJoinRequest
+      ? `You have a join request${roomName ? ` for community "${roomName}"` : ''}.`
     : 'You have a new platform notification.';
 
   return {
@@ -98,8 +110,41 @@ function normalizeNotification(raw: any): NotificationItem {
     createdAt: created.toISOString(),
     status,
     roomId: raw?.roomId ? String(raw.roomId) : undefined,
+    roomName: raw?.roomName ? String(raw.roomName) : undefined,
+    roomVisibility: raw?.roomVisibility ? String(raw.roomVisibility) : undefined,
     inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
+    fromUserName: raw?.fromUserName ? String(raw.fromUserName) : undefined,
+    fromUserEmail: raw?.fromUserEmail ? String(raw.fromUserEmail) : undefined,
+    details: raw?.details && typeof raw.details === 'object' ? (raw.details as Record<string, unknown>) : undefined,
   };
+}
+
+function getNotificationDetailLines(item: NotificationItem): string[] {
+  const details = item.details || {};
+  const inviterName =
+    typeof details.inviterName === 'string' && details.inviterName.trim().length > 0
+      ? details.inviterName.trim()
+      : item.fromUserName;
+  const requesterName =
+    typeof details.requesterName === 'string' && details.requesterName.trim().length > 0
+      ? details.requesterName.trim()
+      : item.fromUserName;
+  const visibility =
+    typeof details.roomVisibility === 'string' && details.roomVisibility.trim().length > 0
+      ? details.roomVisibility.trim()
+      : item.roomVisibility;
+  const roomName =
+    typeof details.roomName === 'string' && details.roomName.trim().length > 0
+      ? details.roomName.trim()
+      : item.roomName;
+
+  const lines: string[] = [];
+  if (roomName) lines.push(`Community: ${roomName}`);
+  if (item.type === 'room_invite' && inviterName) lines.push(`Invited by: ${inviterName}`);
+  if (item.type === 'private_room_join_request' && requesterName) lines.push(`Requested by: ${requesterName}`);
+  if (visibility) lines.push(`Visibility: ${visibility}`);
+  if (item.roomId) lines.push(`Community ID: ${item.roomId}`);
+  return lines;
 }
 
 export interface DashboardFilters {
@@ -250,7 +295,8 @@ export const DashboardHeader = memo(
     }, [notifications, readIds]);
 
     const handleNotificationClick = useCallback((item: NotificationItem) => {
-      if (item.type !== 'room_invite' || !item.roomId) return;
+      if (!item.roomId) return;
+      if (item.type !== 'room_invite' && item.type !== 'private_room_join_request') return;
 
       const roomPath = item.inviteToken
         ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
@@ -262,7 +308,8 @@ export const DashboardHeader = memo(
 
     const handleInvitationAction = useCallback(async (item: NotificationItem, action: 'accept' | 'reject') => {
       if (notificationActionId) return;
-      if (item.type !== 'room_invite' || !item.roomId) return;
+      if (!item.roomId) return;
+      if (item.type !== 'room_invite' && item.type !== 'private_room_join_request') return;
 
       setNotificationActionId(item.id);
       try {
@@ -281,7 +328,7 @@ export const DashboardHeader = memo(
 
         setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
 
-        if (action === 'accept') {
+        if (action === 'accept' && item.type === 'room_invite') {
           setNotificationsOpen(false);
           const roomPath = item.inviteToken
             ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
@@ -575,14 +622,17 @@ export const DashboardHeader = memo(
                   {notifications.map((item) => {
                     const isUnread = !readIds.has(item.id);
                     const isInvite = item.type === 'room_invite' && Boolean(item.roomId);
+                    const isJoinRequest = item.type === 'private_room_join_request' && Boolean(item.roomId);
+                    const isActionable = isInvite || isJoinRequest;
+                    const details = getNotificationDetailLines(item);
                     return (
                       <div
                         key={item.id}
-                        className={`mb-1 rounded-md border p-2 last:mb-0 ${isInvite ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
-                        onClick={isInvite ? () => handleNotificationClick(item) : undefined}
-                        role={isInvite ? 'button' : undefined}
-                        tabIndex={isInvite ? 0 : undefined}
-                        onKeyDown={isInvite ? (e) => {
+                        className={`mb-1 rounded-md border p-2 last:mb-0 ${isActionable ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
+                        onClick={isActionable ? () => handleNotificationClick(item) : undefined}
+                        role={isActionable ? 'button' : undefined}
+                        tabIndex={isActionable ? 0 : undefined}
+                        onKeyDown={isActionable ? (e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
                             handleNotificationClick(item);
@@ -597,7 +647,16 @@ export const DashboardHeader = memo(
                           {isUnread && <span className="mt-1 h-2 w-2 rounded-full bg-blue-500" />}
                         </div>
                         <p className="text-muted-foreground line-clamp-2 text-xs">{item.message}</p>
-                        {isInvite && (
+                        {details.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {details.map((line) => (
+                              <p key={`${item.id}-${line}`} className="text-[11px] text-foreground/80">
+                                {line}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        {isActionable && (
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button
                               type="button"
@@ -608,7 +667,11 @@ export const DashboardHeader = memo(
                               }}
                               className="inline-flex items-center rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              {notificationActionId === item.id ? 'Working...' : 'Accept'}
+                              {notificationActionId === item.id
+                                ? 'Working...'
+                                : isJoinRequest
+                                  ? 'Approve'
+                                  : 'Accept'}
                             </button>
                             <button
                               type="button"
@@ -619,7 +682,7 @@ export const DashboardHeader = memo(
                               }}
                               className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Reject
+                              {isJoinRequest ? 'Decline' : 'Reject'}
                             </button>
                           </div>
                         )}

@@ -5,11 +5,16 @@ const COLLECTION = "notifications";
 
 const createNotificationData = (data: AnyObj): AnyObj => ({
   fromUserId: data.fromUserId || null,
+  fromUserName: data.fromUserName || null,
+  fromUserEmail: data.fromUserEmail || null,
   toUserId: data.toUserId || null,
   type: data.type || "room_invite",
   roomId: data.roomId || null,
   inviteToken: data.inviteToken || null,
   roomName: data.roomName || "",
+  roomVisibility: data.roomVisibility || null,
+  roomType: data.roomType || null,
+  details: data.details || null,
   status: data.status || "pending",
   message: data.message || "",
   createdAt: data.createdAt || FieldValue.serverTimestamp(),
@@ -30,6 +35,8 @@ class NotificationService {
     roomId: string;
     roomName: string;
     requesterName?: string;
+    requesterEmail?: string;
+    roomVisibility?: string;
   }) {
     const {
       fromUserId,
@@ -37,6 +44,8 @@ class NotificationService {
       roomId,
       roomName,
       requesterName,
+      requesterEmail,
+      roomVisibility,
     } = params;
 
     const docId = this.getPrivateJoinRequestDocId(fromUserId, toUserId, roomId);
@@ -57,12 +66,24 @@ class NotificationService {
 
     const payload = createNotificationData({
       fromUserId,
+      fromUserName: displayName,
+      fromUserEmail: requesterEmail || null,
       toUserId,
       type: "private_room_join_request",
       roomId,
       roomName,
+      roomVisibility: roomVisibility || "private",
+      roomType: "private",
       status: "pending",
-      message: `${displayName} requested to join \"${roomName}\"`,
+      message: `${displayName} sent a join request for \"${roomName}\"`,
+      details: {
+        action: "join_request",
+        requesterName: displayName,
+        requesterEmail: requesterEmail || null,
+        roomName,
+        roomId,
+        roomVisibility: roomVisibility || "private",
+      },
       createdAt: existing.exists ? FieldValue.serverTimestamp() : undefined,
     });
 
@@ -82,22 +103,41 @@ class NotificationService {
     toUserIds: string[],
     roomId: string,
     roomName: string,
-    inviteToken?: string
+    inviteToken?: string,
+    inviterName?: string,
+    inviterEmail?: string
   ) {
     const batch = adminDb.batch();
     const notifications: AnyObj[] = [];
 
     for (const toUserId of toUserIds) {
       const ref = this.collection.doc();
+      const normalizedInviterName =
+        typeof inviterName === "string" && inviterName.trim().length > 0
+          ? inviterName.trim()
+          : "Community admin";
       const payload = createNotificationData({
         fromUserId,
+        fromUserName: normalizedInviterName,
+        fromUserEmail: inviterEmail || null,
         toUserId,
         type: "room_invite",
         roomId,
         inviteToken: inviteToken || null,
         roomName,
+        roomVisibility: "private",
+        roomType: "private",
         status: "pending",
-        message: `You've been invited to join the private community "${roomName}"`,
+        message: `${normalizedInviterName} invited you to join the private community "${roomName}"`,
+        details: {
+          action: "invite",
+          inviterName: normalizedInviterName,
+          inviterEmail: inviterEmail || null,
+          roomName,
+          roomId,
+          roomVisibility: "private",
+          inviteToken: inviteToken || null,
+        },
       });
 
       batch.set(ref, payload);

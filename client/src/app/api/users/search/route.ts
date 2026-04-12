@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
     const users = filtered.slice(offset, offset + limit).map((user) => ({
       id: user.id,
       _id: user.id,
+      email: user.email,
+      displayName: user.displayName,
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName,
