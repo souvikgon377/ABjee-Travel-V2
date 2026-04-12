@@ -10,6 +10,10 @@ interface TravelRequestBody {
   country?: string;
   interest?: string;
   type?: TravelType;
+  duration?: string;
+  budget?: string;
+  travelStyle?: string;
+  travelers?: string;
 }
 
 const typeLabels: Record<TravelType, string> = {
@@ -31,12 +35,16 @@ const typeInstructions: Record<TravelType, string> = {
 };
 
 function buildPrompt(payload: Required<Pick<TravelRequestBody, "place" | "country" | "type">> & Pick<TravelRequestBody, "interest">): string {
+  const tripPreferences = [
+    payload.interest ? `Interest: ${payload.interest}` : null,
+  ].filter(Boolean);
+
   return [
     "Act as a professional travel planner.",
     "",
     `Destination: ${payload.place}`,
     `Country: ${payload.country}`,
-    `User Interest: ${payload.interest || "General exploration"}`,
+    ...tripPreferences,
     "",
     `Generate: ${typeLabels[payload.type]}`,
     "",
@@ -51,6 +59,7 @@ function buildPrompt(payload: Required<Pick<TravelRequestBody, "place" | "countr
     "- Add budget estimate",
     "- Add travel tips",
     "- Add route flow for map visualization",
+    "- Include realistic restaurants and stay suggestions when possible",
     "",
     "Output requirements:",
     "- Return JSON only, no markdown or prose outside JSON.",
@@ -84,6 +93,10 @@ export async function POST(req: NextRequest) {
     const place = body.place?.trim();
     const country = body.country?.trim();
     const interest = body.interest?.trim() || "";
+    const duration = body.duration?.trim() || "";
+    const budget = body.budget?.trim() || "";
+    const travelStyle = body.travelStyle?.trim() || "";
+    const travelers = body.travelers?.trim() || "";
     const type = body.type;
 
     if (!place || !country) {
@@ -99,8 +112,16 @@ export async function POST(req: NextRequest) {
       return fail("Gemini API key is missing. Set GEMINI_API_KEY.", 500);
     }
 
-    const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-    const prompt = buildPrompt({ place, country, interest, type });
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const prompt = [
+      buildPrompt({ place, country, interest, type }),
+      duration ? `Preferred Duration: ${duration}` : "",
+      budget ? `Preferred Budget: ${budget}` : "",
+      travelStyle ? `Travel Style: ${travelStyle}` : "",
+      travelers ? `Travelers: ${travelers}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,

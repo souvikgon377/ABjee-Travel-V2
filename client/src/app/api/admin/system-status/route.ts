@@ -112,7 +112,57 @@ async function buildSystemStatus() {
     }
   })();
 
-  const [firestore, realtimeDb] = await Promise.all([firestoreProbe, rtdbProbe]);
+  const geminiStart = Date.now();
+  const geminiProbe = (async () => {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
+    if (!apiKey) {
+      return {
+        ok: false,
+        ms: Date.now() - geminiStart,
+        detail: "Missing API key",
+      };
+    }
+
+    try {
+      const response = await withTimeout(
+        fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`),
+        "gemini",
+      );
+
+      const responseBody = (await response.json().catch(() => null)) as
+        | { error?: { message?: string } }
+        | { models?: unknown[] }
+        | null;
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          ms: Date.now() - geminiStart,
+          detail: responseBody && "error" in responseBody && responseBody.error?.message
+            ? responseBody.error.message
+            : `HTTP ${response.status}`,
+        };
+      }
+
+      return {
+        ok: true,
+        ms: Date.now() - geminiStart,
+        detail: "Healthy",
+      };
+    } catch {
+      return {
+        ok: false,
+        ms: Date.now() - geminiStart,
+        detail: "Offline",
+      };
+    }
+  })();
+
+  const [firestore, realtimeDb, gemini] = await Promise.all([
+    firestoreProbe,
+    rtdbProbe,
+    geminiProbe,
+  ]);
 
   const totalMs = Date.now() - startedAt;
 
@@ -120,6 +170,7 @@ async function buildSystemStatus() {
     firebaseAuth: true,
     firestore,
     realtimeDb,
+    gemini,
     responseTimeMs: totalMs,
   };
 

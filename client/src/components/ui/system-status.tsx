@@ -1,6 +1,6 @@
 import { memo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Database, Zap, Activity } from 'lucide-react';
+import { Shield, Database, Zap, Activity, Bot } from 'lucide-react';
 import { ref, get } from 'firebase/database';
 import { getCountFromServer, collection } from 'firebase/firestore';
 import { database } from '@/lib/firebase';
@@ -12,6 +12,7 @@ export const SystemStatus = memo(() => {
     { label: 'Firebase Auth',   status: 'Checking...', color: 'text-gray-500', icon: Shield,   percentage: 0 },
     { label: 'Firestore DB',    status: 'Checking...', color: 'text-gray-500', icon: Database, percentage: 0 },
     { label: 'Realtime DB',     status: 'Checking...', color: 'text-gray-500', icon: Zap,      percentage: 0 },
+    { label: 'Gemini API',      status: 'Checking...', color: 'text-gray-500', icon: Bot,      percentage: 0 },
     { label: 'Response Time',   status: 'Checking...', color: 'text-gray-500', icon: Activity, percentage: 0 },
   ]);
 
@@ -21,6 +22,7 @@ export const SystemStatus = memo(() => {
         { label: 'Firebase Auth',   icon: Shield,   ok: false, detail: 'Offline', pct: 0 },
         { label: 'Firestore DB',    icon: Database, ok: false, detail: 'Offline', pct: 0 },
         { label: 'Realtime DB',     icon: Zap,      ok: false, detail: 'Offline', pct: 0 },
+        { label: 'Gemini API',      icon: Bot,      ok: false, detail: 'Offline', pct: 0 },
         { label: 'Response Time',   icon: Activity, ok: false, detail: 'Unknown', pct: 0 },
       ];
 
@@ -46,10 +48,17 @@ export const SystemStatus = memo(() => {
           results[2].detail = results[2].ok ? `${rtdbMs}ms` : 'Offline';
           results[2].pct = results[2].ok ? 100 : 0;
 
+          const geminiMs = Number(payload?.gemini?.ms || 0);
+          results[3].ok = payload?.gemini?.ok === true;
+          results[3].detail = results[3].ok
+            ? `${geminiMs}ms`
+            : String(payload?.gemini?.detail || 'Offline');
+          results[3].pct = results[3].ok ? 100 : 0;
+
           const rtForUi = totalMs > 0 ? totalMs : Math.max(firestoreMs, rtdbMs);
-          results[3].ok = rtForUi < 600;
-          results[3].detail = `${rtForUi}ms`;
-          results[3].pct = Math.max(0, Math.min(100, Math.round(100 - (rtForUi / 20))));
+          results[4].ok = rtForUi < 600;
+          results[4].detail = `${rtForUi}ms`;
+          results[4].pct = Math.max(0, Math.min(100, Math.round(100 - (rtForUi / 20))));
 
           setStatusItems(results.map(r => ({
             label:      r.label,
@@ -71,8 +80,8 @@ export const SystemStatus = memo(() => {
         const fsMs = Date.now() - fsStart;
         results[0].ok = true; results[0].detail = 'Healthy'; results[0].pct = 100; // Auth OK if Firestore OK
         results[1].ok = true; results[1].detail = 'Healthy'; results[1].pct = 100;
-        results[3].ok = fsMs < 600; results[3].detail = `${fsMs}ms`;
-        results[3].pct = Math.max(0, Math.min(100, Math.round(100 - (fsMs / 20))));
+        results[4].ok = fsMs < 600; results[4].detail = `${fsMs}ms`;
+        results[4].pct = Math.max(0, Math.min(100, Math.round(100 - (fsMs / 20))));
       } catch {
         results[0].detail = 'Degraded'; results[0].pct = 50;
         results[1].detail = 'Offline';  results[1].pct = 0;

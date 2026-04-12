@@ -17,6 +17,18 @@ export interface TravelData {
   map: string | null;
   createdAt: string;
   updatedAt: string;
+  overview?: string;
+  durationText?: string;
+  budgetEstimate?: string;
+  travelTips?: string[];
+  localInsights?: string[];
+  routeFlow?: string;
+  routePoints?: Array<{
+    name: string;
+    lat?: number;
+    lng?: number;
+  }>;
+  generatedBy?: 'gemini' | 'system';
 }
 
 export interface TravelDataFormInput {

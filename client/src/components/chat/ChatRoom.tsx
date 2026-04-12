@@ -179,11 +179,26 @@ const ChatRoom = () => {
 
   // Extract colors from background image - memoized for performance
   const extractColorsFromImage = useCallback((imageUrl: string) => {
+    if (!imageUrl || typeof window === 'undefined') return;
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(imageUrl, window.location.origin);
+    } catch {
+      return;
+    }
+
+    // Canvas color extraction on cross-origin images requires ACAO headers.
+    // Skip extraction to avoid noisy CORS failures and keep default theme colors.
+    if (parsedUrl.origin !== window.location.origin) {
+      return;
+    }
+
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.src = imageUrl;
-    
+    img.src = parsedUrl.href;
+
     img.onload = () => {
+      try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -225,6 +240,13 @@ const ChatRoom = () => {
         secondary: sortedColors[1] || 'rgb(236, 72, 153)',
         accent: sortedColors[2] || 'rgb(219, 39, 119)'
       });
+      } catch {
+        // If image analysis fails for any reason, keep existing/default colors.
+      }
+    };
+
+    img.onerror = () => {
+      // Ignore image read failures; UI can continue with fallback colors.
     };
   }, []);
 
@@ -1641,12 +1663,12 @@ const ChatRoom = () => {
       </Dialog>
 
       {/* Main Chat UI */}
-      <div className="flex h-screen bg-background overflow-hidden">
+      <div className="flex h-dvh bg-background overflow-hidden">
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col min-h-0">
           {/* Header */}
           <div 
-            className="border-b p-2 sm:p-3 md:p-4 flex items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm shrink-0"
+            className="border-b p-2 sm:p-3 md:p-4 flex flex-nowrap items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm shrink-0"
             style={imageColors ? {
               backgroundColor: `${imageColors.accent}20`,
               borderBottomColor: `${imageColors.primary}40`
@@ -1661,7 +1683,7 @@ const ChatRoom = () => {
             >
               <ArrowLeft className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-x-0.5 group-active:scale-90" />
             </Button>
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden pr-1">
               {/* Room Icon */}
               {room.iconImage ? (
                 <Avatar 
@@ -1684,42 +1706,71 @@ const ChatRoom = () => {
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <h2 className="text-sm sm:text-base md:text-lg lg:text-xl font-bold truncate">{room.name}</h2>
+                <h2 className="text-xs sm:text-base md:text-lg lg:text-xl font-bold truncate leading-tight">{room.name}</h2>
                 {room.description && (
-                  <p className="text-[10px] sm:text-xs md:text-sm text-muted-foreground truncate">{room.description}</p>
+                  <p className="hidden sm:block text-[10px] sm:text-xs md:text-sm text-muted-foreground truncate">{room.description}</p>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
-              <div className="shrink-0">
+            <div className="ml-auto flex w-auto items-center justify-end gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+              <div className="shrink-0 max-[340px]:hidden">
                 <ModeToggle />
               </div>
               {canManageCurrentCommunity && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setAddMembersDialogOpen(true)}
-                    title="Add Members"
-                    className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
-                  >
-                    <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setSettingsDialogOpen(true)}
-                    title="Community Settings"
-                    className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
-                  >
-                    <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  </Button>
+                  <div className="hidden sm:flex items-center gap-1 sm:gap-1.5 md:gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setAddMembersDialogOpen(true)}
+                      title="Add Members"
+                      className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
+                    >
+                      <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setSettingsDialogOpen(true)}
+                      title="Community Settings"
+                      className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
+                    >
+                      <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </Button>
+                  </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild className="sm:hidden">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Community Actions"
+                        className="h-8 w-8 shrink-0"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => setAddMembersDialogOpen(true)}>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Add Members
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSettingsDialogOpen(true)}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Community Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleLeaveRoom}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        {room.isPublic ? 'Leave Room' : 'Exit Community'}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
               )}
               <Button 
                 variant="outline" 
                 onClick={handleLeaveRoom}
-                className="h-8 sm:h-9 px-2 sm:px-3 md:px-4 shrink-0"
+                className="hidden sm:inline-flex h-8 sm:h-9 px-2 sm:px-3 md:px-4 shrink-0"
               >
                 <span className="text-[10px] sm:text-xs md:text-sm font-medium">
                   <span className="hidden sm:inline">{room.isPublic ? 'Leave Room' : 'Exit Community'}</span>
@@ -1817,7 +1868,7 @@ const ChatRoom = () => {
                                   cancelEditing();
                                 }
                               }}
-                              className="min-w-37.5 sm:min-w-50 bg-card/90 backdrop-blur-sm text-sm"
+                              className="w-full min-w-0 sm:min-w-50 bg-card/90 backdrop-blur-sm text-sm"
                               autoFocus
                             />
                             <Button
@@ -1873,7 +1924,7 @@ const ChatRoom = () => {
                                           loading="lazy"
                                         />
                                       ) : message.attachment.type === 'voice' ? (
-                                        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-45 sm:min-w-55 md:min-w-62.5">
+                                        <div className="flex w-full min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 sm:min-w-55 md:min-w-62.5">
                                           <Mic className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                                           <audio 
                                             controls 
@@ -1902,7 +1953,7 @@ const ChatRoom = () => {
                                           Your browser does not support the video element.
                                         </video>
                                       ) : message.attachment.type === 'audio' ? (
-                                        <div className="flex flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 min-w-45 sm:min-w-55 md:min-w-62.5">
+                                        <div className="flex w-full min-w-0 flex-col gap-1.5 sm:gap-2 bg-black/10 rounded-lg p-1.5 sm:p-2 md:p-3 sm:min-w-55 md:min-w-62.5">
                                           <div className="flex items-center gap-1.5 sm:gap-2">
                                             <FileText className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                                             <div className="flex-1 min-w-0">
@@ -1928,7 +1979,7 @@ const ChatRoom = () => {
                                         <a 
                                           href={message.attachment.url} 
                                           download={message.attachment.name}
-                                          className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors min-w-45 sm:min-w-55 md:min-w-62.5"
+                                          className="flex w-full min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3 bg-black/10 hover:bg-black/20 rounded-lg p-1.5 sm:p-2 md:p-3 transition-colors sm:min-w-55 md:min-w-62.5"
                                         >
                                           <span className="text-xl sm:text-2xl shrink-0">{getFileIcon(message.attachment.mimeType)}</span>
                                           <div className="flex-1 min-w-0">
@@ -2182,14 +2233,16 @@ const ChatRoom = () => {
               <Button 
                 type="submit" 
                 disabled={(!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
-                className="hover:shadow-lg transition-all text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9 shrink-0"
+                className="hover:shadow-lg transition-all text-xs sm:text-sm px-2 sm:px-4 h-8 sm:h-9 shrink-0"
                 style={imageColors ? {
                   background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
                   color: 'white'
                 } : undefined}
               >
                 <span className="hidden sm:inline">{uploadingAttachment ? 'Uploading...' : 'Send'}</span>
-                <span className="sm:hidden">{uploadingAttachment ? '...' : 'Send'}</span>
+                <span className="sm:hidden">
+                  {uploadingAttachment ? '...' : <ArrowUp className="h-4 w-4" />}
+                </span>
               </Button>
             </div>
 
