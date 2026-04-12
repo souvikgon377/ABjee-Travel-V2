@@ -38,45 +38,6 @@ interface SearchState {
 	hasSearched: boolean;
 }
 
-const DEMO_TRAVEL_DATA: TravelData[] = [
-	{
-		id: 'demo-goa',
-		place: 'Goa',
-		country: 'India',
-		itinerary:
-			'Day 1: Arrive at Panaji, relax at Miramar Beach, evening cruise.\nDay 2: Explore North Goa beaches and Fort Aguada.\nDay 3: South Goa churches, local market shopping, sunset dinner by the sea.',
-		places: ['Fort Aguada', 'Baga Beach', 'Calangute Beach', 'Basilica of Bom Jesus'],
-		restaurants: ['Pousada by the Beach', 'Fisherman’s Wharf', 'Mum’s Kitchen'],
-		hotels: ['Taj Fort Aguada', 'Zuri White Sands', 'Novotel Goa Resort'],
-		budget: '₹18,000 - ₹30,000',
-		images: [
-			'https://images.unsplash.com/photo-1582972236019-ea9a8cda546f?w=1200&q=80',
-			'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=1200&q=80',
-			'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&q=80',
-		],
-		videos: [],
-		map: null,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-	{
-		id: 'demo-kerala',
-		place: 'Alleppey',
-		country: 'Kerala',
-		itinerary:
-			'Day 1: Check-in to houseboat and canal cruise.\nDay 2: Village walk and local cuisine trail.\nDay 3: Sunrise backwaters, shopping, and departure.',
-		places: ['Alleppey Backwaters', 'Marari Beach', 'Pathiramanal Island'],
-		restaurants: ['Thaff Delicacy', 'Cassia', 'Mushroom Houseboat Restaurant'],
-		hotels: ['Punnamada Resort', 'Lemon Tree Vembanad Lake', 'Houseboat Stay'],
-		budget: '₹22,000',
-		images: ['https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=1200&q=80'],
-		videos: [],
-		map: null,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-];
-
 const getDurationText = (result: TravelData) => {
     if (result.durationText) return result.durationText;
 	const dayMatches = result.itinerary?.match(/Day\s*\d+/gi) || [];
@@ -673,12 +634,11 @@ export default function TravelItenaryDisplay() {
 			const data = await res.json();
 			if (!res.ok) throw new Error(data.message || 'Failed to fetch itineraries');
 			const fetchedResults: TravelData[] = data?.data?.results || data?.results || [];
-			const combinedResults = [...fetchedResults, ...DEMO_TRAVEL_DATA];
-			setAllResults(combinedResults);
-			setSearch(prev => ({ ...prev, results: combinedResults, loading: false }));
+			setAllResults(fetchedResults);
+			setSearch(prev => ({ ...prev, results: fetchedResults, loading: false }));
 		} catch (error: any) {
-			setAllResults(DEMO_TRAVEL_DATA);
-			setSearch(prev => ({ ...prev, results: DEMO_TRAVEL_DATA, loading: false, error: error.message || 'An error occurred' }));
+			setAllResults([]);
+			setSearch(prev => ({ ...prev, results: [], loading: false, error: error.message || 'An error occurred' }));
 		}
 	}, []);
 

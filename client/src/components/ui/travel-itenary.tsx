@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader } from 'lucide-react';
+import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,7 +21,7 @@ interface FormState {
 	budget: string;
 	imageFiles: File[];
 	videoFiles: File[];
-	mapFile: File | null;
+	mapFile: File | string | null;
 	imagePreviews: string[];
 	videoPreviews: string[];
 }
@@ -37,10 +37,15 @@ interface TravelItem {
 	id: string;
 	place: string;
 	country: string;
+	itinerary?: string;
+	restaurants?: string[];
+	hotels?: string[];
 	budget: string;
 	createdAt: string;
 	updatedAt: string;
 	images?: string[];
+	videos?: string[];
+	map?: string | null;
 	places?: string[];
 }
 
@@ -92,8 +97,12 @@ export default function AdminTravelItenary() {
 	// Cleanup preview URLs on unmount
 	useEffect(() => {
 		return () => {
-			form.imagePreviews.forEach(url => URL.revokeObjectURL(url));
-			form.videoPreviews.forEach(url => URL.revokeObjectURL(url));
+			form.imagePreviews.forEach(url => {
+				if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+			});
+			form.videoPreviews.forEach(url => {
+				if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+			});
 		};
 	}, [form.imagePreviews, form.videoPreviews]);
 
@@ -109,7 +118,11 @@ export default function AdminTravelItenary() {
 			const res = await fetch('/api/travel');
 			if (!res.ok) throw new Error('Failed to fetch itineraries');
 			const data = await res.json();
-			setExistingItineraries(data.results || data.data?.results || []);
+			const results = data.results || data.data?.results || [];
+			const sortedResults = [...results].sort((a: TravelItem, b: TravelItem) => {
+				return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+			});
+			setExistingItineraries(sortedResults);
 		} catch (error: any) {
 			setUploadState(prev => ({
 				...prev,
@@ -126,16 +139,16 @@ export default function AdminTravelItenary() {
 			id: itinerary.id,
 			place: itinerary.place,
 			country: itinerary.country,
-			itinerary: '',
+			itinerary: itinerary.itinerary || '',
 			places: itinerary.places || [''],
-			restaurants: [''],
-			hotels: [''],
-			budget: itinerary.budget,
+			restaurants: itinerary.restaurants || [''],
+			hotels: itinerary.hotels || [''],
+			budget: itinerary.budget || '',
 			imageFiles: [],
 			videoFiles: [],
-			mapFile: null,
+			mapFile: itinerary.map || null,
 			imagePreviews: itinerary.images || [],
-			videoPreviews: [],
+			videoPreviews: itinerary.videos || [],
 		});
 		setIsEditing(true);
 		window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -385,7 +398,7 @@ export default function AdminTravelItenary() {
 		if (form.places.filter(p => p.trim()).length === 0) return 'At least one place is required';
 		if (form.restaurants.filter(r => r.trim()).length === 0) return 'At least one restaurant is required';
 		if (form.hotels.filter(h => h.trim()).length === 0) return 'At least one hotel is required';
-		if (form.imageFiles.length === 0) return 'At least one image is required';
+		if (form.imagePreviews.length === 0) return 'At least one image is required';
 		return null;
 	};
 
@@ -408,8 +421,8 @@ export default function AdminTravelItenary() {
 		}));
 
 		try {
-			// Upload only new images (skip existing URLs)
-			const uploadedImages: string[] = [...form.imagePreviews.filter(p => p.startsWith('data:') || !p.startsWith('http'))];
+			// Keep existing remote images, upload only newly added files.
+			const uploadedImages: string[] = [...form.imagePreviews.filter(p => p.startsWith('http'))];
 			for (let i = 0; i < form.imageFiles.length; i++) {
 				const formData = new FormData();
 				formData.append('file', form.imageFiles[i]);
@@ -431,8 +444,8 @@ export default function AdminTravelItenary() {
 				}));
 			}
 
-			// Upload videos
-			const uploadedVideos: string[] = [];
+			// Keep existing remote videos, upload only newly added files.
+			const uploadedVideos: string[] = [...form.videoPreviews.filter(p => p.startsWith('http'))];
 			for (let i = 0; i < form.videoFiles.length; i++) {
 				const formData = new FormData();
 				formData.append('file', form.videoFiles[i]);
@@ -471,6 +484,8 @@ export default function AdminTravelItenary() {
 					throw new Error(data?.message || 'Map upload failed');
 				}
 				uploadedMap = data.data.url;
+			} else if (typeof form.mapFile === 'string') {
+				uploadedMap = form.mapFile;
 			}
 			setUploadState(prev => ({
 				...prev,
@@ -546,8 +561,12 @@ export default function AdminTravelItenary() {
 
 	// Reset form
 	const handleReset = useCallback(() => {
-		form.imagePreviews.forEach(url => URL.revokeObjectURL(url));
-		form.videoPreviews.forEach(url => URL.revokeObjectURL(url));
+		form.imagePreviews.forEach(url => {
+			if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+		});
+		form.videoPreviews.forEach(url => {
+			if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+		});
 		setForm({
 			place: '',
 			country: '',
@@ -565,6 +584,13 @@ export default function AdminTravelItenary() {
 		setIsEditing(false);
 	}, [form]);
 
+	const getMapLabel = (mapValue: File | string | null) => {
+		if (!mapValue) return '';
+		if (mapValue instanceof File) return mapValue.name;
+		const segments = mapValue.split('/');
+		return segments[segments.length - 1] || mapValue;
+	};
+
 	return (
 		<div className="min-h-screen bg-linear-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
 			<div className="max-w-6xl mx-auto">
@@ -575,25 +601,48 @@ export default function AdminTravelItenary() {
 					className="mb-8"
 				>
 					<h1 className="text-4xl font-bold bg-linear-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent mb-2">
-						Travel Itenary Details
+						Travel Itinerary Details
 					</h1>
 					<p className="text-slate-600 dark:text-slate-400">
 						Manage and upload travel destination data
 					</p>
 				</motion.div>
 
-				{/* Existing Itineraries Section */}
-				{!loadingItineraries && existingItineraries.length > 0 && (
-					<motion.div
-						initial={{ opacity: 0, y: 20 }}
-						animate={{ opacity: 1, y: 0 }}
-						className="mb-12"
-					>
-						<Card className="p-6 border-0 shadow-lg dark:shadow-2xl">
-							<h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white flex items-center gap-2">
+				{/* Database Itineraries Section */}
+				<motion.div
+					initial={{ opacity: 0, y: 20 }}
+					animate={{ opacity: 1, y: 0 }}
+					className="mb-12"
+				>
+					<Card className="p-6 border-0 shadow-lg dark:shadow-2xl">
+						<div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+							<h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
 								<span className="text-rose-500">📋</span>
-								Existing Itineraries ({existingItineraries.length})
+								Database Itineraries ({existingItineraries.length})
 							</h2>
+							<Button
+								onClick={fetchItineraries}
+								variant="outline"
+								size="sm"
+								disabled={loadingItineraries}
+								className="gap-2"
+							>
+								{loadingItineraries ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+								Refresh
+							</Button>
+						</div>
+
+						{loadingItineraries ? (
+							<div className="p-8 text-center">
+								<Loader className="w-8 h-8 animate-spin mx-auto text-rose-500 mb-3" />
+								<p className="text-slate-600 dark:text-slate-400">Loading itineraries from database...</p>
+							</div>
+						) : existingItineraries.length === 0 ? (
+							<div className="p-8 text-center rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40">
+								<p className="text-slate-700 dark:text-slate-200 font-medium">No travel itineraries found in database.</p>
+								<p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Create one using the form below and it will appear here.</p>
+							</div>
+						) : (
 							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 								{existingItineraries.map((item) => (
 									<motion.div
@@ -613,6 +662,14 @@ export default function AdminTravelItenary() {
 										<h3 className="text-lg font-semibold text-slate-900 dark:text-white">{item.place}</h3>
 										<p className="text-sm text-slate-600 dark:text-slate-400 mb-2">{item.country}</p>
 										<p className="text-sm font-medium text-rose-600 dark:text-rose-400 mb-3">{item.budget}</p>
+										{item.itinerary && (
+											<p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-3 mb-3">{item.itinerary}</p>
+										)}
+										<div className="flex flex-wrap gap-2 mb-3">
+											<Badge variant="outline" className="text-xs">{item.places?.length || 0} places</Badge>
+											<Badge variant="outline" className="text-xs">{item.restaurants?.length || 0} restaurants</Badge>
+											<Badge variant="outline" className="text-xs">{item.hotels?.length || 0} hotels</Badge>
+										</div>
 										<div className="flex gap-2">
 											<Button
 												onClick={() => loadForEditing(item)}
@@ -636,20 +693,9 @@ export default function AdminTravelItenary() {
 									</motion.div>
 								))}
 							</div>
-						</Card>
-					</motion.div>
-				)}
-
-				{loadingItineraries && (
-					<motion.div
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						className="mb-12 p-8 text-center"
-					>
-						<Loader className="w-8 h-8 animate-spin mx-auto text-rose-500 mb-3" />
-						<p className="text-slate-600 dark:text-slate-400">Loading itineraries...</p>
-					</motion.div>
-				)}
+						)}
+					</Card>
+				</motion.div>
 
 				{/* Status Messages */}
 				{uploadState.error && (
@@ -1055,7 +1101,7 @@ export default function AdminTravelItenary() {
 									animate={{ opacity: 1, y: 0 }}
 									className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-between"
 								>
-									<span className="text-sm text-slate-600 dark:text-slate-400 truncate">{form.mapFile.name}</span>
+									<span className="text-sm text-slate-600 dark:text-slate-400 truncate">{getMapLabel(form.mapFile)}</span>
 									<Button
 										onClick={() => setForm(prev => ({ ...prev, mapFile: null }))}
 										variant="ghost"
