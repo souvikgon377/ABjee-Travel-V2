@@ -44,6 +44,17 @@ function resolvePublicAssetBaseUrl(): string {
   }
 }
 
+function sanitizeMetadataValue(value: string): string {
+  // S3 metadata headers must be ASCII-safe and cannot contain control chars.
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, "_")
+    .replace(/[\r\n]/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const r2AccountId = readEnv("R2_ACCOUNT_ID", "NEXT_PUBLIC_R2_ACCOUNT_ID");
@@ -102,7 +113,7 @@ export async function POST(req: NextRequest) {
       ContentType: file.type || "application/octet-stream",
       CacheControl: "public, max-age=31536000",
       Metadata: {
-        originalName: file.name,
+        originalName: sanitizeMetadataValue(file.name || "upload.bin") || "upload.bin",
       },
     }));
 

@@ -25,6 +25,7 @@ import { collection, query, orderBy, deleteDoc, doc, onSnapshot, type Unsubscrib
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { UserActionsDialog } from '@/components/ui/user-actions-dialog';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { modernConfirm } from '@/lib/modernDialog';
 
 const USERS_PER_PAGE = 10;
 
@@ -164,7 +165,17 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
   }, [fetchUsers]);
 
   const handleDeleteUser = useCallback(async (user: any) => {
-    if (!confirm(`Are you sure you want to delete user "${user.displayName || user.email}"? This action cannot be undone.`))
+    const confirmed = await modernConfirm(
+      `Are you sure you want to delete user "${user.displayName || user.email}"? This action cannot be undone.`,
+      {
+        title: 'Delete User',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        destructive: true,
+      }
+    );
+
+    if (!confirmed)
       return;
     try {
       await deleteDoc(doc(firestoreDb, 'users', user.id));

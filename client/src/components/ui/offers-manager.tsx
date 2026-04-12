@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, Trash2, Save, Sparkles } from 'lucide-react';
+import { modernConfirm } from '@/lib/modernDialog';
 
 type OfferDoc = {
   id: string;
@@ -148,7 +149,13 @@ export function OffersManager() {
   };
 
   const removeOffer = async (id: string) => {
-    if (!confirm('Delete this offer?')) return;
+    const confirmed = await modernConfirm('Delete this offer?', {
+      title: 'Delete Offer',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await deleteDoc(doc(firestoreDb, 'offers', id));
   };
 
@@ -199,7 +206,13 @@ export function OffersManager() {
   };
 
   const removeCoupon = async (id: string) => {
-    if (!confirm('Delete this coupon?')) return;
+    const confirmed = await modernConfirm('Delete this coupon?', {
+      title: 'Delete Coupon',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
     await deleteDoc(doc(firestoreDb, 'coupons', id));
   };
 

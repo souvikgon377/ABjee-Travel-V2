@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { AddChatRoomDialog } from '@/components/ui/add-chatroom-dialog';
 import { ChatRoomActionsDialog } from '@/components/ui/chatroom-actions-dialog';
+import { modernConfirm } from '@/lib/modernDialog';
 
 // ─── Pure helpers (outside component — never recreated on render) ─────────────
 
@@ -273,7 +274,13 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
       return;
     }
 
-    if (!confirm(`Delete "${room.name}"? This will remove all messages and cannot be undone.`)) return;
+    const confirmed = await modernConfirm(`Delete "${room.name}"? This will remove all messages and cannot be undone.`, {
+      title: 'Delete Community',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await remove(ref(database, `chatrooms/${room.id}`));
       fetchRooms();

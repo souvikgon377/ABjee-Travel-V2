@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram } from 'lucide-react';
+import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -21,6 +21,7 @@ import {
   getPaidPrivateRoomLimit,
   hasPaidAccess,
 } from '@/lib/subscriptionPolicy';
+import { modernConfirm } from '@/lib/modernDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -384,6 +385,7 @@ const ChatRoomsList: React.FC = () => {
   const [newRoomIsPublic, setNewRoomIsPublic] = useState(false); // New state for public/private
   const [newPrivateVisibility, setNewPrivateVisibility] = useState<'exposed' | 'private'>('private');
   const [creating, setCreating] = useState(false);
+  const [createRoomError, setCreateRoomError] = useState('');
   
   // Image upload states
   const [backgroundImageFile, setBackgroundImageFile] = useState<File | null>(null);
@@ -1085,6 +1087,7 @@ const ChatRoomsList: React.FC = () => {
   // Create new room
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateRoomError('');
     
     if (!newRoomName.trim() || !user) return;
 
@@ -1094,13 +1097,23 @@ const ChatRoomsList: React.FC = () => {
     }
 
     if (!canCreatePrivateCommunity) {
-      alert('Only subscribed users can create private community chat.');
+      setCreateRoomError('Only subscribed users can create private community chat.');
       return;
     }
 
     if (!newRoomIsPublic && !isAdminOrOwner && !privateRoomAllowance.allowed) {
-      alert(privateRoomAllowance.reason);
+      setCreateRoomError(privateRoomAllowance.reason);
       return;
+    }
+
+    if (!newRoomIsPublic && !isAdminOrOwner) {
+      const latestPrivateMembershipCount = await chatService.getUserPrivateRoomMembershipCount(user.uid);
+      setUserCreatedPrivateRoomsCount(latestPrivateMembershipCount);
+      const latestAllowance = getPrivateRoomCreateAllowance(userProfile, latestPrivateMembershipCount);
+      if (!latestAllowance.allowed) {
+        setCreateRoomError(latestAllowance.reason);
+        return;
+      }
     }
 
     setCreating(true);
@@ -1114,7 +1127,10 @@ const ChatRoomsList: React.FC = () => {
       if (backgroundImageFile) {
         try {
           backgroundImageData = await uploadImageToR2(backgroundImageFile, {
-            folder: 'chat-rooms/backgrounds'
+            folder: 'chat-rooms/backgrounds',
+            convertToWebP: true,
+            webpQuality: 0.82,
+            maxImageDimension: 1920,
           });
         } catch (error: any) {
           throw new Error(`Background image upload failed: ${error.message}`);
@@ -1125,7 +1141,10 @@ const ChatRoomsList: React.FC = () => {
       if (iconImageFile) {
         try {
           iconImageData = await uploadImageToR2(iconImageFile, {
-            folder: 'chat-rooms/icons'
+            folder: 'chat-rooms/icons',
+            convertToWebP: true,
+            webpQuality: 0.8,
+            maxImageDimension: 512,
           });
         } catch (error: any) {
           throw new Error(`Icon image upload failed: ${error.message}`);
@@ -1156,16 +1175,23 @@ const ChatRoomsList: React.FC = () => {
       setNewRoomPassword('');
       setNewRoomIsPublic(false);
       setNewPrivateVisibility('private');
+      setCreateRoomError('');
       removeBackgroundImage();
       removeIconImage();
       
       // Navigate to the new room
       router.push(`/chat/room/${roomId}`);
     } catch (error: any) {
-      if ((process.env.NODE_ENV === "development")) {
+      const message = error?.message || 'Failed to create room';
+      const expectedPolicyError =
+        message.toLowerCase().includes('private community limit') ||
+        message.toLowerCase().includes('requires an active paid subscription');
+
+      if ((process.env.NODE_ENV === "development") && !expectedPolicyError) {
         console.error('Error creating room:', error);
       }
-      alert(error.message || 'Failed to create room');
+
+      setCreateRoomError(message);
       setUploadingImages(false);
     } finally {
       setCreating(false);
@@ -1274,7 +1300,14 @@ const ChatRoomsList: React.FC = () => {
       return;
     }
     
-    if (!confirm('Are you sure you want to delete this community? This action cannot be undone.')) {
+    const confirmed = await modernConfirm('Are you sure you want to delete this community? This action cannot be undone.', {
+      title: 'Delete Community',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      destructive: true,
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -2711,7 +2744,10 @@ const ChatRoomsList: React.FC = () => {
         
             <Dialog
               open={showCreateDialog}
-              onOpenChange={(open) => setShowCreateDialog(canCreatePrivateCommunity ? open : false)}
+              onOpenChange={(open) => {
+                setCreateRoomError('');
+                setShowCreateDialog(canCreatePrivateCommunity ? open : false);
+              }}
             >
               {canCreatePrivateCommunity ? (
                 <DialogTrigger asChild>
@@ -2927,6 +2963,49 @@ const ChatRoomsList: React.FC = () => {
                     )}
                   </Button>
                 </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog
+              open={Boolean(createRoomError)}
+              onOpenChange={(open) => {
+                if (!open) setCreateRoomError('');
+              }}
+            >
+              <DialogContent className="w-[92vw] max-w-md rounded-2xl border border-red-400/40 bg-background p-0 overflow-hidden">
+                <DialogHeader className="sr-only">
+                  <DialogTitle>Unable to create community</DialogTitle>
+                  <DialogDescription>{createRoomError || 'Community creation failed.'}</DialogDescription>
+                </DialogHeader>
+                <div className="bg-linear-to-r from-red-600/10 via-rose-600/10 to-pink-600/10 p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-xl bg-red-100 p-2 text-red-600 dark:bg-red-900/40 dark:text-red-300">
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-foreground">Unable to create community</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">{createRoomError}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                    {!paidMember && (
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setCreateRoomError('');
+                          router.push('/pricing?source=private-community');
+                        }}
+                        className="bg-linear-to-r from-rose-600 to-pink-600 text-white hover:from-rose-700 hover:to-pink-700"
+                      >
+                        Upgrade Plan
+                      </Button>
+                    )}
+                    <Button type="button" variant="outline" onClick={() => setCreateRoomError('')}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
               </DialogContent>
             </Dialog>
           </div>

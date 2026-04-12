@@ -23,6 +23,9 @@ export interface ImageUploadOptions {
   folder?: string;
   maxSizeBytes?: number;
   allowedFormats?: string[];
+  convertToWebP?: boolean;
+  webpQuality?: number;
+  maxImageDimension?: number;
 }
 
 // ==================== CONFIGURATION ====================
@@ -34,8 +37,84 @@ const _R2_ACCOUNT_ID = process.env.NEXT_PUBLIC_R2_ACCOUNT_ID;
 const DEFAULT_OPTIONS: ImageUploadOptions = {
   folder: 'chat-rooms',
   maxSizeBytes: 5 * 1024 * 1024, // 5MB
-  allowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif']
+  allowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+  convertToWebP: false,
+  webpQuality: 0.82,
 };
+
+function clampQuality(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 0.82;
+  return Math.min(0.95, Math.max(0.45, value));
+}
+
+function canvasToWebPBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Failed to encode image as WebP'));
+          return;
+        }
+        resolve(blob);
+      },
+      'image/webp',
+      quality,
+    );
+  });
+}
+
+async function convertImageToWebP(file: File, options: ImageUploadOptions): Promise<File> {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Failed to load image for compression'));
+      image.src = objectUrl;
+    });
+
+    let width = img.naturalWidth;
+    let height = img.naturalHeight;
+    const maxDimension = options.maxImageDimension;
+    if (typeof maxDimension === 'number' && maxDimension > 0) {
+      const largestSide = Math.max(width, height);
+      if (largestSide > maxDimension) {
+        const scale = maxDimension / largestSide;
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Failed to initialize canvas for image compression');
+    }
+
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const maxSize = options.maxSizeBytes || DEFAULT_OPTIONS.maxSizeBytes!;
+    let quality = clampQuality(options.webpQuality);
+    let blob = await canvasToWebPBlob(canvas, quality);
+
+    // Step quality down to satisfy max upload size when possible.
+    for (let i = 0; i < 6 && blob.size > maxSize && quality > 0.5; i++) {
+      quality = Math.max(0.45, quality - 0.08);
+      blob = await canvasToWebPBlob(canvas, quality);
+    }
+
+    const originalName = file.name.replace(/\.[^/.]+$/, '');
+    return new File([blob], `${originalName}.webp`, {
+      type: 'image/webp',
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -141,26 +220,31 @@ export async function uploadImageToR2(
   
   // Merge options with defaults
   const uploadOptions = { ...DEFAULT_OPTIONS, ...options };
+
+  // Convert to WebP before validating size so oversized originals can still be optimized.
+  const uploadFile = uploadOptions.convertToWebP
+    ? await convertImageToWebP(file, uploadOptions)
+    : file;
   
   // Validate file
-  validateFile(file, uploadOptions);
+  validateFile(uploadFile, uploadOptions);
   
   // Calculate SHA-256 hash
-  const hash = await calculateSHA256(file);
+  const hash = await calculateSHA256(uploadFile);
   
   // Get image dimensions
-  const dimensions = await getImageDimensions(file);
+  const dimensions = await getImageDimensions(uploadFile);
   
   // Generate unique key with timestamp
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).substring(7);
-  const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const fileExtension = uploadFile.name.split('.').pop()?.toLowerCase() || 'jpg';
   const folder = uploadOptions.folder || DEFAULT_OPTIONS.folder!;
   const key = `${folder}/${timestamp}-${randomId}.${fileExtension}`;
   
   // Prepare form data
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', uploadFile);
   formData.append('key', key);
   formData.append('hash', hash);
   
@@ -192,7 +276,7 @@ export async function uploadImageToR2(
       width: dimensions.width,
       height: dimensions.height,
       format: dimensions.format,
-      bytes: file.size,
+      bytes: uploadFile.size,
       createdAt: new Date().toISOString()
     };
     

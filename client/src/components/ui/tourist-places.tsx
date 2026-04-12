@@ -36,6 +36,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { modernConfirm } from '@/lib/modernDialog';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface MediaItem {
@@ -520,7 +521,13 @@ export function TouristPlacesManager() {
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this tourist place?')) return;
+    const confirmed = await modernConfirm('Delete this tourist place?', {
+      title: 'Delete Tourist Place',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await deleteDoc(doc(firestoreDb, 'touristPlaces', id));
       flash('Place deleted.', 'success');

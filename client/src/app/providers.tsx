@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { ThemeProvider } from "@/components/mvpblocks/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PageViewTracker } from "@/components/PageViewTracker";
+import { ModernDialogHost } from "@/components/ui/modern-dialog-host";
+import { modernAlert } from "@/lib/modernDialog";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -110,6 +112,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    const nativeAlert = window.alert.bind(window);
+
+    window.alert = (message?: unknown) => {
+      void modernAlert(typeof message === "string" ? message : String(message ?? ""));
+    };
+
+    return () => {
+      window.alert = nativeAlert;
+    };
+  }, []);
+
+  useEffect(() => {
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason as { code?: string; message?: string } | undefined;
       const code = typeof reason?.code === "string" ? reason.code : "";
@@ -139,6 +153,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         <PageViewTracker />
         {children}
+        <ModernDialogHost />
       </AuthProvider>
     </ThemeProvider>
   );

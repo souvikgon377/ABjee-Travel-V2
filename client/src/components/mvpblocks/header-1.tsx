@@ -84,6 +84,21 @@ const normalizeNotification = (raw: any): NotificationItem => ({
   inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
 });
 
+const isRoomNavigableNotification = (item: NotificationItem): boolean => {
+  if (!item.roomId) return false;
+  return item.type === 'room_invite' || item.type === 'private_room_join_request';
+};
+
+const formatNotificationType = (type: string): string => {
+  if (type === 'private_room_join_request') return 'join request';
+  return type.replaceAll('_', ' ');
+};
+
+const isActionableNotification = (item: NotificationItem): boolean => {
+  if (!item.roomId) return false;
+  return item.type === 'room_invite' || item.type === 'private_room_join_request';
+};
+
 export default function Header1() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -187,7 +202,7 @@ export default function Header1() {
     setNotificationError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token') || await currentUser.getIdToken();
       if (!token) {
         throw new Error('Authentication token missing');
       }
@@ -267,7 +282,7 @@ export default function Header1() {
   const totalCount = notifications.length;
 
   const handleNotificationClick = useCallback((item: NotificationItem) => {
-    if (item.type !== 'room_invite' || !item.roomId) return;
+    if (!isRoomNavigableNotification(item)) return;
 
     const roomPath = item.inviteToken
       ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
@@ -280,11 +295,11 @@ export default function Header1() {
 
   const handleInvitationAction = useCallback(async (item: NotificationItem, action: 'accept' | 'reject') => {
     if (notificationActionId) return;
-    if (item.type !== 'room_invite' || !item.roomId) return;
+    if (!isActionableNotification(item)) return;
 
     setNotificationActionId(item.id);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('token') || await currentUser?.getIdToken();
       if (!token) throw new Error('Authentication token missing');
 
       const response = await fetch(`/api/notifications/${item.id}/${action}`, {
@@ -294,12 +309,12 @@ export default function Header1() {
 
       const json = await response.json().catch(() => ({ success: false }));
       if (!response.ok || !json?.success) {
-        throw new Error(json?.message || `Failed to ${action} invitation`);
+        throw new Error(json?.message || `Failed to ${action} notification`);
       }
 
       setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
 
-      if (action === 'accept') {
+      if (action === 'accept' && item.type === 'room_invite') {
         setNotificationsOpen(false);
         const roomPath = item.inviteToken
           ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
@@ -310,7 +325,7 @@ export default function Header1() {
     } finally {
       setNotificationActionId(null);
     }
-  }, [notificationActionId, router]);
+  }, [currentUser, notificationActionId, router]);
 
   useEffect(() => {
     if (!notificationsOpen) return;
@@ -386,14 +401,17 @@ export default function Header1() {
 
         {notifications.map((item) => {
           const isInvite = item.type === 'room_invite' && Boolean(item.roomId);
+          const isJoinRequest = item.type === 'private_room_join_request' && Boolean(item.roomId);
+          const isNavigable = isRoomNavigableNotification(item);
+          const isActionable = isActionableNotification(item);
           return (
             <div
               key={item.id}
-              className={`mb-2 rounded-lg border border-border px-3 py-2 ${isInvite ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
-              onClick={isInvite ? () => handleNotificationClick(item) : undefined}
-              role={isInvite ? 'button' : undefined}
-              tabIndex={isInvite ? 0 : undefined}
-              onKeyDown={isInvite ? (e) => {
+              className={`mb-2 rounded-lg border border-border px-3 py-2 ${isNavigable ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
+              onClick={isNavigable ? () => handleNotificationClick(item) : undefined}
+              role={isNavigable ? 'button' : undefined}
+              tabIndex={isNavigable ? 0 : undefined}
+              onKeyDown={isNavigable ? (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   handleNotificationClick(item);
@@ -402,12 +420,12 @@ export default function Header1() {
             >
               <div className="mb-1 flex items-center justify-between">
                 <p className="text-xs font-medium text-foreground capitalize">
-                  {item.type.replace('_', ' ')}
+                  {formatNotificationType(item.type)}
                 </p>
                 <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
               </div>
               <p className="text-xs text-muted-foreground">{item.message}</p>
-              {isInvite && (
+              {isActionable && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -418,7 +436,11 @@ export default function Header1() {
                     }}
                     className="inline-flex items-center rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {notificationActionId === item.id ? 'Working...' : 'Accept'}
+                    {notificationActionId === item.id
+                      ? 'Working...'
+                      : isJoinRequest
+                        ? 'Approve'
+                        : 'Accept'}
                   </button>
                   <button
                     type="button"
@@ -429,7 +451,7 @@ export default function Header1() {
                     }}
                     className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Reject
+                    {isInvite ? 'Reject' : 'Decline'}
                   </button>
                 </div>
               )}

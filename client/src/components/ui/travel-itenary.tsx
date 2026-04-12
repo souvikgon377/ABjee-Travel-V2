@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { modernConfirm } from '@/lib/modernDialog';
 
 interface FormState {
 	id?: string;
@@ -142,7 +143,14 @@ export default function AdminTravelItenary() {
 
 	// Delete itinerary
 	const deleteItinerary = async (id: string) => {
-		if (!confirm('Are you sure you want to delete this itinerary? This action cannot be undone.')) {
+		const confirmed = await modernConfirm('Are you sure you want to delete this itinerary? This action cannot be undone.', {
+			title: 'Delete Itinerary',
+			confirmText: 'Delete',
+			cancelText: 'Cancel',
+			destructive: true,
+		});
+
+		if (!confirmed) {
 			return;
 		}
 

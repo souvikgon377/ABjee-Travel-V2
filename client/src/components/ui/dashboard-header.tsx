@@ -44,6 +44,7 @@ import {
   CheckCheck,
   Inbox,
 } from 'lucide-react';
+import { modernPrompt } from '@/lib/modernDialog';
 
 type NotificationItem = {
   id: string;
@@ -483,8 +484,15 @@ export const DashboardHeader = memo(
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => {
-                  const input = prompt('Search dashboard:');
-                  if (input) onSearchChange(input);
+                  void (async () => {
+                    const input = await modernPrompt('Search dashboard:', {
+                      title: 'Search Dashboard',
+                      placeholder: 'Type keywords',
+                      confirmText: 'Search',
+                      cancelText: 'Cancel',
+                    });
+                    if (input) onSearchChange(input);
+                  })();
                 }}>
                   <Search className="mr-2 h-4 w-4" />
                   Search

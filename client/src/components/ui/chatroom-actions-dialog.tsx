@@ -334,6 +334,9 @@ export const ChatRoomActionsDialog = memo(
         setUploadingBackground(true);
         const result = await uploadImageToR2(file, {
           folder: 'chat-rooms/backgrounds',
+          convertToWebP: true,
+          webpQuality: 0.82,
+          maxImageDimension: 1920,
         });
         setSelectedBackgroundImage(result);
       } catch (error: any) {
@@ -356,6 +359,9 @@ export const ChatRoomActionsDialog = memo(
         setUploadingIcon(true);
         const result = await uploadImageToR2(file, {
           folder: 'chat-rooms/icons',
+          convertToWebP: true,
+          webpQuality: 0.8,
+          maxImageDimension: 512,
         });
         setSelectedIconImage(result);
       } catch (error: any) {
@@ -603,6 +609,7 @@ export const ChatRoomActionsDialog = memo(
                       onChange={handleBackgroundImageChange}
                       className="hidden"
                     />
+                    <p className="text-xs text-muted-foreground">Auto-optimized to WebP before upload.</p>
                   </div>
                 </div>
 
@@ -645,6 +652,7 @@ export const ChatRoomActionsDialog = memo(
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">Square images work best (recommended: 256x256px)</p>
+                  <p className="text-xs text-muted-foreground">Auto-optimized to WebP before upload.</p>
                 </div>
 
                 {(uploadingBackground || uploadingIcon) && (

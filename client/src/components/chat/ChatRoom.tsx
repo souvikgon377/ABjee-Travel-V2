@@ -30,6 +30,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { firestoreDb } from '../../lib/firebaseFirestore';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { getPrivateRoomParticipationAllowance } from '../../lib/subscriptionPolicy';
+import { modernConfirm } from '../../lib/modernDialog';
 
 // Emoji list constant (moved outside component for performance)
 const EMOJI_LIST = [
@@ -408,6 +409,34 @@ const ChatRoom = () => {
 
     try {
       await chatService.requestToJoinRoom(roomId, user.uid);
+
+      try {
+        const token = localStorage.getItem('token') || await user.getIdToken();
+        if (token) {
+          const response = await fetch('/api/notifications/send-join-request', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              roomId,
+              requesterName:
+                userProfile?.displayName || user.displayName || user.email || 'A user',
+            }),
+          });
+
+          if (!response.ok) {
+            const json = await response.json().catch(() => null);
+            throw new Error(json?.message || 'Failed to send join request notification');
+          }
+        }
+      } catch (notifyError) {
+        if ((process.env.NODE_ENV === 'development')) {
+          console.warn('Join request notification failed:', notifyError);
+        }
+      }
+
       setJoinRequestPending(true);
       setRoom((prev) => {
         if (!prev) return prev;
@@ -502,7 +531,12 @@ const ChatRoom = () => {
     try {
       // For private communities, perform an actual membership exit.
       if (room && !room.isPublic && user?.uid) {
-        const confirmed = window.confirm(`Exit private community "${room.name}"?`);
+        const confirmed = await modernConfirm(`Exit private community "${room.name}"?`, {
+          title: 'Exit Community',
+          confirmText: 'Exit',
+          cancelText: 'Stay',
+          destructive: true,
+        });
         if (!confirmed) {
           return;
         }
@@ -675,6 +709,9 @@ const ChatRoom = () => {
       setUploadingBackground(true);
       const result = await uploadImageToR2(file, {
         folder: 'chat-rooms/backgrounds',
+        convertToWebP: true,
+        webpQuality: 0.82,
+        maxImageDimension: 1920,
       });
 
       // Stage the uploaded image
@@ -709,6 +746,9 @@ const ChatRoom = () => {
       setUploadingIcon(true);
       const result = await uploadImageToR2(file, {
         folder: 'chat-rooms/icons',
+        convertToWebP: true,
+        webpQuality: 0.8,
+        maxImageDimension: 512,
       });
 
       // Stage the uploaded image

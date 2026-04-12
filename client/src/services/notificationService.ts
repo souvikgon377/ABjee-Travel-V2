@@ -20,6 +20,56 @@ const createNotificationData = (data: AnyObj): AnyObj => ({
 class NotificationService {
   private collection = adminDb.collection(COLLECTION);
 
+  private getPrivateJoinRequestDocId(fromUserId: string, toUserId: string, roomId: string): string {
+    return `private_join_${toUserId}_${fromUserId}_${roomId}`;
+  }
+
+  async createPrivateJoinRequestNotification(params: {
+    fromUserId: string;
+    toUserId: string;
+    roomId: string;
+    roomName: string;
+    requesterName?: string;
+  }) {
+    const {
+      fromUserId,
+      toUserId,
+      roomId,
+      roomName,
+      requesterName,
+    } = params;
+
+    const docId = this.getPrivateJoinRequestDocId(fromUserId, toUserId, roomId);
+    const docRef = this.collection.doc(docId);
+    const existing = await docRef.get();
+
+    if (existing.exists) {
+      const data = existing.data() as AnyObj;
+      if (data?.status === "pending") {
+        return { id: existing.id, ...data };
+      }
+    }
+
+    const displayName =
+      typeof requesterName === "string" && requesterName.trim().length > 0
+        ? requesterName.trim()
+        : "A user";
+
+    const payload = createNotificationData({
+      fromUserId,
+      toUserId,
+      type: "private_room_join_request",
+      roomId,
+      roomName,
+      status: "pending",
+      message: `${displayName} requested to join \"${roomName}\"`,
+      createdAt: existing.exists ? FieldValue.serverTimestamp() : undefined,
+    });
+
+    await docRef.set(payload, { merge: true });
+    return { id: docId, ...payload };
+  }
+
   async create(notificationData: AnyObj) {
     const ref = this.collection.doc();
     const payload = createNotificationData(notificationData);
