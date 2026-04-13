@@ -199,8 +199,9 @@ export default function Header1() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [homePageEnabled, setHomePageEnabled] = useState(true);
-  const [bookingCategoriesEnabled, setBookingCategoriesEnabled] = useState(true);
+  const [homePageEnabled, setHomePageEnabled] = useState<boolean | null>(null);
+  const [bookingCategoriesEnabled, setBookingCategoriesEnabled] = useState<boolean | null>(null);
+  const [navSettingsResolved, setNavSettingsResolved] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(false);
   const [notificationError, setNotificationError] = useState<string | null>(null);
@@ -233,6 +234,28 @@ export default function Header1() {
   useEffect(() => {
     let isMounted = true;
 
+    try {
+      const cachedSettingsRaw = sessionStorage.getItem('header-public-settings');
+      if (cachedSettingsRaw) {
+        const cachedSettings = JSON.parse(cachedSettingsRaw) as {
+          homePageEnabled?: boolean;
+          bookingCategoriesEnabled?: boolean;
+        };
+
+        if (typeof cachedSettings.homePageEnabled === 'boolean') {
+          setHomePageEnabled(cachedSettings.homePageEnabled);
+        }
+
+        if (typeof cachedSettings.bookingCategoriesEnabled === 'boolean') {
+          setBookingCategoriesEnabled(cachedSettings.bookingCategoriesEnabled);
+        }
+
+        setNavSettingsResolved(true);
+      }
+    } catch {
+      // Ignore cache parsing issues and fall back to network fetch.
+    }
+
     const loadPublicSettings = async () => {
       try {
         const response = await fetch('/api/public/settings', {
@@ -246,12 +269,29 @@ export default function Header1() {
           return;
         }
 
-        setHomePageEnabled(settings?.homePageEnabled !== false);
-        setBookingCategoriesEnabled(settings?.bookingCategoriesEnabled !== false);
+        const nextHomePageEnabled = settings?.homePageEnabled !== false;
+        const nextBookingCategoriesEnabled = settings?.bookingCategoriesEnabled !== false;
+
+        setHomePageEnabled(nextHomePageEnabled);
+        setBookingCategoriesEnabled(nextBookingCategoriesEnabled);
+        setNavSettingsResolved(true);
+
+        try {
+          sessionStorage.setItem(
+            'header-public-settings',
+            JSON.stringify({
+              homePageEnabled: nextHomePageEnabled,
+              bookingCategoriesEnabled: nextBookingCategoriesEnabled,
+            })
+          );
+        } catch {
+          // Ignore cache write issues.
+        }
       } catch {
         if (isMounted) {
           setHomePageEnabled(true);
           setBookingCategoriesEnabled(true);
+          setNavSettingsResolved(true);
         }
       }
     };
@@ -265,18 +305,24 @@ export default function Header1() {
 
   const visibleNavItems = useMemo(
     () => navItems.filter((item) => {
-      if (!homePageEnabled && item.href === '/') {
-        return false;
+      if (item.href === '/') {
+        return homePageEnabled === true;
       }
 
-      if (!bookingCategoriesEnabled && item.href === '/booking-categories') {
+      if (item.href === '/booking-categories') {
+        return bookingCategoriesEnabled === true;
+      }
+
+      if (!navSettingsResolved && (item.href === '/' || item.href === '/booking-categories')) {
         return false;
       }
 
       return true;
     }),
-    [bookingCategoriesEnabled, homePageEnabled],
+    [bookingCategoriesEnabled, homePageEnabled, navSettingsResolved],
   );
+
+  const mobileNavItems = useMemo(() => visibleNavItems, [visibleNavItems]);
 
   const navGridStyle = useMemo(
     () => ({
@@ -1037,7 +1083,7 @@ export default function Header1() {
               transition={{ duration: 0.28, ease: 'easeInOut' }}
             >
               <div className="mt-2 space-y-1 rounded-xl border border-border bg-background/95 py-3 shadow-xl backdrop-blur-lg">
-                {visibleNavItems.map((item, i) => (
+                {mobileNavItems.map((item, i) => (
                   <motion.div
                     key={item.name}
                     custom={i}
@@ -1048,7 +1094,7 @@ export default function Header1() {
                   >
                     {item.hasDropdown ? (
                       <div className="px-4 py-2">
-                        <div className="font-medium text-foreground mb-2">{item.name}</div>
+                        <div className="mb-2 font-medium text-foreground">{item.name}</div>
                         <div className="pl-4 space-y-1">
                           {item.dropdownItems?.map((dropdownItem) => (
                             <Link
@@ -1078,83 +1124,82 @@ export default function Header1() {
                     )}
                   </motion.div>
                 ))}
+
                 <motion.div
                   className="space-y-2 px-4 py-2 will-change-[transform,opacity]"
                   initial={{ opacity: 0, x: -20 }}
                   animate={isMobileMenuOpen ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
-                  transition={{ delay: isMobileMenuOpen ? visibleNavItems.length * 0.06 : 0, duration: 0.25, ease: 'easeOut' }}
+                  transition={{ delay: isMobileMenuOpen ? mobileNavItems.length * 0.06 : 0, duration: 0.25, ease: 'easeOut' }}
                 >
-                  {currentUser ? (
-                    <>
-                      <div className="flex items-center space-x-3 px-4 py-3 bg-muted rounded-lg">
-                        <button
-                          type="button"
-                          onClick={goToProfile}
-                          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
-                          aria-label="Open profile"
-                          title="Open profile"
-                        >
-                          {profileAvatar && !profileAvatarError ? (
-                            <img
-                              src={profileAvatar}
-                              alt="Profile"
-                              className="w-10 h-10 rounded-full border-2 border-rose-500"
-                              referrerPolicy="no-referrer"
-                              onError={() => setProfileAvatarError(true)}
-                            />
-                          ) : (
-                            <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white font-bold">
-                              {userDisplayName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </button>
-                        <div>
-                          <p className="font-medium text-foreground">
-                            {userDisplayName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Welcome back!</p>
+              {currentUser ? (
+                <>
+                  <div className="flex items-center space-x-3 rounded-lg bg-muted px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={goToProfile}
+                      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+                      aria-label="Open profile"
+                      title="Open profile"
+                    >
+                      {profileAvatar && !profileAvatarError ? (
+                        <img
+                          src={profileAvatar}
+                          alt="Profile"
+                          className="h-10 w-10 rounded-full border-2 border-rose-500"
+                          referrerPolicy="no-referrer"
+                          onError={() => setProfileAvatarError(true)}
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 font-bold text-white">
+                          {userDisplayName.charAt(0).toUpperCase()}
                         </div>
-                      </div>
-                      {userProfile?.role === 'admin' && (
-                        <Link
-                          href="/admin"
-                          className="flex items-center justify-center space-x-2 w-full rounded-lg bg-linear-to-r from-purple-500 to-purple-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
-                          onClick={() => setIsMobileMenuOpen(false)}
-                        >
-                          <Shield className="h-4 w-4" />
-                          <span>Admin Dashboard</span>
-                        </Link>
                       )}
-                      <button
-                        onClick={() => {
-                          setIsMobileMenuOpen(false);
-                          logout();
-                          router.push('/');
-                        }}
-                        className="flex items-center justify-center space-x-2 w-full rounded-lg border-2 border-rose-500 py-2.5 text-center font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        <span>Logout</span>
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link
-                        href="/auth"
-                        className="block w-full rounded-lg py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        Sign In
-                      </Link>
-                      <Link
-                        href="/auth"
-                        className="block w-full rounded-lg bg-linear-to-r from-rose-500 to-rose-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        Get Started
-                      </Link>
-                    </>
+                    </button>
+                    <div>
+                      <p className="font-medium text-foreground">{userDisplayName}</p>
+                      <p className="text-xs text-muted-foreground">Welcome back!</p>
+                    </div>
+                  </div>
+                  {userProfile?.role === 'admin' && (
+                    <Link
+                      href="/admin"
+                      className="flex w-full items-center justify-center space-x-2 rounded-lg bg-linear-to-r from-purple-500 to-purple-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>Admin Dashboard</span>
+                    </Link>
                   )}
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      logout();
+                      router.push('/');
+                    }}
+                    className="flex w-full items-center justify-center space-x-2 rounded-lg border-2 border-rose-500 py-2.5 text-center font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/auth"
+                    className="block w-full rounded-lg py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth"
+                    className="block w-full rounded-lg bg-linear-to-r from-rose-500 to-rose-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
                 </motion.div>
               </div>
             </motion.div>

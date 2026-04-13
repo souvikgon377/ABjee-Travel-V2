@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import type { TouristPlace, MediaItem } from '@/components/ui/tourist-places';
@@ -230,17 +230,17 @@ const PlaceCard: React.FC<{
               muted
               loop
               playsInline
-              controls
+              controls={!disableVideoAutoplay}
               preload="metadata"
               onPlay={() => setVidPaused(false)}
               onPause={() => setVidPaused(true)}
             />
             {/* pause / resume button */}
             <motion.button
-              whileHover={{ scale: 1.12 }}
-              whileTap={{ scale: 0.9 }}
-              animate={vidPaused ? { scale: 1 } : { scale: [1, 1.08, 1] }}
-              transition={vidPaused ? { duration: 0.2 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              whileHover={reducedMotion ? undefined : { scale: 1.12 }}
+              whileTap={reducedMotion ? undefined : { scale: 0.9 }}
+              animate={reducedMotion ? undefined : (vidPaused ? { scale: 1 } : { scale: [1, 1.08, 1] })}
+              transition={reducedMotion ? undefined : (vidPaused ? { duration: 0.2 } : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' })}
               onClick={toggleVid}
               className="absolute bottom-2.5 right-2.5 z-20 h-9 w-9 rounded-full bg-linear-to-br from-black/70 to-rose-700/55 hover:from-black/80 hover:to-rose-600/70 backdrop-blur-md border border-white/35 flex items-center justify-center text-white shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-colors"
             >
@@ -415,7 +415,9 @@ const ChatRoomsList: React.FC = () => {
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
-  const featureCardHeightClass = 'h-[18rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]';
+  const featureCardHeightClass = isMobile
+    ? 'h-[12rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]'
+    : 'h-[18rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]';
   const deferredSearchDestination = useDeferredValue(searchDestination);
   const normalizedSearchDestination = useMemo(
     () => deferredSearchDestination.trim().toLowerCase(),
@@ -489,8 +491,8 @@ const ChatRoomsList: React.FC = () => {
     };
 
     const updatePerformanceMode = () => {
-      const lowCpu = (navigator.hardwareConcurrency ?? 8) <= 6;
-      const lowMemory = (nav.deviceMemory ?? 8) <= 4;
+      const lowCpu = (navigator.hardwareConcurrency ?? 8) <= 8;
+      const lowMemory = (nav.deviceMemory ?? 8) <= 6;
       const saveData = Boolean(nav.connection?.saveData);
       const networkType = nav.connection?.effectiveType ?? '';
       const constrainedNetwork = networkType === '2g' || networkType === '3g' || networkType === 'slow-2g';
@@ -518,7 +520,7 @@ const ChatRoomsList: React.FC = () => {
       nav.connection?.removeEventListener?.('change', updatePerformanceMode);
     };
   }, [isMobile]);
-  const countryUsersCarousel = countryUsers.length > 0 ? (
+  const countryUsersCarousel = countryUsers.length > 0 && !isMobile ? (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
@@ -623,7 +625,9 @@ const ChatRoomsList: React.FC = () => {
   ) : null;
 
   useEffect(() => {
-    const usersRef = collection(firestoreDb, 'users');
+    if (isMobile || mobilePerformanceMode) return;
+
+    const usersRef = query(collection(firestoreDb, 'users'), limit(120));
 
     const unsubscribe = onSnapshot(usersRef, (snapshot) => {
       const usersFromDb: CountryUserHighlight[] = [];
@@ -660,7 +664,7 @@ const ChatRoomsList: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isMobile, mobilePerformanceMode]);
 
   const filteredPlaces = useMemo(() => {
     if (!hasSearchQuery) return [];
@@ -671,6 +675,13 @@ const ChatRoomsList: React.FC = () => {
       p.country.toLowerCase().includes(normalizedSearchDestination)
     ));
   }, [firestorePlaces, hasSearchQuery, normalizedSearchDestination]);
+
+  const filteredPlacesForRender = useMemo(() => {
+    if (isMobile) {
+      return filteredPlaces.slice(0, 16);
+    }
+    return filteredPlaces;
+  }, [filteredPlaces, isMobile]);
 
   const selectedPlaceImages = useMemo(
     () => selectedPlace?.media?.filter((m) => m.type === 'image') ?? [],
@@ -1461,6 +1472,9 @@ const ChatRoomsList: React.FC = () => {
                   loop 
                   muted 
                   playsInline
+                  disableRemotePlayback
+                  disablePictureInPicture
+                  preload={shouldAutoplayRichMedia ? 'metadata' : 'auto'}
                   className="absolute inset-0 w-full h-full object-cover"
                 >
                   <source src={STATIC_VIDEO_V1} type="video/mp4" />
@@ -1511,11 +1525,13 @@ const ChatRoomsList: React.FC = () => {
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <motion.div 
-                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
-                  animate={{ x: ['-100%', '100%'] }}
-                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
-                />
+                {!mobilePerformanceMode && (
+                  <motion.div 
+                    className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
+                    animate={{ x: ['-100%', '100%'] }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                  />
+                )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ 
@@ -1696,23 +1712,27 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
-                <video 
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop 
-                  muted 
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V2} type="video/mp4" />
-                </video>
+                {!isMobile && (
+                  <video 
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop 
+                    muted 
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V2} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <motion.div 
-                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
-                  animate={{ x: ['-100%', '100%'] }}
-                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
-                />
+                {!isMobile && (
+                  <motion.div 
+                    className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
+                    animate={{ x: ['-100%', '100%'] }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                  />
+                )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{ 
@@ -1750,23 +1770,27 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
-                <video
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V3} type="video/mp4" />
-                </video>
+                {!isMobile && (
+                  <video
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V3} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-yellow-700/60 via-amber-700/50 to-yellow-700/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-yellow-400/30 via-amber-400/20 to-yellow-300/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <motion.div
-                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
-                  animate={{ x: ['-100%', '100%'] }}
-                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
-                />
+                {!isMobile && (
+                  <motion.div
+                    className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
+                    animate={{ x: ['-100%', '100%'] }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                  />
+                )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
                     animate={{
@@ -1804,15 +1828,17 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
-                <video
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V4} type="video/mp4" />
-                </video>
+                {!isMobile && (
+                  <video
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V4} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -1856,6 +1882,9 @@ const ChatRoomsList: React.FC = () => {
                   loop
                   muted
                   playsInline
+                  disableRemotePlayback
+                  disablePictureInPicture
+                  preload={shouldAutoplayRichMedia ? 'metadata' : 'none'}
                   className="absolute inset-0 w-full h-full object-cover"
                 >
                   <source src={STATIC_VIDEO_V1} type="video/mp4" />
@@ -2045,12 +2074,12 @@ const ChatRoomsList: React.FC = () => {
                         >
                           <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-semibold shadow-lg">
                             <MapPin className="h-4 w-4 text-rose-400" />
-                            {filteredPlaces.length} place{filteredPlaces.length !== 1 ? 's' : ''} for &ldquo;{deferredSearchDestination.trim()}&rdquo;
+                            {filteredPlacesForRender.length} of {filteredPlaces.length} place{filteredPlaces.length !== 1 ? 's' : ''} for &ldquo;{deferredSearchDestination.trim()}&rdquo;
                           </span>
                         </motion.div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                          {filteredPlaces.map((place, idx) => (
+                          {filteredPlacesForRender.map((place, idx) => (
                             <PlaceCard
                               key={place.id ?? idx}
                               place={place}
@@ -2095,8 +2124,10 @@ const ChatRoomsList: React.FC = () => {
                                   muted
                                   loop
                                   playsInline
-                                  controls
-                                  preload="metadata"
+                                  controls={shouldAutoplayRichMedia}
+                                  disableRemotePlayback
+                                  disablePictureInPicture
+                                  preload={shouldAutoplayRichMedia ? 'metadata' : 'none'}
                                   onPlay={() => setDetailVidPaused(false)}
                                   onPause={() => setDetailVidPaused(true)}
                                 />
