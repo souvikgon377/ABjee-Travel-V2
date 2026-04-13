@@ -18,7 +18,7 @@ const statsCache: {
 let statsRefreshPromise: Promise<void> | null = null;
 
 const CACHE_TTL_MS = 30000; // Cache for 30 seconds
-const SOURCE_TIMEOUT_MS = 5000; // Reduced from 8000 to 5000 for faster failures
+const SOURCE_TIMEOUT_MS = 3000; // Very aggressive timeout for Vercel serverless (was 5000)
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -56,12 +56,28 @@ export async function GET(req: NextRequest) {
       return ok(statsCache.data);
     }
 
-    // Cold start: fetch once so we can return meaningful data.
-    await refreshStats();
-    return ok(statsCache.data || getDefaultStats());
+    // Cold start: try to fetch fresh stats but timeout after 2 seconds
+    // to avoid blocking the response. Continue refreshing in background.
+    const fetchPromise = refreshStats();
+    const timeoutPromise = new Promise((resolve) => {
+      setTimeout(() => resolve("timeout"), 2000);
+    });
+
+    await Promise.race([fetchPromise, timeoutPromise]);
+    
+    // Return cached data if available (should be populated by now)
+    if (statsCache.data) {
+      return ok(statsCache.data);
+    }
+
+    // If still nothing, return defaults to unblock UI
+    return ok(getDefaultStats());
   } catch (error: any) {
     if (error instanceof AuthError) return fail(error.message, error.status);
-    return fail("Failed to get dashboard statistics", 500);
+    
+    // Even on error, try to return cached or default data
+    if (statsCache.data) return ok(statsCache.data);
+    return ok(getDefaultStats());
   }
 }
 
