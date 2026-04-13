@@ -9,13 +9,13 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/logo.jpg",
+      "src": "https://pub-e65e4da93a9d432b867c1a9d7f1ca5d4.r2.dev/logo.jpg",
       "sizes": "192x192",
       "type": "image/jpeg",
       "purpose": "any maskable"
     },
     {
-      "src": "/logo.jpg",
+      "src": "https://pub-e65e4da93a9d432b867c1a9d7f1ca5d4.r2.dev/logo.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "any maskable"

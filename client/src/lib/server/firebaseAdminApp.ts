@@ -1,4 +1,4 @@
-import { cert, getApps, initializeApp, type App } from 'firebase-admin/app';
+import { cert, initializeApp, type App } from 'firebase-admin/app';
 
 type ServiceAccountShape = {
   project_id: string;

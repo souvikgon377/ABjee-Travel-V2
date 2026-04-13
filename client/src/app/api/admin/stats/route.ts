@@ -18,7 +18,25 @@ const statsCache: {
 let statsRefreshPromise: Promise<void> | null = null;
 
 const CACHE_TTL_MS = 30000; // Cache for 30 seconds
-const SOURCE_TIMEOUT_MS = 8000;
+const SOURCE_TIMEOUT_MS = 5000; // Reduced from 8000 to 5000 for faster failures
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Query timed out: ${label}`));
+    }, SOURCE_TIMEOUT_MS);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -88,14 +106,15 @@ async function fetchStatsInBackground() {
     thisMonth.setDate(1);
     thisMonth.setHours(0, 0, 0, 0);
 
-    // Fetch all data in parallel, but let each source fail independently.
+    // Fetch all data in parallel with reduced limits and shorter timeouts
+    // Reduced from 10000 to 1000 for faster queries on Vercel
     const [usersResult, statusResult, pageViewsResult, paymentsResult, subscriptionsResult] =
       await Promise.allSettled([
-        withTimeout(adminDb.collection("users").limit(10000).get(), "users"),
-        withTimeout(getAdminRtdb().ref("status").get(), "status"),
+        withTimeout(adminDb.collection("users").limit(1000).get(), "users"),
+        withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get(), "status"),
         withTimeout(getAdminRtdb().ref("analytics/pageViews").get(), "pageViews"),
-        withTimeout(adminDb.collection("subscriptionPayments").limit(5000).get(), "subscriptionPayments"),
-        withTimeout(adminDb.collection("subscriptions").limit(10000).get(), "subscriptions"),
+        withTimeout(adminDb.collection("subscriptionPayments").limit(500).orderBy("verifiedAt", "desc").get(), "subscriptionPayments"),
+        withTimeout(adminDb.collection("subscriptions").limit(500).get(), "subscriptions"),
       ]);
 
     const usersSnapshot = usersResult.status === "fulfilled" ? usersResult.value : null;
@@ -239,22 +258,4 @@ async function fetchStatsInBackground() {
   } catch (error) {
     console.error("Error fetching stats:", error);
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error(`Stats source timed out: ${label}`));
-    }, SOURCE_TIMEOUT_MS);
-
-    promise
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
-  });
 }

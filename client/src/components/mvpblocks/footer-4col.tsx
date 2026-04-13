@@ -1,12 +1,9 @@
 import {
-  Dribbble,
   Facebook,
-  Github,
   Instagram,
   Mail,
   MapPin,
   Phone,
-  Twitter,
   YoutubeIcon,
 } from 'lucide-react';
 import { publicAsset } from '@/lib/publicAsset';

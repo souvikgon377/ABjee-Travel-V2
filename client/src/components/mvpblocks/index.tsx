@@ -125,14 +125,14 @@ export default function AdminDashboard() {
     fetchStats({ withLoader: true });
     fetchHomePageSetting();
     
-    // Poll stats every 30 seconds to get updated data
+    // Poll stats every 60 seconds (reduced from 30) to reduce server load
     const statsInterval = setInterval(() => {
       fetchStats().catch((err) => {
         if (process.env.NODE_ENV === 'development') {
           console.error('Error polling stats:', err);
         }
       });
-    }, 30000); // 30 seconds
+    }, 60000); // 60 seconds instead of 30 for less frequent updates
 
     return () => clearInterval(statsInterval);
   }, [fetchHomePageSetting, fetchStats]);

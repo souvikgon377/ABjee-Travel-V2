@@ -104,6 +104,23 @@ const isGeneralCommunityRoom = (room: RoomType | null): boolean => {
   return typeof room?.name === 'string' && room.name.trim().toLowerCase() === 'general community chat';
 };
 
+const estimateMessageRowHeight = (message: ChatMessage): number => {
+  const baseHeight = 78;
+  const textLength = message.text?.length ?? 0;
+  const textRows = Math.min(7, Math.ceil(textLength / 42));
+  const textHeight = textRows * 18;
+
+  const attachmentHeight = message.attachment
+    ? message.attachment.type === 'image' || message.attachment.type === 'video'
+      ? 200
+      : message.attachment.type === 'voice' || message.attachment.type === 'audio'
+        ? 72
+        : 64
+    : 0;
+
+  return baseHeight + textHeight + attachmentHeight;
+};
+
 type JoinRequestUser = {
   id: string;
   displayName?: string;
@@ -193,8 +210,13 @@ const ChatRoom = () => {
   const [addMemberSuccess, setAddMemberSuccess] = useState<string | null>(null);
   const [invitedMemberIds, setInvitedMemberIds] = useState<Set<string>>(new Set());
   const [existingMemberIds, setExistingMemberIds] = useState<Set<string>>(new Set());
+  const [messageScrollTop, setMessageScrollTop] = useState(0);
+  const [messageViewportHeight, setMessageViewportHeight] = useState(0);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const typingStateRef = useRef<{ active: boolean; lastSentAt: number }>({ active: false, lastSentAt: 0 });
+  const typingUsersKeyRef = useRef('');
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -417,7 +439,15 @@ const ChatRoom = () => {
 
         // Listen to typing indicators
         const unsubTyping = chatService.listenToTyping(roomId, (typing: any[]) => {
-          setTypingUsers(typing.filter((t: any) => t.userId !== user.uid));
+          const filteredTyping = typing.filter((t: any) => t.userId !== user.uid);
+          const nextTypingKey = filteredTyping.map((item: any) => `${item.userId}:${item.timestamp}`).join('|');
+
+          if (nextTypingKey === typingUsersKeyRef.current) {
+            return;
+          }
+
+          typingUsersKeyRef.current = nextTypingKey;
+          setTypingUsers(filteredTyping);
         });
 
         setLoading(false);
@@ -427,6 +457,8 @@ const ChatRoom = () => {
           if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current);
           }
+          typingStateRef.current = { active: false, lastSentAt: 0 };
+          typingUsersKeyRef.current = '';
           chatService.stopTyping(roomId).catch(() => {});
           
           // Clean up recording
@@ -561,8 +593,25 @@ const ChatRoom = () => {
   };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!hasMessageAccess) return;
+
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      return;
+    }
+
+    // Auto-scroll only when the user is already near the bottom.
+    const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+    if (distanceFromBottom > 180) return;
+
+    const behavior: ScrollBehavior = messages.length <= 1 ? 'auto' : 'smooth';
+    const rafId = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior });
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [messages.length, hasMessageAccess]);
 
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -585,6 +634,7 @@ const ChatRoom = () => {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = undefined;
     }
+    typingStateRef.current = { active: false, lastSentAt: 0 };
     chatService.stopTyping(roomId).catch(() => {});
 
     try {
@@ -617,18 +667,22 @@ const ChatRoom = () => {
   const handleTyping = useCallback(() => {
     if (!roomId || !user || !hasMessageAccess) return;
 
-    // Start typing
-    chatService.startTyping(roomId);
+    const now = Date.now();
+    if (!typingStateRef.current.active || now - typingStateRef.current.lastSentAt > 2000) {
+      typingStateRef.current = { active: true, lastSentAt: now };
+      chatService.startTyping(roomId).catch(() => {});
+    }
 
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Stop typing after 3 seconds of inactivity
+    // Stop typing shortly after inactivity to reduce writes and UI churn.
     typingTimeoutRef.current = setTimeout(() => {
-      chatService.stopTyping(roomId);
-    }, 3000);
+      typingStateRef.current = { active: false, lastSentAt: 0 };
+      chatService.stopTyping(roomId).catch(() => {});
+    }, 2200);
   }, [roomId, user, hasMessageAccess]);
 
   const handleLeaveRoom = useCallback(async () => {
@@ -638,6 +692,7 @@ const ChatRoom = () => {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
+    typingStateRef.current = { active: false, lastSentAt: 0 };
     await chatService.stopTyping(roomId).catch(() => {});
 
     try {
@@ -1359,9 +1414,103 @@ const ChatRoom = () => {
   }, [messages, user]);
 
   useEffect(() => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+
+    let rafId = 0;
+
+    const updateScrollState = () => {
+      setMessageScrollTop(container.scrollTop);
+      setMessageViewportHeight(container.clientHeight);
+    };
+
+    const handleScroll = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateScrollState);
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateScrollState();
+    });
+
+    updateScrollState();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    resizeObserver.observe(container);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      container.removeEventListener('scroll', handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const virtualizedMessages = useMemo(() => {
+    const source = hasMessageAccess ? filteredMessages : [];
+    if (source.length === 0) {
+      return {
+        enabled: false,
+        items: [] as Array<{ message: ChatMessage; index: number }>,
+        topSpacer: 0,
+        bottomSpacer: 0,
+      };
+    }
+
+    if (source.length < 40 || messageViewportHeight <= 0) {
+      return {
+        enabled: false,
+        items: source.map((message, index) => ({ message, index })),
+        topSpacer: 0,
+        bottomSpacer: 0,
+      };
+    }
+
+    const rowHeights = source.map(estimateMessageRowHeight);
+    const rowOffsets = new Array<number>(source.length);
+    let totalHeight = 0;
+
+    for (let i = 0; i < source.length; i += 1) {
+      rowOffsets[i] = totalHeight;
+      totalHeight += rowHeights[i];
+    }
+
+    const viewportTop = Math.max(0, messageScrollTop - 600);
+    const viewportBottom = messageScrollTop + messageViewportHeight + 600;
+
+    let startIndex = 0;
+    while (startIndex < source.length && rowOffsets[startIndex] + rowHeights[startIndex] < viewportTop) {
+      startIndex += 1;
+    }
+
+    let endIndex = startIndex;
+    while (endIndex < source.length && rowOffsets[endIndex] < viewportBottom) {
+      endIndex += 1;
+    }
+
+    startIndex = Math.max(0, startIndex - 6);
+    endIndex = Math.min(source.length - 1, endIndex + 6);
+
+    const visibleItems = source
+      .slice(startIndex, endIndex + 1)
+      .map((message, idx) => ({ message, index: startIndex + idx }));
+
+    const topSpacer = rowOffsets[startIndex] ?? 0;
+    const lastOffset = rowOffsets[endIndex] ?? 0;
+    const lastHeight = rowHeights[endIndex] ?? 0;
+    const bottomSpacer = Math.max(0, totalHeight - (lastOffset + lastHeight));
+
+    return {
+      enabled: true,
+      items: visibleItems,
+      topSpacer,
+      bottomSpacer,
+    };
+  }, [filteredMessages, hasMessageAccess, messageScrollTop, messageViewportHeight]);
+
+  useEffect(() => {
     const candidateUserIds = Array.from(
       new Set(
         messages
+          .slice(-80)
           .map((message) => message.userId)
           .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
       )
@@ -2091,6 +2240,7 @@ const ChatRoom = () => {
           {/* Messages */}
           <div 
             data-lenis-prevent
+            ref={messagesScrollRef}
             className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 space-y-3 sm:space-y-4 relative min-h-0"
             style={room.backgroundImage ? {
               backgroundImage: `url(${room.backgroundImage.url})`,
@@ -2141,7 +2291,11 @@ const ChatRoom = () => {
               </div>
             )}
 
-            {(hasMessageAccess ? filteredMessages : []).map((message) => {
+            {virtualizedMessages.topSpacer > 0 && (
+              <div aria-hidden="true" style={{ height: `${virtualizedMessages.topSpacer}px` }} />
+            )}
+
+            {virtualizedMessages.items.map(({ message }) => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
@@ -2368,6 +2522,10 @@ const ChatRoom = () => {
                   </div>
                 );
               })}
+
+            {virtualizedMessages.bottomSpacer > 0 && (
+              <div aria-hidden="true" style={{ height: `${virtualizedMessages.bottomSpacer}px` }} />
+            )}
             
             {/* Typing Indicator */}
             {hasMessageAccess && typingUsers.length > 0 && (
@@ -2540,8 +2698,20 @@ const ChatRoom = () => {
               <Input
                 value={newMessage}
                 onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  handleTyping();
+                  const value = e.target.value;
+                  setNewMessage(value);
+
+                  if (value.trim().length > 0) {
+                    handleTyping();
+                    return;
+                  }
+
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                    typingTimeoutRef.current = undefined;
+                  }
+                  typingStateRef.current = { active: false, lastSentAt: 0 };
+                  chatService.stopTyping(roomId).catch(() => {});
                 }}
                 placeholder={hasMessageAccess ? 'Type a message...' : 'Waiting for admin approval...'}
                 disabled={!hasMessageAccess}

@@ -10,6 +10,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, EffectFade } from 'swiper/modules';
 import 'swiper/css';
 import 'swiper/css/effect-fade';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { chatService } from '@/lib/chatService';
 import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
@@ -132,7 +133,9 @@ const PlaceCard: React.FC<{
   place: TouristPlace;
   idx: number;
   onSelect: () => void;
-}> = ({ place, idx, onSelect }) => {
+  reducedMotion?: boolean;
+  disableVideoAutoplay?: boolean;
+}> = ({ place, idx, onSelect, reducedMotion = false, disableVideoAutoplay = false }) => {
   const videos = place.media?.filter(m => m.type === 'video') ?? [];
   const images = place.media?.filter(m => m.type === 'image') ?? [];
   const hasVideo = videos.length > 0;
@@ -198,19 +201,21 @@ const PlaceCard: React.FC<{
     <motion.div
       initial={{ opacity: 0, y: 32, scale: 0.94 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay: 0.04 * idx, type: 'spring', stiffness: 260, damping: 24 }}
-      whileHover={{ y: -8, scale: 1.03 }}
+      transition={reducedMotion ? { duration: 0.2 } : { delay: 0.04 * idx, type: 'spring', stiffness: 260, damping: 24 }}
+      whileHover={reducedMotion ? undefined : { y: -8, scale: 1.03 }}
       onClick={onSelect}
       className="cursor-pointer rounded-2xl overflow-hidden bg-white/10 backdrop-blur-md border border-white/15 shadow-xl hover:shadow-2xl hover:shadow-black/40 hover:border-white/30 transition-all duration-300 group relative"
     >
       {/* Shimmer on hover */}
-      <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-        <motion.div
-          className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent skew-x-12"
-          animate={{ x: ['-150%', '250%'] }}
-          transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 1, ease: 'linear' }}
-        />
-      </div>
+      {!reducedMotion && (
+        <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+          <motion.div
+            className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent skew-x-12"
+            animate={{ x: ['-150%', '250%'] }}
+            transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 1, ease: 'linear' }}
+          />
+        </div>
+      )}
 
       {/* Media */}
       <div className="relative h-44 overflow-hidden">
@@ -221,7 +226,7 @@ const PlaceCard: React.FC<{
               ref={cardVideoRef}
               src={videos[0].url}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-              autoPlay
+              autoPlay={!disableVideoAutoplay}
               muted
               loop
               playsInline
@@ -375,6 +380,7 @@ const ChatRoomsList: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, userProfile } = useAuth();
+  const isMobile = useIsMobile();
   
   const [rooms, setRooms] = useState<ChatRoomType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -408,6 +414,7 @@ const ChatRoomsList: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
   const featureCardHeightClass = 'h-[18rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]';
   const deferredSearchDestination = useDeferredValue(searchDestination);
   const normalizedSearchDestination = useMemo(
@@ -430,6 +437,7 @@ const ChatRoomsList: React.FC = () => {
   }, [isAdminOrOwner, paidMember]);
   const hasSearchQuery = normalizedSearchDestination.length > 0;
   const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
+  const shouldAutoplayRichMedia = !mobilePerformanceMode;
 
   // Firestore tourist places
   const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
@@ -465,6 +473,51 @@ const ChatRoomsList: React.FC = () => {
     () => resolveAvatarUrl(userProfile, user),
     [user, userProfile]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(max-width: 1024px)');
+    const nav = navigator as Navigator & {
+      deviceMemory?: number;
+      connection?: {
+        effectiveType?: string;
+        saveData?: boolean;
+        addEventListener?: (type: 'change', listener: () => void) => void;
+        removeEventListener?: (type: 'change', listener: () => void) => void;
+      };
+    };
+
+    const updatePerformanceMode = () => {
+      const lowCpu = (navigator.hardwareConcurrency ?? 8) <= 6;
+      const lowMemory = (nav.deviceMemory ?? 8) <= 4;
+      const saveData = Boolean(nav.connection?.saveData);
+      const networkType = nav.connection?.effectiveType ?? '';
+      const constrainedNetwork = networkType === '2g' || networkType === '3g' || networkType === 'slow-2g';
+
+      setMobilePerformanceMode(mediaQuery.matches && (lowCpu || lowMemory || saveData || constrainedNetwork));
+    };
+
+    updatePerformanceMode();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updatePerformanceMode);
+    } else {
+      mediaQuery.addListener(updatePerformanceMode);
+    }
+
+    nav.connection?.addEventListener?.('change', updatePerformanceMode);
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener('change', updatePerformanceMode);
+      } else {
+        mediaQuery.removeListener(updatePerformanceMode);
+      }
+
+      nav.connection?.removeEventListener?.('change', updatePerformanceMode);
+    };
+  }, [isMobile]);
   const countryUsersCarousel = countryUsers.length > 0 ? (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -646,6 +699,12 @@ const ChatRoomsList: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const communityRoomsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mobilePerformanceMode || !videoRef.current) return;
+    videoRef.current.pause();
+    setIsVideoPlaying(false);
+  }, [mobilePerformanceMode]);
 
   // Scroll to + reset detail panel when a place is selected
   useEffect(() => {
@@ -1398,7 +1457,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video 
-                  autoPlay 
+                  autoPlay={shouldAutoplayRichMedia}
                   loop 
                   muted 
                   playsInline
@@ -1441,7 +1500,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video 
-                  autoPlay 
+                  autoPlay={shouldAutoplayRichMedia}
                   loop 
                   muted 
                   playsInline
@@ -1495,7 +1554,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video
-                  autoPlay
+                  autoPlay={shouldAutoplayRichMedia}
                   loop
                   muted
                   playsInline
@@ -1549,7 +1608,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video
-                  autoPlay
+                  autoPlay={shouldAutoplayRichMedia}
                   loop
                   muted
                   playsInline
@@ -1595,7 +1654,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video 
-                  autoPlay 
+                  autoPlay={shouldAutoplayRichMedia}
                   loop 
                   muted 
                   playsInline
@@ -1638,7 +1697,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video 
-                  autoPlay 
+                  autoPlay={shouldAutoplayRichMedia}
                   loop 
                   muted 
                   playsInline
@@ -1692,7 +1751,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
                 <video
-                  autoPlay
+                  autoPlay={shouldAutoplayRichMedia}
                   loop
                   muted
                   playsInline
@@ -1746,7 +1805,7 @@ const ChatRoomsList: React.FC = () => {
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
                 <video
-                  autoPlay
+                  autoPlay={shouldAutoplayRichMedia}
                   loop
                   muted
                   playsInline
@@ -1793,7 +1852,7 @@ const ChatRoomsList: React.FC = () => {
               <div className="relative w-full h-full">
                 <video
                   ref={videoRef}
-                  autoPlay
+                  autoPlay={shouldAutoplayRichMedia}
                   loop
                   muted
                   playsInline
@@ -1997,6 +2056,8 @@ const ChatRoomsList: React.FC = () => {
                               place={place}
                               idx={idx}
                               onSelect={() => handleSelectPlace(place)}
+                              reducedMotion={mobilePerformanceMode}
+                              disableVideoAutoplay={mobilePerformanceMode}
                             />
                           ))}
                         </div>
@@ -2030,7 +2091,7 @@ const ChatRoomsList: React.FC = () => {
                                   key={dpVideos[detailVidIdx]?.url}
                                   src={dpVideos[detailVidIdx]?.url}
                                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 hover:scale-[1.015]"
-                                  autoPlay
+                                  autoPlay={shouldAutoplayRichMedia}
                                   muted
                                   loop
                                   playsInline
@@ -3123,11 +3184,11 @@ const ChatRoomsList: React.FC = () => {
                                 <Swiper
                                   modules={[Autoplay, EffectFade]}
                                   effect="fade"
-                                  autoplay={{
+                                  autoplay={shouldAutoplayRichMedia ? {
                                     delay: 3000,
                                     disableOnInteraction: false,
                                     pauseOnMouseEnter: false
-                                  }}
+                                  } : false}
                                   loop={allImages.length > 2}
                                   speed={1500}
                                   className="h-full w-full"
@@ -3230,7 +3291,7 @@ const ChatRoomsList: React.FC = () => {
               </div>
             )}
 
-            {false && (
+            {searchDestination === '__legacy_country_users__' && (
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -3381,11 +3442,11 @@ const ChatRoomsList: React.FC = () => {
                                 <Swiper
                                   modules={[Autoplay, EffectFade]}
                                   effect="fade"
-                                  autoplay={{
+                                  autoplay={shouldAutoplayRichMedia ? {
                                     delay: 3000,
                                     disableOnInteraction: false,
                                     pauseOnMouseEnter: false
-                                  }}
+                                  } : false}
                                   loop={allImages.length > 2}
                                   speed={1500}
                                   className="h-full w-full"

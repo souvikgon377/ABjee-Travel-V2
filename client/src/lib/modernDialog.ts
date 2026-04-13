@@ -1,4 +1,4 @@
-type DialogKind = 'alert' | 'confirm' | 'prompt';
+export type DialogKind = 'alert' | 'confirm' | 'prompt';
 
 type AlertRequest = {
   kind: 'alert';

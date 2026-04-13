@@ -625,7 +625,7 @@ export default function TravelItenaryDisplay() {
 	const [selectedResult, setSelectedResult] = useState<TravelData | null>(null);
 	const [hasHandledInitialStoryLink, setHasHandledInitialStoryLink] = useState(false);
 	const [geminiForm, setGeminiForm] = useState<GeminiItineraryFormState>(DEFAULT_GEMINI_FORM);
-	const [generatedItinerary, setGeneratedItinerary] = useState<TravelData | null>(null);
+	const [_generatedItinerary, setGeneratedItinerary] = useState<TravelData | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [generationError, setGenerationError] = useState<string | null>(null);
 	const heroRef = useRef<HTMLElement | null>(null);

@@ -83,7 +83,7 @@ class NotificationService {
       roomVisibility: roomVisibility || "private",
       roomType: "private",
       status: "pending",
-      message: `${displayName} sent a join request for \"${roomName}\"`,
+      message: `${displayName} sent a join request for "${roomName}"`,
       details: {
         action: "join_request",
         requesterName: displayName,

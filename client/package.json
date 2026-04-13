@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint src --ext .ts,.tsx,.js,.jsx",
     "postinstall": "patch-package",
     "upload:r2:public": "node scripts/upload-public-to-r2.mjs"
   },
