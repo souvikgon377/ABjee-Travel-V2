@@ -289,6 +289,24 @@ const ChatRoom = () => {
     }
   }, [settingsDialogOpen, room]);
 
+  const clearPrivateRoomNotifications = useCallback(async (roomToClearId: string) => {
+    if (!roomToClearId || !user) return;
+
+    try {
+      const token = localStorage.getItem('token') || await user.getIdToken();
+      if (!token) return;
+
+      await fetch(`/api/notifications/room/${encodeURIComponent(roomToClearId)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      // Non-blocking cleanup only.
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!roomId || !user) {
       router.push('/chat');
@@ -310,6 +328,7 @@ const ChatRoom = () => {
         setRoom(roomData);
         const generalCommunity = isGeneralCommunityRoom(roomData);
         const participants = Array.isArray(roomData.participants) ? roomData.participants : [];
+        const shouldClearRoomNotifications = !roomData.isPublic && !generalCommunity;
         
         // Check if user is already a participant
         const isParticipant = participants.includes(user.uid);
@@ -333,6 +352,9 @@ const ChatRoom = () => {
             // Try to join with invite token
             try {
               await chatService.joinRoom(roomId, user.uid, undefined, inviteToken);
+              if (shouldClearRoomNotifications) {
+                await clearPrivateRoomNotifications(roomId);
+              }
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Invalid invite link');
@@ -364,6 +386,10 @@ const ChatRoom = () => {
             setLoading(false);
             return; // Don't load messages yet
           }
+        }
+
+        if (shouldClearRoomNotifications) {
+          await clearPrivateRoomNotifications(roomId);
         }
 
         // Listen to messages (onChildAdded fires for existing messages first, then new ones)
@@ -425,7 +451,30 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, userProfile, router, searchParams, privateRoomAllowance.reason]);
+  }, [roomId, user, userProfile, router, searchParams, privateRoomAllowance.reason, clearPrivateRoomNotifications]);
+
+  useEffect(() => {
+    if (!roomId || !user || !room || !joinRequestPending || hasMessageAccess) return;
+
+    const unsubscribe = chatService.listenToRoom(roomId, async (updatedRoom) => {
+      if (!updatedRoom) return;
+
+      setRoom(updatedRoom);
+      const participants = Array.isArray(updatedRoom.participants) ? updatedRoom.participants : [];
+      const isParticipant = participants.includes(user.uid);
+
+      if (isParticipant) {
+        setJoinRequestPending(false);
+        setShowJoinRequestDialog(false);
+        await clearPrivateRoomNotifications(roomId);
+        router.refresh();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [roomId, user, room, joinRequestPending, hasMessageAccess, clearPrivateRoomNotifications, router]);
 
   // Handle password submission
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -452,17 +501,32 @@ const ChatRoom = () => {
 
   const handleJoinRequestSubmit = async () => {
     if (!roomId || !user || !room) return;
+    if (joinRequestPending || requestingJoin) return;
 
     setJoinRequestError('');
     setRequestingJoin(true);
+    const previousJoinRequests = Array.isArray(room.joinRequests) ? [...room.joinRequests] : [];
+
+    // Optimistically mark as requested for instant feedback.
+    setJoinRequestPending(true);
+    setRoom((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        joinRequests: Array.from(new Set([...(prev.joinRequests || []), user.uid])),
+      };
+    });
 
     try {
       await chatService.requestToJoinRoom(roomId, user.uid);
 
-      try {
-        const token = localStorage.getItem('token') || await user.getIdToken();
-        if (token) {
-          const response = await fetch('/api/notifications/send-join-request', {
+      // Send owner notification in background; room request is already persisted.
+      void (async () => {
+        try {
+          const token = localStorage.getItem('token') || await user.getIdToken();
+          if (!token) return;
+
+          await fetch('/api/notifications/send-join-request', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -475,27 +539,21 @@ const ChatRoom = () => {
               requesterEmail: userProfile?.email || user.email || '',
             }),
           });
-
-          if (!response.ok) {
-            const json = await response.json().catch(() => null);
-            throw new Error(json?.message || 'Failed to send join request notification');
+        } catch (notifyError) {
+          if ((process.env.NODE_ENV === 'development')) {
+            console.warn('Join request notification failed:', notifyError);
           }
         }
-      } catch (notifyError) {
-        if ((process.env.NODE_ENV === 'development')) {
-          console.warn('Join request notification failed:', notifyError);
-        }
-      }
-
-      setJoinRequestPending(true);
+      })();
+    } catch (error: any) {
+      setJoinRequestPending(false);
       setRoom((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
-          joinRequests: Array.from(new Set([...(prev.joinRequests || []), user.uid])),
+          joinRequests: previousJoinRequests,
         };
       });
-    } catch (error: any) {
       setJoinRequestError(error.message || 'Failed to send join request');
     } finally {
       setRequestingJoin(false);
@@ -609,21 +667,42 @@ const ChatRoom = () => {
 
   const handleDeleteForMe = useCallback(async (message: ChatMessage) => {
     if (!roomId || !message.id) return;
+
+    let previousMessages: ChatMessage[] | null = null;
+    setMessages((prev) => {
+      previousMessages = prev;
+      return prev.filter((m) => m.id !== message.id);
+    });
+
     try {
       await chatService.deleteMessageForMe(roomId, message.id);
-      setMessages(prev => prev.filter(m => m.id !== message.id));
     } catch {
+      if (previousMessages) {
+        setMessages(previousMessages);
+      }
       alert('Failed to delete message');
     }
   }, [roomId]);
 
   const handleDeleteForEveryone = useCallback(async (message: ChatMessage) => {
     if (!roomId || !message.id) return;
+
+    let previousMessages: ChatMessage[] | null = null;
+    setMessages((prev) => {
+      previousMessages = prev;
+      return prev.filter((m) => m.id !== message.id);
+    });
+    setDeleteDialogOpen(false);
+    setMessageToDelete(null);
+
     try {
       await chatService.deleteMessageForEveryone(roomId, message.id);
-      setDeleteDialogOpen(false);
-      setMessageToDelete(null);
     } catch {
+      if (previousMessages) {
+        setMessages(previousMessages);
+      }
+      setMessageToDelete(message);
+      setDeleteDialogOpen(true);
       alert('Failed to delete message for everyone');
     }
   }, [roomId]);
@@ -646,10 +725,34 @@ const ChatRoom = () => {
 
   const saveEdit = useCallback(async () => {
     if (!roomId || !editingMessageId || !editText.trim()) return;
+
+    const nextText = editText.trim();
+    const targetMessageId = editingMessageId;
+    let previousMessages: ChatMessage[] | null = null;
+
+    setMessages((prev) => {
+      previousMessages = prev;
+      return prev.map((message) => (
+        message.id === targetMessageId
+          ? {
+              ...message,
+              text: nextText,
+              edited: true,
+              editedAt: Date.now(),
+            }
+          : message
+      ));
+    });
+    cancelEditing();
+
     try {
-      await chatService.editMessage(roomId, editingMessageId, editText.trim());
-      cancelEditing();
+      await chatService.editMessage(roomId, targetMessageId, nextText);
     } catch (error: any) {
+      if (previousMessages) {
+        setMessages(previousMessages);
+      }
+      setEditingMessageId(targetMessageId);
+      setEditText(nextText);
       alert(error?.message || 'Failed to edit message');
     }
   }, [roomId, editingMessageId, editText, cancelEditing]);
@@ -836,6 +939,7 @@ const ChatRoom = () => {
 
   const handleApplySettings = useCallback(async () => {
     if (!roomId || !room) return;
+    let previousRoomSnapshot: RoomType | null = null;
     
     try {
       // Check if there are actual changes
@@ -846,13 +950,54 @@ const ChatRoom = () => {
       const currentIconHash = room.iconImage?.hash || null;
       const selectedIconHash = selectedIconImage?.hash || null;
       const iconChanged = selectedIconHash !== currentIconHash;
+
+      const shouldUpdateBackground = backgroundChanged && Boolean(selectedBackgroundImage);
+      const shouldUpdateIcon = iconChanged && Boolean(selectedIconImage);
+      previousRoomSnapshot = room;
+
+      if (shouldUpdateBackground || shouldUpdateIcon) {
+        // Optimistic room update so visual changes are instant.
+        setRoom((prev) => {
+          if (!prev) return prev;
+
+          const nextBackgroundImage = shouldUpdateBackground
+            ? selectedBackgroundImage
+            : prev.backgroundImage;
+          const nextIconImage = shouldUpdateIcon
+            ? selectedIconImage
+            : prev.iconImage;
+
+          const existingBgHistory = prev.backgroundImageHistory || [];
+          const existingIconHistory = prev.iconImageHistory || [];
+
+          const nextBgHistory = shouldUpdateBackground && selectedBackgroundImage
+            ? existingBgHistory.some((img: any) => img.hash === selectedBackgroundImage.hash)
+              ? existingBgHistory
+              : [...existingBgHistory, selectedBackgroundImage]
+            : existingBgHistory;
+
+          const nextIconHistory = shouldUpdateIcon && selectedIconImage
+            ? existingIconHistory.some((img: any) => img.hash === selectedIconImage.hash)
+              ? existingIconHistory
+              : [...existingIconHistory, selectedIconImage]
+            : existingIconHistory;
+
+          return {
+            ...prev,
+            ...(nextBackgroundImage ? { backgroundImage: nextBackgroundImage } : {}),
+            ...(nextIconImage ? { iconImage: nextIconImage } : {}),
+            backgroundImageHistory: nextBgHistory,
+            iconImageHistory: nextIconHistory,
+          };
+        });
+      }
       
       // Apply changes if any
-      if (backgroundChanged || iconChanged) {
+      if (shouldUpdateBackground || shouldUpdateIcon) {
         await chatService.updateRoomImages(
           roomId, 
-          backgroundChanged ? selectedBackgroundImage || undefined : undefined, 
-          iconChanged ? selectedIconImage || undefined : undefined
+          shouldUpdateBackground ? selectedBackgroundImage || undefined : undefined, 
+          shouldUpdateIcon ? selectedIconImage || undefined : undefined
         );
         // Room listener will automatically update the state
       }
@@ -884,6 +1029,10 @@ const ChatRoom = () => {
       setSettingsDialogOpen(false);
       
     } catch (error: any) {
+      // Roll back optimistic room visuals on failure.
+      if (previousRoomSnapshot) {
+        setRoom(previousRoomSnapshot);
+      }
       alert(error.message || 'Failed to apply settings');
     }
   }, [roomId, room, selectedBackgroundImage, selectedIconImage, backgroundPreview, iconPreview]);
@@ -957,43 +1106,75 @@ const ChatRoom = () => {
   const handleApproveJoinRequest = useCallback(async (requestUserId: string) => {
     if (!roomId || !user || !room || room.createdBy !== user.uid) return;
 
+    const previousRoom = room;
+    const previousRequester = joinRequestUsersMap[requestUserId];
     setProcessingJoinRequestUserId(requestUserId);
+    setRoom((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        joinRequests: (prev.joinRequests || []).filter((uid) => uid !== requestUserId),
+        participants: Array.from(new Set([...(prev.participants || []), requestUserId])),
+      };
+    });
+    setJoinRequestUsersMap((prev) => {
+      if (!prev[requestUserId]) return prev;
+      const next = { ...prev };
+      delete next[requestUserId];
+      return next;
+    });
+
     try {
       await (chatService as any).acceptJoinRequest(roomId, requestUserId, user.uid);
-      setRoom(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          joinRequests: (prev.joinRequests || []).filter(uid => uid !== requestUserId),
-          participants: Array.from(new Set([...(prev.participants || []), requestUserId]))
-        };
-      });
     } catch (error: any) {
+      setRoom(previousRoom);
+      if (previousRequester) {
+        setJoinRequestUsersMap((prev) => ({
+          ...prev,
+          [requestUserId]: previousRequester,
+        }));
+      }
       alert(error.message || 'Failed to approve join request');
     } finally {
       setProcessingJoinRequestUserId(null);
     }
-  }, [roomId, user, room]);
+  }, [roomId, user, room, joinRequestUsersMap]);
 
   const handleRejectJoinRequest = useCallback(async (requestUserId: string) => {
     if (!roomId || !user || !room || room.createdBy !== user.uid) return;
 
+    const previousRoom = room;
+    const previousRequester = joinRequestUsersMap[requestUserId];
     setProcessingJoinRequestUserId(requestUserId);
+    setRoom((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        joinRequests: (prev.joinRequests || []).filter((uid) => uid !== requestUserId),
+      };
+    });
+    setJoinRequestUsersMap((prev) => {
+      if (!prev[requestUserId]) return prev;
+      const next = { ...prev };
+      delete next[requestUserId];
+      return next;
+    });
+
     try {
       await (chatService as any).rejectJoinRequest(roomId, requestUserId, user.uid);
-      setRoom(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          joinRequests: (prev.joinRequests || []).filter(uid => uid !== requestUserId)
-        };
-      });
     } catch (error: any) {
+      setRoom(previousRoom);
+      if (previousRequester) {
+        setJoinRequestUsersMap((prev) => ({
+          ...prev,
+          [requestUserId]: previousRequester,
+        }));
+      }
       alert(error.message || 'Failed to reject join request');
     } finally {
       setProcessingJoinRequestUserId(null);
     }
-  }, [roomId, user, room]);
+  }, [roomId, user, room, joinRequestUsersMap]);
 
   // Load all users when Add Members dialog opens
   const loadAllUsersForRoom = useCallback(async () => {
@@ -1097,7 +1278,15 @@ const ChatRoom = () => {
   // Invite a user to the room
   const handleInviteMember = useCallback(async (member: any) => {
     if (!roomId || !room || !user) return;
+
+    const wasInvited = invitedMemberIds.has(member.id);
+    const memberName = `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.username || member.email || 'member';
+
+    // Optimistically reflect invite action in UI.
+    setInvitedMemberIds((prev) => new Set([...prev, member.id]));
+    setAddMemberSuccess(`Sending invitation to ${memberName}...`);
     setAddingMemberId(member.id);
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     try {
@@ -1119,30 +1308,39 @@ const ChatRoom = () => {
         })
       });
 
+      const payload = await response.json().catch(() => null);
+
       if (!response.ok) {
         let message = 'Failed to send invitation';
-        try {
-          const payload = await response.json();
-          if (payload?.error && typeof payload.error === 'string') {
-            message = payload.error;
-          }
-        } catch {
-          // Ignore JSON parse errors and use default message.
+        const apiError = payload?.error || payload?.message;
+        if (typeof apiError === 'string' && apiError.trim().length > 0) {
+          message = apiError;
         }
         throw new Error(message);
       }
 
-      setInvitedMemberIds(prev => new Set([...prev, member.id]));
-      setAddMemberSuccess(`Invitation sent to ${member.firstName} ${member.lastName}`);
+      const summary = payload?.data?.summary;
+      if (summary && summary.sentCount === 0 && summary.skippedPendingCount > 0) {
+        setAddMemberSuccess(`Invitation already pending for ${memberName}`);
+      } else {
+        setAddMemberSuccess(`Invitation sent to ${memberName}`);
+      }
       setTimeout(() => setAddMemberSuccess(null), 1000);
     } catch (error: any) {
+      if (!wasInvited) {
+        setInvitedMemberIds((prev) => {
+          const next = new Set(prev);
+          next.delete(member.id);
+          return next;
+        });
+      }
       const isTimeout = error?.name === 'AbortError';
       alert(isTimeout ? 'Invite request timed out. Please try again.' : (error?.message || 'Failed to send invitation'));
     } finally {
       clearTimeout(timeoutId);
       setAddingMemberId(null);
     }
-  }, [roomId, room, user]);
+  }, [roomId, room, user, userProfile, invitedMemberIds]);
 
   // Filter on search query change (client-side, instant)
   useEffect(() => {

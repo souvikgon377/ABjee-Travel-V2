@@ -31,3 +31,16 @@ export async function GET(req: NextRequest) {
     return fail("Failed to fetch notifications", 500);
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await authenticateRequest(req);
+    const deletedCount = await notificationService.clearUserNotifications(user.firebaseUid || user.id);
+    return ok({ deletedCount });
+  } catch (error: any) {
+    if (error instanceof AuthError) {
+      return fail(error.message, error.status);
+    }
+    return fail("Failed to clear notifications", 500);
+  }
+}

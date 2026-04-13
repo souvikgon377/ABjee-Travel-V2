@@ -6,12 +6,13 @@ import { publicAsset } from '@/lib/publicAsset';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw } from 'lucide-react';
+import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox } from 'lucide-react';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 
 interface NavItem {
   name: string;
@@ -50,6 +51,7 @@ type NotificationItem = {
   message: string;
   status: string;
   createdAt: string;
+  unreadCount?: number;
   roomId?: string;
   roomName?: string;
   roomVisibility?: string;
@@ -79,20 +81,46 @@ const timeAgo = (createdAt: string): string => {
   return 'Just now';
 };
 
-const normalizeNotification = (raw: any): NotificationItem => ({
-  id: String(raw?.id || `${raw?.toUserId || 'notification'}-${Math.random().toString(36).slice(2)}`),
-  type: String(raw?.type || 'notification'),
-  message: String(raw?.message || 'You have a new notification.'),
-  status: String(raw?.status || 'pending'),
-  createdAt: toDate(raw?.createdAt).toISOString(),
-  roomId: raw?.roomId ? String(raw.roomId) : undefined,
-  roomName: raw?.roomName ? String(raw.roomName) : undefined,
-  roomVisibility: raw?.roomVisibility ? String(raw.roomVisibility) : undefined,
-  inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
-  fromUserName: raw?.fromUserName ? String(raw.fromUserName) : undefined,
-  fromUserEmail: raw?.fromUserEmail ? String(raw.fromUserEmail) : undefined,
-  details: raw?.details && typeof raw.details === 'object' ? (raw.details as Record<string, unknown>) : undefined,
-});
+const normalizeNotification = (raw: any): NotificationItem => {
+  const details = raw?.details && typeof raw.details === 'object'
+    ? (raw.details as Record<string, unknown>)
+    : undefined;
+  const detailsRoomId = typeof details?.roomId === 'string' && details.roomId.trim().length > 0
+    ? details.roomId.trim()
+    : undefined;
+
+  return {
+    id: String(raw?.id || `${raw?.toUserId || 'notification'}-${Math.random().toString(36).slice(2)}`),
+    type: String(raw?.type || 'notification'),
+    message: String(raw?.message || 'You have a new notification.'),
+    status: String(raw?.status || 'pending'),
+    createdAt: toDate(raw?.createdAt).toISOString(),
+    unreadCount: typeof raw?.unreadCount === 'number' && Number.isFinite(raw.unreadCount) && raw.unreadCount > 0
+      ? Math.floor(raw.unreadCount)
+      : undefined,
+    roomId: raw?.roomId ? String(raw.roomId) : detailsRoomId,
+    roomName: raw?.roomName ? String(raw.roomName) : undefined,
+    roomVisibility: raw?.roomVisibility ? String(raw.roomVisibility) : undefined,
+    inviteToken: raw?.inviteToken ? String(raw.inviteToken) : undefined,
+    fromUserName: raw?.fromUserName ? String(raw.fromUserName) : undefined,
+    fromUserEmail: raw?.fromUserEmail ? String(raw.fromUserEmail) : undefined,
+    details,
+  };
+};
+
+const getUnseenCount = (item: NotificationItem): number => {
+  if (typeof item.unreadCount === 'number' && Number.isFinite(item.unreadCount) && item.unreadCount > 0) {
+    return Math.floor(item.unreadCount);
+  }
+
+  const details = item.details || {};
+  const detailsUnread = details.unreadCount;
+  if (typeof detailsUnread === 'number' && Number.isFinite(detailsUnread) && detailsUnread > 0) {
+    return Math.floor(detailsUnread);
+  }
+
+  return 1;
+};
 
 const getNotificationDetailLines = (item: NotificationItem): string[] => {
   const details = item.details || {};
@@ -112,11 +140,35 @@ const getNotificationDetailLines = (item: NotificationItem): string[] => {
     typeof details.roomName === 'string' && details.roomName.trim().length > 0
       ? details.roomName.trim()
       : item.roomName;
+  const senderName =
+    typeof details.senderName === 'string' && details.senderName.trim().length > 0
+      ? details.senderName.trim()
+      : item.fromUserName;
+  const messagePreview =
+    typeof details.messagePreview === 'string' && details.messagePreview.trim().length > 0
+      ? details.messagePreview.trim()
+      : '';
+  const messagePreviews =
+    Array.isArray(details.messagePreviews)
+      ? details.messagePreviews.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+      : [];
+  const unseenCount = getUnseenCount(item);
 
   const lines: string[] = [];
   if (roomName) lines.push(`Community: ${roomName}`);
   if (item.type === 'room_invite' && inviterName) lines.push(`Invited by: ${inviterName}`);
   if (item.type === 'private_room_join_request' && requesterName) lines.push(`Requested by: ${requesterName}`);
+  if (item.type === 'private_room_message' && senderName) lines.push(`From: ${senderName}`);
+  if (item.type === 'private_room_message') {
+    lines.push(`Unseen messages: ${unseenCount}`);
+    if (messagePreviews.length > 0) {
+      for (const preview of messagePreviews) {
+        lines.push(`Message: ${preview}`);
+      }
+    } else if (messagePreview) {
+      lines.push(`Message: ${messagePreview}`);
+    }
+  }
   if (visibility) lines.push(`Visibility: ${visibility}`);
   if (item.roomId) lines.push(`Community ID: ${item.roomId}`);
 
@@ -125,11 +177,16 @@ const getNotificationDetailLines = (item: NotificationItem): string[] => {
 
 const isRoomNavigableNotification = (item: NotificationItem): boolean => {
   if (!item.roomId) return false;
-  return item.type === 'room_invite' || item.type === 'private_room_join_request';
+  return (
+    item.type === 'room_invite' ||
+    item.type === 'private_room_join_request' ||
+    item.type === 'private_room_message'
+  );
 };
 
 const formatNotificationType = (type: string): string => {
   if (type === 'private_room_join_request') return 'join request';
+  if (type === 'private_room_message') return 'new message';
   return type.replaceAll('_', ' ');
 };
 
@@ -158,6 +215,8 @@ export default function Header1() {
   const pathname = usePathname();
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
+  const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
+  const isPaidSubscriber = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
 
   useEffect(() => {
     setProfileAvatarError(false);
@@ -269,6 +328,40 @@ export default function Header1() {
     }
   }, [currentUser]);
 
+  const clearNotifications = useCallback(async () => {
+    if (!currentUser || notifications.length === 0 || notificationLoading) {
+      return;
+    }
+
+    setNotificationLoading(true);
+    setNotificationError(null);
+
+    try {
+      const token = localStorage.getItem('token') || await currentUser.getIdToken();
+      if (!token) {
+        throw new Error('Authentication token missing');
+      }
+
+      const response = await fetch('/api/notifications', {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const json = await response.json().catch(() => ({ success: false }));
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.message || 'Failed to clear notifications');
+      }
+
+      setNotifications([]);
+    } catch {
+      setNotificationError('Could not clear notifications');
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, [currentUser, notifications.length, notificationLoading]);
+
   useEffect(() => {
     if (!currentUser) {
       setNotifications([]);
@@ -320,8 +413,28 @@ export default function Header1() {
   );
   const totalCount = notifications.length;
 
-  const handleNotificationClick = useCallback((item: NotificationItem) => {
+  const clearRoomNotifications = useCallback(async (roomId?: string) => {
+    if (!roomId || !currentUser) return;
+
+    try {
+      const token = localStorage.getItem('token') || await currentUser.getIdToken();
+      if (!token) return;
+
+      await fetch(`/api/notifications/room/${encodeURIComponent(roomId)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      // Navigation should not be blocked by cleanup failures.
+    }
+  }, [currentUser]);
+
+  const handleNotificationClick = useCallback(async (item: NotificationItem) => {
     if (!isRoomNavigableNotification(item)) return;
+
+    await clearRoomNotifications(item.roomId);
 
     const roomPath = item.inviteToken
       ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
@@ -330,13 +443,19 @@ export default function Header1() {
     setNotificationsOpen(false);
     setIsMobileMenuOpen(false);
     router.push(roomPath);
-  }, [router]);
+  }, [clearRoomNotifications, router]);
 
   const handleInvitationAction = useCallback(async (item: NotificationItem, action: 'accept' | 'reject') => {
     if (notificationActionId) return;
     if (!isActionableNotification(item)) return;
 
     setNotificationActionId(item.id);
+    setNotificationError(null);
+    const previousNotifications = notifications;
+
+    // Optimistically remove the notification for instant UI feedback.
+    setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
+
     try {
       const token = localStorage.getItem('token') || await currentUser?.getIdToken();
       if (!token) throw new Error('Authentication token missing');
@@ -351,9 +470,8 @@ export default function Header1() {
         throw new Error(json?.message || `Failed to ${action} notification`);
       }
 
-      setNotifications((prev) => prev.filter((notification) => notification.id !== item.id));
-
       if (action === 'accept' && item.type === 'room_invite') {
+        await clearRoomNotifications(item.roomId);
         setNotificationsOpen(false);
         const roomPath = item.inviteToken
           ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
@@ -361,10 +479,16 @@ export default function Header1() {
         setIsMobileMenuOpen(false);
         router.push(roomPath);
       }
+    } catch {
+      setNotifications((prev) => {
+        if (prev.some((notification) => notification.id === item.id)) return prev;
+        return previousNotifications;
+      });
+      setNotificationError(`Could not ${action} notification`);
     } finally {
       setNotificationActionId(null);
     }
-  }, [currentUser, notificationActionId, router]);
+  }, [clearRoomNotifications, currentUser, notificationActionId, notifications, router]);
 
   useEffect(() => {
     if (!notificationsOpen) return;
@@ -397,37 +521,178 @@ export default function Header1() {
   }, [notificationsOpen]);
 
   const renderNotificationPanel = (panelClassName: string) => (
+    (() => {
+      const requestNotifications = notifications.filter((item) => isActionableNotification(item));
+      const messageNotifications = notifications.filter((item) => !isActionableNotification(item));
+      const totalMessageUnseenCount = messageNotifications.reduce((sum, item) => sum + getUnseenCount(item), 0);
+
+      const groupedMessageNotifications = messageNotifications.reduce<Array<{ item: NotificationItem; count: number }>>((acc, item) => {
+        const details = item.details || {};
+        const roomId = item.roomId || (typeof details.roomId === 'string' ? details.roomId : undefined);
+        const isRoomMessage = item.type === 'private_room_message' && Boolean(roomId);
+        const unseenCount = getUnseenCount(item);
+
+        if (!isRoomMessage) {
+          acc.push({ item, count: unseenCount });
+          return acc;
+        }
+
+        const groupKey = `private_room_message:${roomId}`;
+        const existingIndex = acc.findIndex((entry) => {
+          const entryDetails = entry.item.details || {};
+          const entryRoomId = entry.item.roomId || (typeof entryDetails.roomId === 'string' ? entryDetails.roomId : undefined);
+          return entry.item.type === 'private_room_message' && `private_room_message:${entryRoomId}` === groupKey;
+        });
+
+        if (existingIndex === -1) {
+          acc.push({ item: roomId === item.roomId ? item : { ...item, roomId }, count: unseenCount });
+          return acc;
+        }
+
+        const existing = acc[existingIndex];
+        existing.count += unseenCount;
+        if (new Date(item.createdAt).getTime() > new Date(existing.item.createdAt).getTime()) {
+          existing.item = roomId === item.roomId ? item : { ...item, roomId };
+        }
+
+        return acc;
+      }, []);
+
+      groupedMessageNotifications.sort(
+        (a, b) => new Date(b.item.createdAt).getTime() - new Date(a.item.createdAt).getTime()
+      );
+
+      const renderNotificationItem = (item: NotificationItem, groupedCount: number = 1) => {
+        const isInvite = item.type === 'room_invite' && Boolean(item.roomId);
+        const isJoinRequest = item.type === 'private_room_join_request' && Boolean(item.roomId);
+        const isNavigable = isRoomNavigableNotification(item);
+        const isActionable = isActionableNotification(item);
+
+        return (
+          <motion.div
+            key={item.id}
+            className={`mb-2 rounded-xl border border-white/25 bg-white/70 px-3 py-2.5 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-slate-900/65 ${isNavigable ? 'cursor-pointer transition-all hover:-translate-y-0.5 hover:border-cyan-300/60 hover:bg-white/90 hover:shadow-md dark:hover:border-cyan-500/40 dark:hover:bg-slate-900/85' : ''}`}
+            layout
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 46 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            onClick={isNavigable ? () => { void handleNotificationClick(item); } : undefined}
+            role={isNavigable ? 'button' : undefined}
+            tabIndex={isNavigable ? 0 : undefined}
+            onKeyDown={isNavigable ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                void handleNotificationClick(item);
+              }
+            } : undefined}
+          >
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="inline-flex items-center rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200">
+                {formatNotificationType(item.type)}
+              </p>
+              <div className="flex items-center gap-1.5">
+                {groupedCount > 1 && (
+                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/45 dark:text-indigo-200">
+                    {groupedCount} new
+                  </span>
+                )}
+                <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-foreground/85 dark:text-slate-200/90">{item.message}</p>
+            {getNotificationDetailLines(item).length > 0 && (
+              <div className="mt-2 space-y-1 rounded-lg bg-slate-100/70 px-2 py-1.5 dark:bg-slate-800/55">
+                {getNotificationDetailLines(item).map((line, lineIndex) => (
+                  <p key={`${item.id}-${lineIndex}`} className="text-[11px] text-foreground/75 dark:text-slate-300/90">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+            {isActionable && (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={notificationActionId === item.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleInvitationAction(item, 'accept');
+                  }}
+                  className="inline-flex items-center rounded-md bg-linear-to-r from-emerald-500 to-green-500 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {notificationActionId === item.id
+                    ? 'Working...'
+                    : isJoinRequest
+                      ? 'Approve'
+                      : 'Accept'}
+                </button>
+                <button
+                  type="button"
+                  disabled={notificationActionId === item.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleInvitationAction(item, 'reject');
+                  }}
+                  className="inline-flex items-center rounded-md border border-rose-300/60 bg-rose-50/80 px-2.5 py-1 text-[11px] font-semibold text-rose-700 transition-all hover:bg-rose-100 dark:border-rose-700/50 dark:bg-rose-950/30 dark:text-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isInvite ? 'Reject' : 'Decline'}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        );
+      };
+
+      return (
     <motion.div
       data-lenis-prevent
       initial={{ opacity: 0, y: -8, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.96 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      className={`${panelClassName} z-80 overflow-hidden rounded-xl border border-border bg-background shadow-xl`}
+      className={`${panelClassName} z-80 overflow-hidden rounded-2xl border border-cyan-300/40 bg-linear-to-br from-cyan-50/95 via-white/95 to-blue-50/95 shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)] backdrop-blur-xl dark:border-cyan-700/35 dark:from-slate-950/95 dark:via-slate-900/95 dark:to-cyan-950/70`}
     >
-      <div className="border-b px-4 py-3">
+      <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-300/35 blur-3xl dark:bg-cyan-500/20" />
+      <div className="pointer-events-none absolute -bottom-12 -left-10 h-36 w-36 rounded-full bg-blue-300/30 blur-3xl dark:bg-blue-500/20" />
+
+      <div className="relative border-b border-cyan-200/60 px-4 py-3 dark:border-cyan-800/45">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Notification Centre</p>
-            <p className="text-[11px] text-muted-foreground">
-              {totalCount} total • {unreadCount} unread
+            <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Notification Centre
             </p>
+            <div className="mt-1 flex items-center gap-2 text-[11px]">
+              <span className="rounded-full bg-cyan-100 px-2 py-0.5 font-medium text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-200">{totalCount} total</span>
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-700 dark:bg-rose-900/35 dark:text-rose-300">{unreadCount} unread</span>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={fetchNotifications}
-            className="inline-flex items-center rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            disabled={notificationLoading}
-          >
-            <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={fetchNotifications}
+              className="inline-flex items-center rounded-md border border-cyan-200/70 bg-white/75 px-2 py-1 text-xs text-cyan-800 transition-all hover:bg-cyan-100 dark:border-cyan-800/60 dark:bg-slate-900/70 dark:text-cyan-300 dark:hover:bg-cyan-900/40"
+              disabled={notificationLoading}
+            >
+              <RefreshCw className={`mr-1 h-3 w-3 ${notificationLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => void clearNotifications()}
+              className="inline-flex items-center rounded-md border border-rose-200/80 bg-rose-50/80 px-2 py-1 text-xs text-rose-700 transition-all hover:bg-rose-100 dark:border-rose-800/60 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={notificationLoading || notifications.length === 0}
+            >
+              <Trash2 className="mr-1 h-3 w-3" />
+              Clear
+            </button>
+          </div>
         </div>
       </div>
 
-      <div data-lenis-prevent className="max-h-80 overflow-y-auto overscroll-contain px-2 py-2 touch-pan-y">
+      <div data-lenis-prevent className="relative max-h-80 overflow-y-auto overscroll-contain px-2 py-2 touch-pan-y">
         {notificationError && (
-          <p className="px-2 py-2 text-xs text-destructive">{notificationError}</p>
+          <p className="rounded-lg bg-rose-50 px-2 py-2 text-xs text-destructive dark:bg-rose-950/30">{notificationError}</p>
         )}
 
         {!notificationError && notificationLoading && notifications.length === 0 && (
@@ -435,79 +700,47 @@ export default function Header1() {
         )}
 
         {!notificationError && !notificationLoading && notifications.length === 0 && (
-          <p className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</p>
+          <div className="flex flex-col items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+            <Inbox className="h-4 w-4 text-cyan-600 dark:text-cyan-300" />
+            No notifications yet.
+          </div>
         )}
 
-        {notifications.map((item) => {
-          const isInvite = item.type === 'room_invite' && Boolean(item.roomId);
-          const isJoinRequest = item.type === 'private_room_join_request' && Boolean(item.roomId);
-          const isNavigable = isRoomNavigableNotification(item);
-          const isActionable = isActionableNotification(item);
-          return (
-            <div
-              key={item.id}
-              className={`mb-2 rounded-lg border border-border px-3 py-2 ${isNavigable ? 'cursor-pointer transition-colors hover:bg-muted/60' : ''}`}
-              onClick={isNavigable ? () => handleNotificationClick(item) : undefined}
-              role={isNavigable ? 'button' : undefined}
-              tabIndex={isNavigable ? 0 : undefined}
-              onKeyDown={isNavigable ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleNotificationClick(item);
-                }
-              } : undefined}
-            >
-              <div className="mb-1 flex items-center justify-between">
-                <p className="text-xs font-medium text-foreground capitalize">
-                  {formatNotificationType(item.type)}
-                </p>
-                <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
+        {!notificationError && notifications.length > 0 && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-amber-200/70 bg-linear-to-r from-amber-50/90 to-orange-50/90 p-2 dark:border-amber-700/45 dark:from-amber-950/35 dark:to-orange-950/30">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Requests</p>
+                <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/45 dark:text-amber-200">{requestNotifications.length}</span>
               </div>
-              <p className="text-xs text-muted-foreground">{item.message}</p>
-              {getNotificationDetailLines(item).length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {getNotificationDetailLines(item).map((line) => (
-                    <p key={`${item.id}-${line}`} className="text-[11px] text-foreground/80">
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              )}
-              {isActionable && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={notificationActionId === item.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleInvitationAction(item, 'accept');
-                    }}
-                    className="inline-flex items-center rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {notificationActionId === item.id
-                      ? 'Working...'
-                      : isJoinRequest
-                        ? 'Approve'
-                        : 'Accept'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={notificationActionId === item.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleInvitationAction(item, 'reject');
-                    }}
-                    className="inline-flex items-center rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isInvite ? 'Reject' : 'Decline'}
-                  </button>
-                </div>
+              {requestNotifications.length > 0 ? (
+                <AnimatePresence initial={false} mode="popLayout">
+                  {requestNotifications.map((item) => renderNotificationItem(item))}
+                </AnimatePresence>
+              ) : (
+                <p className="px-2 py-1 text-xs text-muted-foreground">No pending requests.</p>
               )}
             </div>
-          );
-        })}
+
+            <div className="rounded-xl border border-cyan-200/70 bg-linear-to-r from-cyan-50/85 to-blue-50/85 p-2 dark:border-cyan-700/45 dark:from-cyan-950/30 dark:to-blue-950/30">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-800 dark:text-cyan-200">Messages</p>
+                <span className="rounded-full bg-cyan-200/70 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800 dark:bg-cyan-900/45 dark:text-cyan-200">{totalMessageUnseenCount}</span>
+              </div>
+              {messageNotifications.length > 0 ? (
+                <AnimatePresence initial={false} mode="popLayout">
+                  {groupedMessageNotifications.map(({ item, count }) => renderNotificationItem(item, count))}
+                </AnimatePresence>
+              ) : (
+                <p className="px-2 py-1 text-xs text-muted-foreground">No message notifications.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </motion.div>
+      );
+    })()
   );
 
   useEffect(() => {
@@ -553,8 +786,25 @@ export default function Header1() {
               whileHover={{ scale: 1.05 }}
               transition={{ type: 'spring', stiffness: 400, damping: 10 }}
             >
-              <Link href="/" className="flex items-center space-x-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
+              <Link
+                href="/"
+                className={`relative flex items-center space-x-2 rounded-xl px-1.5 py-1 ${isPaidSubscriber ? 'bg-linear-to-r from-amber-100/75 via-yellow-50/70 to-orange-100/70 dark:from-amber-900/25 dark:via-yellow-950/20 dark:to-orange-900/20' : ''}`}
+              >
+                {isPaidSubscriber && (
+                  <motion.div
+                    className="pointer-events-none absolute inset-0 rounded-xl border border-amber-300/80 dark:border-amber-500/60"
+                    animate={{
+                      opacity: [0.45, 0.95, 0.45],
+                      boxShadow: [
+                        '0 0 0px rgba(251,191,36,0.22)',
+                        '0 0 16px rgba(251,191,36,0.58)',
+                        '0 0 0px rgba(251,191,36,0.22)',
+                      ],
+                    }}
+                    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                )}
+                <div className="relative z-1 flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
                   <Image
                     src={publicAsset('/logo.jpg')}
                     alt="ABjee Travel"
@@ -564,7 +814,7 @@ export default function Header1() {
                     className="h-8 w-8 object-cover"
                   />
                 </div>
-                <span className="hidden bg-linear-to-r from-rose-500 to-rose-700 bg-clip-text text-xl font-bold text-transparent sm:inline">
+                <span className={`relative z-1 hidden bg-linear-to-r bg-clip-text text-xl font-bold text-transparent sm:inline ${isPaidSubscriber ? 'from-amber-500 via-orange-500 to-rose-600' : 'from-rose-500 to-rose-700'}`}>
                   ABjee Travel
                 </span>
               </Link>

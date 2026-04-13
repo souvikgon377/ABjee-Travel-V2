@@ -59,8 +59,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ notifi
       await roomRef.update({ joinRequests: updatedJoinRequests });
     }
 
-    const invitation = await notificationService.rejectInvitation(notificationId);
-    return ok({ invitation });
+    await notificationService.rejectInvitation(notificationId);
+    await notificationService.delete(notificationId);
+    return ok({ success: true });
   } catch (error: any) {
     if (error instanceof AuthError) return fail(error.message, error.status);
     return fail('Failed to reject invitation', 500);

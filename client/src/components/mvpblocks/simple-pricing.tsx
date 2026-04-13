@@ -12,8 +12,8 @@ import {
   CardTitle,
 } from '../ui/card';
 import { cn } from '../../lib/utils';
-import { Sparkles, ArrowRight, Check, Star, Zap, Shield } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { ArrowRight, Check, Star, Zap, Shield, Crown } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import { auth } from '../../lib/firebase';
@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
 import { ConfettiButton } from '@/components/ui/confetti';
+import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 
 const plans = [
   {
@@ -98,6 +99,14 @@ export default function SimplePricing() {
   }>>({});
   const { currentUser, userProfile } = useAuth();
   const router = useRouter();
+  const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
+  const isPaidSubscriber = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+  const activePlanId = useMemo(() => {
+    if (!isPaidSubscriber) return null;
+    if (subscriptionInfo.type === 'premium') return 'enterprise';
+    if (subscriptionInfo.type === 'pro') return 'pro';
+    return null;
+  }, [isPaidSubscriber, subscriptionInfo.type]);
 
   const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 
@@ -464,7 +473,6 @@ export default function SimplePricing() {
             variant="outline"
             className="mb-4 rounded-full border-primary/20 bg-primary/5 px-4 py-1 text-sm font-medium"
           >
-            <Sparkles className="mr-1 h-3.5 w-3.5 animate-pulse text-primary" />
             Pricing Plans
           </Badge>
           <motion.h1
@@ -591,9 +599,13 @@ export default function SimplePricing() {
               whileHover={{ y: -5 }}
               className="flex"
             >
+              {(() => {
+                const isCurrentPlan = Boolean(activePlanId && plan.id === activePlanId);
+                return (
               <Card
                 className={cn(
                   'relative h-full w-full bg-secondary/20 text-left transition-all duration-300 hover:shadow-lg',
+                  isCurrentPlan && 'border-amber-300/70 bg-linear-to-br from-amber-50/80 via-orange-50/70 to-yellow-50/70 shadow-[0_16px_40px_-20px_rgba(251,191,36,0.75)] ring-2 ring-amber-300/65 dark:border-amber-500/40 dark:from-amber-950/35 dark:via-orange-950/25 dark:to-yellow-950/25 dark:ring-amber-500/50',
                   plan.popular
                     ? 'shadow-md ring-2 ring-primary/50 dark:shadow-primary/10'
                     : 'hover:border-primary/30',
@@ -601,10 +613,48 @@ export default function SimplePricing() {
                     'bg-linear-to-b from-primary/3 to-transparent',
                 )}
               >
-                {plan.popular && (
+                {isCurrentPlan && (
+                  <>
+                    <motion.div
+                      className="pointer-events-none absolute inset-0 z-10 rounded-lg border-2 border-amber-300/85 dark:border-amber-400/65"
+                      animate={{
+                        opacity: [0.45, 0.95, 0.45],
+                        boxShadow: [
+                          '0 0 0px rgba(251,191,36,0.25)',
+                          '0 0 22px rgba(251,191,36,0.65)',
+                          '0 0 0px rgba(251,191,36,0.25)',
+                        ],
+                      }}
+                      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <motion.div
+                      className="pointer-events-none absolute -inset-0.5 z-0 rounded-lg border border-amber-200/70 dark:border-amber-500/45"
+                      animate={{ opacity: [0.25, 0.65, 0.25] }}
+                      transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: 0.25 }}
+                    />
+                  </>
+                )}
+                {isCurrentPlan && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: 0.15 + index * 0.06 }}
+                    className="absolute -top-3 left-0 right-0 z-20 mx-auto w-fit"
+                  >
+                    <motion.div
+                      animate={{ scale: [1, 1.05, 1] }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <Badge className="rounded-full border-0 bg-linear-to-r from-amber-500 via-orange-500 to-rose-500 px-4 py-1 text-white shadow-lg shadow-amber-500/30">
+                        <Crown className="mr-1.5 h-3.5 w-3.5" />
+                        Current Plan
+                      </Badge>
+                    </motion.div>
+                  </motion.div>
+                )}
+                {plan.popular && !isCurrentPlan && (
                   <div className="absolute -top-3 left-0 right-0 mx-auto w-fit">
                     <Badge className="rounded-full bg-primary px-4 py-1 text-primary-foreground shadow-sm">
-                      <Sparkles className="mr-1 h-3.5 w-3.5" />
                       Popular
                     </Badge>
                   </div>
@@ -716,14 +766,15 @@ export default function SimplePricing() {
                     variant={plan.popular ? 'default' : 'outline'}
                     className={cn(
                       'w-full font-medium transition-all duration-300',
+                      isCurrentPlan && 'border-0 bg-linear-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-md shadow-amber-500/30 hover:brightness-110',
                       plan.popular
                         ? 'bg-primary hover:bg-primary/90 hover:shadow-md hover:shadow-primary/20'
                         : 'hover:border-primary/30 hover:bg-primary/5 hover:text-primary',
                     )}
                     onClick={() => handleSubscribe(plan.id)}
-                    disabled={processingPlan === plan.id}
+                    disabled={processingPlan === plan.id || isCurrentPlan}
                   >
-                    {processingPlan === plan.id ? 'Processing...' : plan.cta}
+                    {processingPlan === plan.id ? 'Processing...' : isCurrentPlan ? 'You are subscribed' : plan.cta}
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                   </Button>
                 </CardFooter>
@@ -745,6 +796,8 @@ export default function SimplePricing() {
                   </div>
                 )}
               </Card>
+                );
+              })()}
             </motion.div>
           ))}
         </div>

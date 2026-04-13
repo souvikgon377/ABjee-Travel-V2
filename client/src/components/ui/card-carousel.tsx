@@ -60,15 +60,6 @@ const CardCarousel: React.FC<CarouselProps> = ({
 
       <div className="w-full rounded-3xl border border-black/5 p-2 shadow-sm md:rounded-t-[44px]">
         <div className="relative mx-auto flex w-full flex-col rounded-3xl border border-black/5 bg-neutral-800/5 p-2 shadow-sm md:items-start md:gap-8 md:rounded-b-[20px] md:rounded-t-[40px] md:p-2">
-          {/* Badge */}
-          {/* <Badge
-            variant="outline"
-            className="absolute left-4 top-6 rounded-[14px] border border-black/10 text-base md:left-6"
-          >
-            <SparklesIcon className="fill-[#EEBDE0] stroke-1 text-neutral-800 mr-2" />
-            Latest component
-          </Badge> */}
-
           {/* Title & Description */}
           <div className="flex flex-col items-center justify-center pb-2 pt-2 w-full">
             <h3 className="bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-2xl md:text-4xl font-bold text-transparent mt-8 text-center w-full">

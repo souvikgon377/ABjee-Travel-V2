@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Sparkles, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
+import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -492,7 +492,6 @@ const ChatRoomsList: React.FC = () => {
         </div>
 
         <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
-          <Sparkles className="h-3.5 w-3.5" />
           Live carousel
         </div>
       </div>
@@ -1353,7 +1352,7 @@ const ChatRoomsList: React.FC = () => {
         >
           <div className="relative">
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/30 border-t-primary mx-auto"></div>
-            <Sparkles className="h-6 w-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+            <Users className="h-5 w-5 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
           </div>
           <p className="mt-6 text-lg font-medium bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
             Loading communities...
@@ -2757,7 +2756,6 @@ const ChatRoomsList: React.FC = () => {
                   >
                     <Plus className="h-6 w-6 mr-2" />
                     Create New Community
-                    <Sparkles className="h-5 w-5 ml-2" />
                   </Button>
                 </DialogTrigger>
               ) : (
@@ -2768,7 +2766,6 @@ const ChatRoomsList: React.FC = () => {
                 >
                   <Plus className="h-6 w-6 mr-2" />
                   Subscribe Now
-                  <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               )}
               <DialogContent className="w-[95vw] sm:max-w-137.5 max-h-[90vh] overflow-y-auto">
@@ -2895,7 +2892,6 @@ const ChatRoomsList: React.FC = () => {
                   {/* Icon Image Upload */}
                   <div className="space-y-2">
                     <Label htmlFor="iconImage" className="text-sm font-semibold flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
                       Community Icon (Optional)
                     </Label>
                     <div className="space-y-3">
@@ -3074,7 +3070,6 @@ const ChatRoomsList: React.FC = () => {
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   Create First Community
-                  <Sparkles className="h-5 w-5 ml-2" />
                 </Button>
               </CardContent>
             </Card>
@@ -3262,7 +3257,6 @@ const ChatRoomsList: React.FC = () => {
                   </div>
 
                   <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
-                    <Sparkles className="h-3.5 w-3.5" />
                     Live carousel
                   </div>
                 </div>
@@ -3528,7 +3522,6 @@ const ChatRoomsList: React.FC = () => {
               {/* Invite Link */}
               <div className="space-y-3">
                 <Label className="text-sm font-semibold flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
                   Invite Link (No Password Required)
                 </Label>
                 <div className="flex gap-2">
@@ -3642,7 +3635,13 @@ const ChatRoomsList: React.FC = () => {
  * Main Chat Page
  */
 const ChatPage: React.FC = () => {
+  const { userProfile, loading: authLoading } = useAuth();
   const [offers, setOffers] = useState<LiveOffer[]>([]);
+  const showOfferSpotlight = useMemo(() => {
+    if (authLoading) return false;
+    const subscriptionInfo = getSubscriptionInfo(userProfile);
+    return !hasPaidAccess(subscriptionInfo);
+  }, [authLoading, userProfile]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(firestoreDb, 'offers'), (snapshot) => {
@@ -3659,10 +3658,12 @@ const ChatPage: React.FC = () => {
   return (
     <div className="min-h-screen pt-16 md:pt-20 bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
       <Header />
-      <OfferSpotlightPopup
-        offers={offers}
-        contextLabel="Community Offers"
-      />
+      {showOfferSpotlight && (
+        <OfferSpotlightPopup
+          offers={offers}
+          contextLabel="Community Offers"
+        />
+      )}
       <ChatRoomsList />
       <Footer4Col />
     </div>

@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Users, Settings, Activity, Hash, Tag, Shield, Clock, MessageSquare, Crown, Globe, Lock, Paperclip, Mic, RefreshCw, Image as ImageIcon, Upload, X, Sparkles } from 'lucide-react';
+import { Users, Settings, Activity, Hash, Tag, Shield, Clock, MessageSquare, Crown, Globe, Lock, Paperclip, Mic, RefreshCw, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
@@ -615,7 +615,6 @@ export const ChatRoomActionsDialog = memo(
 
                 <div className="space-y-2">
                   <Label htmlFor="edit-iconImage" className="text-sm font-semibold flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
                     Community Icon (Optional)
                   </Label>
                   <div className="space-y-3">

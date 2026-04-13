@@ -7,7 +7,6 @@ import {
   User,
   MapPin,
   AlertCircle,
-  Sparkles,
   Flame,
   Clock3,
   type LucideIcon,
@@ -429,7 +428,6 @@ export function TripStoriesAdminPanel() {
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-            <Sparkles className="h-4 w-4 text-primary" />
             Search across stories, actions, and comments
           </p>
           <input

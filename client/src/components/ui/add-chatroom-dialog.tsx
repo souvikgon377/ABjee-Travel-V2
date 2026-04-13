@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Image as ImageIcon, Upload, X, Sparkles } from 'lucide-react';
+import { Image as ImageIcon, Upload, X } from 'lucide-react';
 
 interface AddChatRoomDialogProps {
   open: boolean;
@@ -361,7 +361,6 @@ export const AddChatRoomDialog = memo(({ open, onOpenChange, onRoomAdded }: AddC
 
             <div className="space-y-2">
               <Label htmlFor="iconImage" className="text-sm font-semibold flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
                 Community Icon (Optional)
               </Label>
               <div className="space-y-3">

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sparkles, X, ArrowRight } from 'lucide-react';
+import { X, ArrowRight } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 type OfferItem = {
@@ -124,7 +124,6 @@ export default function OfferSpotlightPopup({
 
             <div className="relative">
               <p className="inline-flex items-center gap-1.5 rounded-full border border-rose-300/70 bg-white/80 px-3 py-1.5 text-xs font-bold text-rose-700 dark:bg-black/25 dark:text-rose-200">
-                <Sparkles className="h-3 w-3" />
                 {contextLabel}
               </p>
 

@@ -70,8 +70,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ notifi
       });
     }
 
-    const invitation = await notificationService.acceptInvitation(notificationId);
-    return ok({ invitation });
+    await notificationService.acceptInvitation(notificationId);
+    await notificationService.delete(notificationId);
+    return ok({ success: true });
   } catch (error: any) {
     if (error instanceof AuthError) return fail(error.message, error.status);
     return fail('Failed to accept invitation', 500);

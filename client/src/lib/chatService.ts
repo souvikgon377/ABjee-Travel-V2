@@ -922,6 +922,34 @@ class ChatService {
       timestamp: Date.now(),
       userId: user.uid
     });
+
+    // Fire-and-forget notification fan-out for private communities.
+    if (!room.isPublic && newMessageRef.key) {
+      void (async () => {
+        try {
+          const token = localStorage.getItem('token') || await user.getIdToken();
+          if (!token) return;
+
+          const previewSource = trimmedText || (attachment ? `${attachment.type === 'voice' ? 'Voice message' : attachment.name}` : 'New message');
+          const messagePreview = previewSource.length > 140 ? `${previewSource.slice(0, 140)}...` : previewSource;
+
+          await fetch('/api/notifications/send-room-message', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              roomId,
+              messageId: newMessageRef.key,
+              messagePreview,
+            }),
+          });
+        } catch {
+          // Notification fan-out should not affect message delivery.
+        }
+      })();
+    }
     
     // Update last seen
     await this.updateLastSeen();

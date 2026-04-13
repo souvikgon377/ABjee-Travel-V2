@@ -30,7 +30,6 @@ import {
   Eye,
   Star,
   FileText,
-  Sparkles,
   Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -620,7 +619,7 @@ export function TouristPlacesManager() {
           <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-rose-600/10 via-pink-500/5 to-transparent border-b border-border">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-rose-600/10">
-                <Sparkles className="h-5 w-5 text-rose-600" />
+                <MapPin className="h-5 w-5 text-rose-600" />
               </div>
               <h2 className="text-lg font-bold">
                 {editingId ? 'Edit Tourist Place' : 'New Tourist Place'}

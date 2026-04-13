@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Users } from "lucide-react";
-import { Plane, Hotel, Car, CreditCard, Sparkles } from "lucide-react";
+import { Plane, Hotel, Car, CreditCard } from "lucide-react";
 
 export function FeatureBlock3() {
   const features = [
@@ -39,7 +39,7 @@ export function FeatureBlock3() {
       badgeVariant: "destructive" as const,
     },
     {
-      icon: Sparkles,
+      icon: Users,
       title: "Premium Member Benefits",
       description:
         "Exciting offers, early access to deals, and VIP support for our premium members.",
@@ -60,7 +60,7 @@ export function FeatureBlock3() {
     <section className="w-full py-20 md:py-32">
       <div className="container mx-auto px-4 md:px-6">
         <div className="text-center space-y-4 mb-16">
-          <h2 className="text-xl sm:text-2xl md:text-4xl font-bold tracking-wide sm:tracking-normal bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent text-center pb-5">
+          <h2 className="text-xl sm:text-2xl md:text-4xl font-bold tracking-wide sm:tracking-normal bg-linear-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent text-center pb-5">
             Explore the World with Smart & Seamless Travel Solutions with ABjee
           </h2>
 

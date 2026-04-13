@@ -18,7 +18,6 @@ import {
 	Copy,
 	Check,
 	Image as ImageIcon,
-	Sparkles,
 	Loader2,
 	Sailboat,
 } from 'lucide-react';
@@ -943,7 +942,7 @@ export default function TravelItenaryDisplay() {
 							<Card className="overflow-hidden border border-border bg-card/80 shadow-lg shadow-black/5">
 								<div className="p-6 md:p-8 space-y-4 bg-linear-to-br from-rose-500/10 via-background to-orange-500/10">
 									<div className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-200">
-										<Sparkles className="h-3.5 w-3.5" /> Abjee AI Itinerary Generator
+										Abjee AI Itinerary Generator
 									</div>
 									<h2 className="text-2xl md:text-3xl font-black text-foreground">Build a trip plan from basic details</h2>
 									<p className="text-sm md:text-base text-muted-foreground max-w-2xl">Fill in destination and preferences. AI will create an itinerary and save it to Firebase automatically.</p>

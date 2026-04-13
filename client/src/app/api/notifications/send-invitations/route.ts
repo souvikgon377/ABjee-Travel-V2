@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const notifications = await notificationService.sendRoomInvitations(
+    const invitationResult = await notificationService.sendRoomInvitations(
       user.firebaseUid || user.id,
       memberIds,
       roomId,
@@ -58,10 +58,14 @@ export async function POST(req: NextRequest) {
       typeof inviterEmail === 'string' ? inviterEmail : (user.email || '')
     );
 
+    const { notifications, summary } = invitationResult;
+    const { sentCount, skippedPendingCount, skippedAlreadyHandledCount, requestedCount } = summary;
+
     return ok(
       {
-        message: `Invitations sent to ${notifications.length} members`,
+        message: `Invite result: ${sentCount}/${requestedCount} sent, ${skippedPendingCount} already pending, ${skippedAlreadyHandledCount} already handled`,
         notifications,
+        summary,
       },
       200
     );

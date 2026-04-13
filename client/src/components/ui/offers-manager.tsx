@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Trash2, Save, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Save } from 'lucide-react';
 import { modernConfirm } from '@/lib/modernDialog';
 
 type OfferDoc = {
@@ -221,7 +221,6 @@ export function OffersManager() {
       <Card className="border border-rose-200/60 bg-linear-to-br from-rose-50 to-orange-50 dark:from-rose-950/30 dark:to-orange-950/20">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="h-5 w-5 text-rose-500" />
             Add New Offer
           </CardTitle>
         </CardHeader>
