@@ -214,6 +214,11 @@ export default function Header1() {
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const isTravelThemePage =
+    pathname?.includes('/travel-itinerary') ||
+    pathname?.includes('/travel-destinations') ||
+    pathname?.includes('/trip-stories') ||
+    pathname?.includes('/chat');
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
@@ -815,8 +820,12 @@ export default function Header1() {
         'transition-[backdrop-filter,background-color,box-shadow] duration-300',
         'will-change-[background-color,backdrop-filter,box-shadow,transform]',
         isScrolled
-          ? 'backdrop-blur-xl bg-background dark:bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-border/50'
-          : 'backdrop-blur-md bg-background dark:bg-background/45 border-b border-border/35',
+          ? isTravelThemePage
+            ? 'backdrop-blur-xl bg-rose-100/95 dark:bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-rose-200/75 dark:border-border/50'
+            : 'backdrop-blur-xl bg-background dark:bg-background/75 shadow-[0_8px_32px_rgba(0,0,0,0.18)] border-b border-border/50'
+          : isTravelThemePage
+            ? 'backdrop-blur-md bg-rose-100/80 dark:bg-background/45 border-b border-rose-200/70 dark:border-border/35'
+            : 'backdrop-blur-md bg-background dark:bg-background/45 border-b border-border/35',
       ].join(' ')}
       variants={headerVariants}
       initial="initial"

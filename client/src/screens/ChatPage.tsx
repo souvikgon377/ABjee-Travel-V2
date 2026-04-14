@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import Header from '@/components/mvpblocks/header-1';
 import Footer4Col from '@/components/mvpblocks/footer-4col';
 import OfferSpotlightPopup from '@/components/ui/offer-spotlight-popup';
+import { BlurInText } from '@/components/ui/blur-in-text';
 
 
 async function uploadVideoToR2(file: File): Promise<{ url: string; key: string }> {
@@ -534,7 +535,7 @@ const ChatRoomsList: React.FC = () => {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45 }}
-      className="rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
+      className="overflow-hidden rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
     >
       <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
         <div className="flex items-center gap-3">
@@ -560,12 +561,12 @@ const ChatRoomsList: React.FC = () => {
         </div>
       </div>
 
-      <div className="relative overflow-hidden px-3 sm:px-4 pb-5">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-linear-to-r from-white dark:from-gray-900 to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-linear-to-l from-white dark:from-gray-900 to-transparent" />
+      <div className="relative overflow-hidden rounded-b-3xl border-t border-cyan-200/70 dark:border-cyan-800/45 bg-linear-to-b from-cyan-100/30 via-white/70 to-cyan-100/55 dark:from-cyan-950/20 dark:via-slate-900/70 dark:to-blue-950/35 px-4 sm:px-5 pt-3 pb-6">
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-linear-to-r from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-linear-to-l from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
 
         <motion.div
-          className="flex w-max items-center gap-4 px-2"
+          className="flex w-max items-center gap-8 px-4"
           animate={{ x: ['0%', '-50%'] }}
           transition={{
             duration: Math.max(26, countryUsers.length * 2),
@@ -579,7 +580,7 @@ const ChatRoomsList: React.FC = () => {
             return (
               <motion.div
                 key={`${countryUser.id}-${countryUser.country}-${index}`}
-                className="relative flex min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
+                className="relative flex shrink-0 min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
                 initial={{ opacity: 0.85, y: 4 }}
                 animate={{ opacity: 1, y: [0, -4, 0] }}
                 transition={{
@@ -1484,9 +1485,17 @@ const ChatRoomsList: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 text-center"
         >
-          <h2 className="text-3xl md:text-5xl font-bold bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
-            How do you like to spend your time...?
-          </h2>
+          <h1 className="text-3xl md:text-5xl font-bold">
+            <BlurInText
+              text="How Would You Like to Spend Your Time?"
+              blurAmount={12}
+              duration={1}
+              stagger={0.02}
+              split="letter"
+              trigger="mount"
+              className="text-rose-600 dark:text-rose-400"
+            />
+          </h1>
         </motion.div>
 
         {/* Feature Cards */}
@@ -3370,7 +3379,7 @@ const ChatRoomsList: React.FC = () => {
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45 }}
-                className="rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
+                className="overflow-hidden rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
               >
                 <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
                   <div className="flex items-center gap-3">
@@ -3396,12 +3405,12 @@ const ChatRoomsList: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="relative overflow-hidden px-3 sm:px-4 pb-5">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-linear-to-r from-white dark:from-gray-900 to-transparent" />
-                  <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-linear-to-l from-white dark:from-gray-900 to-transparent" />
+                <div className="relative overflow-hidden rounded-b-3xl border-t border-cyan-200/70 dark:border-cyan-800/45 bg-linear-to-b from-cyan-100/30 via-white/70 to-cyan-100/55 dark:from-cyan-950/20 dark:via-slate-900/70 dark:to-blue-950/35 px-4 sm:px-5 pt-3 pb-6">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-linear-to-r from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-linear-to-l from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
 
                   <motion.div
-                    className="flex w-max items-center gap-4 px-2"
+                    className="flex w-max items-center gap-8 px-4"
                     animate={{ x: ['0%', '-50%'] }}
                     transition={{
                       duration: Math.max(26, countryUsers.length * 2),
@@ -3415,7 +3424,7 @@ const ChatRoomsList: React.FC = () => {
                       return (
                         <motion.div
                           key={`${countryUser.id}-${countryUser.country}-${index}`}
-                          className="relative flex min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
+                          className="relative flex shrink-0 min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
                           initial={{ opacity: 0.85, y: 4 }}
                           animate={{ opacity: 1, y: [0, -4, 0] }}
                           transition={{

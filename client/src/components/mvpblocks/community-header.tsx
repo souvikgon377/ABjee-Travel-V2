@@ -65,13 +65,20 @@ const CommunityHeader: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const activeTab = getActiveTabFromPath(pathname);
+  const isTravelThemePage =
+    pathname?.includes('/travel-itinerary') ||
+    pathname?.includes('/travel-destinations') ||
+    pathname?.includes('/trip-stories') ||
+    pathname?.includes('/chat');
 
   const handleNavClick = (item: NavItem) => {
     router.push(item.href);
   };
 
   return (
-    <header className="sticky top-16 lg:top-20 z-40 border-b border-border dark:border-white/10 bg-background dark:bg-black/25 dark:backdrop-blur-xl shadow-[0_8px_26px_rgba(15,23,42,0.28)]">
+    <header
+      className={`sticky top-16 lg:top-20 z-40 border-b dark:border-white/10 dark:bg-black/25 dark:backdrop-blur-xl shadow-[0_8px_26px_rgba(15,23,42,0.28)] ${isTravelThemePage ? 'bg-rose-100/95 border-rose-200/70' : 'bg-background border-border'}`}
+    >
       <div className="max-w-7xl mx-auto px-4">
         <LayoutGroup>
           <nav className="flex items-center justify-center overflow-x-auto scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">

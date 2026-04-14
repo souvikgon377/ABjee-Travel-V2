@@ -989,7 +989,7 @@ export default function TravelItenaryDisplay() {
 					<img src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1600&q=80" alt="Travel destination" className="w-full h-full object-cover" />
 					<div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/40 to-black/30" />
 				</div>
-				<div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-background via-background/55 to-transparent pointer-events-none" />
+				<div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-rose-100/95 via-rose-100/55 to-transparent dark:from-background dark:via-background/55 pointer-events-none" />
 				<div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
 					<motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
 						<span className="inline-block bg-rose-500/20 border border-rose-400/40 text-rose-300 text-xs font-semibold px-4 py-1.5 rounded-full mb-5">Curated Destination Plans</span>
@@ -1015,7 +1015,13 @@ export default function TravelItenaryDisplay() {
 							<Button onClick={triggerSearchAndScroll} className="px-6 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white font-semibold rounded-2xl hover:opacity-90 transition-opacity text-sm shadow-lg shadow-rose-500/25">Search</Button>
 						</div>
 						<div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-							<Button variant="outline" className="rounded-2xl border-white/30 text-white hover:bg-white/10" onClick={() => setSearch(prev => ({ ...prev, query: '', hasSearched: false }))}>Clear</Button>
+							<Button
+								variant="outline"
+								className="rounded-2xl border-rose-300/80 bg-rose-50/90 text-rose-700 hover:bg-rose-100 dark:border-white/30 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+								onClick={() => setSearch(prev => ({ ...prev, query: '', hasSearched: false }))}
+							>
+								Clear
+							</Button>
 						</div>
 					</motion.div>
 				</div>
