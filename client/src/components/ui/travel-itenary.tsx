@@ -676,6 +676,20 @@ export default function AdminTravelItenary() {
 		setIsEditorOpen(false);
 	}, [handleReset, uploadState.uploading]);
 
+	useEffect(() => {
+		if (!isEditorOpen) return;
+
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				closeEditor();
+			}
+		};
+
+		window.addEventListener('keydown', onKeyDown);
+		return () => window.removeEventListener('keydown', onKeyDown);
+	}, [isEditorOpen, closeEditor]);
+
 	const getMapLabel = (mapValue: File | string | null) => {
 		if (!mapValue) return '';
 		if (mapValue instanceof File) return mapValue.name;
@@ -1479,6 +1493,11 @@ export default function AdminTravelItenary() {
 							initial={{ opacity: 0 }}
 							animate={{ opacity: 1 }}
 							exit={{ opacity: 0 }}
+							onMouseDown={(event) => {
+								if (event.target === event.currentTarget) {
+									closeEditor();
+								}
+							}}
 							className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] p-4 sm:p-6 overflow-y-auto"
 						>
 							<motion.div
@@ -1486,7 +1505,7 @@ export default function AdminTravelItenary() {
 								animate={{ opacity: 1, y: 0, scale: 1 }}
 								exit={{ opacity: 0, y: 24, scale: 0.98 }}
 								transition={{ duration: 0.2 }}
-								className="mx-auto w-full max-w-6xl rounded-2xl bg-white dark:bg-slate-950 p-6 shadow-2xl border border-slate-200 dark:border-slate-800"
+								className="mx-auto flex max-h-[92vh] w-full max-w-6xl flex-col rounded-2xl bg-white dark:bg-slate-950 p-6 shadow-2xl border border-slate-200 dark:border-slate-800"
 							>
 								<div className="flex items-center justify-between mb-5">
 									<h2 className="text-xl font-bold text-slate-900 dark:text-white">
@@ -1496,6 +1515,8 @@ export default function AdminTravelItenary() {
 										<X className="w-5 h-5" />
 									</Button>
 								</div>
+
+								<div className="flex-1 overflow-y-auto pr-1 pb-3">
 
 								<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 					{/* Main Form */}
@@ -1870,28 +1891,26 @@ export default function AdminTravelItenary() {
 							)}
 						</Card>
 
-						{/* Action Buttons */}
-						<div className="flex gap-3">
-							<Button
-									type="submit"
-								onClick={handleSubmit}
-								disabled={uploadState.uploading}
-								className="flex-1 gap-2 bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
-							>
-								<Save className="w-4 h-4" />
-								{isEditing ? 'Update' : 'Create'}
-							</Button>
-							<Button
-									type="button"
-								onClick={handleReset}
-								variant="outline"
-								disabled={uploadState.uploading}
-								className="flex-1"
-							>
-								{isEditing ? 'Discard Changes' : 'Reset'}
-							</Button>
-						</div>
 					</div>
+								</div>
+
+								</div>
+
+								<div className="sticky bottom-0 mt-4 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm pt-4">
+									<div className="flex flex-wrap justify-end gap-3">
+										<Button type="button" onClick={closeEditor} variant="outline" disabled={uploadState.uploading}>
+											Cancel
+										</Button>
+										<Button
+											type="button"
+											onClick={handleSubmit}
+											disabled={uploadState.uploading}
+											className="gap-2 bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
+										>
+											<Save className="w-4 h-4" />
+											{isEditing ? 'Update' : 'Create'}
+										</Button>
+									</div>
 								</div>
 							</motion.div>
 						</motion.div>
