@@ -611,18 +611,19 @@ export default function AdminTravelItenary() {
 		return segments[segments.length - 1] || mapValue;
 	};
 
-	const splitCsvLine = (line: string): string[] => {
-		const cells: string[] = [];
-		let current = '';
+	const parseCsvTable = (text: string): string[][] => {
+		const rows: string[][] = [];
+		let currentRow: string[] = [];
+		let currentCell = '';
 		let inQuotes = false;
 
-		for (let i = 0; i < line.length; i += 1) {
-			const char = line[i];
-			const nextChar = line[i + 1];
+		for (let i = 0; i < text.length; i += 1) {
+			const char = text[i];
+			const nextChar = text[i + 1];
 
 			if (char === '"') {
 				if (inQuotes && nextChar === '"') {
-					current += '"';
+					currentCell += '"';
 					i += 1;
 					continue;
 				}
@@ -632,16 +633,34 @@ export default function AdminTravelItenary() {
 			}
 
 			if (char === ',' && !inQuotes) {
-				cells.push(current.trim());
-				current = '';
+				currentRow.push(currentCell);
+				currentCell = '';
 				continue;
 			}
 
-			current += char;
+			if ((char === '\n' || char === '\r') && !inQuotes) {
+				if (char === '\r' && nextChar === '\n') {
+					i += 1;
+				}
+
+				currentRow.push(currentCell);
+				if (currentRow.some((cell) => cell.trim().length > 0)) {
+					rows.push(currentRow);
+				}
+				currentRow = [];
+				currentCell = '';
+				continue;
+			}
+
+			currentCell += char;
 		}
 
-		cells.push(current.trim());
-		return cells;
+		currentRow.push(currentCell);
+		if (currentRow.some((cell) => cell.trim().length > 0)) {
+			rows.push(currentRow);
+		}
+
+		return rows;
 	};
 
 	const normalizeCsvHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -718,16 +737,13 @@ export default function AdminTravelItenary() {
 	};
 
 	const parseCsvTextToRows = (text: string) => {
-		const lines = text
-			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.filter(Boolean);
+		const rows = parseCsvTable(text);
 
-		if (lines.length < 2) {
+		if (rows.length < 2) {
 			throw new Error('CSV must include a header row and at least one data row.');
 		}
 
-		const headerCells = splitCsvLine(lines[0]);
+		const headerCells = rows[0];
 		const headers = headerCells.map(normalizeToCanonicalHeader);
 
 		const requiredHeaders = ['place', 'country', 'budget'];
@@ -737,8 +753,7 @@ export default function AdminTravelItenary() {
 			}
 		}
 
-		return lines.slice(1).map((line, index) => {
-			const cells = splitCsvLine(line);
+		return rows.slice(1).map((cells, index) => {
 			const row: Record<string, string> = {};
 
 			headers.forEach((header, headerIndex) => {
