@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -94,6 +94,7 @@ export default function AdminTravelItenary() {
 	const [csvImportError, setCsvImportError] = useState<string | null>(null);
 	const [copiedCsvTemplate, setCopiedCsvTemplate] = useState(false);
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
+	const [isEditorOpen, setIsEditorOpen] = useState(false);
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const videoInputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +173,7 @@ export default function AdminTravelItenary() {
 			videoPreviews: itinerary.videos || [],
 		});
 		setIsEditing(true);
+		setIsEditorOpen(true);
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}, []);
 
@@ -663,6 +665,17 @@ export default function AdminTravelItenary() {
 		setIsEditing(false);
 	}, [form]);
 
+	const openCreateEditor = useCallback(() => {
+		handleReset();
+		setIsEditorOpen(true);
+	}, [handleReset]);
+
+	const closeEditor = useCallback(() => {
+		if (uploadState.uploading) return;
+		handleReset();
+		setIsEditorOpen(false);
+	}, [handleReset, uploadState.uploading]);
+
 	const getMapLabel = (mapValue: File | string | null) => {
 		if (!mapValue) return '';
 		if (mapValue instanceof File) return mapValue.name;
@@ -1152,6 +1165,31 @@ export default function AdminTravelItenary() {
 
 	return (
 		<div className="min-h-screen bg-linear-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
+			<AnimatePresence>
+				{(uploadState.success || uploadState.error) && (
+					<motion.div
+						key={uploadState.error ? 'itinerary-error-toast' : 'itinerary-success-toast'}
+						initial={{ opacity: 0, y: -18, scale: 0.96 }}
+						animate={{ opacity: 1, y: 0, scale: 1 }}
+						exit={{ opacity: 0, y: -18, scale: 0.96 }}
+						transition={{ duration: 0.2 }}
+						className="fixed top-4 right-4 z-80 max-w-sm rounded-xl border px-4 py-3 shadow-2xl backdrop-blur-md"
+					>
+						{uploadState.error ? (
+							<div className="flex items-start gap-3 bg-red-50/95 dark:bg-red-950/80 border-red-200 dark:border-red-900 text-red-800 dark:text-red-100">
+								<AlertCircle className="w-5 h-5 text-red-600 dark:text-red-300 shrink-0" />
+								<p className="text-sm font-medium">{uploadState.error}</p>
+							</div>
+						) : (
+							<div className="flex items-start gap-3 bg-green-50/95 dark:bg-green-950/80 border-green-200 dark:border-green-900 text-green-800 dark:text-green-100">
+								<CheckCircle className="w-5 h-5 text-green-600 dark:text-green-300 shrink-0" />
+								<p className="text-sm font-medium">{uploadState.success}</p>
+							</div>
+						)}
+					</motion.div>
+				)}
+			</AnimatePresence>
+
 			<div className="max-w-6xl mx-auto">
 				{/* Header */}
 				<motion.div
@@ -1179,6 +1217,13 @@ export default function AdminTravelItenary() {
 								<span className="text-rose-500">📋</span>
 								Database Itineraries ({existingItineraries.length})
 							</h2>
+							<Button
+								onClick={openCreateEditor}
+								className="gap-2 bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
+							>
+								<Plus className="w-4 h-4" />
+								New Itinerary
+							</Button>
 							<Button
 								onClick={fetchItineraries}
 								variant="outline"
@@ -1407,6 +1452,14 @@ export default function AdminTravelItenary() {
 							</span>
 						</div>
 						<Button
+							onClick={() => setIsEditorOpen(true)}
+							size="sm"
+							variant="outline"
+							className="text-blue-600 dark:text-blue-400"
+						>
+							Open Editor
+						</Button>
+						<Button
 							onClick={() => {
 								handleReset();
 								setIsEditing(false);
@@ -1420,7 +1473,31 @@ export default function AdminTravelItenary() {
 					</motion.div>
 				)}
 
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+				<AnimatePresence>
+					{isEditorOpen && (
+						<motion.div
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+							exit={{ opacity: 0 }}
+							className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] p-4 sm:p-6 overflow-y-auto"
+						>
+							<motion.div
+								initial={{ opacity: 0, y: 24, scale: 0.98 }}
+								animate={{ opacity: 1, y: 0, scale: 1 }}
+								exit={{ opacity: 0, y: 24, scale: 0.98 }}
+								transition={{ duration: 0.2 }}
+								className="mx-auto w-full max-w-6xl rounded-2xl bg-white dark:bg-slate-950 p-6 shadow-2xl border border-slate-200 dark:border-slate-800"
+							>
+								<div className="flex items-center justify-between mb-5">
+									<h2 className="text-xl font-bold text-slate-900 dark:text-white">
+										{isEditing ? 'Edit Travel Itinerary' : 'Create Travel Itinerary'}
+									</h2>
+									<Button type="button" variant="ghost" size="icon" onClick={closeEditor} disabled={uploadState.uploading}>
+										<X className="w-5 h-5" />
+									</Button>
+								</div>
+
+								<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 					{/* Main Form */}
 					<div className="lg:col-span-2 space-y-6">
 						{/* Basic Info */}
@@ -1815,7 +1892,11 @@ export default function AdminTravelItenary() {
 							</Button>
 						</div>
 					</div>
-				</div>
+								</div>
+							</motion.div>
+						</motion.div>
+					)}
+				</AnimatePresence>
 			</div>
 		</div>
 	);
