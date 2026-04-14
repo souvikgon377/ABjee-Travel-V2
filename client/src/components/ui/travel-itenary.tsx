@@ -56,6 +56,9 @@ interface CsvImportSummary {
 	errors: string[];
 }
 
+const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
+Goa,India,"Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
+
 export default function AdminTravelItenary() {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
@@ -86,6 +89,7 @@ export default function AdminTravelItenary() {
 	const [csvImportProgress, setCsvImportProgress] = useState(0);
 	const [csvImportSummary, setCsvImportSummary] = useState<CsvImportSummary | null>(null);
 	const [csvImportError, setCsvImportError] = useState<string | null>(null);
+	const [copiedCsvTemplate, setCopiedCsvTemplate] = useState(false);
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
@@ -852,6 +856,16 @@ export default function AdminTravelItenary() {
 		}
 	};
 
+	const handleCopyCsvTemplate = async () => {
+		try {
+			await navigator.clipboard.writeText(CSV_TEMPLATE_TEXT);
+			setCopiedCsvTemplate(true);
+			setTimeout(() => setCopiedCsvTemplate(false), 1800);
+		} catch {
+			setCsvImportError('Unable to copy template. Please copy it manually from the help text.');
+		}
+	};
+
 	return (
 		<div className="min-h-screen bg-linear-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
 			<div className="max-w-6xl mx-auto">
@@ -918,6 +932,13 @@ export default function AdminTravelItenary() {
 									disabled={csvImporting}
 								>
 									{csvFile ? 'Change CSV' : 'Choose CSV'}
+								</Button>
+								<Button
+									onClick={handleCopyCsvTemplate}
+									variant="outline"
+									disabled={csvImporting}
+								>
+									{copiedCsvTemplate ? 'Template Copied' : 'Copy CSV Template'}
 								</Button>
 								<Button
 									onClick={handleImportCsv}
