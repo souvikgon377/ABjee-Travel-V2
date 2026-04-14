@@ -89,16 +89,20 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { place, country, itinerary, places, restaurants, hotels, budget, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
+    const { place, country, introduction, itinerary, places, restaurants, hotels, budget, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
 
     // Validate required fields
     if (!place || !country || !budget) {
       return fail('Missing required fields: place, country, budget', 400);
     }
 
+    const normalizedIntroduction = typeof introduction === 'string' ? introduction.trim() : '';
+    const normalizedOverview = typeof overview === 'string' ? overview.trim() : '';
+
     const travelData = {
       place: place.trim(),
       country: country.trim(),
+      introduction: normalizedIntroduction || normalizedOverview,
       itinerary: (itinerary || '').trim(),
       places: toStringArray(places),
       restaurants: toStringArray(restaurants),
@@ -107,7 +111,7 @@ export async function POST(req: NextRequest) {
       images: Array.isArray(images) ? images : [],
       videos: Array.isArray(videos) ? videos : [],
       map: map || null,
-      overview: typeof overview === 'string' ? overview.trim() : '',
+      overview: normalizedOverview || normalizedIntroduction,
       durationText: typeof durationText === 'string' ? durationText.trim() : '',
       budgetEstimate: typeof budgetEstimate === 'string' ? budgetEstimate.trim() : '',
       travelTips: toStringArray(travelTips),

@@ -52,6 +52,7 @@ const getCardBadge = (index: number) => {
 };
 
 const getPreviewText = (result: TravelData) => {
+	if (result.introduction) return result.introduction;
 	if (result.overview) return result.overview;
 	const firstLine = result.itinerary?.split('\n').find(line => line.trim().length > 0);
 	if (firstLine) return firstLine;
@@ -124,6 +125,7 @@ const sanitizeTravelData = (raw: TravelData): TravelData => {
 
 	return {
 		...raw,
+		introduction: (raw.introduction || raw.overview || '').trim(),
 		place,
 		country,
 		itinerary,
@@ -197,6 +199,8 @@ const renderFormattedItinerary = (itinerary: string) => {
 	const normalizedItinerary = itinerary
 		.replace(/\r\n/g, '\n')
 		.replace(/\s*;\s*(?=Day\s*\d+)/gi, '\n')
+		.replace(/([.!?])\s*(?=Day\s*\d+\s*[:.-]?)/gi, '$1\n')
+		.replace(/([^\n])\s+(?=Day\s*\d+\s*[:.-]?)/gi, '$1\n')
 		.trim();
 
 	const renderDayBody = (body: string) => {
@@ -402,6 +406,10 @@ const buildGeneratedTravelData = (
 		id: `gemini-${Date.now()}`,
 		place: form.place.trim(),
 		country: form.country.trim(),
+		introduction:
+			typeof structured?.introduction === 'string'
+				? structured.introduction.trim()
+				: (typeof structured?.overview === 'string' ? structured.overview.trim() : (response.content || '').trim()),
 		itinerary,
 		places,
 		restaurants,
@@ -529,7 +537,7 @@ function TravelDetailModal({
 									<p className="text-muted-foreground text-sm leading-relaxed">{getPreviewText(result)}</p>
 								</section>
 
-								{result.overview && result.overview !== getPreviewText(result) && (
+								{result.overview && result.overview !== (result.introduction || '').trim() && result.overview !== getPreviewText(result) && (
 									<section>
 										<h3 className="text-xl font-bold text-foreground mb-3">Itinerary Overview</h3>
 										<p className="text-muted-foreground text-sm leading-relaxed">{result.overview}</p>
@@ -866,6 +874,7 @@ export default function TravelItenaryDisplay() {
 				body: JSON.stringify({
 					place: generated.place,
 					country: generated.country,
+					introduction: generated.introduction || generated.overview || '',
 					itinerary: generated.itinerary,
 					places: generated.places,
 					restaurants: generated.restaurants,

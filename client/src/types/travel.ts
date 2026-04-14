@@ -7,6 +7,7 @@ export interface TravelData {
   id: string;
   place: string;
   country: string;
+  introduction?: string;
   itinerary: string;
   places: string[];
   restaurants: string[];

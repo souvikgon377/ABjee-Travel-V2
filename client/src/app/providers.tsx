@@ -151,6 +151,56 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("unhandledrejection", onUnhandledRejection);
   }, []);
 
+  useEffect(() => {
+    const isSupportedInputType = (type: string) => {
+      const normalized = (type || "text").toLowerCase();
+      const blocked = new Set([
+        "button",
+        "submit",
+        "reset",
+        "checkbox",
+        "radio",
+        "file",
+        "range",
+        "color",
+      ]);
+
+      return !blocked.has(normalized);
+    };
+
+    const onGlobalEnter = (event: KeyboardEvent) => {
+      if (event.key !== "Enter") return;
+      if (event.defaultPrevented) return;
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest("[data-enter-ignore='true']")) return;
+      if (target.closest("[role='combobox'], [role='listbox'], [role='menu'], [role='dialog']")) return;
+
+      const tagName = target.tagName.toLowerCase();
+      if (tagName === "textarea") return;
+      if (target.isContentEditable) return;
+
+      if (target instanceof HTMLInputElement && !isSupportedInputType(target.type)) {
+        return;
+      }
+
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) {
+        return;
+      }
+
+      const form = target.closest("form");
+      if (!form || !(form instanceof HTMLFormElement)) return;
+
+      event.preventDefault();
+      form.requestSubmit();
+    };
+
+    window.addEventListener("keydown", onGlobalEnter);
+    return () => window.removeEventListener("keydown", onGlobalEnter);
+  }, []);
+
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <AuthProvider>

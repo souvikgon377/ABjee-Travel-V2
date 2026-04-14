@@ -14,6 +14,7 @@ interface FormState {
 	id?: string;
 	place: string;
 	country: string;
+	introduction: string;
 	itinerary: string;
 	places: string[];
 	restaurants: string[];
@@ -37,6 +38,7 @@ interface TravelItem {
 	id: string;
 	place: string;
 	country: string;
+	introduction?: string;
 	itinerary?: string;
 	restaurants?: string[];
 	hotels?: string[];
@@ -56,8 +58,8 @@ interface CsvImportSummary {
 	errors: string[];
 }
 
-const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
-Goa,India,"Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
+const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Introduction,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
+Goa,India,"A coastal escape with beaches, old churches, and vibrant nightlife.","Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
 
 export default function AdminTravelItenary() {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
@@ -66,6 +68,7 @@ export default function AdminTravelItenary() {
 	const [form, setForm] = useState<FormState>({
 		place: '',
 		country: '',
+		introduction: '',
 		itinerary: '',
 		places: [''],
 		restaurants: [''],
@@ -156,6 +159,7 @@ export default function AdminTravelItenary() {
 			id: itinerary.id,
 			place: itinerary.place,
 			country: itinerary.country,
+			introduction: itinerary.introduction || '',
 			itinerary: itinerary.itinerary || '',
 			places: itinerary.places || [''],
 			restaurants: itinerary.restaurants || [''],
@@ -568,6 +572,7 @@ export default function AdminTravelItenary() {
 			const travelData = {
 				place: form.place.trim(),
 				country: form.country.trim(),
+				introduction: form.introduction.trim(),
 				itinerary: form.itinerary.trim(),
 				places: form.places.filter(p => p.trim()),
 				restaurants: form.restaurants.filter(r => r.trim()),
@@ -604,6 +609,7 @@ export default function AdminTravelItenary() {
 				setForm({
 					place: '',
 					country: '',
+					introduction: '',
 					itinerary: '',
 					places: [''],
 					restaurants: [''],
@@ -642,6 +648,7 @@ export default function AdminTravelItenary() {
 		setForm({
 			place: '',
 			country: '',
+			introduction: '',
 			itinerary: '',
 			places: [''],
 			restaurants: [''],
@@ -760,6 +767,8 @@ export default function AdminTravelItenary() {
 		map: 'map',
 		overview: 'overview',
 		generatedby: 'generatedby',
+		introduction: 'introduction',
+		intro: 'introduction',
 	};
 
 	const normalizeToCanonicalHeader = (value: string) => {
@@ -770,6 +779,7 @@ export default function AdminTravelItenary() {
 
 		if (normalized.includes('place') && normalized.includes('travel')) return 'place';
 		if (normalized.includes('country')) return 'country';
+		if (normalized.includes('intro')) return 'introduction';
 		if (normalized.includes('itinerary') || normalized.includes('travelitin')) return 'itinerary';
 		if (normalized.includes('budget') || normalized.startsWith('averageb') || normalized.includes('avgb')) return 'budget';
 		if (normalized.includes('restaurant')) return 'restaurants';
@@ -782,6 +792,7 @@ export default function AdminTravelItenary() {
 	const DEFAULT_CSV_HEADERS = [
 		'place',
 		'country',
+		'introduction',
 		'itinerary',
 		'budget',
 		'places',
@@ -1000,13 +1011,18 @@ export default function AdminTravelItenary() {
 		const headers = Array.from({ length: columnCount }, (_, index) => `field${index + 1}`);
 		if (columnCount > 0) headers[0] = 'place';
 		if (columnCount > 1) headers[1] = 'country';
-		if (columnCount > 2) headers[2] = 'itinerary';
-		if (columnCount > 3) headers[3] = 'budget';
-		if (columnCount > 4) headers[4] = 'places';
-		if (columnCount > 5) headers[5] = 'restaurants';
-		if (columnCount > 6) headers[6] = 'hotels';
+		if (columnCount > 2) headers[2] = 'introduction';
+		if (columnCount > 3) headers[3] = 'itinerary';
+		if (columnCount > 4) headers[4] = 'budget';
+		if (columnCount > 5) headers[5] = 'places';
+		if (columnCount > 6) headers[6] = 'restaurants';
+		if (columnCount > 7) headers[7] = 'hotels';
 		if (columnCount === 3) {
 			headers[2] = 'budget';
+		}
+		if (columnCount === 4) {
+			headers[2] = 'itinerary';
+			headers[3] = 'budget';
 		}
 		return headers;
 	};
@@ -1063,8 +1079,9 @@ export default function AdminTravelItenary() {
 					place,
 					country,
 					budget,
+					introduction: data.introduction || data.overview || '',
 					itinerary: data.itinerary || '',
-					overview: data.overview || '',
+					overview: data.overview || data.introduction || '',
 					durationText: data.durationtext || '',
 					budgetEstimate: data.budgetestimate || '',
 					routeFlow: data.routeflow || '',
@@ -1192,7 +1209,7 @@ export default function AdminTravelItenary() {
 								</Badge>
 							</div>
 							<p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mb-3">
-								Optional columns: itinerary, places, restaurants, hotels, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy. Use | to separate list values.
+								Optional columns: introduction, itinerary, places, restaurants, hotels, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy. Use | to separate list values.
 							</p>
 							<div className="flex flex-wrap gap-2">
 								<input
@@ -1440,6 +1457,21 @@ export default function AdminTravelItenary() {
 
 								<div>
 									<label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+										Introduction
+									</label>
+									<Textarea
+										name="introduction"
+										value={form.introduction}
+										onChange={handleInputChange}
+										placeholder="Short summary for the destination and trip vibe..."
+										rows={5}
+										disabled={uploadState.uploading}
+										className="w-full"
+									/>
+								</div>
+
+								<div>
+									<label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
 										Travel Itinerary
 									</label>
 									<Textarea
@@ -1448,6 +1480,7 @@ export default function AdminTravelItenary() {
 										onChange={handleInputChange}
 										placeholder="Day 1: Arrival and check-in...&#10;Day 2: Beach visit...&#10;Day 3: Cultural tour..."
 										rows={6}
+										rows={12}
 										disabled={uploadState.uploading}
 										className="w-full"
 									/>
