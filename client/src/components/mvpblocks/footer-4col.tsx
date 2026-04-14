@@ -55,17 +55,17 @@ const socialLinks = [
 ];
 
 const aboutLinks = [
-  { text: 'Company History', href: data.about.history },
-  { text: 'Meet the Team', href: data.about.team },
-  { text: 'Employee Handbook', href: data.about.handbook },
-  { text: 'Careers', href: data.about.careers },
+  { text: 'About Us', href: data.about.history },
+  { text: 'Meet the Dev Team', href: data.about.team },
+  // { text: 'Employee Handbook', href: data.about.handbook },
+  // { text: 'Careers', href: data.about.careers },
 ];
 
 const serviceLinks = [
-  { text: 'Web Development', href: data.services.webdev },
-  { text: 'Web Design', href: data.services.webdesign },
-  { text: 'Marketing', href: data.services.marketing },
-  { text: 'Google Ads', href: data.services.googleads },
+  { text: 'Community Building', href: data.services.webdev },
+  { text: 'Helping Travellors', href: data.services.webdesign },
+  // { text: 'Marketing', href: data.services.marketing },
+  // { text: 'Google Ads', href: data.services.googleads },
 ];
 
 const helpfulLinks = [

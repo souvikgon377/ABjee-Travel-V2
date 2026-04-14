@@ -491,13 +491,13 @@ const ChatRoomsList: React.FC = () => {
     };
 
     const updatePerformanceMode = () => {
-      const lowCpu = (navigator.hardwareConcurrency ?? 8) <= 8;
-      const lowMemory = (nav.deviceMemory ?? 8) <= 6;
       const saveData = Boolean(nav.connection?.saveData);
       const networkType = nav.connection?.effectiveType ?? '';
       const constrainedNetwork = networkType === '2g' || networkType === '3g' || networkType === 'slow-2g';
 
-      setMobilePerformanceMode(mediaQuery.matches && (lowCpu || lowMemory || saveData || constrainedNetwork));
+      // Keep rich mobile animations enabled on good networks; throttle only when
+      // the user explicitly enables data saver or the connection is constrained.
+      setMobilePerformanceMode(mediaQuery.matches && (saveData || constrainedNetwork));
     };
 
     updatePerformanceMode();

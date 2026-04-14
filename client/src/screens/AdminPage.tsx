@@ -3,6 +3,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import AdminDashboard from '@/components/mvpblocks/index';
 
+const ADMIN_PROFILE_RECOVERY_KEY = 'admin-profile-recovery-attempted';
+const ADMIN_LOADING_RECOVERY_KEY = 'admin-loading-recovery-attempted';
+
 export default function AdminPage() {
   const { currentUser, userProfile, loading } = useAuth();
   const router = useRouter();
@@ -26,6 +29,51 @@ export default function AdminPage() {
       router.push('/');
     }
   }, [currentUser, userProfile, loading, router, canAccessAdmin]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (loading || !currentUser || userProfile) {
+      sessionStorage.removeItem(ADMIN_PROFILE_RECOVERY_KEY);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const recoveryAttempted = sessionStorage.getItem(ADMIN_PROFILE_RECOVERY_KEY) === '1';
+
+      if (!recoveryAttempted) {
+        sessionStorage.setItem(ADMIN_PROFILE_RECOVERY_KEY, '1');
+        window.location.reload();
+        return;
+      }
+
+      router.replace('/auth');
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [loading, currentUser, userProfile, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!loading) {
+      sessionStorage.removeItem(ADMIN_LOADING_RECOVERY_KEY);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const recoveryAttempted = sessionStorage.getItem(ADMIN_LOADING_RECOVERY_KEY) === '1';
+
+      if (!recoveryAttempted) {
+        sessionStorage.setItem(ADMIN_LOADING_RECOVERY_KEY, '1');
+        window.location.reload();
+        return;
+      }
+
+      router.replace('/auth');
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [loading, router]);
 
   // Show loading while checking auth
   if (loading || (currentUser && !userProfile)) {

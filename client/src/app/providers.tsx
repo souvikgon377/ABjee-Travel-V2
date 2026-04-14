@@ -76,9 +76,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       window.matchMedia("(hover: none)").matches;
     const isSmallViewport = window.matchMedia("(max-width: 1024px)").matches;
     const hasTouchPoints = navigator.maxTouchPoints > 0;
-    const disableLenisOnMobile = isTouchDevice || (isSmallViewport && hasTouchPoints);
+    const disableLenisOnMobile =
+      isSmallViewport ||
+      isTouchDevice ||
+      (isSmallViewport && hasTouchPoints);
 
-    // Touch devices generally feel smoother with native scrolling than JS-driven smoothing.
+    // Mobile/touch devices generally feel smoother with native scrolling.
     if (prefersReducedMotion || disableLenisOnMobile) {
       return;
     }

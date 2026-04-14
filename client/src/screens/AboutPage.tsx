@@ -22,7 +22,6 @@ import { DEFAULT_ABOUT_PAGE_CONTENT, loadAboutPageContent } from '@/lib/aboutCon
 import { publicAsset } from '@/lib/publicAsset';
 import type { AboutFounderContent, AboutPageContent, AboutSocialIconName } from '@/types/about';
 
-// â”€â”€â”€ Animation Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 50 },
