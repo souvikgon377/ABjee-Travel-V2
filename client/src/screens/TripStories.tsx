@@ -5,6 +5,7 @@ import {
   Heart, MessageCircle, Share2, MapPin, Calendar, Clock, DollarSign,
   Users, X, ChevronDown, Search, Upload, Play, Copy, Check, Send,
   ArrowLeft, Image as ImageIcon, Plus, Trash2, Pencil,
+  Maximize2, Minimize2,
   Facebook, Instagram, Youtube, Globe, Camera, Star,
   BookOpen
 } from 'lucide-react';
@@ -703,6 +704,7 @@ function StoryModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [heroIdx, setHeroIdx] = useState(0);
   const [heroDir, setHeroDir] = useState(1);
+  const [isWindowExpanded, setIsWindowExpanded] = useState(false);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -736,6 +738,10 @@ function StoryModal({
     }, 4000);
     return () => clearInterval(timer);
   }, [galleryPhotos.length]);
+
+  const toggleWindowExpand = () => {
+    setIsWindowExpanded((prev) => !prev);
+  };
 
   // Load comments from Firestore
   useEffect(() => {
@@ -798,11 +804,13 @@ function StoryModal({
       >
         <div className="min-h-screen py-0 flex items-start justify-center">
           <motion.div
-            className="relative bg-background max-w-4xl w-full mx-auto min-h-screen md:my-8 md:rounded-3xl overflow-hidden shadow-2xl"
+            layout
+            className={`relative bg-background w-full mx-auto min-h-screen overflow-hidden shadow-2xl transition-[max-width,margin,border-radius] duration-500 ease-out ${isWindowExpanded ? 'max-w-[98vw] md:my-2 md:rounded-2xl' : 'max-w-4xl md:my-8 md:rounded-3xl'}`}
             initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 60, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            layoutDependency={isWindowExpanded}
             onClick={e => e.stopPropagation()}
           >
             {/* Hero Banner - auto-advancing slideshow */}
@@ -847,9 +855,16 @@ function StoryModal({
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              {isOwner && (
-                <div className="absolute top-4 right-4 flex items-center gap-2">
-                  {confirmDelete ? (
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                <button
+                  onClick={toggleWindowExpand}
+                  title={isWindowExpanded ? 'Restore card width' : 'Expand to window width'}
+                  className="hidden md:inline-flex bg-black/40 backdrop-blur hover:bg-black/60 text-white rounded-full p-2 transition-colors"
+                >
+                  {isWindowExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+                {isOwner ? (
+                  confirmDelete ? (
                     <>
                       <span className="text-white text-xs bg-black/60 backdrop-blur px-2 py-1 rounded-lg">Delete this story?</span>
                       <button
@@ -883,9 +898,9 @@ function StoryModal({
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  )}
-                </div>
-              )}
+                  )
+                ) : null}
+              </div>
               <div className="absolute bottom-0 left-0 right-0 p-6">
                 <div className="flex items-center gap-2 mb-2">
                   <MapPin className="w-4 h-4 text-rose-400" />

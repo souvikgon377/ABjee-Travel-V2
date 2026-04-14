@@ -697,7 +697,7 @@ export default function AdminTravelItenary() {
 		return segments[segments.length - 1] || mapValue;
 	};
 
-	const parseCsvTable = (text: string): string[][] => {
+	const parseCsvTable = (text: string, delimiter: ',' | ';' | '\t' | '|'): string[][] => {
 		const rows: string[][] = [];
 		let currentRow: string[] = [];
 		let currentCell = '';
@@ -718,7 +718,7 @@ export default function AdminTravelItenary() {
 				continue;
 			}
 
-			if (char === ',' && !inQuotes) {
+			if (char === delimiter && !inQuotes) {
 				currentRow.push(currentCell);
 				currentCell = '';
 				continue;
@@ -806,8 +806,8 @@ export default function AdminTravelItenary() {
 
 		if (normalized.includes('place') && normalized.includes('travel')) return 'place';
 		if (normalized.includes('country')) return 'country';
-		if (normalized.includes('intro')) return 'introduction';
 		if (normalized.includes('itinerary') || normalized.includes('travelitin')) return 'itinerary';
+		if (normalized.includes('intro')) return 'introduction';
 		if (normalized.includes('budget') || normalized.startsWith('averageb') || normalized.includes('avgb')) return 'budget';
 		if (normalized.includes('restaurant')) return 'restaurants';
 		if (normalized.includes('hotel') || normalized.includes('resort')) return 'hotels';
@@ -984,6 +984,41 @@ export default function AdminTravelItenary() {
 			.filter((point): point is { name: string; lat?: number; lng?: number } => point !== null);
 	};
 
+	const looksLikeItineraryText = (value: string) => {
+		const text = value.trim();
+		if (!text) return false;
+		if (/\bday\s*\d+\b/i.test(text)) return true;
+		if (/\b(morning|afternoon|evening|night)\b/i.test(text) && /[\n\r]|[-•]/.test(text)) return true;
+		return false;
+	};
+
+	const normalizeNarrativeFields = (introductionRaw: string, itineraryRaw: string, overviewRaw: string) => {
+		let introduction = introductionRaw.trim();
+		let itinerary = itineraryRaw.trim();
+		let overview = overviewRaw.trim();
+
+		if (!itinerary && looksLikeItineraryText(introduction)) {
+			itinerary = introduction;
+			introduction = '';
+		}
+
+		if (introduction && itinerary && looksLikeItineraryText(introduction) && !looksLikeItineraryText(itinerary)) {
+			const swappedIntroduction = itinerary;
+			itinerary = introduction;
+			introduction = swappedIntroduction;
+		}
+
+		if (!introduction && overview && !looksLikeItineraryText(overview)) {
+			introduction = overview;
+		}
+
+		if (!overview) {
+			overview = introduction;
+		}
+
+		return { introduction, itinerary, overview };
+	};
+
 	const parseTableRowsToImportRows = (rows: string[][]) => {
 		if (rows.length === 0) {
 			throw new Error('CSV is empty.');
@@ -1095,6 +1130,11 @@ export default function AdminTravelItenary() {
 				const place = (data.place || '').trim();
 				const country = (data.country || '').trim();
 				const budget = (data.budget || '').trim();
+				const normalizedNarrative = normalizeNarrativeFields(
+					data.introduction || data.overview || '',
+					data.itinerary || '',
+					data.overview || data.introduction || '',
+				);
 
 				if (!place || !country || !budget) {
 					errors.push(`Row ${rowNumber}: place, country, and budget are required.`);
@@ -1106,9 +1146,9 @@ export default function AdminTravelItenary() {
 					place,
 					country,
 					budget,
-					introduction: data.introduction || data.overview || '',
-					itinerary: data.itinerary || '',
-					overview: data.overview || data.introduction || '',
+					introduction: normalizedNarrative.introduction,
+					itinerary: normalizedNarrative.itinerary,
+					overview: normalizedNarrative.overview,
 					durationText: data.durationtext || '',
 					budgetEstimate: data.budgetestimate || '',
 					routeFlow: data.routeflow || '',

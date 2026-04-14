@@ -10,6 +10,8 @@ import {
 	Heart,
 	MessageCircle,
 	ArrowLeft,
+	Maximize2,
+	Minimize2,
 	X,
 	Share2,
 	Send,
@@ -445,6 +447,7 @@ function TravelDetailModal({
 	const [copied, setCopied] = useState(false);
 	const [commentName, setCommentName] = useState('');
 	const [commentText, setCommentText] = useState('');
+	const [isWindowExpanded, setIsWindowExpanded] = useState(false);
 
 	useEffect(() => {
 		const original = document.body.style.overflow;
@@ -453,6 +456,10 @@ function TravelDetailModal({
 			document.body.style.overflow = original;
 		};
 	}, []);
+
+	const toggleWindowExpand = () => {
+		setIsWindowExpanded((prev) => !prev);
+	};
 
 	const mapSrc = result.map && !result.map.endsWith('.pdf')
 		? result.map
@@ -494,10 +501,12 @@ function TravelDetailModal({
 			>
 				<div className="min-h-screen py-0 flex items-start justify-center">
 					<motion.div
-						className="relative bg-background max-w-4xl w-full mx-auto min-h-screen md:my-8 md:rounded-3xl overflow-hidden shadow-2xl"
+						layout
+						className={`relative bg-background w-full mx-auto min-h-screen overflow-hidden shadow-2xl transition-[max-width,margin,border-radius] duration-500 ease-out ${isWindowExpanded ? 'max-w-[98vw] md:my-2 md:rounded-2xl' : 'max-w-4xl md:my-8 md:rounded-3xl'}`}
 						initial={{ y: 40, opacity: 0 }}
 						animate={{ y: 0, opacity: 1 }}
 						exit={{ y: 40, opacity: 0 }}
+						transition={{ layout: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }}
 						onClick={e => e.stopPropagation()}
 					>
 						<div className="relative h-72 md:h-96 overflow-hidden">
@@ -512,6 +521,13 @@ function TravelDetailModal({
 								className="absolute top-4 left-4 bg-black/40 backdrop-blur text-white rounded-full p-2 hover:bg-black/60 transition-colors"
 							>
 								<ArrowLeft className="w-5 h-5" />
+							</button>
+							<button
+								onClick={toggleWindowExpand}
+								title={isWindowExpanded ? 'Restore card width' : 'Expand to window width'}
+								className="hidden md:inline-flex absolute top-4 right-4 bg-black/40 backdrop-blur text-white rounded-full p-2 hover:bg-black/60 transition-colors"
+							>
+								{isWindowExpanded ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
 							</button>
 							<div className="absolute bottom-0 left-0 right-0 p-6">
 								<div className="flex items-center gap-2 mb-2 text-rose-300">
