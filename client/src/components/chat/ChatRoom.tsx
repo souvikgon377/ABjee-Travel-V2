@@ -136,6 +136,8 @@ type JoinRequestUser = {
   imageUrl?: string;
 };
 
+const PENDING_PRIVATE_JOIN_ROOMS_KEY = 'abjee:pending-private-join-rooms';
+
 const ChatRoom = () => {
   const params = useParams();
   const roomId = params.roomId as string;
@@ -157,6 +159,7 @@ const ChatRoom = () => {
   const [showJoinRequestDialog, setShowJoinRequestDialog] = useState(false);
   const [joinRequestPending, setJoinRequestPending] = useState(false);
   const [requestingJoin, setRequestingJoin] = useState(false);
+  const [joinApprovalSyncKey, setJoinApprovalSyncKey] = useState(0);
   const [joinRequestError, setJoinRequestError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<ChatMessage | null>(null);
@@ -181,6 +184,46 @@ const ChatRoom = () => {
   const [processingJoinRequestUserId, setProcessingJoinRequestUserId] = useState<string | null>(null);
   const [joinRequestUsersMap, setJoinRequestUsersMap] = useState<Record<string, JoinRequestUser>>({});
   const [voiceRecorder] = useState(() => new VoiceRecorder());
+  const markPendingPrivateJoinRoom = useCallback((targetRoomId: string) => {
+    if (!targetRoomId || typeof window === 'undefined') return;
+
+    try {
+      const stored = window.localStorage.getItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      const roomIds = Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === 'string')
+        : [];
+
+      if (!roomIds.includes(targetRoomId)) {
+        roomIds.push(targetRoomId);
+      }
+
+      window.localStorage.setItem(PENDING_PRIVATE_JOIN_ROOMS_KEY, JSON.stringify(roomIds));
+    } catch {
+      // Local tracking is best-effort only.
+    }
+  }, []);
+
+  const clearPendingPrivateJoinRoom = useCallback((targetRoomId: string) => {
+    if (!targetRoomId || typeof window === 'undefined') return;
+
+    try {
+      const stored = window.localStorage.getItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      const roomIds = Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === 'string')
+        : [];
+      const remainingRoomIds = roomIds.filter((id) => id !== targetRoomId);
+
+      if (remainingRoomIds.length > 0) {
+        window.localStorage.setItem(PENDING_PRIVATE_JOIN_ROOMS_KEY, JSON.stringify(remainingRoomIds));
+      } else {
+        window.localStorage.removeItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
+      }
+    } catch {
+      // Local tracking is best-effort only.
+    }
+  }, []);
   const privateRoomAllowance = useMemo(
     () => getPrivateRoomParticipationAllowance(userProfile, 0),
     [userProfile]
@@ -483,7 +526,7 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, userProfile, router, searchParams, privateRoomAllowance.reason, clearPrivateRoomNotifications]);
+  }, [roomId, user, userProfile, router, searchParams, privateRoomAllowance.reason, clearPrivateRoomNotifications, joinApprovalSyncKey]);
 
   useEffect(() => {
     if (!roomId || !user || !room || !joinRequestPending || hasMessageAccess) return;
@@ -498,15 +541,16 @@ const ChatRoom = () => {
       if (isParticipant) {
         setJoinRequestPending(false);
         setShowJoinRequestDialog(false);
+        clearPendingPrivateJoinRoom(roomId);
         await clearPrivateRoomNotifications(roomId);
-        router.refresh();
+        setJoinApprovalSyncKey((prev) => prev + 1);
       }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [roomId, user, room, joinRequestPending, hasMessageAccess, clearPrivateRoomNotifications, router]);
+  }, [roomId, user, room, joinRequestPending, hasMessageAccess, clearPrivateRoomNotifications, clearPendingPrivateJoinRoom, router]);
 
   // Handle password submission
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -551,6 +595,7 @@ const ChatRoom = () => {
 
     try {
       await chatService.requestToJoinRoom(roomId, user.uid);
+      markPendingPrivateJoinRoom(roomId);
 
       // Send owner notification in background; room request is already persisted.
       void (async () => {
@@ -579,6 +624,7 @@ const ChatRoom = () => {
       })();
     } catch (error: any) {
       setJoinRequestPending(false);
+      clearPendingPrivateJoinRoom(roomId);
       setRoom((prev) => {
         if (!prev) return prev;
         return {

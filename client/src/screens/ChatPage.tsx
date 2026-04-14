@@ -96,6 +96,7 @@ const STATIC_VIDEO_V1 = publicAsset('/v1.mp4');
 const STATIC_VIDEO_V2 = publicAsset('/v2.mp4');
 const STATIC_VIDEO_V3 = publicAsset('/v3.mp4');
 const STATIC_VIDEO_V4 = publicAsset('/v4.mp4');
+const PENDING_PRIVATE_JOIN_ROOMS_KEY = 'abjee:pending-private-join-rooms';
 
 const getCountryFromUserData = (data: Record<string, unknown>): string => {
   const location = data.location && typeof data.location === 'object'
@@ -403,6 +404,14 @@ const ChatRoomsList: React.FC = () => {
   // Filter rooms into public and private
   const publicRooms = useMemo(() => rooms.filter(room => room.isPublic), [rooms]);
   const privateRooms = useMemo(() => rooms.filter(room => !room.isPublic), [rooms]);
+  const myPrivateRooms = useMemo(
+    () => privateRooms.filter((room) => room.createdBy === user?.uid),
+    [privateRooms, user?.uid]
+  );
+  const friendsPrivateRooms = useMemo(
+    () => privateRooms.filter((room) => room.createdBy !== user?.uid),
+    [privateRooms, user?.uid]
+  );
   
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareRoom, setShareRoom] = useState<ChatRoomType | null>(null);
@@ -1085,6 +1094,40 @@ const ChatRoomsList: React.FC = () => {
           room => !room.isPublic && (room.participants?.includes(user.uid) || room.createdBy === user.uid)
         ).length;
         setUserCreatedPrivateRoomsCount(privateMembershipCount);
+
+        // If a requested private room gets approved, open it immediately.
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = window.localStorage.getItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
+            const parsed = stored ? JSON.parse(stored) : [];
+            const pendingRoomIds = Array.isArray(parsed)
+              ? parsed.filter((id): id is string => typeof id === 'string')
+              : [];
+
+            if (pendingRoomIds.length > 0) {
+              const approvedRoom = loadedRooms.find((room) => {
+                if (!room.id || room.isPublic) return false;
+                const isTracked = pendingRoomIds.includes(room.id);
+                const hasAccess = room.createdBy === user.uid || (room.participants || []).includes(user.uid);
+                return isTracked && hasAccess;
+              });
+
+              if (approvedRoom?.id) {
+                const remainingRoomIds = pendingRoomIds.filter((id) => id !== approvedRoom.id);
+                if (remainingRoomIds.length > 0) {
+                  window.localStorage.setItem(PENDING_PRIVATE_JOIN_ROOMS_KEY, JSON.stringify(remainingRoomIds));
+                } else {
+                  window.localStorage.removeItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
+                }
+
+                router.push(`/chat/room/${approvedRoom.id}`);
+                return;
+              }
+            }
+          } catch {
+            // Auto-open is best-effort; list should still render.
+          }
+        }
 
         setLoading(false);
       });
@@ -3427,7 +3470,7 @@ const ChatRoomsList: React.FC = () => {
             )}
 
             {/* Private Rooms Section */}
-            {privateRooms.length > 0 && (
+            {(myPrivateRooms.length > 0 || friendsPrivateRooms.length > 0) && (
               <div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 rounded-xl bg-linear-to-br from-amber-500 to-orange-600 shadow-lg">
@@ -3440,148 +3483,195 @@ const ChatRoomsList: React.FC = () => {
                     Exposed communities allow join requests; private communities stay hidden
                   </span>
                 </div>
-                <motion.div 
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <AnimatePresence mode="popLayout">
-                    {privateRooms.map((room, index) => (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  {[
+                    {
+                      key: 'my-private-community',
+                      title: 'My Private Community',
+                      rooms: myPrivateRooms,
+                      emptyMessage: 'You have not created any private communities yet.',
+                    },
+                    {
+                      key: 'friends-private-community',
+                      title: 'Friends Private Community',
+                      rooms: friendsPrivateRooms,
+                      emptyMessage: 'No friends private communities available yet.',
+                    },
+                  ].map((section, sectionIndex) => (
+                    <motion.div
+                      key={section.key}
+                      className="relative overflow-hidden space-y-4 rounded-3xl border border-amber-300/50 dark:border-amber-700/50 bg-linear-to-br from-white/55 via-amber-50/35 to-rose-100/25 dark:from-slate-900/55 dark:via-amber-950/15 dark:to-rose-950/10 p-4 sm:p-5 shadow-[0_20px_45px_-28px_rgba(245,158,11,0.55)]"
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.45, delay: sectionIndex * 0.08 }}
+                    >
                       <motion.div
-                        key={room.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ delay: index * 0.05 }}
-                        whileHover={{ y: -8, transition: { duration: 0.2 } }}
-                        layout
-                      >
-                        <Card
-                          className="cursor-pointer h-full border border-white/20 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden group relative"
-                          onClick={() => router.push(`/chat/room/${room.id}`)}
-                        >
-                          {/* Sliding Background Images Carousel */}
-                          {(() => {
-                            const allImages = [
-                              ...(room.backgroundImage ? [room.backgroundImage] : []),
-                              ...(room.backgroundImageHistory || [])
-                            ];
-                            
-                            return allImages.length > 0 ? (
-                              <div className="absolute inset-0 overflow-hidden z-0">
-                                <Swiper
-                                  modules={[Autoplay, EffectFade]}
-                                  effect="fade"
-                                  autoplay={shouldAutoplayRichMedia ? {
-                                    delay: 3000,
-                                    disableOnInteraction: false,
-                                    pauseOnMouseEnter: false
-                                  } : false}
-                                  loop={allImages.length > 2}
-                                  speed={1500}
-                                  className="h-full w-full"
-                                  allowTouchMove={false}
+                        className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-linear-to-br from-amber-400/25 to-rose-400/20 blur-3xl"
+                        animate={{ scale: [1, 1.1, 1], opacity: [0.55, 0.8, 0.55] }}
+                        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: sectionIndex * 0.4 }}
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
+                          {section.title}
+                        </h3>
+                        <span className="relative z-10 text-xs sm:text-sm rounded-full border border-amber-300/70 dark:border-amber-700/70 px-2.5 py-1 font-semibold text-amber-700 dark:text-amber-300 bg-white/70 dark:bg-slate-900/70 shadow-sm">
+                          {section.rooms.length} community{section.rooms.length === 1 ? '' : 'ies'}
+                        </span>
+                      </div>
+
+                      {section.rooms.length === 0 ? (
+                        <div className="relative z-10 rounded-2xl border border-dashed border-amber-300/70 dark:border-amber-700/70 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-5 text-sm text-amber-700 dark:text-amber-300">
+                          {section.emptyMessage}
+                        </div>
+                      ) : (
+                        <div className="relative z-10 max-h-156 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(245,158,11,0.6)_transparent]">
+                          <motion.div
+                            className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-1"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.5 }}
+                          >
+                            <AnimatePresence mode="popLayout">
+                              {section.rooms.map((room, index) => (
+                                <motion.div
+                                  key={room.id}
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.9 }}
+                                  transition={{ delay: index * 0.05 }}
+                                  whileHover={{ y: -10, transition: { duration: 0.2 } }}
+                                  layout
                                 >
-                                  {allImages.map((image, idx) => (
-                                    <SwiperSlide key={`${image.url}-${idx}`}>
-                                      <div
-                                        className="absolute inset-0"
-                                        style={{
-                                          backgroundImage: `url(${image.url})`,
-                                          backgroundSize: 'cover',
-                                          backgroundPosition: 'center',
-                                          backgroundRepeat: 'no-repeat'
-                                        }}
-                                      />
-                                    </SwiperSlide>
-                                  ))}
-                                </Swiper>
-                              </div>
-                            ) : null;
-                          })()}
-                          
-                          {/* Gradient overlay on hover */}
-                          <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-2 pointer-events-none"></div>
-                          
-                          <CardHeader className="relative z-10">
-                            <CardTitle className="flex items-center gap-2.5 text-xl text-gray-900 dark:text-white font-bold" style={{ textShadow: 'none' }}>
-                              {/* Room Icon */}
-                              {room.iconImage ? (
-                                <Avatar className="h-10 w-10 border-2 border-white/50 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
-                                  <AvatarImage src={room.iconImage.url} alt={room.name} />
-                                  <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                </Avatar>
-                              ) : (
-                                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
-                                  <MessageCircle className="h-5 w-5 text-white" />
-                                </div>
-                              )}
-                              <span className="flex-1 truncate group-hover:text-rose-600 dark:group-hover:text-rose-300 transition-colors font-bold">
-                                {room.name}
-                              </span>
-                              {room.password && (
-                                <div className="p-1.5 rounded-lg bg-amber-500/30 backdrop-blur-sm">
-                                  <Lock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
-                                </div>
-                              )}
-                            </CardTitle>
-                            <CardDescription className="text-base mt-2 text-gray-800 dark:text-white font-medium" style={{ textShadow: 'none' }}>
-                              {room.description}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="relative z-10">
-                            <div className="space-y-3 text-sm">
-                              <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
-                                <div className="p-1.5 rounded-lg bg-rose-500/30 backdrop-blur-sm">
-                                  <Users className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
-                                </div>
-                                <span className="font-semibold" style={{ textShadow: 'none' }}>{room.participants?.length || 0} participants</span>
-                              </div>
-                              <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
-                                <div className="p-1.5 rounded-lg bg-pink-500/30 backdrop-blur-sm">
-                                  <Clock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
-                                </div>
-                                <span className="font-semibold" style={{ textShadow: 'none' }}>Created {formatDate(room.createdAt)}</span>
-                              </div>
-                            </div>
-                            
-                            {/* Action buttons */}
-                            {user && (
-                              <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                <Button
-                                  size="sm"
-                                  className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    router.push(`/chat/room/${room.id}`);
-                                  }}
+                                <Card
+                                  className="cursor-pointer h-full min-h-96 border border-white/20 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden group relative"
+                                  onClick={() => router.push(`/chat/room/${room.id}`)}
                                 >
-                                  <MessageCircle className="h-4 w-4 mr-1.5" />
-                                  Chat Now
-                                </Button>
-                                {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) &&
-                                  !((room.name || '').trim().toLowerCase() === 'general community chat' ||
-                                    (room.name || '').trim().toLowerCase() === 'general chat' ||
-                                    (room.name || '').trim().toLowerCase().startsWith('general chat') ||
-                                    (room.name || '').trim().toLowerCase().includes('general community')) && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-xl border-2 border-red-400 dark:border-red-400/50 bg-red-200 dark:bg-red-500/30 backdrop-blur-sm text-gray-900 dark:text-white hover:bg-red-300 dark:hover:bg-red-500/50 hover:border-red-500 dark:hover:border-red-300 transition-all font-semibold"
-                                    onClick={(e) => handleDeleteRoom(room.id!, e)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
+                                  {/* Sliding Background Images Carousel */}
+                                  {(() => {
+                                    const allImages = [
+                                      ...(room.backgroundImage ? [room.backgroundImage] : []),
+                                      ...(room.backgroundImageHistory || [])
+                                    ];
+
+                                    return allImages.length > 0 ? (
+                                      <div className="absolute inset-0 overflow-hidden z-0">
+                                        <Swiper
+                                          modules={[Autoplay, EffectFade]}
+                                          effect="fade"
+                                          autoplay={shouldAutoplayRichMedia ? {
+                                            delay: 3000,
+                                            disableOnInteraction: false,
+                                            pauseOnMouseEnter: false
+                                          } : false}
+                                          loop={allImages.length > 2}
+                                          speed={1500}
+                                          className="h-full w-full"
+                                          allowTouchMove={false}
+                                        >
+                                          {allImages.map((image, idx) => (
+                                            <SwiperSlide key={`${image.url}-${idx}`}>
+                                              <div
+                                                className="absolute inset-0"
+                                                style={{
+                                                  backgroundImage: `url(${image.url})`,
+                                                  backgroundSize: 'cover',
+                                                  backgroundPosition: 'center',
+                                                  backgroundRepeat: 'no-repeat'
+                                                }}
+                                              />
+                                            </SwiperSlide>
+                                          ))}
+                                        </Swiper>
+                                      </div>
+                                    ) : null;
+                                  })()}
+
+                                  {/* Gradient overlay on hover */}
+                                  <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-2 pointer-events-none"></div>
+
+                                  <CardHeader className="relative z-10 pb-2">
+                                    <CardTitle className="flex items-center gap-2.5 text-xl sm:text-2xl text-gray-900 dark:text-white font-bold" style={{ textShadow: 'none' }}>
+                                      {/* Room Icon */}
+                                      {room.iconImage ? (
+                                        <Avatar className="h-11 w-11 border-2 border-white/50 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
+                                          <AvatarImage src={room.iconImage.url} alt={room.name} />
+                                          <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                        </Avatar>
+                                      ) : (
+                                        <div className="p-2.5 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
+                                          <MessageCircle className="h-5.5 w-5.5 text-white" />
+                                        </div>
+                                      )}
+                                      <span className="flex-1 truncate group-hover:text-rose-600 dark:group-hover:text-rose-300 transition-colors font-bold">
+                                        {room.name}
+                                      </span>
+                                      {room.password && (
+                                        <div className="p-1.5 rounded-lg bg-amber-500/30 backdrop-blur-sm">
+                                          <Lock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
+                                        </div>
+                                      )}
+                                    </CardTitle>
+                                    <CardDescription className="text-base mt-2 text-gray-800 dark:text-white font-medium" style={{ textShadow: 'none' }}>
+                                      {room.description}
+                                    </CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="relative z-10">
+                                    <div className="space-y-3.5 text-sm sm:text-base">
+                                      <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
+                                        <div className="p-1.5 rounded-lg bg-rose-500/30 backdrop-blur-sm">
+                                          <Users className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
+                                        </div>
+                                        <span className="font-semibold" style={{ textShadow: 'none' }}>{room.participants?.length || 0} participants</span>
+                                      </div>
+                                      <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
+                                        <div className="p-1.5 rounded-lg bg-pink-500/30 backdrop-blur-sm">
+                                          <Clock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
+                                        </div>
+                                        <span className="font-semibold" style={{ textShadow: 'none' }}>Created {formatDate(room.createdAt)}</span>
+                                      </div>
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    {user && (
+                                      <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
+                                        <Button
+                                          size="sm"
+                                          className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            router.push(`/chat/room/${room.id}`);
+                                          }}
+                                        >
+                                          <MessageCircle className="h-4 w-4 mr-1.5" />
+                                          Chat Now
+                                        </Button>
+                                        {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) &&
+                                          !((room.name || '').trim().toLowerCase() === 'general community chat' ||
+                                            (room.name || '').trim().toLowerCase() === 'general chat' ||
+                                            (room.name || '').trim().toLowerCase().startsWith('general chat') ||
+                                            (room.name || '').trim().toLowerCase().includes('general community')) && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="rounded-xl border-2 border-red-400 dark:border-red-400/50 bg-red-200 dark:bg-red-500/30 backdrop-blur-sm text-gray-900 dark:text-white hover:bg-red-300 dark:hover:bg-red-500/50 hover:border-red-500 dark:hover:border-red-300 transition-all font-semibold"
+                                            onClick={(e) => handleDeleteRoom(room.id!, e)}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+                          </motion.div>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
