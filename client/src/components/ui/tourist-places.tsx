@@ -68,6 +68,13 @@ export interface TouristPlace {
   updatedAt?: unknown;
 }
 
+interface TouristImportSummary {
+  totalRows: number;
+  importedRows: number;
+  failedRows: number;
+  errors: string[];
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 const CATEGORIES = [
   'Temple / Religious',
@@ -92,6 +99,9 @@ const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
   extraInfo: [],
 };
 
+const TOURIST_CSV_TEMPLATE_TEXT = `Name,Area,State,Country,Category,Description,Google Maps URL,Extra Info
+Mysore Palace,Karnataka Heritage Zone,Karnataka,India,Historical / Heritage,"A grand palace known for Indo-Saracenic architecture and evening illumination.","https://maps.google.com/?q=Mysore+Palace","Best Time::Oct to Mar|Highlights::Palace illumination, museum galleries"`;
+
 // ─── Video upload (raw fetch, no extra SDK) ──────────────────────────────────
 // ─── Video upload (R2 S3-compatible API) ───────────────────────────────────
 async function uploadVideoToR2(file: File): Promise<MediaItem> {
@@ -115,6 +125,134 @@ async function uploadVideoToR2(file: File): Promise<MediaItem> {
 function formatBytes(b: number) {
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeImportedText(value: string): string {
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line, idx, arr) => line.length > 0 || (idx > 0 && idx < arr.length - 1))
+    .join('\n')
+    .trim();
+}
+
+function parseCsvTable(text: string, delimiter: ',' | ';' | '\t' | '|' = ','): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentCell += '"';
+        i += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
+      currentRow.push(currentCell);
+      currentCell = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') i += 1;
+      currentRow.push(currentCell);
+      if (currentRow.some((cell) => cell.trim().length > 0)) rows.push(currentRow);
+      currentRow = [];
+      currentCell = '';
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  currentRow.push(currentCell);
+  if (currentRow.some((cell) => cell.trim().length > 0)) rows.push(currentRow);
+
+  return rows;
+}
+
+function detectDelimiter(text: string): ',' | ';' | '\t' | '|' {
+  const delimiters: Array<',' | ';' | '\t' | '|'> = [',', ';', '\t', '|'];
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  if (lines.length === 0) return ',';
+
+  let best: ',' | ';' | '\t' | '|' = ',';
+  let bestScore = -1;
+
+  for (const d of delimiters) {
+    const score = lines.reduce((sum, line) => sum + (line.split(d).length - 1), 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = d;
+    }
+  }
+
+  return best;
+}
+
+function normalizeHeader(value: string): string {
+  return value
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+const TOURIST_HEADER_ALIASES: Record<string, string> = {
+  name: 'name',
+  placename: 'name',
+  area: 'area',
+  locality: 'area',
+  state: 'state',
+  region: 'state',
+  country: 'country',
+  category: 'category',
+  type: 'category',
+  description: 'description',
+  details: 'description',
+  googlemapsurl: 'googleMapsUrl',
+  mapsurl: 'googleMapsUrl',
+  googlemaps: 'googleMapsUrl',
+  mapurl: 'googleMapsUrl',
+  extrainfo: 'extraInfo',
+  info: 'extraInfo',
+};
+
+function normalizeHeaderToField(value: string): string {
+  const n = normalizeHeader(value);
+  return TOURIST_HEADER_ALIASES[n] || n;
+}
+
+function parseExtraInfo(value: string): InfoSection[] {
+  if (!value.trim()) return [];
+  return value
+    .split('|')
+    .map((seg) => seg.trim())
+    .filter(Boolean)
+    .map((seg, idx) => {
+      const [heading, ...rest] = seg.split('::');
+      return {
+        id: `${Date.now()}-${idx}-${Math.random()}`,
+        heading: normalizeImportedText((heading || '').trim()),
+        description: normalizeImportedText(rest.join('::').trim()),
+      };
+    })
+    .filter((section) => section.heading || section.description);
 }
 
 // ─── Pending file item ───────────────────────────────────────────────────────
@@ -260,12 +398,20 @@ export function TouristPlacesManager() {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
 
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importError, setImportError] = useState('');
+  const [importSummary, setImportSummary] = useState<TouristImportSummary | null>(null);
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
+
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryMedia, setGalleryMedia] = useState<MediaItem[]>([]);
   const [galleryStart, setGalleryStart] = useState(0);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);      // for saved video thumbnails
   const pendingThumbInputRef = useRef<HTMLInputElement>(null);   // for pending video thumbnails
   const [thumbnailTarget, setThumbnailTarget] = useState<string | null>(null);
@@ -542,6 +688,144 @@ export function TouristPlacesManager() {
     setGalleryOpen(true);
   };
 
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setImportFile(file);
+    setImportError('');
+    setImportSummary(null);
+    if (csvInputRef.current) csvInputRef.current.value = '';
+  };
+
+  const parseImportRows = async (file: File): Promise<Array<{ rowNumber: number; data: Record<string, string> }>> => {
+    const fileName = file.name.toLowerCase();
+    let rows: string[][] = [];
+
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      const xlsx = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = xlsx.read(buf, { type: 'array' });
+      const firstSheet = wb.SheetNames[0];
+      if (!firstSheet) return [];
+      const raw = xlsx.utils.sheet_to_json<(string | number | boolean | null)[]>(wb.Sheets[firstSheet], {
+        header: 1,
+        raw: false,
+        defval: '',
+        blankrows: false,
+      });
+      rows = raw.map((r) => r.map((c) => String(c ?? '').trim())).filter((r) => r.some((c) => c.length > 0));
+    } else {
+      const text = await file.text();
+      const delimiter = detectDelimiter(text);
+      rows = parseCsvTable(text, delimiter);
+    }
+
+    if (rows.length === 0) {
+      throw new Error('File is empty.');
+    }
+
+    const headers = rows[0].map(normalizeHeaderToField);
+    const dataRows = rows.slice(1);
+    if (dataRows.length === 0) {
+      throw new Error('File must include at least one data row.');
+    }
+
+    return dataRows.map((cells, idx) => {
+      const data: Record<string, string> = {};
+      headers.forEach((h, i) => {
+        data[h] = (cells[i] || '').trim();
+      });
+      return { rowNumber: idx + 2, data };
+    });
+  };
+
+  const handleImportTouristPlaces = async () => {
+    if (!importFile) {
+      setImportError('Please choose a CSV/XLSX file first.');
+      return;
+    }
+
+    setImportingCsv(true);
+    setImportProgress(0);
+    setImportError('');
+    setImportSummary(null);
+
+    try {
+      const rows = await parseImportRows(importFile);
+      const errors: string[] = [];
+      let importedRows = 0;
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const { rowNumber, data } = rows[i];
+
+        const name = normalizeImportedText(data.name || '');
+        const state = normalizeImportedText(data.state || '');
+        const area = normalizeImportedText(data.area || '');
+        const country = normalizeImportedText(data.country || 'India') || 'India';
+        const description = normalizeImportedText(data.description || '');
+        const category = normalizeImportedText(data.category || 'Other');
+        const googleMapsUrl = (data.googleMapsUrl || '').trim();
+        const extraInfo = parseExtraInfo(data.extraInfo || '');
+
+        if (!name || !state) {
+          errors.push(`Row ${rowNumber}: name and state are required.`);
+          setImportProgress(Math.round(((i + 1) / rows.length) * 100));
+          continue;
+        }
+
+        const safeCategory = CATEGORIES.includes(category) ? category : 'Other';
+
+        await addDoc(collection(firestoreDb, 'touristPlaces'), {
+          name,
+          area,
+          state,
+          country,
+          description,
+          category: safeCategory,
+          googleMapsUrl,
+          coverImage: '',
+          media: [],
+          extraInfo,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        importedRows += 1;
+        setImportProgress(Math.round(((i + 1) / rows.length) * 100));
+      }
+
+      const summary: TouristImportSummary = {
+        totalRows: rows.length,
+        importedRows,
+        failedRows: rows.length - importedRows,
+        errors,
+      };
+
+      setImportSummary(summary);
+      if (summary.failedRows > 0) {
+        setImportError('Import completed with some failed rows. Check details below.');
+      } else {
+        flash(`Imported ${summary.importedRows} tourist places successfully.`, 'success');
+      }
+
+      setImportFile(null);
+      await fetchPlaces();
+    } catch (err: unknown) {
+      setImportError(err instanceof Error ? err.message : 'Import failed.');
+    } finally {
+      setImportingCsv(false);
+    }
+  };
+
+  const handleCopyTemplate = async () => {
+    try {
+      await navigator.clipboard.writeText(TOURIST_CSV_TEMPLATE_TEXT);
+      setCopiedTemplate(true);
+      setTimeout(() => setCopiedTemplate(false), 1600);
+    } catch {
+      setImportError('Could not copy template.');
+    }
+  };
+
   const formImages = form.media.filter((m) => m.type === 'image');
   const formVideos = form.media.filter((m) => m.type === 'video');
   const pendingImages = pendingFiles.filter((p) => p.type === 'image');
@@ -579,15 +863,73 @@ export function TouristPlacesManager() {
               </span>
             </div>
           </div>
-          <Button
-            onClick={() => { resetForm(); setShowForm(true); }}
-            className="shrink-0 bg-white text-rose-700 hover:bg-white/90 font-bold gap-2 rounded-2xl px-6 py-5 shadow-lg hover:shadow-xl transition-all"
-          >
-            <Plus className="h-5 w-5" />
-            Add Place
-          </Button>
+          <div className="shrink-0 flex flex-wrap gap-2 justify-start sm:justify-end">
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              onChange={handleImportFileChange}
+              disabled={importingCsv}
+              className="hidden"
+            />
+            <Button
+              onClick={() => csvInputRef.current?.click()}
+              variant="outline"
+              className="bg-white/15 text-white border-white/30 hover:bg-white/25"
+              disabled={importingCsv}
+            >
+              {importFile ? 'Change Import File' : 'Choose CSV/XLSX'}
+            </Button>
+            <Button
+              onClick={handleCopyTemplate}
+              variant="outline"
+              className="bg-white/15 text-white border-white/30 hover:bg-white/25"
+              disabled={importingCsv}
+            >
+              {copiedTemplate ? 'Template Copied' : 'Copy Template'}
+            </Button>
+            <Button
+              onClick={handleImportTouristPlaces}
+              variant="outline"
+              className="bg-white/15 text-white border-white/30 hover:bg-white/25"
+              disabled={!importFile || importingCsv}
+            >
+              {importingCsv ? `Importing ${importProgress}%` : 'Import Tourist Places'}
+            </Button>
+            <Button
+              onClick={() => { resetForm(); setShowForm(true); }}
+              className="bg-white text-rose-700 hover:bg-white/90 font-bold gap-2 rounded-2xl px-6 py-5 shadow-lg hover:shadow-xl transition-all"
+            >
+              <Plus className="h-5 w-5" />
+              Add Place
+            </Button>
+          </div>
         </div>
       </motion.div>
+
+      {(importFile || importError || importSummary) && (
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+          {importFile && (
+            <p className="text-sm text-muted-foreground">
+              Selected file: <span className="font-semibold text-foreground">{importFile.name}</span>
+            </p>
+          )}
+          {importError && <p className="text-sm text-destructive">{importError}</p>}
+          {importSummary && (
+            <div className="text-sm space-y-1">
+              <p className="font-semibold text-foreground">Imported {importSummary.importedRows}/{importSummary.totalRows} rows.</p>
+              {importSummary.failedRows > 0 && <p className="text-destructive">Failed rows: {importSummary.failedRows}</p>}
+              {importSummary.errors.length > 0 && (
+                <div className="max-h-28 overflow-y-auto pr-1">
+                  {importSummary.errors.map((text, idx) => (
+                    <p key={`${text}-${idx}`} className="text-xs text-muted-foreground">{text}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Feedback banners */}
       <AnimatePresence>
