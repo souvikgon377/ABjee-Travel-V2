@@ -49,6 +49,13 @@ interface TravelItem {
 	places?: string[];
 }
 
+interface CsvImportSummary {
+	totalRows: number;
+	importedRows: number;
+	failedRows: number;
+	errors: string[];
+}
+
 export default function AdminTravelItenary() {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
@@ -74,11 +81,17 @@ export default function AdminTravelItenary() {
 		error: null,
 		success: null,
 	});
+	const [csvFile, setCsvFile] = useState<File | null>(null);
+	const [csvImporting, setCsvImporting] = useState(false);
+	const [csvImportProgress, setCsvImportProgress] = useState(0);
+	const [csvImportSummary, setCsvImportSummary] = useState<CsvImportSummary | null>(null);
+	const [csvImportError, setCsvImportError] = useState<string | null>(null);
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const videoInputRef = useRef<HTMLInputElement>(null);
 	const mapInputRef = useRef<HTMLInputElement>(null);
+	const csvInputRef = useRef<HTMLInputElement>(null);
 
 	// Clear success/error messages after 5 seconds
 	useEffect(() => {
@@ -176,7 +189,10 @@ export default function AdminTravelItenary() {
 			}));
 
 			const res = await fetch(`/api/travel/${id}`, { method: 'DELETE' });
-			if (!res.ok) throw new Error('Failed to delete itinerary');
+			if (!res.ok) {
+				const errorBody = await res.json().catch(() => ({} as { message?: string }));
+				throw new Error(errorBody.message || 'Failed to delete itinerary');
+			}
 
 			setExistingItineraries(prev => prev.filter(item => item.id !== id));
 			setUploadState(prev => ({
@@ -591,6 +607,251 @@ export default function AdminTravelItenary() {
 		return segments[segments.length - 1] || mapValue;
 	};
 
+	const splitCsvLine = (line: string): string[] => {
+		const cells: string[] = [];
+		let current = '';
+		let inQuotes = false;
+
+		for (let i = 0; i < line.length; i += 1) {
+			const char = line[i];
+			const nextChar = line[i + 1];
+
+			if (char === '"') {
+				if (inQuotes && nextChar === '"') {
+					current += '"';
+					i += 1;
+					continue;
+				}
+
+				inQuotes = !inQuotes;
+				continue;
+			}
+
+			if (char === ',' && !inQuotes) {
+				cells.push(current.trim());
+				current = '';
+				continue;
+			}
+
+			current += char;
+		}
+
+		cells.push(current.trim());
+		return cells;
+	};
+
+	const normalizeCsvHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+	const CSV_HEADER_ALIASES: Record<string, string> = {
+		placeoftravel: 'place',
+		place: 'place',
+		countryoftravel: 'country',
+		country: 'country',
+		travelitinerary: 'itinerary',
+		itinerary: 'itinerary',
+		averagebudget: 'budget',
+		budget: 'budget',
+		topplacestovisit: 'places',
+		places: 'places',
+		toprestaurants: 'restaurants',
+		restaurants: 'restaurants',
+		tophotelsandresorts: 'hotels',
+		hotelsandresorts: 'hotels',
+		hotels: 'hotels',
+		duration: 'durationtext',
+		durationtext: 'durationtext',
+		budgetestimate: 'budgetestimate',
+		traveltips: 'traveltips',
+		localinsights: 'localinsights',
+		routeflow: 'routeflow',
+		routepoints: 'routepoints',
+		images: 'images',
+		videos: 'videos',
+		map: 'map',
+		overview: 'overview',
+		generatedby: 'generatedby',
+	};
+
+	const normalizeToCanonicalHeader = (value: string) => {
+		const normalized = normalizeCsvHeader(value);
+		return CSV_HEADER_ALIASES[normalized] || normalized;
+	};
+
+	const parseListField = (value: string) => {
+		if (!value.trim()) return [] as string[];
+		return value
+			.split(/[|;]+/)
+			.map((item) => item.trim())
+			.filter(Boolean);
+	};
+
+	const parseRoutePointsField = (value: string) => {
+		if (!value.trim()) return [] as Array<{ name: string; lat?: number; lng?: number }>;
+
+		return value
+			.split('|')
+			.map((segment) => segment.trim())
+			.filter(Boolean)
+			.map((segment) => {
+				const [namePart, coordsPart] = segment.split('@').map((part) => part.trim());
+				if (!namePart) return null;
+
+				if (!coordsPart) {
+					return { name: namePart };
+				}
+
+				const [latRaw, lngRaw] = coordsPart.split(',').map((coord) => coord.trim());
+				const lat = Number(latRaw);
+				const lng = Number(lngRaw);
+
+				return {
+					name: namePart,
+					...(Number.isFinite(lat) ? { lat } : {}),
+					...(Number.isFinite(lng) ? { lng } : {}),
+				};
+			})
+			.filter((point): point is { name: string; lat?: number; lng?: number } => point !== null);
+	};
+
+	const parseCsvTextToRows = (text: string) => {
+		const lines = text
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean);
+
+		if (lines.length < 2) {
+			throw new Error('CSV must include a header row and at least one data row.');
+		}
+
+		const headerCells = splitCsvLine(lines[0]);
+		const headers = headerCells.map(normalizeToCanonicalHeader);
+
+		const requiredHeaders = ['place', 'country', 'budget'];
+		for (const requiredHeader of requiredHeaders) {
+			if (!headers.includes(requiredHeader)) {
+				throw new Error(`Missing required CSV column: ${requiredHeader}`);
+			}
+		}
+
+		return lines.slice(1).map((line, index) => {
+			const cells = splitCsvLine(line);
+			const row: Record<string, string> = {};
+
+			headers.forEach((header, headerIndex) => {
+				row[header] = (cells[headerIndex] || '').trim();
+			});
+
+			return {
+				rowNumber: index + 2,
+				data: row,
+			};
+		});
+	};
+
+	const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0] || null;
+		setCsvFile(file);
+		setCsvImportSummary(null);
+		setCsvImportError(null);
+
+		if (csvInputRef.current) {
+			csvInputRef.current.value = '';
+		}
+	};
+
+	const handleImportCsv = async () => {
+		if (!csvFile) {
+			setCsvImportError('Please select a CSV file to import.');
+			return;
+		}
+
+		setCsvImporting(true);
+		setCsvImportProgress(0);
+		setCsvImportSummary(null);
+		setCsvImportError(null);
+
+		try {
+			const csvText = await csvFile.text();
+			const rows = parseCsvTextToRows(csvText);
+			const errors: string[] = [];
+			let importedRows = 0;
+
+			for (let i = 0; i < rows.length; i += 1) {
+				const { rowNumber, data } = rows[i];
+				const place = (data.place || '').trim();
+				const country = (data.country || '').trim();
+				const budget = (data.budget || '').trim();
+
+				if (!place || !country || !budget) {
+					errors.push(`Row ${rowNumber}: place, country, and budget are required.`);
+					setCsvImportProgress(Math.round(((i + 1) / rows.length) * 100));
+					continue;
+				}
+
+				const payload = {
+					place,
+					country,
+					budget,
+					itinerary: data.itinerary || '',
+					overview: data.overview || '',
+					durationText: data.durationtext || '',
+					budgetEstimate: data.budgetestimate || '',
+					routeFlow: data.routeflow || '',
+					places: parseListField(data.places || ''),
+					restaurants: parseListField(data.restaurants || ''),
+					hotels: parseListField(data.hotels || ''),
+					travelTips: parseListField(data.traveltips || ''),
+					localInsights: parseListField(data.localinsights || ''),
+					images: parseListField(data.images || ''),
+					videos: parseListField(data.videos || ''),
+					map: (data.map || '').trim() || null,
+					routePoints: parseRoutePointsField(data.routepoints || ''),
+					generatedBy: data.generatedby === 'gemini' ? 'gemini' : 'system',
+				};
+
+				const response = await fetch('/api/travel', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(payload),
+				});
+
+				if (!response.ok) {
+					const errorBody = await response.json().catch(() => ({} as { message?: string }));
+					errors.push(`Row ${rowNumber}: ${errorBody.message || 'Failed to import row.'}`);
+				} else {
+					importedRows += 1;
+				}
+
+				setCsvImportProgress(Math.round(((i + 1) / rows.length) * 100));
+			}
+
+			const summary: CsvImportSummary = {
+				totalRows: rows.length,
+				importedRows,
+				failedRows: rows.length - importedRows,
+				errors,
+			};
+
+			setCsvImportSummary(summary);
+
+			if (summary.failedRows > 0) {
+				setCsvImportError('CSV import completed with some failed rows. Check summary below.');
+			} else {
+				setUploadState((prev) => ({
+					...prev,
+					success: `CSV import complete. ${summary.importedRows} itineraries created.`,
+				}));
+			}
+
+			await fetchItineraries();
+		} catch (error: any) {
+			setCsvImportError(error?.message || 'Failed to import CSV.');
+		} finally {
+			setCsvImporting(false);
+			setCsvFile(null);
+		}
+	};
+
 	return (
 		<div className="min-h-screen bg-linear-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
 			<div className="max-w-6xl mx-auto">
@@ -630,6 +891,82 @@ export default function AdminTravelItenary() {
 								{loadingItineraries ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
 								Refresh
 							</Button>
+						</div>
+
+						<div className="mb-6 rounded-xl border border-rose-200/70 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 p-4">
+							<div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+								<h3 className="text-base font-semibold text-slate-900 dark:text-white">Import Itineraries from CSV</h3>
+								<Badge variant="outline" className="text-xs">
+									Required columns: place, country, budget
+								</Badge>
+							</div>
+							<p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mb-3">
+								Optional columns: itinerary, places, restaurants, hotels, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy. Use | to separate list values.
+							</p>
+							<div className="flex flex-wrap gap-2">
+								<input
+									ref={csvInputRef}
+									type="file"
+									accept=".csv,text/csv"
+									onChange={handleCsvFileChange}
+									disabled={csvImporting}
+									className="hidden"
+								/>
+								<Button
+									onClick={() => csvInputRef.current?.click()}
+									variant="outline"
+									disabled={csvImporting}
+								>
+									{csvFile ? 'Change CSV' : 'Choose CSV'}
+								</Button>
+								<Button
+									onClick={handleImportCsv}
+									disabled={!csvFile || csvImporting}
+									className="bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
+								>
+									{csvImporting ? 'Importing...' : 'Import CSV'}
+								</Button>
+							</div>
+							{csvFile && (
+								<p className="mt-2 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+									Selected file: <span className="font-semibold">{csvFile.name}</span>
+								</p>
+							)}
+							{csvImporting && (
+								<div className="mt-3">
+									<div className="w-full bg-rose-200 dark:bg-rose-900/40 rounded-full h-2">
+										<motion.div
+											className="bg-linear-to-r from-rose-500 to-orange-500 h-2 rounded-full"
+											initial={{ width: 0 }}
+											animate={{ width: `${csvImportProgress}%` }}
+											transition={{ duration: 0.2 }}
+										/>
+									</div>
+									<p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Import progress: {csvImportProgress}%</p>
+								</div>
+							)}
+							{csvImportError && (
+								<p className="mt-3 text-sm text-red-600 dark:text-red-300">{csvImportError}</p>
+							)}
+							{csvImportSummary && (
+								<div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 p-3 text-sm">
+									<p className="font-semibold text-slate-800 dark:text-slate-100">
+										Imported {csvImportSummary.importedRows}/{csvImportSummary.totalRows} rows.
+									</p>
+									{csvImportSummary.failedRows > 0 && (
+										<p className="text-red-600 dark:text-red-300 mt-1">
+											Failed rows: {csvImportSummary.failedRows}
+										</p>
+									)}
+									{csvImportSummary.errors.length > 0 && (
+										<div className="mt-2 max-h-32 overflow-y-auto pr-1">
+											{csvImportSummary.errors.map((errorText, index) => (
+												<p key={`${errorText}-${index}`} className="text-xs text-slate-600 dark:text-slate-300">{errorText}</p>
+											))}
+										</div>
+									)}
+								</div>
+							)}
 						</div>
 
 						{loadingItineraries ? (

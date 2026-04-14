@@ -2,14 +2,27 @@ import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
 import { adminDb as db } from '@/lib/server/firebaseAdminFirestore';
 
+type RouteContext = {
+  params: Promise<{ id: string }> | { id: string };
+};
+
+const getRouteId = async (context: RouteContext): Promise<string> => {
+  const resolvedParams = await Promise.resolve(context.params);
+  return typeof resolvedParams?.id === 'string' ? resolvedParams.id.trim() : '';
+};
+
 // PUT: Update travel entry
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: RouteContext) {
   try {
     if (!db) {
       return fail('Database not initialized', 500);
     }
 
-    const { id } = params;
+    const id = await getRouteId(context);
+    if (!id) {
+      return fail('Invalid itinerary id', 400);
+    }
+
     const body = await req.json();
     const { place, country, itinerary, places, restaurants, hotels, budget, images, videos, map } = body;
 
@@ -45,13 +58,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE: Delete travel entry
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, context: RouteContext) {
   try {
     if (!db) {
       return fail('Database not initialized', 500);
     }
 
-    const { id } = params;
+    const id = await getRouteId(context);
+    if (!id) {
+      return fail('Invalid itinerary id', 400);
+    }
 
     // Check if document exists
     const doc = await db.collection('travel-destinations').doc(id).get();
