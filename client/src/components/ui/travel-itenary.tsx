@@ -16,6 +16,7 @@ interface FormState {
 	country: string;
 	introduction: string;
 	itinerary: string;
+	routePoints: Array<{ name: string; lat: string; lng: string }>;
 	places: string[];
 	restaurants: string[];
 	hotels: string[];
@@ -40,6 +41,7 @@ interface TravelItem {
 	country: string;
 	introduction?: string;
 	itinerary?: string;
+	routePoints?: Array<{ name: string; lat?: number; lng?: number }>;
 	restaurants?: string[];
 	hotels?: string[];
 	budget: string;
@@ -61,6 +63,40 @@ interface CsvImportSummary {
 const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Introduction,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
 Goa,India,"A coastal escape with beaches, old churches, and vibrant nightlife.","Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
 
+const normalizeCoordinateInput = (value: string) => value.replace(/\s+/g, '').replace(/,/g, '.');
+
+const isValidCoordinate = (value: string, axis: 'lat' | 'lng') => {
+	if (!value.trim()) return true;
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric)) return false;
+	if (axis === 'lat') return numeric >= -90 && numeric <= 90;
+	return numeric >= -180 && numeric <= 180;
+};
+
+const getRoutePointErrorMessage = (point: { name: string; lat: string; lng: string }) => {
+	const name = point.name.trim();
+	const hasLat = point.lat.trim().length > 0;
+	const hasLng = point.lng.trim().length > 0;
+
+	if (!name && (hasLat || hasLng)) {
+		return 'Add a location name for this pin.';
+	}
+
+	if ((hasLat && !hasLng) || (!hasLat && hasLng)) {
+		return 'Latitude and longitude must both be filled, or both left empty.';
+	}
+
+	if (!isValidCoordinate(point.lat, 'lat')) {
+		return 'Latitude must be a number between -90 and 90.';
+	}
+
+	if (!isValidCoordinate(point.lng, 'lng')) {
+		return 'Longitude must be a number between -180 and 180.';
+	}
+
+	return '';
+};
+
 export default function AdminTravelItenary() {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
@@ -70,6 +106,7 @@ export default function AdminTravelItenary() {
 		country: '',
 		introduction: '',
 		itinerary: '',
+		routePoints: [{ name: '', lat: '', lng: '' }],
 		places: [''],
 		restaurants: [''],
 		hotels: [''],
@@ -95,6 +132,7 @@ export default function AdminTravelItenary() {
 	const [copiedCsvTemplate, setCopiedCsvTemplate] = useState(false);
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
 	const [isEditorOpen, setIsEditorOpen] = useState(false);
+	const validPinCount = form.routePoints.filter((point) => point.name.trim() && !getRoutePointErrorMessage(point)).length;
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const videoInputRef = useRef<HTMLInputElement>(null);
@@ -162,6 +200,7 @@ export default function AdminTravelItenary() {
 			country: itinerary.country,
 			introduction: itinerary.introduction || '',
 			itinerary: itinerary.itinerary || '',
+			routePoints: toRoutePointInputs(itinerary.routePoints),
 			places: itinerary.places || [''],
 			restaurants: itinerary.restaurants || [''],
 			hotels: itinerary.hotels || [''],
@@ -301,6 +340,30 @@ export default function AdminTravelItenary() {
 		setForm(prev => ({
 			...prev,
 			[listName]: prev[listName].filter((_, i) => i !== index),
+		}));
+	}, []);
+
+	const handleRoutePointChange = useCallback((index: number, field: 'name' | 'lat' | 'lng', value: string) => {
+		const normalizedValue = field === 'lat' || field === 'lng' ? normalizeCoordinateInput(value) : value;
+		setForm((prev) => ({
+			...prev,
+			routePoints: prev.routePoints.map((point, i) => (i === index ? { ...point, [field]: normalizedValue } : point)),
+		}));
+	}, []);
+
+	const handleAddRoutePoint = useCallback(() => {
+		setForm((prev) => ({
+			...prev,
+			routePoints: [...prev.routePoints, { name: '', lat: '', lng: '' }],
+		}));
+	}, []);
+
+	const handleRemoveRoutePoint = useCallback((index: number) => {
+		setForm((prev) => ({
+			...prev,
+			routePoints: prev.routePoints.length > 1
+				? prev.routePoints.filter((_, i) => i !== index)
+				: [{ name: '', lat: '', lng: '' }],
 		}));
 	}, []);
 
@@ -576,6 +639,7 @@ export default function AdminTravelItenary() {
 				country: form.country.trim(),
 				introduction: form.introduction.trim(),
 				itinerary: form.itinerary.trim(),
+				routePoints: buildRoutePointsPayload(form.routePoints),
 				places: form.places.filter(p => p.trim()),
 				restaurants: form.restaurants.filter(r => r.trim()),
 				hotels: form.hotels.filter(h => h.trim()),
@@ -613,6 +677,7 @@ export default function AdminTravelItenary() {
 					country: '',
 					introduction: '',
 					itinerary: '',
+					routePoints: [{ name: '', lat: '', lng: '' }],
 					places: [''],
 					restaurants: [''],
 					hotels: [''],
@@ -652,6 +717,7 @@ export default function AdminTravelItenary() {
 			country: '',
 			introduction: '',
 			itinerary: '',
+			routePoints: [{ name: '', lat: '', lng: '' }],
 			places: [''],
 			restaurants: [''],
 			hotels: [''],
@@ -977,6 +1043,41 @@ export default function AdminTravelItenary() {
 
 				return {
 					name: namePart,
+					...(Number.isFinite(lat) ? { lat } : {}),
+					...(Number.isFinite(lng) ? { lng } : {}),
+				};
+			})
+			.filter((point): point is { name: string; lat?: number; lng?: number } => point !== null);
+	};
+
+	const toRoutePointInputs = (points?: Array<{ name: string; lat?: number; lng?: number }>) => {
+		if (!Array.isArray(points) || points.length === 0) {
+			return [{ name: '', lat: '', lng: '' }];
+		}
+
+		const mapped = points
+			.map((point) => ({
+				name: point?.name?.trim() || '',
+				lat: typeof point?.lat === 'number' ? String(point.lat) : '',
+				lng: typeof point?.lng === 'number' ? String(point.lng) : '',
+			}))
+			.filter((point) => point.name);
+
+		return mapped.length > 0 ? mapped : [{ name: '', lat: '', lng: '' }];
+	};
+
+	const buildRoutePointsPayload = (points: Array<{ name: string; lat: string; lng: string }>) => {
+		return points
+			.map((point) => {
+				const name = point.name.trim();
+				if (getRoutePointErrorMessage(point)) return null;
+				if (!name) return null;
+
+				const lat = Number(point.lat.trim());
+				const lng = Number(point.lng.trim());
+
+				return {
+					name,
 					...(Number.isFinite(lat) ? { lat } : {}),
 					...(Number.isFinite(lng) ? { lng } : {}),
 				};
@@ -1621,6 +1722,72 @@ export default function AdminTravelItenary() {
 										disabled={uploadState.uploading}
 										className="w-full"
 									/>
+								</div>
+
+								<div>
+									<div className="mb-2 flex items-center justify-between gap-2">
+										<label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+											Pin Markers (Multiple Locations)
+										</label>
+										<Badge variant="outline" className="text-xs">
+											{validPinCount} valid pin{validPinCount === 1 ? '' : 's'}
+										</Badge>
+									</div>
+									<div className="space-y-2">
+										{form.routePoints.map((point, index) => (
+											<div key={`route-point-${index}`} className="space-y-1.5">
+												<div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+													<Input
+														value={point.name}
+														onChange={(e) => handleRoutePointChange(index, 'name', e.target.value)}
+														placeholder={`Location ${index + 1}`}
+														disabled={uploadState.uploading}
+														className={`md:col-span-6 ${point.name.trim().length === 0 && (point.lat.trim() || point.lng.trim()) ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
+													/>
+													<Input
+														value={point.lat}
+														onChange={(e) => handleRoutePointChange(index, 'lat', e.target.value)}
+														placeholder="Latitude"
+														disabled={uploadState.uploading}
+														className={`md:col-span-2 ${!isValidCoordinate(point.lat, 'lat') || (point.lat.trim() && !point.lng.trim()) ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
+													/>
+													<Input
+														value={point.lng}
+														onChange={(e) => handleRoutePointChange(index, 'lng', e.target.value)}
+														placeholder="Longitude"
+														disabled={uploadState.uploading}
+														className={`md:col-span-2 ${!isValidCoordinate(point.lng, 'lng') || (!point.lat.trim() && point.lng.trim()) ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
+													/>
+													<Button
+														type="button"
+														onClick={() => handleRemoveRoutePoint(index)}
+														variant="ghost"
+														size="icon"
+														disabled={uploadState.uploading}
+														className="md:col-span-2"
+													>
+														<Trash2 className="w-4 h-4 text-red-500" />
+													</Button>
+												</div>
+												{getRoutePointErrorMessage(point) && (
+													<p className="text-xs text-red-500">{getRoutePointErrorMessage(point)}</p>
+												)}
+											</div>
+										))}
+										<Button
+											type="button"
+											onClick={handleAddRoutePoint}
+											variant="outline"
+											size="sm"
+											disabled={uploadState.uploading}
+											className="gap-1"
+										>
+											<Plus className="w-4 h-4" /> Add Pin
+										</Button>
+									</div>
+									<p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+										Add name only, or include latitude/longitude for exact pin placement.
+									</p>
 								</div>
 
 								<div>

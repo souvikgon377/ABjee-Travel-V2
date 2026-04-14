@@ -449,6 +449,52 @@ function TravelDetailModal({
 	const [commentText, setCommentText] = useState('');
 	const [isWindowExpanded, setIsWindowExpanded] = useState(false);
 
+	const routePoints: Array<{ name: string; lat?: number; lng?: number }> = Array.isArray(result.routePoints)
+		? result.routePoints.reduce<Array<{ name: string; lat?: number; lng?: number }>>((acc, point) => {
+				if (!point || typeof point !== 'object') return acc;
+				const name = typeof point.name === 'string' ? point.name.trim() : '';
+				if (!name) return acc;
+
+				const normalizedPoint: { name: string; lat?: number; lng?: number } = { name };
+				if (typeof point.lat === 'number') normalizedPoint.lat = point.lat;
+				if (typeof point.lng === 'number') normalizedPoint.lng = point.lng;
+
+				acc.push(normalizedPoint);
+				return acc;
+			}, [])
+		: [];
+
+	const fallbackPointNames = [result.place, ...result.places.slice(0, 4)]
+		.map((name) => name?.trim())
+		.filter((name): name is string => Boolean(name));
+	const routePointNames = routePoints.length > 0 ? routePoints.map((point) => point.name) : fallbackPointNames;
+	const routeQuery = routePointNames.length > 1
+		? routePointNames.join(' to ')
+		: `${result.place}, ${result.country}`;
+
+	const openRouteInMapsUrl = (() => {
+		if (routePointNames.length < 2) {
+			return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${result.place}, ${result.country}`)}`;
+		}
+
+		const origin = routePointNames[0];
+		const destination = routePointNames[routePointNames.length - 1];
+		const waypoints = routePointNames.slice(1, -1).join('|');
+
+		const params = new URLSearchParams({
+			api: '1',
+			origin,
+			destination,
+			travelmode: 'driving',
+		});
+
+		if (waypoints) {
+			params.set('waypoints', waypoints);
+		}
+
+		return `https://www.google.com/maps/dir/?${params.toString()}`;
+	})();
+
 	useEffect(() => {
 		const original = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
@@ -463,7 +509,7 @@ function TravelDetailModal({
 
 	const mapSrc = result.map && !result.map.endsWith('.pdf')
 		? result.map
-		: `https://maps.google.com/maps?q=${encodeURIComponent(`${result.place}, ${result.country}`)}&z=10&output=embed`;
+		: `https://maps.google.com/maps?q=${encodeURIComponent(routeQuery)}&z=10&output=embed`;
 
 	const toggleLike = () => {
 		setLiked(prev => !prev);
@@ -602,7 +648,7 @@ function TravelDetailModal({
 
 
 								<section>
-									<h3 className="text-xl font-bold text-foreground mb-3">Upload Travel Map</h3>
+									<h3 className="text-xl font-bold text-foreground mb-3">Travel Map</h3>
 									<div className="rounded-2xl overflow-hidden border border-border h-72">
 										{result.map ? (
 											<iframe
@@ -626,7 +672,43 @@ function TravelDetailModal({
 											/>
 										)}
 									</div>
-									{!result.map && <p className="text-muted-foreground text-sm mt-2">No custom travel map uploaded yet. Showing location map for {result.place}, {result.country}.</p>}
+									{!result.map && (
+										<p className="text-muted-foreground text-sm mt-2">
+											{routePointNames.length > 1
+												? `Showing multi-stop route preview for ${routePointNames.length} locations.`
+												: `No custom travel map uploaded yet. Showing location map for ${result.place}, ${result.country}.`}
+										</p>
+									)}
+
+									<div className="mt-4 flex flex-wrap gap-2">
+										<a
+											href={openRouteInMapsUrl}
+											target="_blank"
+											rel="noreferrer"
+											className="inline-flex items-center rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
+										>
+											Open Route in Google Maps
+										</a>
+										{routePoints.map((point, index) => {
+											const query = typeof point.lat === 'number' && typeof point.lng === 'number'
+												? `${point.lat},${point.lng} (${point.name})`
+												: `${point.name}, ${result.country}`;
+											const pointUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+
+											return (
+												<a
+													key={`${point.name}-${index}`}
+													href={pointUrl}
+													target="_blank"
+													rel="noreferrer"
+													className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs text-foreground hover:bg-muted"
+												>
+													<MapPin className="w-3.5 h-3.5 text-rose-500" />
+													{point.name}
+												</a>
+											);
+										})}
+									</div>
 								</section>
 
 							</div>
