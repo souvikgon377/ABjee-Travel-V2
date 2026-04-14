@@ -1479,7 +1479,6 @@ export default function AdminTravelItenary() {
 										value={form.itinerary}
 										onChange={handleInputChange}
 										placeholder="Day 1: Arrival and check-in...&#10;Day 2: Beach visit...&#10;Day 3: Cultural tour..."
-										rows={6}
 										rows={12}
 										disabled={uploadState.uploading}
 										className="w-full"
@@ -1513,6 +1512,7 @@ export default function AdminTravelItenary() {
 											Top Places to Visit <span className="text-red-500">*</span>
 										</label>
 										<Button
+											type="button"
 											onClick={() => handleAddListItem('places')}
 											variant="outline"
 											size="sm"
@@ -1534,6 +1534,7 @@ export default function AdminTravelItenary() {
 												/>
 												{form.places.length > 1 && (
 													<Button
+														type="button"
 														onClick={() => handleRemoveListItem('places', idx)}
 														variant="ghost"
 														size="icon"
@@ -1554,6 +1555,7 @@ export default function AdminTravelItenary() {
 											Top Restaurants <span className="text-red-500">*</span>
 										</label>
 										<Button
+											type="button"
 											onClick={() => handleAddListItem('restaurants')}
 											variant="outline"
 											size="sm"
@@ -1575,6 +1577,7 @@ export default function AdminTravelItenary() {
 												/>
 												{form.restaurants.length > 1 && (
 													<Button
+														type="button"
 														onClick={() => handleRemoveListItem('restaurants', idx)}
 														variant="ghost"
 														size="icon"
@@ -1595,6 +1598,7 @@ export default function AdminTravelItenary() {
 											Top Hotels and Resorts <span className="text-red-500">*</span>
 										</label>
 										<Button
+											type="button"
 											onClick={() => handleAddListItem('hotels')}
 											variant="outline"
 											size="sm"
@@ -1616,6 +1620,7 @@ export default function AdminTravelItenary() {
 												/>
 												{form.hotels.length > 1 && (
 													<Button
+														type="button"
 														onClick={() => handleRemoveListItem('hotels', idx)}
 														variant="ghost"
 														size="icon"
@@ -1653,6 +1658,7 @@ export default function AdminTravelItenary() {
 								className="hidden"
 							/>
 							<Button
+									type="button"
 								onClick={() => imageInputRef.current?.click()}
 								variant="outline"
 								className="w-full mb-3"
@@ -1673,6 +1679,7 @@ export default function AdminTravelItenary() {
 										>
 											<img src={url} alt={`Preview ${idx}`} className="w-full h-20 object-cover rounded-lg" />
 											<Button
+												type="button"
 												onClick={() => handleRemoveImage(idx)}
 												variant="ghost"
 												size="icon"
@@ -1705,6 +1712,7 @@ export default function AdminTravelItenary() {
 								className="hidden"
 							/>
 							<Button
+									type="button"
 								onClick={() => videoInputRef.current?.click()}
 								variant="outline"
 								className="w-full mb-3"
@@ -1725,6 +1733,7 @@ export default function AdminTravelItenary() {
 										>
 											<video src={url} className="w-full h-20 object-cover rounded-lg bg-black" />
 											<Button
+												type="button"
 												onClick={() => handleRemoveVideo(idx)}
 												variant="ghost"
 												size="icon"
@@ -1756,6 +1765,7 @@ export default function AdminTravelItenary() {
 								className="hidden"
 							/>
 							<Button
+									type="button"
 								onClick={() => mapInputRef.current?.click()}
 								variant="outline"
 								className="w-full"
@@ -1771,6 +1781,7 @@ export default function AdminTravelItenary() {
 								>
 									<span className="text-sm text-slate-600 dark:text-slate-400 truncate">{getMapLabel(form.mapFile)}</span>
 									<Button
+											type="button"
 										onClick={() => setForm(prev => ({ ...prev, mapFile: null }))}
 										variant="ghost"
 										size="icon"
@@ -1785,6 +1796,7 @@ export default function AdminTravelItenary() {
 						{/* Action Buttons */}
 						<div className="flex gap-3">
 							<Button
+									type="submit"
 								onClick={handleSubmit}
 								disabled={uploadState.uploading}
 								className="flex-1 gap-2 bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
@@ -1793,6 +1805,7 @@ export default function AdminTravelItenary() {
 								{isEditing ? 'Update' : 'Create'}
 							</Button>
 							<Button
+									type="button"
 								onClick={handleReset}
 								variant="outline"
 								disabled={uploadState.uploading}
