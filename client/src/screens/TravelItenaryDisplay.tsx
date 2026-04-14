@@ -59,6 +59,81 @@ const getPreviewText = (result: TravelData) => {
 	return 'Curated travel itinerary with handpicked places, restaurants, and stays.';
 };
 
+const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+const looksLikeBudget = (value: string) => {
+	const text = value.trim().toLowerCase();
+	if (!text) return false;
+	if (/\b(budget|per\s*person|pp)\b/.test(text)) return true;
+	if (/[$€£₹]/.test(text)) return true;
+	if (/\d+\s*[-to]+\s*\d+/.test(text)) return true;
+	return false;
+};
+
+const hasDayPattern = (value: string) => /\bday\s*\d+\b/i.test(value);
+
+const sanitizeTravelData = (raw: TravelData): TravelData => {
+	let place = normalizeWhitespace(raw.place || '');
+	let country = normalizeWhitespace(raw.country || '');
+	let itinerary = (raw.itinerary || '').trim();
+	let budget = normalizeBudgetText(raw.budgetEstimate) || normalizeBudgetText(raw.budget);
+	let places = Array.isArray(raw.places) ? raw.places.map((item) => item.trim()).filter(Boolean) : [];
+	let restaurants = Array.isArray(raw.restaurants) ? raw.restaurants.map((item) => item.trim()).filter(Boolean) : [];
+	let hotels = Array.isArray(raw.hotels) ? raw.hotels.map((item) => item.trim()).filter(Boolean) : [];
+
+	if (!itinerary && hasDayPattern(country)) {
+		itinerary = country;
+		country = '';
+	}
+
+	if (!itinerary && hasDayPattern(place)) {
+		const dayStart = place.search(/,?\s*Day\s*\d+/i);
+		if (dayStart > 0) {
+			itinerary = place.slice(dayStart).replace(/^,\s*/, '').trim();
+			place = place.slice(0, dayStart).trim();
+		}
+	}
+
+	if (itinerary && looksLikeBudget(itinerary) && !budget) {
+		budget = itinerary;
+		itinerary = '';
+	}
+
+	if (!budget && looksLikeBudget(country)) {
+		budget = country;
+		country = '';
+	}
+
+	if (!budget && places.length > 0 && looksLikeBudget(places[0])) {
+		budget = places[0];
+		places = places.slice(1);
+	}
+
+	if (places.length > 0 && looksLikeBudget(places[0]) && restaurants.length > 0) {
+		if (!budget) budget = places[0];
+		places = restaurants;
+		restaurants = hotels;
+	}
+
+	if (!country || hasDayPattern(country)) {
+		const parenthesized = place.match(/\(([^)]+)\)/)?.[1]?.trim();
+		if (parenthesized && !hasDayPattern(parenthesized)) {
+			country = parenthesized;
+		}
+	}
+
+	return {
+		...raw,
+		place,
+		country,
+		itinerary,
+		budget: budget || raw.budget || '',
+		places,
+		restaurants,
+		hotels,
+	};
+};
+
 interface GeminiItineraryFormState {
 	place: string;
 	country: string;
@@ -119,50 +194,99 @@ const formatGeminiItinerary = (structured: Record<string, any> | null | undefine
 };
 
 const renderFormattedItinerary = (itinerary: string) => {
-	const lines = itinerary.split('\n');
-	const elements: React.ReactNode[] = [];
+	const normalizedItinerary = itinerary
+		.replace(/\r\n/g, '\n')
+		.replace(/\s*;\s*(?=Day\s*\d+)/gi, '\n')
+		.trim();
 
-	lines.forEach((line, i) => {
+	const renderDayBody = (body: string) => {
+		const lines = body
+			.replace(/\r\n/g, '\n')
+			.split('\n')
+			.map((line) => line.trim())
+			.filter((line) => line.length > 0 && !/^\d+$/.test(line));
+
+		if (lines.length === 0) {
+			return <p className="text-muted-foreground text-sm leading-relaxed">Explore the destination at your own pace.</p>;
+		}
+
+		return (
+			<div className="space-y-2">
+				{lines.map((line, index) => {
+					if (/^[-•]\s*/.test(line)) {
+						return (
+							<div key={index} className="flex gap-2 text-muted-foreground text-sm leading-relaxed">
+								<span className="shrink-0 text-rose-500 font-bold">•</span>
+								<span>{line.replace(/^[-•]\s*/, '')}</span>
+							</div>
+						);
+					}
+
+					if (/^[A-Za-z].*:\s*$/.test(line)) {
+						return (
+							<p key={index} className="text-sm font-semibold text-foreground/85">
+								{line}
+							</p>
+						);
+					}
+
+					return (
+						<p key={index} className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">
+							{line}
+						</p>
+					);
+				})}
+			</div>
+		);
+	};
+
+	const dayRegex = /(?:^|\n)\s*(Day\s*\d+\s*[:.-]?\s*)([\s\S]*?)(?=(?:\n\s*Day\s*\d+\s*[:.-]?\s*)|$)/gi;
+	const sections = Array.from(normalizedItinerary.matchAll(dayRegex)).map((match) => {
+		const heading = (match[1] || '').trim().replace(/[:.-]\s*$/, '');
+		const body = (match[2] || '').trim();
+		return { heading, body };
+	});
+
+	if (sections.length > 0) {
+		return (
+			<div className="space-y-3">
+				{sections.map((section, index) => (
+					<div key={`${section.heading}-${index}`} className="rounded-2xl border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/60 dark:bg-rose-950/20 p-4 shadow-sm">
+						<h4 className="font-bold text-foreground text-sm sm:text-base mb-2 flex items-center gap-2">
+							<span className="shrink-0 w-6 h-6 rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 flex items-center justify-center text-xs font-bold">
+								{section.heading.match(/\d+/)?.[0] || index + 1}
+							</span>
+							{section.heading}
+						</h4>
+						{renderDayBody(section.body)}
+					</div>
+				))}
+			</div>
+		);
+	}
+
+	return normalizedItinerary.split('\n').map((line, i) => {
 		const trimmed = line.trim();
 		if (!trimmed) {
-			elements.push(<div key={`empty-${i}`} className="h-1" />);
-			return;
+			return <div key={`empty-${i}`} className="h-1" />;
 		}
 
-		// Check if line is a Day heading (Day 1, Day 2, etc.)
-		if (/^Day\s+\d+/i.test(trimmed)) {
-			elements.push(
-				<h4 key={`day-${i}`} className="font-bold text-foreground text-sm mt-3 mb-2 flex items-center gap-2">
-					<span className="shrink-0 w-5 h-5 rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 flex items-center justify-center text-xs font-bold">
-						{trimmed.match(/\d+/)?.[0]}
-					</span>
-					{trimmed}
-				</h4>
-			);
-			return;
-		}
-
-		// Check if line is an activity (starts with - or •)
 		if (/^[-•]\s*/.test(trimmed)) {
 			const activityText = trimmed.replace(/^[-•]\s*/, '');
-			elements.push(
+			return (
 				<div key={`activity-${i}`} className="flex gap-2 text-muted-foreground text-sm leading-relaxed ml-2">
 					<span className="shrink-0 text-rose-500 font-bold">•</span>
 					<span>{activityText}</span>
 				</div>
 			);
-			return;
 		}
 
-		// Regular text
-		elements.push(
-			<p key={`text-${i}`} className="text-muted-foreground text-sm leading-relaxed">
+		return (
+			<p key={`text-${i}`} className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">
 				{trimmed}
 			</p>
 		);
 	});
-
-	return elements;
 };
 
 const parseBoldText = (text: string) => {
@@ -644,7 +768,7 @@ export default function TravelItenaryDisplay() {
 			const res = await fetch('/api/travel');
 			const data = await res.json();
 			if (!res.ok) throw new Error(data.message || 'Failed to fetch itineraries');
-			const fetchedResults: TravelData[] = data?.data?.results || data?.results || [];
+			const fetchedResults: TravelData[] = (data?.data?.results || data?.results || []).map((item: TravelData) => sanitizeTravelData(item));
 			setAllResults(fetchedResults);
 			setSearch(prev => ({ ...prev, results: fetchedResults, loading: false }));
 		} catch (error: any) {
@@ -771,10 +895,11 @@ export default function TravelItenaryDisplay() {
 				...(savedData?.data || savedData || {}),
 				id: savedData?.data?.id || savedData?.id || generated.id,
 			};
+			const sanitizedSavedGenerated = sanitizeTravelData(savedGenerated);
 
-			setGeneratedItinerary(savedGenerated);
-			setSelectedResult(savedGenerated);
-			setAllResults(prev => [savedGenerated, ...prev.filter(item => item.id !== savedGenerated.id)]);
+			setGeneratedItinerary(sanitizedSavedGenerated);
+			setSelectedResult(sanitizedSavedGenerated);
+			setAllResults(prev => [sanitizedSavedGenerated, ...prev.filter(item => item.id !== sanitizedSavedGenerated.id)]);
 			resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		} catch (error: any) {
 			setGenerationError(error?.message || 'Unable to generate itinerary. Please try again.');

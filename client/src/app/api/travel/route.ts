@@ -130,3 +130,45 @@ export async function POST(req: NextRequest) {
     return fail(error.message || 'Failed to create travel data', 500);
   }
 }
+
+// DELETE: Bulk delete all travel entries
+export async function DELETE(req: NextRequest) {
+  try {
+    if (!db) {
+      return fail('Database not initialized', 500);
+    }
+
+    const { searchParams } = new URL(req.url);
+    const shouldDeleteAll = searchParams.get('all') === 'true';
+
+    if (!shouldDeleteAll) {
+      return fail('Missing required query parameter: all=true', 400);
+    }
+
+    const snapshot = await db.collection('travel-destinations').get();
+    if (snapshot.empty) {
+      return ok({ deletedCount: 0, message: 'No itineraries found to delete.' }, 200);
+    }
+
+    const docs = snapshot.docs;
+    const batchSize = 400;
+    let deletedCount = 0;
+
+    for (let i = 0; i < docs.length; i += batchSize) {
+      const batch = db.batch();
+      const chunk = docs.slice(i, i + batchSize);
+
+      chunk.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+      deletedCount += chunk.length;
+    }
+
+    return ok({ deletedCount, message: 'All itineraries deleted successfully.' }, 200);
+  } catch (error: any) {
+    console.error('DELETE /api/travel error:', error);
+    return fail(error.message || 'Failed to delete itineraries', 500);
+  }
+}

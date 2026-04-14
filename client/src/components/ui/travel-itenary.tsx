@@ -213,6 +213,58 @@ export default function AdminTravelItenary() {
 		}
 	};
 
+	const deleteAllItineraries = async () => {
+		if (existingItineraries.length === 0) {
+			setUploadState((prev) => ({
+				...prev,
+				error: 'No itineraries to delete.',
+			}));
+			return;
+		}
+
+		const confirmed = await modernConfirm(
+			`Delete all ${existingItineraries.length} itineraries? This action cannot be undone.`,
+			{
+				title: 'Delete All Itineraries',
+				confirmText: 'Delete All',
+				cancelText: 'Cancel',
+				destructive: true,
+			}
+		);
+
+		if (!confirmed) {
+			return;
+		}
+
+		try {
+			setUploadState((prev) => ({
+				...prev,
+				uploading: true,
+				error: null,
+				success: null,
+			}));
+
+			const res = await fetch('/api/travel?all=true', { method: 'DELETE' });
+			if (!res.ok) {
+				const errorBody = await res.json().catch(() => ({} as { message?: string }));
+				throw new Error(errorBody.message || 'Failed to delete all itineraries');
+			}
+
+			setExistingItineraries([]);
+			setUploadState((prev) => ({
+				...prev,
+				uploading: false,
+				success: 'All itineraries deleted successfully!',
+			}));
+		} catch (error: any) {
+			setUploadState((prev) => ({
+				...prev,
+				uploading: false,
+				error: error.message || 'Failed to delete all itineraries',
+			}));
+		}
+	};
+
 	// Handle text input changes
 	const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 		const { name, value } = e.target;
@@ -663,22 +715,37 @@ export default function AdminTravelItenary() {
 		return rows;
 	};
 
-	const normalizeCsvHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+	const normalizeCsvHeader = (value: string) =>
+		value
+			.replace(/^\uFEFF/, '')
+			.replace(/^"|"$/g, '')
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '');
 
 	const CSV_HEADER_ALIASES: Record<string, string> = {
 		placeoftravel: 'place',
+		placeof: 'place',
 		place: 'place',
 		countryoftravel: 'country',
+		countryof: 'country',
 		country: 'country',
 		travelitinerary: 'itinerary',
+		travelitin: 'itinerary',
 		itinerary: 'itinerary',
 		averagebudget: 'budget',
+		averageb: 'budget',
+		avgbudget: 'budget',
+		avgb: 'budget',
+		estimatedbudget: 'budget',
 		budget: 'budget',
 		topplacestovisit: 'places',
+		topplaces: 'places',
 		places: 'places',
 		toprestaurants: 'restaurants',
 		restaurants: 'restaurants',
 		tophotelsandresorts: 'hotels',
+		tophotels: 'hotels',
 		hotelsandresorts: 'hotels',
 		hotels: 'hotels',
 		duration: 'durationtext',
@@ -697,7 +764,150 @@ export default function AdminTravelItenary() {
 
 	const normalizeToCanonicalHeader = (value: string) => {
 		const normalized = normalizeCsvHeader(value);
-		return CSV_HEADER_ALIASES[normalized] || normalized;
+		if (CSV_HEADER_ALIASES[normalized]) {
+			return CSV_HEADER_ALIASES[normalized];
+		}
+
+		if (normalized.includes('place') && normalized.includes('travel')) return 'place';
+		if (normalized.includes('country')) return 'country';
+		if (normalized.includes('itinerary') || normalized.includes('travelitin')) return 'itinerary';
+		if (normalized.includes('budget') || normalized.startsWith('averageb') || normalized.includes('avgb')) return 'budget';
+		if (normalized.includes('restaurant')) return 'restaurants';
+		if (normalized.includes('hotel') || normalized.includes('resort')) return 'hotels';
+		if (normalized.includes('places') || normalized.includes('placestovisit')) return 'places';
+
+		return normalized;
+	};
+
+	const DEFAULT_CSV_HEADERS = [
+		'place',
+		'country',
+		'itinerary',
+		'budget',
+		'places',
+		'restaurants',
+		'hotels',
+		'images',
+		'videos',
+		'map',
+		'overview',
+		'durationtext',
+		'budgetestimate',
+		'traveltips',
+		'localinsights',
+		'routeflow',
+		'routepoints',
+		'generatedby',
+	] as const;
+
+	const countDelimiterOutsideQuotes = (line: string, delimiter: ',' | ';' | '\t' | '|') => {
+		let count = 0;
+		let inQuotes = false;
+
+		for (let i = 0; i < line.length; i += 1) {
+			const char = line[i];
+			const nextChar = line[i + 1];
+
+			if (char === '"') {
+				if (inQuotes && nextChar === '"') {
+					i += 1;
+					continue;
+				}
+				inQuotes = !inQuotes;
+				continue;
+			}
+
+			if (!inQuotes && char === delimiter) {
+				count += 1;
+			}
+		}
+
+		return count;
+	};
+
+	const detectDelimiter = (text: string): ',' | ';' | '\t' | '|' => {
+		const candidateDelimiters: Array<',' | ';' | '\t' | '|'> = [',', ';', '\t', '|'];
+		const sampleLines = text
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.slice(0, 5);
+
+		if (sampleLines.length === 0) return ',';
+
+		let bestDelimiter: ',' | ';' | '\t' | '|' = ',';
+		let bestScore = -1;
+
+		for (const delimiter of candidateDelimiters) {
+			const score = sampleLines.reduce((sum, line) => sum + countDelimiterOutsideQuotes(line, delimiter), 0);
+			if (score > bestScore) {
+				bestScore = score;
+				bestDelimiter = delimiter;
+			}
+		}
+
+		return bestDelimiter;
+	};
+
+	const decodeCsvFile = async (file: File): Promise<string> => {
+		const buffer = await file.arrayBuffer();
+		const bytes = new Uint8Array(buffer);
+		const startsWith = (a: number, b: number) => bytes.length >= 2 && bytes[0] === a && bytes[1] === b;
+		const hasNullBytes = bytes.slice(0, Math.min(bytes.length, 200)).some((byte) => byte === 0);
+
+		try {
+			if (startsWith(0xFF, 0xFE)) return new TextDecoder('utf-16le').decode(buffer);
+			if (startsWith(0xFE, 0xFF)) return new TextDecoder('utf-16be').decode(buffer);
+			if (startsWith(0xEF, 0xBB)) return new TextDecoder('utf-8').decode(buffer);
+			if (hasNullBytes) return new TextDecoder('utf-16le').decode(buffer);
+			return new TextDecoder('utf-8').decode(buffer);
+		} catch {
+			return file.text();
+		}
+	};
+
+	const parseCsvWithBestDelimiter = (text: string) => {
+		const sanitizedText = text.replace(/^\uFEFF/, '');
+		const delimiters: Array<',' | ';' | '\t' | '|'> = [detectDelimiter(sanitizedText), ',', ';', '\t', '|'];
+		const uniqueDelimiters = Array.from(new Set(delimiters));
+
+		let bestRows: string[][] = [];
+		let bestScore = -1;
+
+		for (const delimiter of uniqueDelimiters) {
+			const candidateRows = parseCsvTable(sanitizedText, delimiter);
+			const headerScore = candidateRows.length > 0
+				? candidateRows[0].map(normalizeToCanonicalHeader).filter((header) => (DEFAULT_CSV_HEADERS as readonly string[]).includes(header)).length
+				: 0;
+			const score = (headerScore * 100) + candidateRows.length;
+
+			if (score > bestScore) {
+				bestScore = score;
+				bestRows = candidateRows;
+			}
+		}
+
+		return bestRows;
+	};
+
+	const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
+		const arrayBuffer = await file.arrayBuffer();
+		const xlsx = await import('xlsx');
+		const workbook = xlsx.read(arrayBuffer, { type: 'array' });
+		const firstSheetName = workbook.SheetNames[0];
+		if (!firstSheetName) return [];
+
+		const sheet = workbook.Sheets[firstSheetName];
+		const rows = xlsx.utils.sheet_to_json<(string | number | boolean | Date | null)[]>(sheet, {
+			header: 1,
+			raw: false,
+			defval: '',
+			blankrows: false,
+		});
+
+		return rows
+			.map((row) => row.map((cell) => String(cell ?? '').trim()))
+			.filter((row) => row.some((cell) => cell.length > 0));
 	};
 
 	const parseListField = (value: string) => {
@@ -736,24 +946,43 @@ export default function AdminTravelItenary() {
 			.filter((point): point is { name: string; lat?: number; lng?: number } => point !== null);
 	};
 
-	const parseCsvTextToRows = (text: string) => {
-		const rows = parseCsvTable(text);
-
-		if (rows.length < 2) {
-			throw new Error('CSV must include a header row and at least one data row.');
+	const parseTableRowsToImportRows = (rows: string[][]) => {
+		if (rows.length === 0) {
+			throw new Error('CSV is empty.');
 		}
 
-		const headerCells = rows[0];
-		const headers = headerCells.map(normalizeToCanonicalHeader);
-
-		const requiredHeaders = ['place', 'country', 'budget'];
-		for (const requiredHeader of requiredHeaders) {
-			if (!headers.includes(requiredHeader)) {
-				throw new Error(`Missing required CSV column: ${requiredHeader}`);
+		let headerIndex = 0;
+		let bestScore = -1;
+		for (let i = 0; i < Math.min(rows.length, 6); i += 1) {
+			const headers = rows[i].map(normalizeToCanonicalHeader);
+			const requiredMatches = ['place', 'country', 'budget'].filter((key) => headers.includes(key)).length;
+			const known = headers.filter((header) => (DEFAULT_CSV_HEADERS as readonly string[]).includes(header)).length;
+			const score = (requiredMatches * 100) + (known * 10) + headers.length;
+			if (score > bestScore) {
+				bestScore = score;
+				headerIndex = i;
 			}
 		}
 
-		return rows.slice(1).map((cells, index) => {
+		const headerCells = rows[headerIndex] || rows[0];
+		let headers = headerCells.map(normalizeToCanonicalHeader);
+		let dataRows = rows.slice(headerIndex + 1);
+		let rowOffset = headerIndex + 2;
+
+		if (dataRows.length === 0) {
+			headers = buildFallbackHeaders(headerCells.length);
+			dataRows = rows;
+			rowOffset = 1;
+		}
+
+		const missingRequired = ['place', 'country', 'budget'].filter((key) => !headers.includes(key));
+		if (missingRequired.length > 0) {
+			headers = buildFallbackHeaders(headerCells.length);
+			dataRows = rows;
+			rowOffset = 1;
+		}
+
+		return dataRows.map((cells, index) => {
 			const row: Record<string, string> = {};
 
 			headers.forEach((header, headerIndex) => {
@@ -761,10 +990,30 @@ export default function AdminTravelItenary() {
 			});
 
 			return {
-				rowNumber: index + 2,
+				rowNumber: index + rowOffset,
 				data: row,
 			};
 		});
+	};
+
+	const buildFallbackHeaders = (columnCount: number) => {
+		const headers = Array.from({ length: columnCount }, (_, index) => `field${index + 1}`);
+		if (columnCount > 0) headers[0] = 'place';
+		if (columnCount > 1) headers[1] = 'country';
+		if (columnCount > 2) headers[2] = 'itinerary';
+		if (columnCount > 3) headers[3] = 'budget';
+		if (columnCount > 4) headers[4] = 'places';
+		if (columnCount > 5) headers[5] = 'restaurants';
+		if (columnCount > 6) headers[6] = 'hotels';
+		if (columnCount === 3) {
+			headers[2] = 'budget';
+		}
+		return headers;
+	};
+
+	const parseCsvTextToRows = (text: string) => {
+		const rows = parseCsvWithBestDelimiter(text);
+		return parseTableRowsToImportRows(rows);
 	};
 
 	const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -780,7 +1029,7 @@ export default function AdminTravelItenary() {
 
 	const handleImportCsv = async () => {
 		if (!csvFile) {
-			setCsvImportError('Please select a CSV file to import.');
+			setCsvImportError('Please select a CSV or Excel file to import.');
 			return;
 		}
 
@@ -790,8 +1039,11 @@ export default function AdminTravelItenary() {
 		setCsvImportError(null);
 
 		try {
-			const csvText = await csvFile.text();
-			const rows = parseCsvTextToRows(csvText);
+			const fileName = csvFile.name.toLowerCase();
+			const isSpreadsheet = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+			const rows = isSpreadsheet
+				? parseTableRowsToImportRows(await readSpreadsheetRows(csvFile))
+				: parseCsvTextToRows(await decodeCsvFile(csvFile));
 			const errors: string[] = [];
 			let importedRows = 0;
 
@@ -864,7 +1116,7 @@ export default function AdminTravelItenary() {
 
 			await fetchItineraries();
 		} catch (error: any) {
-			setCsvImportError(error?.message || 'Failed to import CSV.');
+			setCsvImportError(error?.message || 'Failed to import file.');
 		} finally {
 			setCsvImporting(false);
 			setCsvFile(null);
@@ -920,6 +1172,16 @@ export default function AdminTravelItenary() {
 								{loadingItineraries ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
 								Refresh
 							</Button>
+							<Button
+								onClick={deleteAllItineraries}
+								variant="destructive"
+								size="sm"
+								disabled={existingItineraries.length === 0 || uploadState.uploading}
+								className="gap-2"
+							>
+								<Trash2 className="w-4 h-4" />
+								Delete All
+							</Button>
 						</div>
 
 						<div className="mb-6 rounded-xl border border-rose-200/70 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 p-4">
@@ -936,7 +1198,7 @@ export default function AdminTravelItenary() {
 								<input
 									ref={csvInputRef}
 									type="file"
-									accept=".csv,text/csv"
+									accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
 									onChange={handleCsvFileChange}
 									disabled={csvImporting}
 									className="hidden"
@@ -946,7 +1208,7 @@ export default function AdminTravelItenary() {
 									variant="outline"
 									disabled={csvImporting}
 								>
-									{csvFile ? 'Change CSV' : 'Choose CSV'}
+									{csvFile ? 'Change File' : 'Choose CSV/XLSX'}
 								</Button>
 								<Button
 									onClick={handleCopyCsvTemplate}
@@ -960,7 +1222,7 @@ export default function AdminTravelItenary() {
 									disabled={!csvFile || csvImporting}
 									className="bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600"
 								>
-									{csvImporting ? 'Importing...' : 'Import CSV'}
+									{csvImporting ? 'Importing...' : 'Import File'}
 								</Button>
 							</div>
 							{csvFile && (
