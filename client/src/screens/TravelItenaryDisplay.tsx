@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { jsPDF } from 'jspdf';
+import { toPng } from 'html-to-image';
 import {
 	Search,
 	MapPin,
@@ -22,6 +24,8 @@ import {
 	Image as ImageIcon,
 	Loader2,
 	Sailboat,
+	Download,
+	Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -29,6 +33,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { TravelData } from '@/types/travel';
+import { useAuth } from '@/contexts/AuthContext';
+import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
 
@@ -64,6 +70,49 @@ const getPreviewText = (result: TravelData) => {
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
+const DEFAULT_TRAVEL_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80';
+const IMAGE_READY_TIMEOUT_MS = 8000;
+
+const waitForImageReady = (image: HTMLImageElement, timeoutMs = IMAGE_READY_TIMEOUT_MS) => {
+	return new Promise<void>((resolve) => {
+		if (image.complete && image.naturalWidth > 0) {
+			resolve();
+			return;
+		}
+
+		let settled = false;
+		const cleanup = () => {
+			if (settled) return;
+			settled = true;
+			image.removeEventListener('load', finish);
+			image.removeEventListener('error', finish);
+			window.clearTimeout(timeoutId);
+			resolve();
+		};
+
+		const finish = (event: Event) => {
+			if (event.type === 'error') {
+				if (image.dataset.fallbackApplied !== 'true') {
+					image.dataset.fallbackApplied = 'true';
+					image.src = DEFAULT_TRAVEL_IMAGE;
+					return;
+				}
+			}
+			cleanup();
+		};
+		const timeoutId = window.setTimeout(cleanup, timeoutMs);
+		image.addEventListener('load', finish);
+		image.addEventListener('error', finish);
+	});
+};
+
+const applyImageFallback = (event: React.SyntheticEvent<HTMLImageElement>) => {
+	const target = event.currentTarget;
+	if (target.dataset.fallbackApplied === 'true') return;
+	target.dataset.fallbackApplied = 'true';
+	target.src = DEFAULT_TRAVEL_IMAGE;
+};
+
 const looksLikeBudget = (value: string) => {
 	const text = value.trim().toLowerCase();
 	if (!text) return false;
@@ -83,6 +132,8 @@ const sanitizeTravelData = (raw: TravelData): TravelData => {
 	let places = Array.isArray(raw.places) ? raw.places.map((item) => item.trim()).filter(Boolean) : [];
 	let restaurants = Array.isArray(raw.restaurants) ? raw.restaurants.map((item) => item.trim()).filter(Boolean) : [];
 	let hotels = Array.isArray(raw.hotels) ? raw.hotels.map((item) => item.trim()).filter(Boolean) : [];
+	const images = Array.isArray(raw.images) ? raw.images.map((item) => item.trim()).filter(Boolean) : [];
+	const videos = Array.isArray(raw.videos) ? raw.videos.map((item) => item.trim()).filter(Boolean) : [];
 
 	if (!itinerary && hasDayPattern(country)) {
 		itinerary = country;
@@ -135,6 +186,8 @@ const sanitizeTravelData = (raw: TravelData): TravelData => {
 		places,
 		restaurants,
 		hotels,
+		images,
+		videos,
 	};
 };
 
@@ -257,7 +310,7 @@ const renderFormattedItinerary = (itinerary: string) => {
 		return (
 			<div className="space-y-3">
 				{sections.map((section, index) => (
-					<div key={`${section.heading}-${index}`} className="rounded-2xl border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/60 dark:bg-rose-950/20 p-4 shadow-sm">
+					<div key={`${section.heading}-${index}`} data-export-keep="true" className="rounded-2xl border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/60 dark:bg-rose-950/20 p-4 shadow-sm">
 						<h4 className="font-bold text-foreground text-sm sm:text-base mb-2 flex items-center gap-2">
 							<span className="shrink-0 w-6 h-6 rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 flex items-center justify-center text-xs font-bold">
 								{section.heading.match(/\d+/)?.[0] || index + 1}
@@ -336,6 +389,13 @@ const normalizeBudgetText = (value: unknown): string => {
 
 const getBudgetDisplayText = (result: TravelData): string => {
 	return normalizeBudgetText(result.budgetEstimate) || normalizeBudgetText(result.budget) || 'Budget on request';
+};
+
+const sanitizeFilenameSegment = (value: string): string => {
+	return value
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/(^-|-$)/g, '');
 };
 
 const renderTravelTip = (tip: string, index: number) => {
@@ -436,10 +496,14 @@ const buildGeneratedTravelData = (
 function TravelDetailModal({
 	result,
 	shareStoryId,
+	canDownload,
+	subscriptionLabel,
 	onClose,
 }: {
 	result: TravelData;
 	shareStoryId: string;
+	canDownload: boolean;
+	subscriptionLabel: string;
 	onClose: () => void;
 }) {
 	const [liked, setLiked] = useState(false);
@@ -448,6 +512,8 @@ function TravelDetailModal({
 	const [commentName, setCommentName] = useState('');
 	const [commentText, setCommentText] = useState('');
 	const [isWindowExpanded, setIsWindowExpanded] = useState(false);
+	const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+	const modalContentRef = useRef<HTMLDivElement | null>(null);
 
 	const routePoints: Array<{ name: string; lat?: number; lng?: number }> = Array.isArray(result.routePoints)
 		? result.routePoints.reduce<Array<{ name: string; lat?: number; lng?: number }>>((acc, point) => {
@@ -511,6 +577,22 @@ function TravelDetailModal({
 		? result.map
 		: `https://maps.google.com/maps?q=${encodeURIComponent(routeQuery)}&z=10&output=embed`;
 
+	const exportMapPreviewUrl = (() => {
+		if (result.map && !result.map.endsWith('.pdf')) return result.map;
+		const firstPointWithCoords = routePoints.find((point) => typeof point.lat === 'number' && typeof point.lng === 'number');
+		if (!firstPointWithCoords) return null;
+
+		const markers = routePoints
+			.filter((point) => typeof point.lat === 'number' && typeof point.lng === 'number')
+			.slice(0, 8)
+			.map((point) => `${point.lat},${point.lng},red-pushpin`)
+			.join('|');
+
+		return `https://staticmap.openstreetmap.de/staticmap.php?center=${firstPointWithCoords.lat},${firstPointWithCoords.lng}&zoom=10&size=1200x500${markers ? `&markers=${encodeURIComponent(markers)}` : ''}`;
+	})();
+
+	const heroImages = (result.images || []).filter(Boolean).slice(0, 4);
+
 	const toggleLike = () => {
 		setLiked(prev => !prev);
 		setLikes(prev => (liked ? Math.max(0, prev - 1) : prev + 1));
@@ -535,6 +617,242 @@ function TravelDetailModal({
 		setTimeout(() => setCopied(false), 1000);
 	};
 
+	const handleDownloadItinerary = useCallback(async () => {
+		if (!canDownload || !modalContentRef.current || isDownloadingPdf) return;
+
+		setIsDownloadingPdf(true);
+		let exportContainer: HTMLDivElement | null = null;
+
+		try {
+			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+			const sourceNode = modalContentRef.current;
+			exportContainer = document.createElement('div');
+			exportContainer.style.position = 'fixed';
+			exportContainer.style.left = '0';
+			exportContainer.style.top = '0';
+			exportContainer.style.width = '794px';
+			exportContainer.style.opacity = '0';
+			exportContainer.style.pointerEvents = 'none';
+			exportContainer.style.zIndex = '-1';
+			exportContainer.style.background = '#ffffff';
+
+			const clonedNode = sourceNode.cloneNode(true) as HTMLElement;
+			clonedNode.style.width = '794px';
+			clonedNode.style.maxWidth = '794px';
+			clonedNode.style.minHeight = 'auto';
+			clonedNode.style.margin = '0';
+			clonedNode.style.borderRadius = '0';
+			clonedNode.style.boxShadow = 'none';
+			clonedNode.style.overflow = 'visible';
+
+			const heroClone = clonedNode.firstElementChild as HTMLElement | null;
+			if (heroClone) {
+				heroClone.style.width = '794px';
+				heroClone.style.maxWidth = '794px';
+				heroClone.style.height = '288px';
+			}
+
+			const mainGrid = Array.from(clonedNode.children).find((child) => {
+				if (!(child instanceof HTMLElement)) return false;
+				return child.className.includes('grid') && child.className.includes('lg:grid-cols-3');
+			}) as HTMLElement | undefined;
+
+			if (mainGrid) {
+				mainGrid.style.display = 'grid';
+				mainGrid.style.gridTemplateColumns = 'minmax(0,2fr) minmax(0,1fr)';
+				mainGrid.style.gap = '20px';
+				mainGrid.style.width = '100%';
+				mainGrid.style.padding = '20px';
+				mainGrid.style.margin = '0';
+				mainGrid.style.boxSizing = 'border-box';
+
+				const children = Array.from(mainGrid.children) as HTMLElement[];
+				if (children[0]) {
+					children[0].style.gridColumn = '1';
+					children[0].style.width = '100%';
+				}
+				if (children[1]) {
+					children[1].style.gridColumn = '2';
+					children[1].style.width = '100%';
+				}
+				if (children[2]) {
+					children[2].style.display = 'none';
+				}
+			}
+
+			clonedNode.querySelectorAll('[data-export-hide="true"]').forEach((node) => {
+				if (node instanceof HTMLElement) {
+					node.style.display = 'none';
+				}
+			});
+
+			// Remove sticky positioning from sidebar in export mode
+			clonedNode.querySelectorAll('[class*="sticky"]').forEach((node) => {
+				if (node instanceof HTMLElement) {
+					node.style.position = 'static';
+					node.style.top = 'auto';
+				}
+			});
+
+			const allSections = Array.from(clonedNode.querySelectorAll('section')) as HTMLElement[];
+			const mapSection = allSections.find((section) => {
+				const heading = section.querySelector('h3');
+				return heading?.textContent?.includes('Travel Map');
+			});
+			if (mapSection) {
+				mapSection.style.display = 'none';
+			}
+
+			clonedNode.querySelectorAll('iframe').forEach((node) => {
+				if (!(node instanceof HTMLIFrameElement)) return;
+				const replacement = document.createElement('img');
+				replacement.src = exportMapPreviewUrl || DEFAULT_TRAVEL_IMAGE;
+				replacement.alt = `${result.place} map preview`;
+				replacement.style.width = '100%';
+				replacement.style.height = '100%';
+				replacement.style.objectFit = 'cover';
+				replacement.setAttribute('crossorigin', 'anonymous');
+				replacement.setAttribute('referrerpolicy', 'no-referrer');
+				node.replaceWith(replacement);
+			});
+
+			document.body.appendChild(exportContainer);
+			exportContainer.appendChild(clonedNode);
+
+			const allImages = Array.from(clonedNode.querySelectorAll('img'));
+			allImages.forEach((img) => {
+				const currentSrc = (img.getAttribute('src') || '').trim();
+				if (!currentSrc || currentSrc.startsWith('data:') || currentSrc.startsWith('blob:')) return;
+
+				if (/^https?:\/\//i.test(currentSrc)) {
+					img.src = `/api/image-proxy?url=${encodeURIComponent(currentSrc)}`;
+				}
+			});
+
+			allImages.forEach((img) => {
+				img.loading = 'eager';
+				img.decoding = 'sync';
+			});
+			await Promise.all(allImages.map((img) => waitForImageReady(img)));
+
+			const pdf = new jsPDF('p', 'mm', 'a4');
+			const pageWidth = pdf.internal.pageSize.getWidth();
+			const pageHeight = pdf.internal.pageSize.getHeight();
+			const margin = 6;
+			const contentWidth = pageWidth - margin * 2;
+			const contentHeight = pageHeight - margin * 2;
+			const transparentPixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+			if (typeof document !== 'undefined' && document.fonts?.ready) {
+				await document.fonts.ready;
+			}
+
+			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+			const fullImageData = await toPng(clonedNode, {
+				cacheBust: false,
+				pixelRatio: 2,
+				backgroundColor: '#ffffff',
+				imagePlaceholder: transparentPixel,
+				width: 794,
+				filter: (node) => {
+					if (node instanceof HTMLVideoElement) return false;
+					if (node instanceof HTMLElement && node.dataset.exportHide === 'true') return false;
+					return true;
+				},
+			});
+
+			const fullImage = new Image();
+			await new Promise<void>((resolve, reject) => {
+				fullImage.onload = () => resolve();
+				fullImage.onerror = () => reject(new Error('Failed to load full export image'));
+				fullImage.src = fullImageData;
+			});
+
+			const clonedRect = clonedNode.getBoundingClientRect();
+			const keepBlocks = Array.from(clonedNode.querySelectorAll('[data-export-keep="true"]')) as HTMLElement[];
+			const keepBoundariesCssPx = keepBlocks.flatMap((block) => {
+				const rect = block.getBoundingClientRect();
+				const top = Math.max(0, rect.top - clonedRect.top);
+				const bottom = Math.max(top, rect.bottom - clonedRect.top);
+				return [Math.round(top), Math.round(bottom)];
+			});
+
+			const pxPerMm = fullImage.width / contentWidth;
+			const pageHeightPx = Math.max(1, Math.floor(contentHeight * pxPerMm));
+			const cssToImageScale = fullImage.width / Math.max(1, clonedNode.scrollWidth);
+			const keepBoundariesImagePx = keepBoundariesCssPx
+				.map((value) => Math.round(value * cssToImageScale))
+				.filter((value) => value > 0 && value < fullImage.height)
+				.sort((a, b) => a - b);
+			const minSlicePx = Math.floor(pageHeightPx * 0.45);
+			let offsetPx = 0;
+			let pageIndex = 0;
+
+			while (offsetPx < fullImage.height) {
+				const idealEndPx = Math.min(offsetPx + pageHeightPx, fullImage.height);
+				let cutEndPx = idealEndPx;
+
+				if (idealEndPx < fullImage.height) {
+					const candidate = keepBoundariesImagePx.reduce<number | null>((best, boundary) => {
+						if (boundary <= offsetPx + minSlicePx) return best;
+						if (boundary > idealEndPx) return best;
+						if (best === null || boundary > best) return boundary;
+						return best;
+					}, null);
+
+					if (candidate !== null) {
+						cutEndPx = candidate;
+					}
+				}
+
+				const sliceHeightPx = Math.max(1, cutEndPx - offsetPx);
+				const pageCanvas = document.createElement('canvas');
+				pageCanvas.width = fullImage.width;
+				pageCanvas.height = sliceHeightPx;
+				const ctx = pageCanvas.getContext('2d');
+				if (!ctx) throw new Error('Unable to render PDF slice canvas');
+
+				ctx.drawImage(
+					fullImage,
+					0,
+					offsetPx,
+					fullImage.width,
+					sliceHeightPx,
+					0,
+					0,
+					fullImage.width,
+					sliceHeightPx,
+				);
+
+				const pageData = pageCanvas.toDataURL('image/png');
+				const renderHeightMm = sliceHeightPx / pxPerMm;
+				if (pageIndex > 0) pdf.addPage();
+				pdf.addImage(pageData, 'PNG', margin, margin, contentWidth, renderHeightMm, undefined, 'FAST');
+
+				offsetPx = cutEndPx;
+				pageIndex += 1;
+			}
+
+			const placePart = sanitizeFilenameSegment(result.place) || 'destination';
+			const countryPart = sanitizeFilenameSegment(result.country) || 'travel';
+			pdf.save(`${placePart}-${countryPart}-itinerary.pdf`);
+		} catch (error) {
+			if (process.env.NODE_ENV === 'development') {
+				console.error('Failed to generate itinerary PDF:', error);
+			}
+			window.alert('Unable to generate PDF right now. Please try again.');
+		} finally {
+			if (exportContainer && exportContainer.parentNode) {
+				exportContainer.parentNode.removeChild(exportContainer);
+			}
+			setIsDownloadingPdf(false);
+		}
+	}, [canDownload, isDownloadingPdf, result.place, result.country, exportMapPreviewUrl]);
+
 	return (
 		<AnimatePresence>
 			<motion.div
@@ -548,6 +866,7 @@ function TravelDetailModal({
 				<div className="min-h-screen py-0 flex items-start justify-center">
 					<motion.div
 						layout
+						ref={modalContentRef}
 						className={`relative bg-background w-full mx-auto min-h-screen overflow-hidden shadow-2xl transition-[max-width,margin,border-radius] duration-500 ease-out ${isWindowExpanded ? 'max-w-[98vw] md:my-2 md:rounded-2xl' : 'max-w-4xl md:my-8 md:rounded-3xl'}`}
 						initial={{ y: 40, opacity: 0 }}
 						animate={{ y: 0, opacity: 1 }}
@@ -555,20 +874,52 @@ function TravelDetailModal({
 						transition={{ layout: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }}
 						onClick={e => e.stopPropagation()}
 					>
-						<div className="relative h-72 md:h-96 overflow-hidden">
-							<img
-								src={result.images[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80'}
-								alt={result.place}
-								className="w-full h-full object-cover"
-							/>
-							<div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
+						<div className="relative h-72 md:h-96 overflow-hidden" data-export-block="true">
+							{heroImages.length > 1 ? (
+								<div className="h-full w-full grid grid-cols-3 grid-rows-2 gap-2 p-2 bg-background">
+									<div className="col-span-2 row-span-2 relative overflow-hidden rounded-2xl">
+										<img
+											src={heroImages[0] || DEFAULT_TRAVEL_IMAGE}
+											alt={result.place}
+											loading="eager"
+											className="h-full w-full object-cover"
+											onError={applyImageFallback}
+										/>
+										<div className="absolute inset-0 bg-linear-to-t from-black/65 via-black/10 to-transparent" />
+									</div>
+									{heroImages.slice(1).map((imageSrc, index) => (
+										<div key={`${imageSrc}-${index}`} className="relative overflow-hidden rounded-2xl">
+											<img
+												src={imageSrc || DEFAULT_TRAVEL_IMAGE}
+												alt={`${result.place} ${index + 2}`}
+												loading="eager"
+												className="h-full w-full object-cover"
+												onError={applyImageFallback}
+											/>
+										</div>
+									))}
+								</div>
+							) : (
+								<>
+									<img
+										src={heroImages[0] || DEFAULT_TRAVEL_IMAGE}
+										alt={result.place}
+										loading="eager"
+										className="w-full h-full object-cover"
+										onError={applyImageFallback}
+									/>
+									<div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
+								</>
+							)}
 							<button
+								data-export-hide="true"
 								onClick={onClose}
 								className="absolute top-4 left-4 bg-black/40 backdrop-blur text-white rounded-full p-2 hover:bg-black/60 transition-colors"
 							>
 								<ArrowLeft className="w-5 h-5" />
 							</button>
 							<button
+								data-export-hide="true"
 								onClick={toggleWindowExpand}
 								title={isWindowExpanded ? 'Restore card width' : 'Expand to window width'}
 								className="hidden md:inline-flex absolute top-4 right-4 bg-black/40 backdrop-blur text-white rounded-full p-2 hover:bg-black/60 transition-colors"
@@ -588,7 +939,7 @@ function TravelDetailModal({
 							</div>
 						</div>
 
-						<div className="p-5 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+						<div className="p-5 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-6" data-export-block="true">
 							<div className="lg:col-span-2 space-y-7">
 								<section>
 									<h2 className="text-xl font-bold text-foreground mb-3">Place or Country of Travel</h2>
@@ -629,7 +980,7 @@ function TravelDetailModal({
 									)}
 
 									{result.localInsights && result.localInsights.length > 0 && (
-										<section>
+											<section>
 											<h3 className="text-xl font-bold text-foreground mb-4">Local Insights</h3>
 											<div className="space-y-2">
 												{result.localInsights.map((insight, index) => renderLocalInsight(insight, index))}
@@ -638,7 +989,7 @@ function TravelDetailModal({
 									)}
 
 									{result.routeFlow && (
-										<section>
+											<section>
 											<h3 className="text-xl font-bold text-foreground mb-4">Route Flow</h3>
 											<div className="rounded-xl border border-border/50 bg-muted/30 px-4 py-3">
 												<p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line font-medium">{result.routeFlow}</p>
@@ -682,6 +1033,7 @@ function TravelDetailModal({
 
 									<div className="mt-4 flex flex-wrap gap-2">
 										<a
+											data-export-hide="true"
 											href={openRouteInMapsUrl}
 											target="_blank"
 											rel="noreferrer"
@@ -697,6 +1049,7 @@ function TravelDetailModal({
 
 											return (
 												<a
+													data-export-hide="true"
 													key={`${point.name}-${index}`}
 													href={pointUrl}
 													target="_blank"
@@ -732,6 +1085,31 @@ function TravelDetailModal({
 										<div>
 											<p className="text-muted-foreground">Travel Type</p>
 											<span className="inline-flex mt-1 text-xs font-semibold px-3 py-1 rounded-full bg-pink-500/20 text-pink-700 dark:text-pink-300 border border-pink-400/30">{getCardBadge(1)}</span>
+										</div>
+										<div className="pt-3 border-t border-rose-200/70 dark:border-rose-500/20">
+											<Button
+												onClick={handleDownloadItinerary}
+												disabled={!canDownload || isDownloadingPdf}
+												className="w-full rounded-xl bg-linear-to-r from-rose-500 to-orange-500 text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+											>
+												{canDownload
+													? (isDownloadingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />)
+													: <Lock className="mr-2 h-4 w-4" />}
+												{canDownload ? (isDownloadingPdf ? 'Generating PDF...' : 'Download Itinerary PDF') : 'Download Locked'}
+											</Button>
+											<p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+												{canDownload
+													? `Included in your ${subscriptionLabel} plan.`
+													: 'This feature is available for Paid and Premium members only.'}
+											</p>
+											{!canDownload && (
+												<a
+													href="/pricing"
+													className="mt-2 inline-flex text-xs font-semibold text-rose-600 hover:text-rose-500 dark:text-rose-300 dark:hover:text-rose-200"
+												>
+													Upgrade to unlock downloads
+												</a>
+											)}
 										</div>
 									</div>
 								</div>
@@ -782,7 +1160,7 @@ function TravelDetailModal({
 											<p className="text-muted-foreground text-sm">Photos ({result.images.length})</p>
 											<div className="grid grid-cols-2 gap-3">
 												{result.images.map((img, i) => (
-													<img key={i} src={img} alt={`${result.place} ${i + 1}`} className="rounded-xl h-32 w-full object-cover" />
+													<img key={i} src={img} alt={`${result.place} ${i + 1}`} onError={applyImageFallback} className="rounded-xl h-32 w-full object-cover" />
 												))}
 											</div>
 										</div>
@@ -803,7 +1181,7 @@ function TravelDetailModal({
 								</section>
 							</div>
 
-							<div className="lg:col-span-2 space-y-7">
+							<div className="lg:col-span-2 space-y-7" data-export-hide="true">
 								<section>
 									<h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2"><Share2 className="w-5 h-5 text-blue-500" /> Share This Story</h3>
 									<div className="flex flex-wrap gap-3 mb-5">
@@ -848,6 +1226,15 @@ function TravelDetailModal({
 }
 
 export default function TravelItenaryDisplay() {
+	const { userProfile } = useAuth();
+	const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
+	const canDownloadItinerary = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+	const subscriptionLabel = useMemo(() => {
+		if (subscriptionInfo.type === 'premium') return 'Premium';
+		if (subscriptionInfo.type === 'pro') return 'Paid';
+		return 'Paid';
+	}, [subscriptionInfo.type]);
+
 	const [search, setSearch] = useState<SearchState>({
 		query: '',
 		results: [],
@@ -1257,7 +1644,12 @@ export default function TravelItenaryDisplay() {
 								<motion.div key={result.id} className="group" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.08 }} whileHover={{ y: -4 }} onClick={() => setSelectedResult(result)}>
 									<Card className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border border-border cursor-pointer">
 										<div className="relative overflow-hidden h-48 bg-muted">
-											<img src={result.images[0] || 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80'} alt={result.place} className="w-full h-full object-cover" />
+												<img src={result.images[0] || DEFAULT_TRAVEL_IMAGE}
+												alt={result.place}
+												loading="lazy"
+												onError={applyImageFallback}
+												className="w-full h-full object-cover"
+											/>
 											<div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
 											<span className="absolute top-3 right-3 text-xs font-semibold px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-400/30">{result.generatedBy === 'gemini' ? 'AI' : getCardBadge(idx)}</span>
 											<div className="absolute bottom-4 left-4 right-4">
@@ -1294,6 +1686,8 @@ export default function TravelItenaryDisplay() {
 					<TravelDetailModal
 						result={selectedResult}
 						shareStoryId={selectedResult.id}
+						canDownload={canDownloadItinerary}
+						subscriptionLabel={subscriptionLabel}
 						onClose={() => setSelectedResult(null)}
 					/>
 				)}

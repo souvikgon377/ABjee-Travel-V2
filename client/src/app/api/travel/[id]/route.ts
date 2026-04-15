@@ -11,6 +11,44 @@ const getRouteId = async (context: RouteContext): Promise<string> => {
   return typeof resolvedParams?.id === 'string' ? resolvedParams.id.trim() : '';
 };
 
+const toImageArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object') {
+          const candidate = item as Record<string, unknown>;
+          if (typeof candidate.url === 'string') return candidate.url.trim();
+          if (typeof candidate.image === 'string') return candidate.image.trim();
+        }
+        return '';
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const normalizeImages = (doc: Record<string, unknown>): string[] => {
+  const images = [
+    ...toImageArray(doc.images),
+    ...toImageArray(doc.coverImage),
+    ...toImageArray(doc.imageUrl),
+    ...toImageArray(doc.imageURL),
+    ...toImageArray(doc.image),
+  ];
+
+  if (Array.isArray(doc.photos)) {
+    images.push(...toImageArray(doc.photos));
+  }
+
+  return Array.from(new Set(images.filter(Boolean)));
+};
+
 // PUT: Update travel entry
 export async function PUT(req: NextRequest, context: RouteContext) {
   try {
@@ -24,7 +62,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     }
 
     const body = await req.json();
-    const { place, country, introduction, itinerary, places, restaurants, hotels, budget, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
+    const { place, country, introduction, itinerary, places, restaurants, hotels, budget, images, coverImage, photoUrl, imageUrl, image, photos, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
 
     // Validate required fields
     if (!place || !country || !budget) {
@@ -69,7 +107,7 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       restaurants: toStringArray(restaurants),
       hotels: toStringArray(hotels),
       budget: budget.trim(),
-      images: Array.isArray(images) ? images : [],
+      images: normalizeImages({ images, coverImage, photoUrl, imageUrl, image, photos }),
       videos: Array.isArray(videos) ? videos : [],
       map: map || null,
       overview: normalizedOverview || normalizedIntroduction,

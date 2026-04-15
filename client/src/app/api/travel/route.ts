@@ -37,6 +37,50 @@ const toRoutePoints = (value: unknown): Array<{ name: string; lat?: number; lng?
     .filter((item): item is { name: string; lat?: number; lng?: number } => item !== null);
 };
 
+const toImageArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object') {
+          const candidate = item as Record<string, unknown>;
+          if (typeof candidate.url === 'string') return candidate.url.trim();
+          if (typeof candidate.image === 'string') return candidate.image.trim();
+        }
+        return '';
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+
+  return [];
+};
+
+const normalizeImages = (doc: Record<string, unknown>): string[] => {
+  const images = [
+    ...toImageArray(doc.images),
+    ...toImageArray(doc.coverImage),
+    ...toImageArray(doc.imageUrl),
+    ...toImageArray(doc.imageURL),
+    ...toImageArray(doc.image),
+  ];
+
+  if (Array.isArray(doc.photos)) {
+    images.push(...toImageArray(doc.photos));
+  }
+
+  return Array.from(new Set(images.filter(Boolean)));
+};
+
+const normalizeTravelDoc = (id: string, doc: Record<string, unknown>) => ({
+  id,
+  ...doc,
+  images: normalizeImages(doc),
+});
+
 // GET: Search or list all travel data
 export async function GET(req: NextRequest) {
   try {
@@ -54,10 +98,7 @@ export async function GET(req: NextRequest) {
       const snapshot = await query.get();
       
       const results = snapshot.docs
-        .map(doc => ({
-          id: doc.id,
-          ...(doc.data() as TravelDestinationDoc),
-        }))
+        .map(doc => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>))
         .filter((doc: TravelDestinationDoc) => {
           const place = (doc.place || '').toLowerCase();
           const country = (doc.country || '').toLowerCase();
@@ -69,10 +110,7 @@ export async function GET(req: NextRequest) {
 
     // Return all documents if no search query
     const snapshot = await query.get();
-    const results = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const results = snapshot.docs.map(doc => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
 
     return ok({ results }, 200);
   } catch (error: any) {
@@ -89,7 +127,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { place, country, introduction, itinerary, places, restaurants, hotels, budget, images, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
+    const { place, country, introduction, itinerary, places, restaurants, hotels, budget, images, coverImage, photoUrl, imageUrl, image, photos, videos, map, overview, durationText, budgetEstimate, travelTips, localInsights, routeFlow, routePoints, generatedBy } = body;
 
     // Validate required fields
     if (!place || !country || !budget) {
@@ -108,7 +146,7 @@ export async function POST(req: NextRequest) {
       restaurants: toStringArray(restaurants),
       hotels: toStringArray(hotels),
       budget: budget.trim(),
-      images: Array.isArray(images) ? images : [],
+      images: normalizeImages({ images, coverImage, photoUrl, imageUrl, image, photos }),
       videos: Array.isArray(videos) ? videos : [],
       map: map || null,
       overview: normalizedOverview || normalizedIntroduction,

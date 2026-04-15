@@ -48,6 +48,10 @@ interface TravelItem {
 	createdAt: string;
 	updatedAt: string;
 	images?: string[];
+	coverImage?: string;
+	imageUrl?: string;
+	image?: string;
+	photos?: Array<{ url?: string }>;
 	videos?: string[];
 	map?: string | null;
 	places?: string[];
@@ -92,6 +96,24 @@ const getRoutePointErrorMessage = (point: { name: string; lat: string; lng: stri
 
 	if (!isValidCoordinate(point.lng, 'lng')) {
 		return 'Longitude must be a number between -180 and 180.';
+	}
+
+	return '';
+};
+
+const getTravelItemImage = (item: TravelItem): string => {
+	const candidates = [
+		...(Array.isArray(item.images) ? item.images : []),
+		item.coverImage,
+		item.imageUrl,
+		item.image,
+		...(Array.isArray(item.photos) ? item.photos.map((photo) => photo?.url || '') : []),
+	];
+
+	for (const candidate of candidates) {
+		if (typeof candidate === 'string' && candidate.trim()) {
+			return candidate.trim();
+		}
 	}
 
 	return '';
@@ -208,7 +230,7 @@ export default function AdminTravelItenary() {
 			imageFiles: [],
 			videoFiles: [],
 			mapFile: itinerary.map || null,
-			imagePreviews: itinerary.images || [],
+			imagePreviews: itinerary.images?.length ? itinerary.images : (getTravelItemImage(itinerary) ? [getTravelItemImage(itinerary)] : []),
 			videoPreviews: itinerary.videos || [],
 		});
 		setIsEditing(true);
@@ -563,7 +585,8 @@ export default function AdminTravelItenary() {
 
 		try {
 			// Keep existing remote images, upload only newly added files.
-			const uploadedImages: string[] = [...form.imagePreviews.filter(p => p.startsWith('http'))];
+			const existingRemoteImages: string[] = [...form.imagePreviews.filter(p => p.startsWith('http'))];
+			const uploadedImages: string[] = [];
 			for (let i = 0; i < form.imageFiles.length; i++) {
 				const formData = new FormData();
 				formData.append('file', form.imageFiles[i]);
@@ -644,7 +667,8 @@ export default function AdminTravelItenary() {
 				restaurants: form.restaurants.filter(r => r.trim()),
 				hotels: form.hotels.filter(h => h.trim()),
 				budget: form.budget.trim(),
-				images: uploadedImages.length > 0 ? uploadedImages : form.imagePreviews,
+				images: uploadedImages.length > 0 ? [...uploadedImages, ...existingRemoteImages] : existingRemoteImages,
+				coverImage: uploadedImages[0] || existingRemoteImages[0] || '',
 				videos: uploadedVideos,
 				map: uploadedMap || form.mapFile || null,
 			};
@@ -1504,9 +1528,9 @@ export default function AdminTravelItenary() {
 										whileHover={{ scale: 1.02 }}
 										className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:shadow-lg transition-all cursor-pointer"
 									>
-										{item.images && item.images[0] && (
+										{getTravelItemImage(item) && (
 											<img
-												src={item.images[0]}
+												src={getTravelItemImage(item)}
 												alt={item.place}
 												className="w-full h-40 object-cover rounded-md mb-3"
 											/>
