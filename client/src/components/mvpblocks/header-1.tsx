@@ -23,7 +23,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: 'Home', href: '/' },
-  { name: 'Community', href: '/chat' },
+  { name: 'Community', href: '/community' },
   { name: 'Booking Categories', href: '/booking-categories' },
   { name: 'About', href: '/about' },
   { name: 'Pricing', href: '/pricing' },
@@ -218,7 +218,8 @@ export default function Header1() {
     pathname?.includes('/travel-itinerary') ||
     pathname?.includes('/travel-destinations') ||
     pathname?.includes('/trip-stories') ||
-    pathname?.includes('/chat');
+    pathname?.includes('/chat') ||
+    pathname?.includes('/community');
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
@@ -234,7 +235,11 @@ export default function Header1() {
   };
 
   const isActive = (href: string) =>
-    href === '/' ? pathname === '/' : pathname?.startsWith(href);
+    href === '/'
+      ? pathname === '/'
+      : href === '/community'
+        ? pathname === '/community' || pathname?.startsWith('/chat')
+        : pathname?.startsWith(href);
 
   useEffect(() => {
     let isMounted = true;

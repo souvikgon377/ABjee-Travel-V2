@@ -22,10 +22,13 @@ export default function AuthPage() {
   }, [profileAvatar]);
 
   useEffect(() => {
-    if (currentUser && canAccessAdmin) {
+    // Avoid surprise redirects when users open the site or refresh auth page.
+    // Admin navigation should happen explicitly after login completion.
+    const allowAutoRedirect = searchParams.get('autoredirect') === '1';
+    if (allowAutoRedirect && currentUser && canAccessAdmin) {
       router.replace('/admin');
     }
-  }, [currentUser, canAccessAdmin, router]);
+  }, [currentUser, canAccessAdmin, router, searchParams]);
 
   const handleAuthComplete = () => {
     // Check if user has admin role and redirect to admin dashboard

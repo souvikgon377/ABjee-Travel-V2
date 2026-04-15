@@ -14,7 +14,7 @@ const navItems: NavItem[] = [
   {
     id: 'explore-interest',
     label: 'Explore Your Interest',
-    href: '/chat?view=explore-interest',
+    href: '/community?view=explore-interest',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2l2.6 5.27 5.82.85-4.21 4.1.99 5.79L12 15.9l-5.2 2.74.99-5.79-4.21-4.1 5.82-.85L12 2z" />
@@ -50,6 +50,10 @@ const getActiveTabFromPath = (pathname: string | null): string => {
     return 'explore-interest';
   }
 
+  if (pathname.includes('/community')) {
+    return 'explore-interest';
+  }
+
   if (pathname.includes('/trip-stories')) {
     return 'trip-stories';
   }
@@ -69,7 +73,8 @@ const CommunityHeader: React.FC = () => {
     pathname?.includes('/travel-itinerary') ||
     pathname?.includes('/travel-destinations') ||
     pathname?.includes('/trip-stories') ||
-    pathname?.includes('/chat');
+    pathname?.includes('/chat') ||
+    pathname?.includes('/community');
 
   const handleNavClick = (item: NavItem) => {
     router.push(item.href);

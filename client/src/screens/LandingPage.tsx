@@ -27,14 +27,14 @@ const landingHighlights = [
   {
     title: 'Travel Community',
     description: 'Meet travelers, exchange ideas, and discover people planning similar journeys.',
-    href: '/chat',
+    href: '/community',
     cta: 'Explore Community',
     icon: Users,
   },
   {
     title: 'Chat Communities',
     description: 'Join active travel communities or create your own space to plan with your group in real-time.',
-    href: '/chat',
+    href: '/community',
     cta: 'Open Chat Communities',
     icon: MessageCircle,
   },
@@ -151,7 +151,7 @@ function LandingPage() {
                   </p>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
-                      href="/chat"
+                      href="/community"
                       onClick={() => {
                         window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
                         setShowCommunityPopup(false)
@@ -161,7 +161,7 @@ function LandingPage() {
                       Enter Community
                     </Link>
                     <Link
-                      href="/chat"
+                      href="/community"
                       onClick={() => {
                         window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
                         setShowCommunityPopup(false)
@@ -216,7 +216,7 @@ function LandingPage() {
                           <h4 className="mt-2 text-base font-bold text-foreground line-clamp-2">{offer.title}</h4>
                           <p className="mt-1 text-sm text-muted-foreground line-clamp-3 min-h-16">{offer.description}</p>
                           <Link
-                            href={offer.ctaHref || '/chat'}
+                            href={offer.ctaHref || '/community'}
                             onClick={() => {
                               window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
                               setShowCommunityPopup(false)

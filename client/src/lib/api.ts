@@ -45,7 +45,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      if (window.location.pathname !== '/auth') {
+      // Redirect only when an authenticated session exists but token became invalid/expired.
+      // Signed-out users should be able to browse public pages without forced auth redirects.
+      if (auth.currentUser && window.location.pathname !== '/auth') {
         window.location.href = '/auth';
       }
     }
@@ -76,7 +78,8 @@ adminApiInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      if (window.location.pathname !== '/auth') {
+      // Redirect only when an authenticated session exists but token became invalid/expired.
+      if (auth.currentUser && window.location.pathname !== '/auth') {
         window.location.href = '/auth';
       }
     }
