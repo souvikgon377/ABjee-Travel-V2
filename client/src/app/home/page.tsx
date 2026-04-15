@@ -20,7 +20,7 @@ export default async function HomeRoute() {
     const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : true;
 
     if (homePageEnabled === false) {
-      redirect('/chat');
+      redirect('/community');
     }
   } catch (error) {
     // Re-throw Next.js redirect errors - check for digest which is how Next.js marks redirects
