@@ -94,11 +94,9 @@ export const getPaidPrivateRoomLimit = (
   subscription: UserSubscriptionInfo,
   limits?: PrivateRoomLimitOverrides
 ): number => {
+  void limits;
   if (!hasPaidAccess(subscription)) return 0;
-
-  const normalized = normalizePrivateRoomLimits(limits);
-  if (subscription.type === 'premium') return normalized.premium;
-  return normalized.pro;
+  return Number.POSITIVE_INFINITY;
 };
 
 export const canJoinPrivateRoom = (subscription: UserSubscriptionInfo): boolean => {
@@ -120,24 +118,15 @@ export const getPrivateRoomParticipationAllowance = (
   privateRoomCount: number,
   limits?: PrivateRoomLimitOverrides
 ): { allowed: boolean; maxAllowed: number; reason: string } => {
+  void privateRoomCount;
   const subscription = getSubscriptionInfo(userProfile);
 
   if (hasPaidAccess(subscription)) {
     const maxAllowed = getPaidPrivateRoomLimit(subscription, limits);
-    const planName = subscription.type === 'premium' ? 'Premium' : 'Paid';
-
-    if (privateRoomCount >= maxAllowed) {
-      return {
-        allowed: false,
-        maxAllowed,
-        reason: `${planName} plan allows up to ${maxAllowed} private communities in total.`,
-      };
-    }
-
     return {
       allowed: true,
       maxAllowed,
-      reason: `${planName} member: up to ${maxAllowed} private communities in total.`,
+      reason: 'Paid member: unlimited private communities.',
     };
   }
 

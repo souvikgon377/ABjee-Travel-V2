@@ -13,7 +13,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users, Eye, EyeOff } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -192,6 +192,9 @@ const ChatRoom = () => {
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [backgroundImageTab, setBackgroundImageTab] = useState<'upload' | 'history'>('upload');
   const [iconImageTab, setIconImageTab] = useState<'upload' | 'history'>('upload');
+  const [selectedRoomVisibility, setSelectedRoomVisibility] = useState<'exposed' | 'private'>('private');
+  const [selectedRoomName, setSelectedRoomName] = useState('');
+  const [selectedRoomDescription, setSelectedRoomDescription] = useState('');
   const [selectedBackgroundImage, setSelectedBackgroundImage] = useState<any>(null);
   const [selectedIconImage, setSelectedIconImage] = useState<any>(null);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -426,8 +429,11 @@ const ChatRoom = () => {
   useEffect(() => {
     if (settingsDialogOpen && room) {
       // Initialize with current room images
+      setSelectedRoomName(room.name || '');
+      setSelectedRoomDescription(room.description || '');
       setSelectedBackgroundImage(room.backgroundImage || null);
       setSelectedIconImage(room.iconImage || null);
+      setSelectedRoomVisibility(room.visibility === 'exposed' ? 'exposed' : 'private');
     }
   }, [settingsDialogOpen, room]);
 
@@ -746,27 +752,52 @@ const ChatRoom = () => {
     }
 
     const buildMemberFromSource = (participantId: string, source?: any): CommunityMember => {
-      const displayName = source
-        ? String(source.displayName || '').trim() ||
-          `${String(source.firstName || '').trim()} ${String(source.lastName || '').trim()}`.trim() ||
-          String(source.username || '').trim() ||
-          String(source.email || '').trim() ||
+      const normalizedId = String(participantId || '').trim();
+      const isCurrentUser = normalizedId.length > 0 && normalizedId === String(user?.uid || '').trim();
+
+      const localFallbackSource = isCurrentUser
+        ? {
+            displayName:
+              String(userProfile?.displayName || '').trim() ||
+              String(user?.displayName || '').trim(),
+            firstName: String(userProfile?.firstName || '').trim(),
+            lastName: String(userProfile?.lastName || '').trim(),
+            username: String(userProfile?.username || '').trim(),
+            email:
+              String(userProfile?.email || '').trim() ||
+              String(user?.email || '').trim(),
+            avatar: (userProfile as any)?.avatar,
+            avatarUrl: (userProfile as any)?.avatarUrl,
+            photoURL: String(user?.photoURL || '').trim(),
+            profileImage: (userProfile as any)?.profileImage,
+            profilePicture: (userProfile as any)?.profilePicture,
+            imageUrl: (userProfile as any)?.imageUrl,
+          }
+        : undefined;
+
+      const effectiveSource = source || localFallbackSource;
+      const normalizedAvatarUrl = resolveAvatarUrl(effectiveSource, localFallbackSource) || '';
+      const displayName = effectiveSource
+        ? String(effectiveSource.displayName || '').trim() ||
+          `${String(effectiveSource.firstName || '').trim()} ${String(effectiveSource.lastName || '').trim()}`.trim() ||
+          String(effectiveSource.username || '').trim() ||
+          String(effectiveSource.email || '').trim() ||
           `User ${participantId.slice(0, 6)}`
         : `User ${participantId.slice(0, 6)}`;
 
       return {
         id: participantId,
         displayName,
-        firstName: typeof source?.firstName === 'string' ? source.firstName : '',
-        lastName: typeof source?.lastName === 'string' ? source.lastName : '',
-        username: source?.username,
-        email: source?.email,
-        avatar: source?.avatar,
-        avatarUrl: source?.avatarUrl,
-        photoURL: source?.photoURL,
-        profileImage: source?.profileImage,
-        profilePicture: source?.profilePicture,
-        imageUrl: source?.imageUrl,
+        firstName: typeof effectiveSource?.firstName === 'string' ? effectiveSource.firstName : '',
+        lastName: typeof effectiveSource?.lastName === 'string' ? effectiveSource.lastName : '',
+        username: effectiveSource?.username,
+        email: effectiveSource?.email,
+        avatar: normalizedAvatarUrl,
+        avatarUrl: normalizedAvatarUrl,
+        photoURL: normalizedAvatarUrl,
+        profileImage: normalizedAvatarUrl,
+        profilePicture: normalizedAvatarUrl,
+        imageUrl: normalizedAvatarUrl,
         role: participantId === room.createdBy ? 'Owner' : 'Member',
       };
     };
@@ -826,7 +857,7 @@ const ChatRoom = () => {
     return () => {
       isCancelled = true;
     };
-  }, [participantIds, room?.createdBy]);
+  }, [participantIds, room?.createdBy, user?.uid, user?.displayName, user?.email, user?.photoURL, userProfile]);
 
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1365,10 +1396,34 @@ const ChatRoom = () => {
     setSelectedBackgroundImage(image);
   }, []);
 
+  const handleRemoveStagedBackgroundImage = useCallback(() => {
+    // Stage background removal; applied when user clicks Done.
+    setSelectedBackgroundImage(null);
+    if (backgroundPreview) {
+      revokeImagePreview(backgroundPreview);
+      setBackgroundPreview(null);
+    }
+    if (backgroundInputRef.current) {
+      backgroundInputRef.current.value = '';
+    }
+  }, [backgroundPreview]);
+
   const handleSelectIconFromHistory = useCallback((image: any) => {
     // Stage the selected image from history
     setSelectedIconImage(image);
   }, []);
+
+  const handleRemoveStagedIconImage = useCallback(() => {
+    // Stage icon removal; applied when user clicks Done.
+    setSelectedIconImage(null);
+    if (iconPreview) {
+      revokeImagePreview(iconPreview);
+      setIconPreview(null);
+    }
+    if (iconInputRef.current) {
+      iconInputRef.current.value = '';
+    }
+  }, [iconPreview]);
 
   const handleApplySettings = useCallback(async () => {
     if (!roomId || !room) return;
@@ -1379,16 +1434,27 @@ const ChatRoom = () => {
       const currentBgHash = room.backgroundImage?.hash || null;
       const selectedBgHash = selectedBackgroundImage?.hash || null;
       const backgroundChanged = selectedBgHash !== currentBgHash;
+
+      const currentName = String(room.name || '').trim();
+      const nextName = selectedRoomName.trim();
+      const nameChanged = nextName !== currentName;
+
+      const currentDescription = String(room.description || '').trim();
+      const nextDescription = selectedRoomDescription.trim();
+      const descriptionChanged = nextDescription !== currentDescription;
       
       const currentIconHash = room.iconImage?.hash || null;
       const selectedIconHash = selectedIconImage?.hash || null;
       const iconChanged = selectedIconHash !== currentIconHash;
 
-      const shouldUpdateBackground = backgroundChanged && Boolean(selectedBackgroundImage);
-      const shouldUpdateIcon = iconChanged && Boolean(selectedIconImage);
+      const currentVisibility = room.visibility === 'exposed' ? 'exposed' : 'private';
+      const visibilityChanged = !room.isPublic && selectedRoomVisibility !== currentVisibility;
+
+      const shouldUpdateBackground = backgroundChanged;
+      const shouldUpdateIcon = iconChanged;
       previousRoomSnapshot = room;
 
-      if (shouldUpdateBackground || shouldUpdateIcon) {
+      if (shouldUpdateBackground || shouldUpdateIcon || visibilityChanged || nameChanged || descriptionChanged) {
         // Optimistic room update so visual changes are instant.
         setRoom((prev) => {
           if (!prev) return prev;
@@ -1402,6 +1468,10 @@ const ChatRoom = () => {
 
           const existingBgHistory = prev.backgroundImageHistory || [];
           const existingIconHistory = prev.iconImageHistory || [];
+
+          const nextVisibility = !prev.isPublic && visibilityChanged
+            ? selectedRoomVisibility
+            : prev.visibility;
 
           const nextBgHistory = shouldUpdateBackground && selectedBackgroundImage
             ? existingBgHistory.some((img: any) => img.hash === selectedBackgroundImage.hash)
@@ -1417,8 +1487,11 @@ const ChatRoom = () => {
 
           return {
             ...prev,
-            ...(nextBackgroundImage ? { backgroundImage: nextBackgroundImage } : {}),
-            ...(nextIconImage ? { iconImage: nextIconImage } : {}),
+            ...(nameChanged ? { name: nextName } : {}),
+            ...(descriptionChanged ? { description: nextDescription } : {}),
+            backgroundImage: nextBackgroundImage || undefined,
+            iconImage: nextIconImage || undefined,
+            ...(nextVisibility ? { visibility: nextVisibility } : {}),
             backgroundImageHistory: nextBgHistory,
             iconImageHistory: nextIconHistory,
           };
@@ -1426,11 +1499,22 @@ const ChatRoom = () => {
       }
       
       // Apply changes if any
+      if (nameChanged || descriptionChanged) {
+        await chatService.updateRoomDetails(roomId, {
+          ...(nameChanged ? { name: nextName } : {}),
+          ...(descriptionChanged ? { description: nextDescription } : {}),
+        });
+      }
+
+      if (visibilityChanged) {
+        await chatService.updateRoomVisibility(roomId, selectedRoomVisibility);
+      }
+
       if (shouldUpdateBackground || shouldUpdateIcon) {
         await chatService.updateRoomImages(
           roomId, 
-          shouldUpdateBackground ? selectedBackgroundImage || undefined : undefined, 
-          shouldUpdateIcon ? selectedIconImage || undefined : undefined
+          shouldUpdateBackground ? selectedBackgroundImage ?? null : undefined,
+          shouldUpdateIcon ? selectedIconImage ?? null : undefined
         );
         // Room listener will automatically update the state
       }
@@ -1446,8 +1530,11 @@ const ChatRoom = () => {
       // Reset state
       setBackgroundPreview(null);
       setIconPreview(null);
+      setSelectedRoomName('');
+      setSelectedRoomDescription('');
       setSelectedBackgroundImage(null);
       setSelectedIconImage(null);
+      setSelectedRoomVisibility('private');
       setBackgroundImageTab('upload');
       setIconImageTab('upload');
       
@@ -1468,7 +1555,7 @@ const ChatRoom = () => {
       }
       alert(error.message || 'Failed to apply settings');
     }
-  }, [roomId, room, selectedBackgroundImage, selectedIconImage, backgroundPreview, iconPreview]);
+  }, [roomId, room, selectedBackgroundImage, selectedIconImage, backgroundPreview, iconPreview, selectedRoomVisibility, selectedRoomName, selectedRoomDescription]);
 
   const handleCloseSettings = useCallback(() => {
     // Clean up previews when closing without applying
@@ -1482,8 +1569,11 @@ const ChatRoom = () => {
     // Reset state
     setBackgroundPreview(null);
     setIconPreview(null);
+    setSelectedRoomName('');
+    setSelectedRoomDescription('');
     setSelectedBackgroundImage(null);
     setSelectedIconImage(null);
+    setSelectedRoomVisibility('private');
     setBackgroundImageTab('upload');
     setIconImageTab('upload');
     
@@ -2133,7 +2223,15 @@ const ChatRoom = () => {
                   </div>
                 )}
                 {filteredCommunityMembers.map((member) => {
-                  const memberAvatar = resolveAvatarUrl(member as Record<string, unknown>);
+                  const memberAvatar = resolveAvatarUrl(
+                    member as Record<string, unknown>,
+                    communityUserIndex[member.id] as Record<string, unknown> | undefined,
+                  );
+                  const trimmedFirstName = member.firstName?.trim() || '';
+                  const trimmedLastName = member.lastName?.trim() || '';
+                  const trimmedUsername = member.username?.trim() || '';
+                  const trimmedEmail = member.email?.trim() || '';
+                  const hasProfileDetails = Boolean(trimmedFirstName || trimmedLastName || trimmedUsername || trimmedEmail);
                   return (
                     <div key={member.id} className="flex items-start justify-between gap-3 px-3 py-3">
                       <div className="flex min-w-0 items-start gap-2.5">
@@ -2145,18 +2243,31 @@ const ChatRoom = () => {
                         </Avatar>
                         <div className="min-w-0 space-y-1">
                           <p className="truncate text-sm font-semibold">{member.displayName}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            First Name: {member.firstName?.trim() || 'Not provided'}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            Last Name: {member.lastName?.trim() || 'Not provided'}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            Username: {member.username?.trim() ? `@${member.username.trim()}` : 'Not provided'}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            Email: {member.email?.trim() || 'Not provided'}
-                          </p>
+                          {trimmedFirstName ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              First Name: {trimmedFirstName}
+                            </p>
+                          ) : null}
+                          {trimmedLastName ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              Last Name: {trimmedLastName}
+                            </p>
+                          ) : null}
+                          {trimmedUsername ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              Username: @{trimmedUsername}
+                            </p>
+                          ) : null}
+                          {trimmedEmail ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              Email: {trimmedEmail}
+                            </p>
+                          ) : null}
+                          {!hasProfileDetails ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              Profile details are unavailable for this account.
+                            </p>
+                          ) : null}
                           <p className="truncate text-xs text-muted-foreground">
                             User ID: {member.id}
                           </p>
@@ -2326,6 +2437,36 @@ const ChatRoom = () => {
           </DialogHeader>
 
           <div className="space-y-4 sm:space-y-6 mt-4">
+            {room && (
+              <div className="space-y-3">
+                <Label htmlFor="community-name" className="text-sm font-medium">Community Name</Label>
+                <Input
+                  id="community-name"
+                  value={selectedRoomName}
+                  onChange={(e) => setSelectedRoomName(e.target.value)}
+                  maxLength={80}
+                  placeholder="Enter community name"
+                  className="h-11"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Visible to everyone who can access the community.
+                </p>
+
+                <Label htmlFor="community-description" className="text-sm font-medium">Community Description</Label>
+                <textarea
+                  id="community-description"
+                  value={selectedRoomDescription}
+                  onChange={(e) => setSelectedRoomDescription(e.target.value)}
+                  maxLength={240}
+                  placeholder="Write a short description"
+                  className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+                <p className="text-xs text-muted-foreground">
+                  A short intro shown in community cards and header.
+                </p>
+              </div>
+            )}
+
             {/* Background Image Section */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">Background Image</Label>
@@ -2340,10 +2481,10 @@ const ChatRoom = () => {
                 
                 <TabsContent value="upload" className="space-y-3 mt-4">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    {backgroundPreview || selectedBackgroundImage || room.backgroundImage ? (
+                    {backgroundPreview || selectedBackgroundImage ? (
                       <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-border overflow-hidden">
                         <img 
-                          src={backgroundPreview || selectedBackgroundImage?.url || room.backgroundImage?.url} 
+                          src={backgroundPreview || selectedBackgroundImage?.url} 
                           alt="Background preview" 
                           className="w-full h-full object-cover"
                           loading="lazy"
@@ -2368,6 +2509,19 @@ const ChatRoom = () => {
                         <p className="text-xs text-muted-foreground mt-1">Uploading...</p>
                       )}
                     </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveStagedBackgroundImage}
+                      disabled={uploadingBackground || (!selectedBackgroundImage && !backgroundPreview)}
+                      className="gap-1.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove Background
+                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Recommended: 1920x1080px or larger. Max 5MB.
@@ -2428,10 +2582,10 @@ const ChatRoom = () => {
                 
                 <TabsContent value="upload" className="space-y-3 mt-4">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    {iconPreview || selectedIconImage || room.iconImage ? (
+                    {iconPreview || selectedIconImage ? (
                       <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-border overflow-hidden">
                         <img 
-                          src={iconPreview || selectedIconImage?.url || room.iconImage?.url} 
+                          src={iconPreview || selectedIconImage?.url} 
                           alt="Icon preview" 
                           className="w-full h-full object-cover"
                           loading="lazy"
@@ -2456,6 +2610,19 @@ const ChatRoom = () => {
                         <p className="text-xs text-muted-foreground mt-1">Uploading...</p>
                       )}
                     </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveStagedIconImage}
+                      disabled={uploadingIcon || (!selectedIconImage && !iconPreview)}
+                      className="gap-1.5"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove Icon
+                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Recommended: Square image, 512x512px or larger. Max 5MB.
@@ -2498,6 +2665,46 @@ const ChatRoom = () => {
                 </TabsContent>
               </Tabs>
             </div>
+
+            {room && !room.isPublic && user?.uid === room.createdBy && (
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Community Visibility</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectedRoomVisibility('exposed')}
+                    className={`justify-start gap-2 h-auto py-3 px-4 ${
+                      selectedRoomVisibility === 'exposed'
+                        ? 'border-green-400 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300'
+                        : 'border-border'
+                    }`}
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span className="flex flex-col items-start text-left">
+                      <span className="font-semibold">Exposed</span>
+                      <span className="text-xs opacity-80">Visible to everyone, join requests enabled</span>
+                    </span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectedRoomVisibility('private')}
+                    className={`justify-start gap-2 h-auto py-3 px-4 ${
+                      selectedRoomVisibility === 'private'
+                        ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300'
+                        : 'border-border'
+                    }`}
+                  >
+                    <EyeOff className="h-4 w-4" />
+                    <span className="flex flex-col items-start text-left">
+                      <span className="font-semibold">Private</span>
+                      <span className="text-xs opacity-80">Hidden from browse view, invite only</span>
+                    </span>
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Join Requests Section (Admin only for exposed private rooms) */}
             {user && room.createdBy === user.uid && !room.isPublic && room.visibility === 'exposed' && (
@@ -2734,11 +2941,25 @@ const ChatRoom = () => {
                     background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`
                   } : undefined}
                 >
-                  <Lock className="h-4 w-4 sm:h-5 md:h-6 sm:w-5 md:w-6 text-white" />
+                  <Lock className="h-4 w-4 sm:h-5 md:h-6 sm:w-5 md:w-6 text-black dark:text-white" />
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <h2 className="text-xs sm:text-base md:text-lg lg:text-xl font-bold truncate leading-tight">{room.name}</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xs sm:text-base md:text-lg lg:text-xl font-bold truncate leading-tight">{room.name}</h2>
+                    {!room.isPublic && (
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border-2 ${
+                          room.visibility === 'exposed'
+                            ? 'border-green-500 bg-green-100 text-green-800 dark:border-green-500/50 dark:bg-green-950/50 dark:text-green-300'
+                            : 'border-blue-500 bg-blue-100 text-blue-800 dark:border-blue-500/50 dark:bg-blue-950/50 dark:text-blue-300'
+                        }`}
+                      >
+                        {room.visibility === 'exposed' ? 'Exposed' : 'Private'}
+                      </Badge>
+                    )}
+                  </div>
                 {room.description && (
                   <p className="hidden sm:block text-[10px] sm:text-xs md:text-sm text-muted-foreground truncate">{room.description}</p>
                 )}
@@ -2886,6 +3107,8 @@ const ChatRoom = () => {
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
                 const useLightChatText = Boolean(room?.backgroundImage?.url && isDarkBackground);
+                const hasImageColorTheme = Boolean(imageColors);
+                const hasImageBasedStyling = useLightChatText || hasImageColorTheme;
                 const messageAvatarCandidate = message as unknown as Record<string, unknown>;
                 const messageAvatarUrl =
                   userAvatarMap[message.userId] ||
@@ -2908,8 +3131,12 @@ const ChatRoom = () => {
                     </Avatar>
                     <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[80%] md:max-w-[70%]`}>
                       <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
-                        <span className={`text-xs sm:text-sm font-medium ${useLightChatText ? 'text-slate-100' : ''}`}>{message.username}</span>
-                        <span className={`text-[10px] sm:text-xs ${useLightChatText ? 'text-slate-300' : 'text-muted-foreground'}`}>{formatTime(message.timestamp)}</span>
+                        <span className={`text-xs sm:text-sm font-medium ${hasImageBasedStyling ? (isOwnMessage ? 'text-blue-100' : 'text-slate-100') : ''}`}>
+                          {message.username}
+                        </span>
+                        <span className={`text-[10px] sm:text-xs ${hasImageBasedStyling ? (isOwnMessage ? 'text-blue-200' : 'text-slate-300') : 'text-muted-foreground'}`}>
+                          {formatTime(message.timestamp)}
+                        </span>
                       </div>
                       <div className={`group relative flex items-center gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                         {/* Inline Edit UI */}
@@ -2951,19 +3178,27 @@ const ChatRoom = () => {
                               className={isOnlyEmoji ? 'text-2xl sm:text-3xl md:text-4xl animate-bounce-in' : `rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 backdrop-blur-sm shadow-md ${
                                 isDeleted 
                                   ? 'bg-muted/70 text-muted-foreground italic'
-                                  : useLightChatText
-                                    ? 'text-slate-100 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]'
-                                    : 'text-black dark:text-white'
+                                  : hasImageBasedStyling
+                                    ? isOwnMessage
+                                      ? 'border text-white [text-shadow:0_1px_8px_rgba(0,0,0,0.75)]'
+                                      : 'border text-slate-50 [text-shadow:0_1px_8px_rgba(0,0,0,0.65)]'
+                                    : isOwnMessage
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'bg-muted/90 text-foreground border border-border/60'
                               }`}
-                              style={!isDeleted && !isOnlyEmoji && isOwnMessage && imageColors ? {
-                                background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
-                                opacity: 0.95
-                              } : !isDeleted && !isOnlyEmoji && !isOwnMessage && imageColors ? {
-                                background: `linear-gradient(135deg, ${imageColors.secondary}DD 0%, ${imageColors.accent}CC 100%)`,
-                                opacity: 0.9
-                              } : !isDeleted && !isOnlyEmoji && !isOwnMessage ? {
-                                backgroundColor: 'hsl(var(--card) / 0.9)'
-                              } : undefined}
+                              style={!isDeleted && !isOnlyEmoji && hasImageBasedStyling ? (
+                                isOwnMessage
+                                  ? {
+                                      backgroundColor: 'rgba(30, 58, 138, 0.82)',
+                                      borderColor: 'rgba(147, 197, 253, 0.55)',
+                                      boxShadow: '0 6px 18px rgba(15, 23, 42, 0.35)'
+                                    }
+                                  : {
+                                      backgroundColor: 'rgba(17, 24, 39, 0.58)',
+                                      borderColor: 'rgba(226, 232, 240, 0.32)',
+                                      boxShadow: '0 6px 16px rgba(0, 0, 0, 0.28)'
+                                    }
+                              ) : undefined}
                             >
                               {isDeleted ? (
                                 <span className="flex items-center gap-2">

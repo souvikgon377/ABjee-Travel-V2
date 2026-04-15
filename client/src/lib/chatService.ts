@@ -818,8 +818,8 @@ class ChatService {
    */
   async updateRoomImages(
     roomId: string, 
-    backgroundImage?: ChatRoomImage, 
-    iconImage?: ChatRoomImage
+    backgroundImage?: ChatRoomImage | null,
+    iconImage?: ChatRoomImage | null
   ) {
     const user = this.getCurrentUser();
     const roomRef = ref(database, `chatrooms/${roomId}`);
@@ -839,32 +839,103 @@ class ChatService {
     
     // Prepare updates
     const updates: any = {};
-    if (backgroundImage) {
+    if (backgroundImage !== undefined) {
       updates.backgroundImage = backgroundImage;
-      // Add to history if not already present (check by hash)
-      const existingHistory = room.backgroundImageHistory || [];
-      const isDuplicate = existingHistory.some((img: ChatRoomImage) => img.hash === backgroundImage.hash);
-      if (!isDuplicate) {
-        updates.backgroundImageHistory = [...existingHistory, backgroundImage];
-      } else {
-        // Preserve existing history even when selecting from history
-        updates.backgroundImageHistory = existingHistory;
+      if (backgroundImage) {
+        // Add to history if not already present (check by hash)
+        const existingHistory = room.backgroundImageHistory || [];
+        const isDuplicate = existingHistory.some((img: ChatRoomImage) => img.hash === backgroundImage.hash);
+        if (!isDuplicate) {
+          updates.backgroundImageHistory = [...existingHistory, backgroundImage];
+        } else {
+          // Preserve existing history even when selecting from history
+          updates.backgroundImageHistory = existingHistory;
+        }
       }
     }
-    if (iconImage) {
+    if (iconImage !== undefined) {
       updates.iconImage = iconImage;
-      // Add to history if not already present (check by hash)
-      const existingHistory = room.iconImageHistory || [];
-      const isDuplicate = existingHistory.some((img: ChatRoomImage) => img.hash === iconImage.hash);
-      if (!isDuplicate) {
-        updates.iconImageHistory = [...existingHistory, iconImage];
-      } else {
-        // Preserve existing history even when selecting from history
-        updates.iconImageHistory = existingHistory;
+      if (iconImage) {
+        // Add to history if not already present (check by hash)
+        const existingHistory = room.iconImageHistory || [];
+        const isDuplicate = existingHistory.some((img: ChatRoomImage) => img.hash === iconImage.hash);
+        if (!isDuplicate) {
+          updates.iconImageHistory = [...existingHistory, iconImage];
+        } else {
+          // Preserve existing history even when selecting from history
+          updates.iconImageHistory = existingHistory;
+        }
       }
     }
     
     // Update the room
+    await update(roomRef, updates);
+  }
+
+  /**
+   * WHY: Update room visibility for private communities
+   * DECISION: Only the room creator can change private community visibility
+   */
+  async updateRoomVisibility(roomId: string, visibility: 'exposed' | 'private') {
+    const user = this.getCurrentUser();
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+
+    const snapshot = await get(roomRef);
+    if (!snapshot.exists()) {
+      throw new Error('Community not found');
+    }
+
+    const room = snapshot.val() as ChatRoom;
+    if (room.isPublic) {
+      throw new Error('Public communities do not use visibility settings');
+    }
+    if (room.createdBy !== user.uid) {
+      throw new Error('Cannot update community visibility: not the creator');
+    }
+
+    const updates: any = { visibility };
+    if (visibility === 'exposed' && !Array.isArray(room.joinRequests)) {
+      updates.joinRequests = [];
+    }
+
+    await update(roomRef, updates);
+  }
+
+  /**
+   * WHY: Update editable room metadata from community settings
+   * DECISION: Only the creator (or admin for public rooms) can rename the community
+   */
+  async updateRoomDetails(roomId: string, details: { name?: string; description?: string }) {
+    const user = this.getCurrentUser();
+    const roomRef = ref(database, `chatrooms/${roomId}`);
+
+    const snapshot = await get(roomRef);
+    if (!snapshot.exists()) {
+      throw new Error('Community not found');
+    }
+
+    const room = snapshot.val() as ChatRoom;
+    if (room.isPublic) {
+      await this.assertAdminOrOwner(user.uid, 'Only admins can maintain General Community Chat.');
+    } else if (room.createdBy !== user.uid) {
+      throw new Error('Cannot update community details: not the creator');
+    }
+
+    const updates: Record<string, string> = {};
+    if (typeof details.name === 'string') {
+      const nextName = details.name.trim();
+      if (!nextName) {
+        throw new Error('Community name cannot be empty');
+      }
+      updates.name = nextName;
+    }
+
+    if (typeof details.description === 'string') {
+      updates.description = details.description.trim();
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
     await update(roomRef, updates);
   }
 

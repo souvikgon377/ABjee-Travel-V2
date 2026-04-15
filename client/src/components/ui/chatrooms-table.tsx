@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import {
   Plus,
+  Eye,
   Calendar,
   MapPin,
   MoreHorizontal,
@@ -68,6 +69,12 @@ function getTypeLabel(type: string): string {
   }
 }
 
+function getVisibilityColor(visibility: 'exposed' | 'private'): string {
+  return visibility === 'exposed'
+    ? 'bg-green-100 text-green-800 border-2 border-green-500 dark:bg-green-950/50 dark:text-green-300 dark:border-green-500/60'
+    : 'bg-blue-100 text-blue-800 border-2 border-blue-500 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-500/60';
+}
+
 function getTypeIcon(type: string, size = 'sm') {
   const cls = size === 'lg' ? 'h-5 w-5' : 'h-3.5 w-3.5';
   switch (type) {
@@ -87,12 +94,14 @@ function normalizeRoom(id: string, raw: any) {
     raw.type === 'public' || raw.type === 'private' || raw.type === 'premium'
       ? raw.type
       : raw.isPublic === false ? 'private' : 'public';
+  const visibility: 'exposed' | 'private' = raw.visibility === 'exposed' ? 'exposed' : 'private';
   return {
     id,
     name: raw.name || '',
     description: raw.description || '',
     type,
     isPublic: raw.isPublic !== false,
+    visibility,
     isActive: raw.isActive !== false,
     destination: raw.destination || {},
     maxMembers,
@@ -439,6 +448,7 @@ interface RoomCardProps {
 
 const RoomCard = memo(({ room, onManage, onDelete }: RoomCardProps) => {
   const typeColor  = useMemo(() => getTypeColor(room.type),       [room.type]);
+  const visibilityColor = useMemo(() => getVisibilityColor(room.visibility), [room.visibility]);
   const avatarColor = useMemo(() => getRoomAvatarColor(room.name || ''), [room.name]);
   const capPct = room.capacityPercent ?? 0;
   const capColor = capPct >= 90 ? 'text-red-500' : capPct >= 70 ? 'text-amber-500' : 'text-green-500';
@@ -476,6 +486,12 @@ const RoomCard = memo(({ room, onManage, onDelete }: RoomCardProps) => {
               {getTypeIcon(room.type)}
               {getTypeLabel(room.type)}
             </span>
+            {!room.isPublic && (
+              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold flex items-center gap-1.5 ${visibilityColor}`}>
+                {room.visibility === 'exposed' ? <Eye className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                {room.visibility === 'exposed' ? 'Exposed' : 'Private'}
+              </span>
+            )}
             {room.subscriptionRequired && (
               <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-500 flex items-center gap-1">
                 <Shield className="h-3 w-3" /> Premium

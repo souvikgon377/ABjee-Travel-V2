@@ -20,12 +20,12 @@ import { adminAPI, subscriptionsAPI } from '@/lib/api';
 import {
   getSubscriptionInfo,
   getPrivateRoomCreateAllowance,
-  getPaidPrivateRoomLimit,
   hasPaidAccess,
 } from '@/lib/subscriptionPolicy';
 import { modernConfirm } from '@/lib/modernDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -420,9 +420,11 @@ const ChatRoomsList: React.FC = () => {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [socialShareMessage, setSocialShareMessage] = useState('');
+  const [joinRequestingRoomIds, setJoinRequestingRoomIds] = useState<Set<string>>(new Set());
   const [_userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
   const [userCreatedPrivateRoomsCount, setUserCreatedPrivateRoomsCount] = useState(0);
   const [privateRoomLimitSettings, setPrivateRoomLimitSettings] = useState<{ pro: number; premium: number }>({ pro: 3, premium: 10 });
+  const [privateCommunitySearch, setPrivateCommunitySearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -441,10 +443,6 @@ const ChatRoomsList: React.FC = () => {
     () => getPrivateRoomCreateAllowance(userProfile, userCreatedPrivateRoomsCount, privateRoomLimitSettings),
     [userProfile, userCreatedPrivateRoomsCount, privateRoomLimitSettings]
   );
-  const paidPrivateRoomLimit = useMemo(
-    () => getPaidPrivateRoomLimit(subscriptionInfo, privateRoomLimitSettings),
-    [subscriptionInfo, privateRoomLimitSettings]
-  );
   const isAdminOrOwner = useMemo(() => {
     const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
     return role === 'admin' || role === 'owner';
@@ -455,6 +453,27 @@ const ChatRoomsList: React.FC = () => {
   const hasSearchQuery = normalizedSearchDestination.length > 0;
   const shouldOpenExploreInterest = searchParams.get('view') === 'explore-interest';
   const shouldAutoplayRichMedia = !mobilePerformanceMode;
+  const normalizedPrivateCommunitySearch = useMemo(
+    () => privateCommunitySearch.trim().toLowerCase(),
+    [privateCommunitySearch]
+  );
+  const filterPrivateCommunityRooms = useCallback(
+    (roomsList: ChatRoomType[]) => {
+      if (!normalizedPrivateCommunitySearch) return roomsList;
+      return roomsList.filter((room) => {
+        const searchableText = [
+          room.name,
+          room.description,
+          room.visibility === 'exposed' ? 'exposed' : 'private',
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return searchableText.includes(normalizedPrivateCommunitySearch);
+      });
+    },
+    [normalizedPrivateCommunitySearch]
+  );
 
   // Firestore tourist places
   const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
@@ -1306,7 +1325,10 @@ const ChatRoomsList: React.FC = () => {
         iconImageData,
         newRoomIsPublic ? undefined : newPrivateVisibility,
         {
-          maxPrivateRooms: newRoomIsPublic ? undefined : privateRoomAllowance.maxAllowed,
+          maxPrivateRooms:
+            newRoomIsPublic || !Number.isFinite(privateRoomAllowance.maxAllowed)
+              ? undefined
+              : privateRoomAllowance.maxAllowed,
           limits: newRoomIsPublic ? undefined : privateRoomLimitSettings,
         }
       );
@@ -1458,6 +1480,61 @@ const ChatRoomsList: React.FC = () => {
       await chatService.deleteRoom(roomId);
     } catch (error: any) {
       alert(error.message || 'Failed to delete community');
+    }
+  };
+
+  const handleSendJoinRequest = async (room: ChatRoomType, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!user || !room.id) return;
+
+    const participants = Array.isArray(room.participants) ? room.participants : [];
+    const isParticipant = room.createdBy === user.uid || participants.includes(user.uid);
+    if (isParticipant) return;
+
+    if (joinRequestingRoomIds.has(room.id)) return;
+
+    setJoinRequestingRoomIds((prev) => new Set(prev).add(room.id!));
+
+    try {
+      await chatService.requestToJoinRoom(room.id, user.uid);
+
+      // Optimistically mark request as sent until room listener confirms.
+      setRooms((prevRooms) =>
+        prevRooms.map((candidate) => {
+          if (candidate.id !== room.id) return candidate;
+          const existingRequests = Array.isArray(candidate.joinRequests) ? candidate.joinRequests : [];
+          if (existingRequests.includes(user.uid)) return candidate;
+          return {
+            ...candidate,
+            joinRequests: [...existingRequests, user.uid],
+          };
+        })
+      );
+
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = window.localStorage.getItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
+          const parsed = stored ? JSON.parse(stored) : [];
+          const pendingRoomIds = Array.isArray(parsed)
+            ? parsed.filter((id): id is string => typeof id === 'string')
+            : [];
+          if (!pendingRoomIds.includes(room.id)) {
+            pendingRoomIds.push(room.id);
+            window.localStorage.setItem(PENDING_PRIVATE_JOIN_ROOMS_KEY, JSON.stringify(pendingRoomIds));
+          }
+        } catch {
+          // Best-effort local tracking only.
+        }
+      }
+    } catch (error: any) {
+      alert(error?.message || 'Failed to send join request');
+    } finally {
+      setJoinRequestingRoomIds((prev) => {
+        const next = new Set(prev);
+        if (room.id) next.delete(room.id);
+        return next;
+      });
     }
   };
 
@@ -2906,7 +2983,7 @@ const ChatRoomsList: React.FC = () => {
                     <Crown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
                       {paidMember
-                        ? `${userCreatedPrivateRoomsCount}/${paidPrivateRoomLimit} Private Communities`
+                        ? `Unlimited Private Communities (${userCreatedPrivateRoomsCount} joined/created)`
                         : 'Private Communities Locked (Paid Plan Required)'
                       }
                     </span>
@@ -3347,7 +3424,7 @@ const ChatRoomsList: React.FC = () => {
                                   <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                 </Avatar>
                               ) : (
-                                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
+                                <div className="p-2 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 dark:from-rose-600 dark:to-pink-700 shadow-lg border border-rose-400 dark:border-rose-500" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
                                   <MessageCircle className="h-5 w-5 text-white" />
                                 </div>
                               )}
@@ -3549,17 +3626,78 @@ const ChatRoomsList: React.FC = () => {
 
             {/* Private Rooms Section */}
             {(myPrivateRooms.length > 0 || friendsPrivateRooms.length > 0) && (
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-linear-to-br from-amber-500 to-orange-600 shadow-lg">
-                    <Lock className="h-6 w-6 text-white" />
-                  </div>
-                  <h2 className="text-2xl font-bold bg-linear-to-r from-amber-600 to-orange-500 bg-clip-text text-transparent">
-                    Private Community Chat
-                  </h2>
-                  <span className="text-sm text-muted-foreground">
-                    Exposed communities allow join requests; private communities stay hidden
-                  </span>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+              >
+                <div className="relative mb-8 py-4">
+                  {/* Small Glowing Header */}
+                  <motion.div 
+                    className="relative z-10 text-center mb-4"
+                  >
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <motion.div
+                        animate={{ 
+                          boxShadow: [
+                            '0 0 10px rgba(168, 85, 247, 0.5)',
+                            '0 0 20px rgba(168, 85, 247, 0.8)',
+                            '0 0 10px rgba(168, 85, 247, 0.5)'
+                          ]
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="p-2 rounded-lg bg-linear-to-br from-purple-500 to-pink-500"
+                      >
+                        <Lock className="h-5 w-5 text-white" />
+                      </motion.div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100">
+                        Private Community Chat
+                      </h2>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                      🔐 Exposed • 🚫 Private
+                    </p>
+                  </motion.div>
+
+                  {/* Compact Search Bar with Glow */}
+                  <motion.div 
+                    className="relative z-10 flex justify-center mb-4"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1, duration: 0.3 }}
+                  >
+                    <div className="w-full max-w-md px-4 sm:px-0">
+                      <motion.div
+                        animate={{ 
+                          boxShadow: [
+                            '0 0 20px rgba(236, 72, 145, 0.6), 0 0 40px rgba(168, 85, 247, 0.4)',
+                            '0 0 35px rgba(236, 72, 145, 0.8), 0 0 60px rgba(168, 85, 247, 0.6)',
+                            '0 0 20px rgba(236, 72, 145, 0.6), 0 0 40px rgba(168, 85, 247, 0.4)'
+                          ]
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="relative bg-white dark:bg-slate-900 rounded-2xl px-4 py-3 flex items-center gap-2 border-2 border-pink-400 dark:border-pink-500 shadow-lg"
+                      >
+                        <Search className="h-5 w-5 text-pink-500 dark:text-pink-400 font-semibold" />
+                        <Input
+                          placeholder="Search communities..."
+                          value={privateCommunitySearch}
+                          onChange={(e) => setPrivateCommunitySearch(e.target.value)}
+                          className="h-full text-sm bg-transparent border-0 focus:ring-0 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:ring-0 font-medium"
+                        />
+                        {privateCommunitySearch && (
+                          <motion.button
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            onClick={() => setPrivateCommunitySearch('')}
+                            className="p-1 hover:bg-pink-100 dark:hover:bg-pink-950/40 rounded transition-colors"
+                          >
+                            <X className="h-5 w-5 text-pink-500 dark:text-pink-400 hover:text-pink-600 dark:hover:text-pink-300" />
+                          </motion.button>
+                        )}
+                      </motion.div>
+                    </div>
+                  </motion.div>
                 </div>
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {[
@@ -3593,13 +3731,15 @@ const ChatRoomsList: React.FC = () => {
                           {section.title}
                         </h3>
                         <span className="relative z-10 text-xs sm:text-sm rounded-full border border-amber-300/70 dark:border-amber-700/70 px-2.5 py-1 font-semibold text-amber-700 dark:text-amber-300 bg-white/70 dark:bg-slate-900/70 shadow-sm">
-                          {section.rooms.length} community{section.rooms.length === 1 ? '' : 'ies'}
+                          {filterPrivateCommunityRooms(section.rooms).length} {filterPrivateCommunityRooms(section.rooms).length === 1 ? 'community' : 'communities'}
                         </span>
                       </div>
 
-                      {section.rooms.length === 0 ? (
+                      {filterPrivateCommunityRooms(section.rooms).length === 0 ? (
                         <div className="relative z-10 rounded-2xl border border-dashed border-amber-300/70 dark:border-amber-700/70 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-5 text-sm text-amber-700 dark:text-amber-300">
-                          {section.emptyMessage}
+                          {normalizedPrivateCommunitySearch
+                            ? `No private communities found for "${privateCommunitySearch.trim()}".`
+                            : section.emptyMessage}
                         </div>
                       ) : (
                         <div className="relative z-10 max-h-156 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(245,158,11,0.6)_transparent]">
@@ -3610,7 +3750,7 @@ const ChatRoomsList: React.FC = () => {
                             transition={{ duration: 0.5 }}
                           >
                             <AnimatePresence mode="popLayout">
-                              {section.rooms.map((room, index) => (
+                              {filterPrivateCommunityRooms(section.rooms).map((room, index) => (
                                 <motion.div
                                   key={room.id}
                                   initial={{ opacity: 0, y: 20 }}
@@ -3621,7 +3761,11 @@ const ChatRoomsList: React.FC = () => {
                                   layout
                                 >
                                 <Card
-                                  className="cursor-pointer h-full min-h-96 border border-white/20 dark:border-gray-700/50 shadow-lg hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-2xl overflow-hidden group relative"
+                                  className={`cursor-pointer h-full min-h-96 border-2 shadow-lg hover:shadow-2xl transition-all duration-300 rounded-2xl overflow-hidden group relative ${
+                                    room.visibility === 'exposed'
+                                      ? 'border-green-400/80 dark:border-green-500/80 shadow-[0_0_0_1px_rgba(34,197,94,0.20),0_0_22px_rgba(34,197,94,0.22)] hover:border-green-300'
+                                      : 'border-blue-400/80 dark:border-blue-500/80 shadow-[0_0_0_1px_rgba(59,130,246,0.20),0_0_22px_rgba(59,130,246,0.22)] hover:border-blue-300'
+                                  }`}
                                   onClick={() => router.push(`/chat/room/${room.id}`)}
                                 >
                                   {/* Sliding Background Images Carousel */}
@@ -3666,6 +3810,28 @@ const ChatRoomsList: React.FC = () => {
 
                                   {/* Gradient overlay on hover */}
                                   <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-2 pointer-events-none"></div>
+                                  <motion.div
+                                    aria-hidden="true"
+                                    className={`absolute inset-0 rounded-2xl border-2 pointer-events-none z-30 ${
+                                      room.visibility === 'exposed'
+                                        ? 'border-green-400/70 dark:border-green-400/80'
+                                        : 'border-blue-400/70 dark:border-blue-400/80'
+                                    }`}
+                                    animate={{ opacity: [0.35, 1, 0.35] }}
+                                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                                  />
+                                  {!room.isPublic && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`absolute top-2 right-2 z-40 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-md pointer-events-none border-2 ${
+                                        room.visibility === 'exposed'
+                                          ? 'border-green-500 bg-green-100 text-green-800 dark:border-green-500/60 dark:bg-green-950/50 dark:text-green-300'
+                                          : 'border-blue-500 bg-blue-100 text-blue-800 dark:border-blue-500/60 dark:bg-blue-950/50 dark:text-blue-300'
+                                      }`}
+                                    >
+                                      {room.visibility === 'exposed' ? 'Exposed' : 'Private'}
+                                    </Badge>
+                                  )}
                                   {room.backgroundImage?.url && room.iconImage?.url && (
                                     <div className="absolute inset-0 bg-black/35 backdrop-brightness-75 z-2 pointer-events-none" />
                                   )}
@@ -3686,7 +3852,7 @@ const ChatRoomsList: React.FC = () => {
                                           <AvatarFallback>{room.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                         </Avatar>
                                       ) : (
-                                        <div className="p-2.5 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
+                                        <div className="p-2.5 rounded-xl bg-linear-to-br from-rose-500 to-pink-600 dark:from-rose-600 dark:to-pink-700 shadow-lg border border-rose-400 dark:border-rose-500" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
                                           <MessageCircle className="h-5.5 w-5.5 text-white" />
                                         </div>
                                       )}
@@ -3747,21 +3913,50 @@ const ChatRoomsList: React.FC = () => {
                                     {/* Action buttons */}
                                     {user && (
                                       <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
-                                        <Button
-                                          size="sm"
-                                          className={`rounded-xl font-semibold ${
-                                            room.backgroundImage?.url && room.iconImage?.url
-                                              ? 'border border-white/60 bg-white/20 text-slate-50 backdrop-blur-md shadow-[0_0_22px_rgba(255,255,255,0.25)] hover:bg-white/30 hover:text-white hover:shadow-[0_0_30px_rgba(255,255,255,0.38)]'
-                                              : 'bg-linear-to-r from-rose-600 to-pink-600 text-white shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow'
-                                          }`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            router.push(`/chat/room/${room.id}`);
-                                          }}
-                                        >
-                                          <MessageCircle className="h-4 w-4 mr-1.5" />
-                                          Chat Now
-                                        </Button>
+                                        {(() => {
+                                          const participants = Array.isArray(room.participants) ? room.participants : [];
+                                          const isMember = room.createdBy === user.uid || participants.includes(user.uid);
+                                          const canRequestJoin = !room.isPublic && room.visibility === 'exposed' && !isMember;
+                                          const hasRequested = Array.isArray(room.joinRequests) && room.joinRequests.includes(user.uid);
+                                          const isSendingRequest = Boolean(room.id && joinRequestingRoomIds.has(room.id));
+
+                                          if (canRequestJoin) {
+                                            return (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={hasRequested || isSendingRequest}
+                                                className={`rounded-xl font-semibold ${
+                                                  room.backgroundImage?.url && room.iconImage?.url
+                                                    ? 'border border-green-300/80 bg-green-500/20 text-slate-50 backdrop-blur-md hover:bg-green-500/30'
+                                                    : 'border-green-400 text-green-700 bg-green-50 hover:bg-green-100 dark:border-green-500 dark:text-green-300 dark:bg-green-950/25'
+                                                }`}
+                                                onClick={(e) => handleSendJoinRequest(room, e)}
+                                              >
+                                                <Shield className="h-4 w-4 mr-1.5" />
+                                                {isSendingRequest ? 'Sending...' : hasRequested ? 'Request Sent' : 'Send Join Request'}
+                                              </Button>
+                                            );
+                                          }
+
+                                          return (
+                                            <Button
+                                              size="sm"
+                                              className={`rounded-xl font-semibold ${
+                                                room.backgroundImage?.url && room.iconImage?.url
+                                                  ? 'border border-white/60 bg-white/20 text-slate-50 backdrop-blur-md shadow-[0_0_22px_rgba(255,255,255,0.25)] hover:bg-white/30 hover:text-white hover:shadow-[0_0_30px_rgba(255,255,255,0.38)]'
+                                                  : 'bg-linear-to-r from-rose-600 to-pink-600 text-white shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow'
+                                              }`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                router.push(`/chat/room/${room.id}`);
+                                              }}
+                                            >
+                                              <MessageCircle className="h-4 w-4 mr-1.5" />
+                                              Chat Now
+                                            </Button>
+                                          );
+                                        })()}
                                         {((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid)) &&
                                           !((room.name || '').trim().toLowerCase() === 'general community chat' ||
                                             (room.name || '').trim().toLowerCase() === 'general chat' ||
@@ -3789,7 +3984,7 @@ const ChatRoomsList: React.FC = () => {
                     </motion.div>
                   ))}
                 </div>
-              </div>
+              </motion.div>
             )}
           </div>
         )}
