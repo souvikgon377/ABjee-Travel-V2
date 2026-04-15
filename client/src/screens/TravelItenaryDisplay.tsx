@@ -72,6 +72,9 @@ const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim()
 
 const DEFAULT_TRAVEL_IMAGE = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200&q=80';
 const IMAGE_READY_TIMEOUT_MS = 8000;
+const PDF_EXPORT_WIDTH_PX = 794;
+const PDF_EXPORT_PIXEL_RATIO = 2;
+const PDF_EXPORT_JPEG_QUALITY = 0.82;
 
 const waitForImageReady = (image: HTMLImageElement, timeoutMs = IMAGE_READY_TIMEOUT_MS) => {
 	return new Promise<void>((resolve) => {
@@ -629,28 +632,67 @@ function TravelDetailModal({
 
 			const sourceNode = modalContentRef.current;
 			exportContainer = document.createElement('div');
+			exportContainer.setAttribute('data-export-container', 'true');
 			exportContainer.style.position = 'fixed';
 			exportContainer.style.left = '0';
 			exportContainer.style.top = '0';
-			exportContainer.style.width = '794px';
+			exportContainer.style.width = `${PDF_EXPORT_WIDTH_PX}px`;
 			exportContainer.style.opacity = '0';
 			exportContainer.style.pointerEvents = 'none';
 			exportContainer.style.zIndex = '-1';
 			exportContainer.style.background = '#ffffff';
+			// Force light mode on export container
+			exportContainer.classList.remove('dark');
+			exportContainer.style.colorScheme = 'light';
+			exportContainer.style.setProperty('--background', 'oklch(1 0 0)');
+			exportContainer.style.setProperty('--foreground', 'oklch(0.141 0.005 285.823)');
+			exportContainer.style.setProperty('--card', 'oklch(1 0 0)');
+			exportContainer.style.setProperty('--card-foreground', 'oklch(0.141 0.005 285.823)');
+			exportContainer.style.setProperty('--popover', 'oklch(1 0 0)');
+			exportContainer.style.setProperty('--popover-foreground', 'oklch(0.141 0.005 285.823)');
+			exportContainer.style.setProperty('--muted', 'oklch(0.967 0.001 286.375)');
+			exportContainer.style.setProperty('--muted-foreground', 'oklch(0.552 0.016 285.938)');
+			exportContainer.style.setProperty('--secondary', 'oklch(0.967 0.001 286.375)');
+			exportContainer.style.setProperty('--secondary-foreground', 'oklch(0.21 0.006 285.885)');
+			exportContainer.style.setProperty('--accent', 'oklch(0.967 0.001 286.375)');
+			exportContainer.style.setProperty('--accent-foreground', 'oklch(0.21 0.006 285.885)');
+			exportContainer.style.setProperty('--border', 'oklch(0.92 0.004 286.32)');
+			exportContainer.style.setProperty('--input', 'oklch(0.92 0.004 286.32)');
 
 			const clonedNode = sourceNode.cloneNode(true) as HTMLElement;
-			clonedNode.style.width = '794px';
-			clonedNode.style.maxWidth = '794px';
+			clonedNode.style.width = `${PDF_EXPORT_WIDTH_PX}px`;
+			clonedNode.style.maxWidth = `${PDF_EXPORT_WIDTH_PX}px`;
 			clonedNode.style.minHeight = 'auto';
 			clonedNode.style.margin = '0';
 			clonedNode.style.borderRadius = '0';
 			clonedNode.style.boxShadow = 'none';
 			clonedNode.style.overflow = 'visible';
+			clonedNode.style.color = '#000000';
+			clonedNode.style.backgroundColor = '#ffffff';
+			// Force light mode on cloned node
+			clonedNode.classList.remove('dark');
+			clonedNode.style.colorScheme = 'light';
+
+			// Remove all dark mode classes from all descendants
+			const removeDarkModeClasses = (node: HTMLElement) => {
+				node.classList.remove('dark');
+				node.querySelectorAll('[class*="dark:"]').forEach((el) => {
+					if (el instanceof HTMLElement) {
+						el.classList.remove('dark');
+					}
+				});
+				Array.from(node.children).forEach((child) => {
+					if (child instanceof HTMLElement) {
+						removeDarkModeClasses(child);
+					}
+				});
+			};
+			removeDarkModeClasses(clonedNode);
 
 			const heroClone = clonedNode.firstElementChild as HTMLElement | null;
 			if (heroClone) {
-				heroClone.style.width = '794px';
-				heroClone.style.maxWidth = '794px';
+				heroClone.style.width = `${PDF_EXPORT_WIDTH_PX}px`;
+				heroClone.style.maxWidth = `${PDF_EXPORT_WIDTH_PX}px`;
 				heroClone.style.height = '288px';
 			}
 
@@ -721,6 +763,149 @@ function TravelDetailModal({
 			document.body.appendChild(exportContainer);
 			exportContainer.appendChild(clonedNode);
 
+			// Deep comprehensive dark mode removal and light mode enforcement
+			const enforceLightMode = (node: HTMLElement) => {
+				// Remove dark class
+				node.classList.remove('dark');
+				node.style.removeProperty('color-scheme');
+				
+				// Comprehensive list of light text classes to remove
+				const textClassesToRemove = [
+					// Slate variants
+					'text-slate-50', 'text-slate-100', 'text-slate-200', 'text-slate-300', 'text-slate-400',
+					// Gray variants
+					'text-gray-50', 'text-gray-100', 'text-gray-200', 'text-gray-300', 'text-gray-400',
+					// Zinc variants
+					'text-zinc-50', 'text-zinc-100', 'text-zinc-200', 'text-zinc-300', 'text-zinc-400',
+					// Stone variants
+					'text-stone-50', 'text-stone-100', 'text-stone-200', 'text-stone-300', 'text-stone-400',
+					// Neutral variants
+					'text-neutral-50', 'text-neutral-100', 'text-neutral-200', 'text-neutral-300', 'text-neutral-400',
+					// Explicit light text utility classes
+					'text-current',
+					// Opacity variants
+					'text-foreground/50', 'text-foreground/60', 'text-foreground/70', 'text-foreground/80', 'text-foreground/90',
+					'text-black/50', 'text-black/60', 'text-black/70',
+				];
+				
+				textClassesToRemove.forEach((cls) => {
+					node.classList.remove(cls);
+				});
+				
+				// Comprehensive list of dark background classes to remove
+				const bgClassesToRemove = [
+					// Slate
+					'bg-slate-950', 'bg-slate-900', 'bg-slate-800', 'bg-slate-700',
+					// Gray
+					'bg-gray-950', 'bg-gray-900', 'bg-gray-800', 'bg-gray-700',
+					// Zinc
+					'bg-zinc-950', 'bg-zinc-900', 'bg-zinc-800', 'bg-zinc-700',
+					// Stone
+					'bg-stone-950', 'bg-stone-900', 'bg-stone-800', 'bg-stone-700',
+					// Other
+					'bg-black', 'dark:bg-slate-900', 'dark:bg-gray-900',
+				];
+				
+				bgClassesToRemove.forEach((cls) => {
+					node.classList.remove(cls);
+				});
+				
+				// Smart text color enforcement - only on light backgrounds
+				const tagsThatNeedDarkText = ['P', 'SPAN', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'SECTION', 'ARTICLE', 'LI'];
+				if (tagsThatNeedDarkText.includes(node.tagName)) {
+					const computedStyle = window.getComputedStyle(node);
+					const bgColor = computedStyle.backgroundColor;
+					
+					// Check if element has a dark background
+					const hasDarkBg = 
+						bgColor.includes('rgb(0,') ||
+						bgColor.includes('rgb(15,') ||
+						bgColor.includes('rgb(23,') ||
+						bgColor.includes('rgb(31,') ||
+						bgColor.includes('rgb(51,') ||
+						bgColor.includes('rgb(100,') ||
+						bgColor.includes('#000') ||
+						bgColor.includes('#111') ||
+						bgColor.includes('#222') ||
+						node.className.includes('bg-slate-9') ||
+						node.className.includes('bg-gray-9') ||
+						node.className.includes('bg-black') ||
+						node.className.includes('bg-rose-') ||
+						node.className.includes('bg-pink-') ||
+						node.className.includes('bg-emerald-') ||
+						node.className.includes('bg-blue-');
+					
+					// Only force black text if background is light (white or very light)
+					if (!hasDarkBg) {
+						const currentColor = node.style.color || computedStyle.color;
+						
+						if (!currentColor || 
+						    currentColor.includes('rgb(255') || 
+						    currentColor.includes('rgb(200') ||
+						    currentColor.includes('rgb(150') ||
+						    currentColor.includes('white') ||
+						    currentColor.includes('#fff') ||
+						    currentColor.includes('#ccc')) {
+							node.style.color = '#000000';
+						}
+					}
+				}
+				
+				// Remove inline dark colors
+				if (node.style.color) {
+					const color = node.style.color;
+					if (
+						color.includes('rgb(0,') ||
+						color.includes('rgb(15,') ||
+						color.includes('rgb(17,') ||
+						color.includes('rgb(23,') ||
+						color.includes('rgb(31,') ||
+						color.includes('#000') ||
+						color.includes('#111')
+					) {
+						node.style.removeProperty('color');
+					}
+				}
+				
+				// Remove inline dark backgrounds only if they're very dark
+				if (node.style.backgroundColor) {
+					const bgColor = node.style.backgroundColor;
+					if (
+						bgColor.includes('rgb(15,') ||
+						bgColor.includes('rgb(17,') ||
+						bgColor.includes('rgb(23,') ||
+						bgColor.includes('rgb(31,') ||
+						bgColor.includes('#000') ||
+						bgColor.includes('#111')
+					) {
+						node.style.removeProperty('background-color');
+					}
+				}
+				
+				// Recursively process all children
+				Array.from(node.children).forEach((child) => {
+					if (child instanceof HTMLElement) {
+						enforceLightMode(child);
+					}
+				});
+			};
+			
+			enforceLightMode(clonedNode);
+			
+			// Force white background on container
+			exportContainer.style.background = '#ffffff';
+			clonedNode.style.background = '#ffffff';
+			
+			// Inject minimal export CSS scoped to container only
+			const styleEl = document.createElement('style');
+			styleEl.setAttribute('data-export-style', 'true');
+			styleEl.innerHTML = `
+				[data-export-container="true"] * {
+					text-shadow: none;
+				}
+			`;
+			document.head.appendChild(styleEl);
+
 			const allImages = Array.from(clonedNode.querySelectorAll('img'));
 			allImages.forEach((img) => {
 				const currentSrc = (img.getAttribute('src') || '').trim();
@@ -754,10 +939,10 @@ function TravelDetailModal({
 
 			const fullImageData = await toPng(clonedNode, {
 				cacheBust: false,
-				pixelRatio: 2,
+				pixelRatio: PDF_EXPORT_PIXEL_RATIO,
 				backgroundColor: '#ffffff',
 				imagePlaceholder: transparentPixel,
-				width: 794,
+				width: PDF_EXPORT_WIDTH_PX,
 				filter: (node) => {
 					if (node instanceof HTMLVideoElement) return false;
 					if (node instanceof HTMLElement && node.dataset.exportHide === 'true') return false;
@@ -815,6 +1000,8 @@ function TravelDetailModal({
 				pageCanvas.height = sliceHeightPx;
 				const ctx = pageCanvas.getContext('2d');
 				if (!ctx) throw new Error('Unable to render PDF slice canvas');
+				ctx.imageSmoothingEnabled = true;
+				ctx.imageSmoothingQuality = 'high';
 
 				ctx.drawImage(
 					fullImage,
@@ -828,10 +1015,10 @@ function TravelDetailModal({
 					sliceHeightPx,
 				);
 
-				const pageData = pageCanvas.toDataURL('image/png');
+				const pageData = pageCanvas.toDataURL('image/jpeg', PDF_EXPORT_JPEG_QUALITY);
 				const renderHeightMm = sliceHeightPx / pxPerMm;
 				if (pageIndex > 0) pdf.addPage();
-				pdf.addImage(pageData, 'PNG', margin, margin, contentWidth, renderHeightMm, undefined, 'FAST');
+				pdf.addImage(pageData, 'JPEG', margin, margin, contentWidth, renderHeightMm, undefined, 'MEDIUM');
 
 				offsetPx = cutEndPx;
 				pageIndex += 1;
@@ -846,6 +1033,12 @@ function TravelDetailModal({
 			}
 			window.alert('Unable to generate PDF right now. Please try again.');
 		} finally {
+			// Remove injected style
+			const injectedStyle = document.head.querySelector('style[data-export-style="true"]');
+			if (injectedStyle) {
+				injectedStyle.remove();
+			}
+			
 			if (exportContainer && exportContainer.parentNode) {
 				exportContainer.parentNode.removeChild(exportContainer);
 			}
