@@ -20,6 +20,10 @@ const DEFAULT_PRIVATE_ROOM_LIMITS = {
   pro: 3,
   premium: 10,
 };
+const DEFAULT_FEATURES = {
+  proFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nExpose private rooms for join requests\nPriority support',
+  premiumFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nAdvanced member tools\nPriority assistance',
+};
 
 const normalizeBoolean = (value: unknown, defaultValue = true) =>
   typeof value === 'boolean' ? value : defaultValue;
@@ -64,11 +68,21 @@ const normalizePrivateRoomLimits = (value: unknown) => {
   };
 };
 
+const normalizeFeatures = (value: unknown) => {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+  return {
+    proFeatures: typeof raw.proFeatures === 'string' && raw.proFeatures.trim() ? raw.proFeatures.trim() : DEFAULT_FEATURES.proFeatures,
+    premiumFeatures: typeof raw.premiumFeatures === 'string' && raw.premiumFeatures.trim() ? raw.premiumFeatures.trim() : DEFAULT_FEATURES.premiumFeatures,
+  };
+};
+
 const normalizeSettingsPayload = (data: Record<string, unknown>) => ({
   homePageEnabled: normalizeBoolean(data.homePageEnabled, true),
   bookingCategoriesEnabled: normalizeBoolean(data.bookingCategoriesEnabled, true),
   pricing: normalizePricing(data.pricing),
   privateRoomLimits: normalizePrivateRoomLimits(data.privateRoomLimits),
+  features: normalizeFeatures(data.features),
 });
 
 export async function GET(req: NextRequest) {
@@ -113,6 +127,10 @@ export async function PUT(req: NextRequest) {
 
     if (Object.prototype.hasOwnProperty.call(body, 'privateRoomLimits')) {
       updates.privateRoomLimits = normalizePrivateRoomLimits(body.privateRoomLimits);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'features')) {
+      updates.features = normalizeFeatures(body.features);
     }
 
     await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).set(updates, { merge: true });

@@ -16,7 +16,7 @@ import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
 import { publicAsset } from '@/lib/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminAPI } from '@/lib/api';
+import { adminAPI, subscriptionsAPI } from '@/lib/api';
 import {
   getSubscriptionInfo,
   getPrivateRoomCreateAllowance,
@@ -538,10 +538,10 @@ const ChatRoomsList: React.FC = () => {
   useEffect(() => {
     const loadPrivateRoomLimits = async () => {
       try {
-        const response = await adminAPI.getSettings();
-        const limits = response?.data?.data?.privateRoomLimits;
-        const parsedPro = Number(limits?.pro);
-        const parsedPremium = Number(limits?.premium);
+        const response = await subscriptionsAPI.getPlans();
+        const plans = response?.data?.data?.plans;
+        const parsedPro = Number(plans?.pro?.features?.maxPrivateChats);
+        const parsedPremium = Number(plans?.premium?.features?.maxPrivateChats);
 
         setPrivateRoomLimitSettings({
           pro: Number.isFinite(parsedPro) && parsedPro >= 0 ? Math.floor(parsedPro) : 3,
