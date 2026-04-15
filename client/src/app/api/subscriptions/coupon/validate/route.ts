@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { fail, ok } from '@/lib/server/http';
-import { getPlanByInterval, isValidInterval, isValidPaidPlan } from '@/lib/server/subscriptionPlans';
+import { getConfiguredPlanByInterval, isValidInterval, isValidPaidPlan } from '@/lib/server/subscriptionPlans';
 import { getCouponPricing } from '@/lib/server/couponPricing';
 
 export const runtime = 'nodejs';
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       return fail('Coupon code is required', 400);
     }
 
-    const selectedPrice = getPlanByInterval(planType, interval);
+    const selectedPrice = await getConfiguredPlanByInterval(planType, interval);
     const pricing = await getCouponPricing({
       promoCode,
       planType,

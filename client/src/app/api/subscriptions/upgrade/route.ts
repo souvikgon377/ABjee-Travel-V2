@@ -1,25 +1,14 @@
-import { NextRequest } from "next/server";
-import { authenticateRequest, AuthError } from "@/lib/server/auth";
-import { fail, ok } from "@/lib/server/http";
-import { subscriptionService } from "@/services/subscriptionService";
-import { userService } from "@/services/userService";
+import { NextRequest } from 'next/server';
+import { authenticateRequest, AuthError } from '@/lib/server/auth';
+import { fail, ok } from '@/lib/server/http';
+import { subscriptionService } from '@/services/subscriptionService';
+import { userService } from '@/services/userService';
+import {
+  getConfiguredPrivateRoomLimits,
+  getConfiguredSubscriptionPlans,
+} from '@/lib/server/subscriptionPlans';
 
-export const runtime = "nodejs";
-
-const SUBSCRIPTION_PLANS: Record<string, any> = {
-  pro: {
-    type: "pro",
-    name: "Paid Plan",
-    price: { amount: 2, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
-  },
-  premium: {
-    type: "premium",
-    name: "Premium Plan",
-    price: { amount: 2, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
-  },
-};
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,10 +24,14 @@ export async function POST(req: NextRequest) {
       return fail("Invalid billing interval", 400);
     }
 
-    const selectedPlan = SUBSCRIPTION_PLANS[planType];
+    const [configuredPlans, privateRoomLimits] = await Promise.all([
+      getConfiguredSubscriptionPlans(),
+      getConfiguredPrivateRoomLimits(),
+    ]);
+    const selectedPlan = configuredPlans[planType as 'pro' | 'premium'];
     const startDate = new Date();
     const endDate = new Date();
-    if (interval === "yearly") endDate.setFullYear(endDate.getFullYear() + 1);
+    if (interval === 'yearly') endDate.setFullYear(endDate.getFullYear() + 1);
     else endDate.setMonth(endDate.getMonth() + 1);
 
     let subscription = await subscriptionService.findByUserId(user.id);
@@ -50,7 +43,7 @@ export async function POST(req: NextRequest) {
     };
 
     const features = subscriptionService.getFeaturesForPlan(planType);
-    features.maxPrivateChats = interval === "yearly" ? 10 : 3;
+    features.maxPrivateChats = privateRoomLimits[planType as 'pro' | 'premium'];
 
     if (!subscription) {
       subscription = await subscriptionService.create({

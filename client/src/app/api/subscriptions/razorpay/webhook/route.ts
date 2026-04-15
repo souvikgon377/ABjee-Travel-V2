@@ -5,9 +5,10 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { subscriptionService } from '@/services/subscriptionService';
 import { userService } from '@/services/userService';
 import {
+  getConfiguredPlanByInterval,
+  getConfiguredPrivateRoomLimits,
+  getConfiguredSubscriptionPlans,
   getIntervalEndDate,
-  getPlanByInterval,
-  SUBSCRIPTION_PLANS,
   isValidInterval,
   isValidPaidPlan,
 } from '@/lib/server/subscriptionPlans';
@@ -109,8 +110,12 @@ export async function POST(req: NextRequest) {
       return ok({ message: `Payment status ${paymentStatus || 'unknown'} recorded` });
     }
 
-    const selectedPlan = SUBSCRIPTION_PLANS[planType];
-    const selectedPrice = getPlanByInterval(planType, interval);
+    const [configuredPlans, privateRoomLimits, selectedPrice] = await Promise.all([
+      getConfiguredSubscriptionPlans(),
+      getConfiguredPrivateRoomLimits(),
+      getConfiguredPlanByInterval(planType, interval),
+    ]);
+    const selectedPlan = configuredPlans[planType];
     const appliedPromoCode = typeof paymentData.promoCode === 'string' ? paymentData.promoCode : null;
     const discountPercent = Number(paymentData.discountPercent || 0);
     const discountAmount = Number(paymentData.discountAmount || 0);
@@ -128,7 +133,7 @@ export async function POST(req: NextRequest) {
     };
 
     const features = subscriptionService.getFeaturesForPlan(planType);
-    features.maxPrivateChats = interval === 'yearly' ? 10 : 3;
+    features.maxPrivateChats = privateRoomLimits[planType];
 
     const billingEntry = {
       amount: finalAmount,

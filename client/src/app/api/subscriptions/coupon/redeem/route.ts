@@ -4,11 +4,12 @@ import { fail, ok } from '@/lib/server/http';
 import { subscriptionService } from '@/services/subscriptionService';
 import { userService } from '@/services/userService';
 import {
+  getConfiguredPlanByInterval,
+  getConfiguredPrivateRoomLimits,
+  getConfiguredSubscriptionPlans,
   getIntervalEndDate,
-  getPlanByInterval,
   isValidInterval,
   isValidPaidPlan,
-  SUBSCRIPTION_PLANS,
 } from '@/lib/server/subscriptionPlans';
 import { getCouponPricing } from '@/lib/server/couponPricing';
 
@@ -35,7 +36,11 @@ export async function POST(req: NextRequest) {
       return fail('Coupon code is required', 400);
     }
 
-    const selectedPrice = getPlanByInterval(planType, interval);
+    const [selectedPrice, configuredPlans, privateRoomLimits] = await Promise.all([
+      getConfiguredPlanByInterval(planType, interval),
+      getConfiguredSubscriptionPlans(),
+      getConfiguredPrivateRoomLimits(),
+    ]);
     const couponPricing = await getCouponPricing({
       promoCode,
       planType,
@@ -47,7 +52,7 @@ export async function POST(req: NextRequest) {
       return fail('Coupon does not fully cover the payable amount', 400);
     }
 
-    const selectedPlan = SUBSCRIPTION_PLANS[planType];
+    const selectedPlan = configuredPlans[planType];
     const startDate = new Date();
     const endDate = getIntervalEndDate(interval, startDate);
 
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest) {
     };
 
     const features = subscriptionService.getFeaturesForPlan(planType);
-    features.maxPrivateChats = interval === 'yearly' ? 10 : 3;
+    features.maxPrivateChats = privateRoomLimits[planType];
 
     const billingEntry = {
       amount: 0,

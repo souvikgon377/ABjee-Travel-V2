@@ -3,10 +3,10 @@ import { authenticateRequest, AuthError } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import {
-  getPlanByInterval,
+  getConfiguredPlanByInterval,
+  getConfiguredSubscriptionPlans,
   isValidInterval,
   isValidPaidPlan,
-  SUBSCRIPTION_PLANS,
 } from '@/lib/server/subscriptionPlans';
 import { getCouponPricing } from '@/lib/server/couponPricing';
 
@@ -53,7 +53,10 @@ export async function POST(req: NextRequest) {
       return fail('Invalid billing interval', 400);
     }
 
-    const selectedPrice = getPlanByInterval(planType, interval);
+    const [selectedPrice, configuredPlans] = await Promise.all([
+      getConfiguredPlanByInterval(planType, interval),
+      getConfiguredSubscriptionPlans(),
+    ]);
     const couponPricing = await getCouponPricing({
       promoCode,
       planType,
@@ -82,7 +85,7 @@ export async function POST(req: NextRequest) {
           userId: user.id,
           planType,
           interval,
-          planName: SUBSCRIPTION_PLANS[planType].name,
+          planName: configuredPlans[planType].name,
           promoCode: couponPricing.promoCode || '',
           discountPercent: String(couponPricing.discountPercent),
         },
@@ -123,7 +126,7 @@ export async function POST(req: NextRequest) {
       keyId,
       planType,
       interval,
-      planName: SUBSCRIPTION_PLANS[planType].name,
+      planName: configuredPlans[planType].name,
       baseAmount: selectedPrice.amount,
       finalAmount: couponPricing.finalAmount,
       discountAmount: couponPricing.discountAmount,

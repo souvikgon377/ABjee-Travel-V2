@@ -1,59 +1,79 @@
-import { ok } from "@/lib/server/http";
+import { ok } from '@/lib/server/http';
+import {
+  getConfiguredPrivateRoomLimits,
+  getConfiguredSubscriptionPlans,
+} from '@/lib/server/subscriptionPlans';
+import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
-export const runtime = "nodejs";
-
-const SUBSCRIPTION_PLANS = {
-  free: {
-    type: "free",
-    name: "Free Plan",
-    price: { amount: 0, currency: "USD" },
-    features: {
-      privateChatAccess: false,
-      maxPrivateChats: 0,
-      travelPartnerRequests: 1,
-      prioritySupport: false,
-      advancedFilters: false,
-      profileBoost: false,
-      fileUploadLimit: 5,
-      customDestinations: false,
-    },
-  },
-  pro: {
-    type: "pro",
-    name: "Paid Plan",
-    price: { amount: 2, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
-    features: {
-      privateChatAccess: true,
-      maxPrivateChats: 3,
-      maxPrivateChatsYearly: 10,
-      travelPartnerRequests: 5,
-      prioritySupport: true,
-      advancedFilters: true,
-      profileBoost: false,
-      fileUploadLimit: 25,
-      customDestinations: true,
-    },
-  },
-  premium: {
-    type: "premium",
-    name: "Premium Plan",
-    price: { amount: 2, currency: "USD", interval: "monthly" },
-    yearlyPrice: { amount: 15, currency: "USD", interval: "yearly" },
-    features: {
-      privateChatAccess: true,
-      maxPrivateChats: 3,
-      maxPrivateChatsYearly: 10,
-      travelPartnerRequests: -1,
-      prioritySupport: true,
-      advancedFilters: true,
-      profileBoost: true,
-      fileUploadLimit: 100,
-      customDestinations: true,
-    },
-  },
-};
+export const runtime = 'nodejs';
 
 export async function GET() {
-  return ok({ plans: SUBSCRIPTION_PLANS });
+  const [configuredPlans, privateRoomLimits] = await Promise.all([
+    getConfiguredSubscriptionPlans(),
+    getConfiguredPrivateRoomLimits(),
+  ]);
+
+  // Fetch admin feature text
+  let adminFeatures = { proFeatures: '', premiumFeatures: '' };
+  try {
+    const snapshot = await adminDb.collection('admin_settings').doc('system').get();
+    const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    const features = data.features && typeof data.features === 'object' ? (data.features as Record<string, any>) : {};
+    adminFeatures = {
+      proFeatures: typeof features.proFeatures === 'string' ? features.proFeatures : '',
+      premiumFeatures: typeof features.premiumFeatures === 'string' ? features.premiumFeatures : '',
+    };
+  } catch (error) {
+    console.error('Failed to fetch admin features:', error);
+  }
+
+  return ok({
+    plans: {
+      free: {
+        type: 'free',
+        name: 'Free Plan',
+        price: { amount: 0, currency: configuredPlans.pro.price.currency },
+        features: {
+          privateChatAccess: false,
+          maxPrivateChats: 0,
+          maxPrivateChatsYearly: 0,
+          travelPartnerRequests: 1,
+          prioritySupport: false,
+          advancedFilters: false,
+          profileBoost: false,
+          fileUploadLimit: 5,
+          customDestinations: false,
+        },
+      },
+      pro: {
+        ...configuredPlans.pro,
+        features: {
+          privateChatAccess: true,
+          maxPrivateChats: privateRoomLimits.pro,
+          maxPrivateChatsYearly: privateRoomLimits.pro,
+          travelPartnerRequests: 5,
+          prioritySupport: true,
+          advancedFilters: true,
+          profileBoost: false,
+          fileUploadLimit: 25,
+          customDestinations: true,
+        },
+      },
+      premium: {
+        ...configuredPlans.premium,
+        features: {
+          privateChatAccess: true,
+          maxPrivateChats: privateRoomLimits.premium,
+          maxPrivateChatsYearly: privateRoomLimits.premium,
+          travelPartnerRequests: -1,
+          prioritySupport: true,
+          advancedFilters: true,
+          profileBoost: true,
+          fileUploadLimit: 100,
+          customDestinations: true,
+        },
+      },
+    },
+    adminFeatures,
+  });
 }

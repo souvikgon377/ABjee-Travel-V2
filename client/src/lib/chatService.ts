@@ -441,8 +441,11 @@ class ChatService {
   private async enforcePrivateRoomMembershipLimit(userId: string, maxOverride?: number): Promise<void> {
     const privateRoomCount = await this.getUserPrivateRoomMembershipCount(userId);
 
-    if (typeof maxOverride === 'number' && maxOverride >= 0 && privateRoomCount >= maxOverride) {
-      throw new Error(`You have reached your private community limit (${maxOverride}).`);
+    if (typeof maxOverride === 'number' && maxOverride >= 0) {
+      if (privateRoomCount >= maxOverride) {
+        throw new Error(`You have reached your private community limit (${maxOverride}).`);
+      }
+      return;
     }
 
     const userRef = doc(firestoreDb, 'users', userId);

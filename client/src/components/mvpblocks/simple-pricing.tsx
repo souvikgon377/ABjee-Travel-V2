@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { ConfettiButton } from '@/components/ui/confetti';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 
-const plans = [
+const DEFAULT_PLANS = [
   {
     id: 'hobby',
     name: 'Free',
@@ -82,9 +82,79 @@ const plans = [
   },
 ];
 
+const generateFeaturesFromApi = (planId: string, features: any, adminFeatureText?: string): string[] => {
+  // If admin has provided feature text, use that
+  if (adminFeatureText && typeof adminFeatureText === 'string') {
+    return adminFeatureText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+
+  // Otherwise generate from features object (fallback)
+  const featuresList: string[] = [];
+
+  if (planId === 'hobby') {
+    featuresList.push('Public room chat and posting');
+    featuresList.push('Public room creation');
+    featuresList.push('No private room access');
+    featuresList.push('Private rooms require paid subscription');
+    featuresList.push('Basic community support');
+  } else if (planId === 'pro' || planId === 'enterprise') {
+    // Private room limits - handle both monthly and yearly
+    const monthlyLimit = features?.maxPrivateChats ?? 0;
+    const yearlyLimit = features?.maxPrivateChatsYearly ?? monthlyLimit;
+    
+    if (monthlyLimit > 0) {
+      featuresList.push(`Create or join up to ${monthlyLimit} private rooms (monthly)`);
+    }
+    if (yearlyLimit > 0 && yearlyLimit !== monthlyLimit) {
+      featuresList.push(`Create or join up to ${yearlyLimit} private rooms (yearly)`);
+    } else if (yearlyLimit > 0) {
+      // If same as monthly, still show yearly if specified differently
+      if (features?.maxPrivateChatsYearly !== undefined && features.maxPrivateChatsYearly !== features.maxPrivateChats) {
+        featuresList.push(`Create or join up to ${yearlyLimit} private rooms (yearly)`);
+      }
+    }
+
+    // Private room access
+    if (features?.privateChatAccess) {
+      featuresList.push('Private room access included');
+    }
+
+    // Plan-specific features
+    if (planId === 'pro') {
+      featuresList.push('Expose private rooms for join requests');
+    }
+
+    if (planId === 'enterprise') {
+      if (features?.profileBoost) {
+        featuresList.push('Advanced member tools');
+      }
+    }
+
+    // Common premium features
+    if (features?.prioritySupport) {
+      featuresList.push(planId === 'enterprise' ? 'Priority assistance' : 'Priority support');
+    }
+
+    if (features?.advancedFilters) {
+      featuresList.push('Advanced filtering options');
+    }
+
+    if (features?.customDestinations) {
+      featuresList.push('Custom destination access');
+    }
+  }
+
+  // If no features were generated, use defaults
+  return featuresList.length > 0 ? featuresList : DEFAULT_PLANS.find((p) => p.id === planId)?.features || [];
+};
+
 export default function SimplePricing() {
   const [frequency, setFrequency] = useState<string>('monthly');
   const [mounted, setMounted] = useState(false);
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [paymentConfirmation, setPaymentConfirmation] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState('');
@@ -455,6 +525,64 @@ export default function SimplePricing() {
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const fetchPricingPlans = async () => {
+      try {
+        const res = await fetch('/api/subscriptions/plans');
+        const payload = await res.json().catch(() => ({}));
+        
+        console.log('Pricing API Response:', payload);
+        
+        if (res.ok && payload?.success && payload?.data?.plans) {
+          const plansData = payload.data.plans;
+          const adminFeatures = payload?.data?.adminFeatures || {};
+          
+          // Map component plan IDs to API plan IDs
+          const planIdMap: Record<string, string> = {
+            hobby: 'free',
+            pro: 'pro',
+            enterprise: 'premium',
+          };
+          
+          // Merge fetched pricing and features with default plan structure
+          const updatedPlans = DEFAULT_PLANS.map((defaultPlan) => {
+            const apiPlanId = planIdMap[defaultPlan.id];
+            const fetchedPlan = plansData[apiPlanId];
+            
+            console.log(`Plan ${defaultPlan.id} (API: ${apiPlanId}):`, fetchedPlan);
+            
+            if (fetchedPlan && fetchedPlan.price && fetchedPlan.yearlyPrice) {
+              // Get admin feature text for this plan
+              const featureTextKey = defaultPlan.id === 'pro' ? 'proFeatures' : defaultPlan.id === 'enterprise' ? 'premiumFeatures' : null;
+              const adminFeatureText = featureTextKey ? adminFeatures[featureTextKey] : null;
+              
+              const features = generateFeaturesFromApi(defaultPlan.id, fetchedPlan.features, adminFeatureText);
+              console.log(`Generated features for ${defaultPlan.id}:`, features);
+              
+              return {
+                ...defaultPlan,
+                price: {
+                  monthly: fetchedPlan.price.amount ?? defaultPlan.price.monthly,
+                  yearly: fetchedPlan.yearlyPrice.amount ?? defaultPlan.price.yearly,
+                },
+                features,
+              };
+            }
+            return defaultPlan;
+          });
+          
+          console.log('Updated Plans:', updatedPlans);
+          setPlans(updatedPlans);
+        }
+      } catch (error) {
+        console.error('Failed to fetch pricing plans:', error);
+        // Keep using default plans if fetch fails
+      }
+    };
+
+    fetchPricingPlans();
   }, []);
 
   if (!mounted) return null;

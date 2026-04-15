@@ -16,6 +16,7 @@ import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
 import { publicAsset } from '@/lib/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
+import { adminAPI } from '@/lib/api';
 import {
   getSubscriptionInfo,
   getPrivateRoomCreateAllowance,
@@ -421,6 +422,7 @@ const ChatRoomsList: React.FC = () => {
   const [socialShareMessage, setSocialShareMessage] = useState('');
   const [_userCreatedRoomsCount, setUserCreatedRoomsCount] = useState(0);
   const [userCreatedPrivateRoomsCount, setUserCreatedPrivateRoomsCount] = useState(0);
+  const [privateRoomLimitSettings, setPrivateRoomLimitSettings] = useState<{ pro: number; premium: number }>({ pro: 3, premium: 10 });
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -436,10 +438,13 @@ const ChatRoomsList: React.FC = () => {
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
   const paidMember = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
   const privateRoomAllowance = useMemo(
-    () => getPrivateRoomCreateAllowance(userProfile, userCreatedPrivateRoomsCount),
-    [userProfile, userCreatedPrivateRoomsCount]
+    () => getPrivateRoomCreateAllowance(userProfile, userCreatedPrivateRoomsCount, privateRoomLimitSettings),
+    [userProfile, userCreatedPrivateRoomsCount, privateRoomLimitSettings]
   );
-  const paidPrivateRoomLimit = useMemo(() => getPaidPrivateRoomLimit(subscriptionInfo), [subscriptionInfo]);
+  const paidPrivateRoomLimit = useMemo(
+    () => getPaidPrivateRoomLimit(subscriptionInfo, privateRoomLimitSettings),
+    [subscriptionInfo, privateRoomLimitSettings]
+  );
   const isAdminOrOwner = useMemo(() => {
     const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
     return role === 'admin' || role === 'owner';
@@ -530,6 +535,26 @@ const ChatRoomsList: React.FC = () => {
       nav.connection?.removeEventListener?.('change', updatePerformanceMode);
     };
   }, [isMobile]);
+  useEffect(() => {
+    const loadPrivateRoomLimits = async () => {
+      try {
+        const response = await adminAPI.getSettings();
+        const limits = response?.data?.data?.privateRoomLimits;
+        const parsedPro = Number(limits?.pro);
+        const parsedPremium = Number(limits?.premium);
+
+        setPrivateRoomLimitSettings({
+          pro: Number.isFinite(parsedPro) && parsedPro >= 0 ? Math.floor(parsedPro) : 3,
+          premium: Number.isFinite(parsedPremium) && parsedPremium >= 0 ? Math.floor(parsedPremium) : 10,
+        });
+      } catch {
+        setPrivateRoomLimitSettings({ pro: 3, premium: 10 });
+      }
+    };
+
+    loadPrivateRoomLimits();
+  }, []);
+
   const countryUsersCarousel = countryUsers.length > 0 && !isMobile ? (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -1222,7 +1247,11 @@ const ChatRoomsList: React.FC = () => {
     if (!newRoomIsPublic && !isAdminOrOwner) {
       const latestPrivateMembershipCount = await chatService.getUserPrivateRoomMembershipCount(user.uid);
       setUserCreatedPrivateRoomsCount(latestPrivateMembershipCount);
-      const latestAllowance = getPrivateRoomCreateAllowance(userProfile, latestPrivateMembershipCount);
+      const latestAllowance = getPrivateRoomCreateAllowance(
+        userProfile,
+        latestPrivateMembershipCount,
+        privateRoomLimitSettings
+      );
       if (!latestAllowance.allowed) {
         setCreateRoomError(latestAllowance.reason);
         return;

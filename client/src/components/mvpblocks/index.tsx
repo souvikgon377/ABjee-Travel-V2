@@ -33,6 +33,42 @@ const STAT_DEFAULTS = [
   { title: 'Page Views',       value: '0',  change: '+0%', changeType: 'negative' as const, icon: Eye,         color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
 ];
 
+type RevenueSettings = {
+  pricing: {
+    currency: string;
+    proMonthly: number;
+    proYearly: number;
+    premiumMonthly: number;
+    premiumYearly: number;
+  };
+  privateRoomLimits: {
+    pro: number;
+    premium: number;
+  };
+  features?: {
+    proFeatures: string;
+    premiumFeatures: string;
+  };
+};
+
+const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
+  pricing: {
+    currency: 'INR',
+    proMonthly: 2,
+    proYearly: 15,
+    premiumMonthly: 2,
+    premiumYearly: 15,
+  },
+  privateRoomLimits: {
+    pro: 3,
+    premium: 10,
+  },
+  features: {
+    proFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nExpose private rooms for join requests\nPriority support',
+    premiumFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nAdvanced member tools\nPriority assistance',
+  },
+};
+
 const RevenueChart = lazy(() => import('@/components/ui/revenue-chart').then((module) => ({ default: module.RevenueChart })));
 const UsersTable = lazy(() => import('@/components/ui/users-table').then((module) => ({ default: module.UsersTable })));
 const ChatRoomsTable = lazy(() => import('@/components/ui/chatrooms-table').then((module) => ({ default: module.ChatRoomsTable })));
@@ -59,6 +95,11 @@ export default function AdminDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [homePageEnabled, setHomePageEnabled] = useState(true);
   const [homePageToggleLoading, setHomePageToggleLoading] = useState(false);
+  const [revenueSettings, setRevenueSettings] = useState<RevenueSettings>(REVENUE_SETTINGS_DEFAULTS);
+  const [revenueForm, setRevenueForm] = useState<RevenueSettings>(REVENUE_SETTINGS_DEFAULTS);
+  const [revenueSettingsLoading, setRevenueSettingsLoading] = useState(false);
+  const [revenueSettingsSaving, setRevenueSettingsSaving] = useState(false);
+  const [revenueSettingsMessage, setRevenueSettingsMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddUserDialog, setShowAddUserDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -108,18 +149,62 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const normalizeRevenueSettings = useCallback((value: unknown): RevenueSettings => {
+    const raw = value && typeof value === 'object' ? (value as Record<string, any>) : {};
+    const pricing = raw.pricing && typeof raw.pricing === 'object' ? raw.pricing : {};
+    const limits = raw.privateRoomLimits && typeof raw.privateRoomLimits === 'object' ? raw.privateRoomLimits : {};
+    const features = raw.features && typeof raw.features === 'object' ? raw.features : {};
+
+    const toAmount = (candidate: unknown, fallback: number) => {
+      const parsed = Number(candidate);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+    };
+    const toLimit = (candidate: unknown, fallback: number) => {
+      const parsed = Number(candidate);
+      return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+    };
+
+    return {
+      pricing: {
+        currency: typeof pricing.currency === 'string' && pricing.currency.trim() ? pricing.currency.trim().toUpperCase() : REVENUE_SETTINGS_DEFAULTS.pricing.currency,
+        proMonthly: toAmount(pricing.proMonthly, REVENUE_SETTINGS_DEFAULTS.pricing.proMonthly),
+        proYearly: toAmount(pricing.proYearly, REVENUE_SETTINGS_DEFAULTS.pricing.proYearly),
+        premiumMonthly: toAmount(pricing.premiumMonthly, REVENUE_SETTINGS_DEFAULTS.pricing.premiumMonthly),
+        premiumYearly: toAmount(pricing.premiumYearly, REVENUE_SETTINGS_DEFAULTS.pricing.premiumYearly),
+      },
+      privateRoomLimits: {
+        pro: toLimit(limits.pro, REVENUE_SETTINGS_DEFAULTS.privateRoomLimits.pro),
+        premium: toLimit(limits.premium, REVENUE_SETTINGS_DEFAULTS.privateRoomLimits.premium),
+      },
+      features: {
+        proFeatures: typeof features.proFeatures === 'string' && features.proFeatures.trim() ? features.proFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.proFeatures || '',
+        premiumFeatures: typeof features.premiumFeatures === 'string' && features.premiumFeatures.trim() ? features.premiumFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.premiumFeatures || '',
+      },
+    };
+  }, []);
+
   const fetchHomePageSetting = useCallback(async () => {
+    setRevenueSettingsLoading(true);
     try {
       const response = await adminAPI.getSettings();
-      const enabledValue = response?.data?.data?.homePageEnabled;
+      const settings = response?.data?.data;
+      const enabledValue = settings?.homePageEnabled;
       setHomePageEnabled(enabledValue !== false);
+
+      const normalizedRevenueSettings = normalizeRevenueSettings(settings);
+      setRevenueSettings(normalizedRevenueSettings);
+      setRevenueForm(normalizedRevenueSettings);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Failed to load home page setting:', error);
       }
       setHomePageEnabled(true);
+      setRevenueSettings(REVENUE_SETTINGS_DEFAULTS);
+      setRevenueForm(REVENUE_SETTINGS_DEFAULTS);
+    } finally {
+      setRevenueSettingsLoading(false);
     }
-  }, []);
+  }, [normalizeRevenueSettings]);
 
   useEffect(() => {
     fetchStats({ withLoader: true });
@@ -158,6 +243,91 @@ export default function AdminDashboard() {
       setHomePageToggleLoading(false);
     }
   }, [homePageEnabled]);
+
+  const handleRevenuePricingChange = useCallback((field: keyof RevenueSettings['pricing'], value: string) => {
+    setRevenueForm((prev) => {
+      if (field === 'currency') {
+        return {
+          ...prev,
+          pricing: {
+            ...prev.pricing,
+            currency: value.toUpperCase(),
+          },
+        };
+      }
+
+      const parsed = Number(value);
+      return {
+        ...prev,
+        pricing: {
+          ...prev.pricing,
+          [field]: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0,
+        },
+      };
+    });
+  }, []);
+
+  const handleRevenueLimitChange = useCallback((field: keyof RevenueSettings['privateRoomLimits'], value: string) => {
+    const parsed = Number(value);
+    setRevenueForm((prev) => ({
+      ...prev,
+      privateRoomLimits: {
+        ...prev.privateRoomLimits,
+        [field]: Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0,
+      },
+    }));
+  }, []);
+
+  const handleFeaturesChange = useCallback((field: keyof (RevenueSettings['features'] | {}), value: string) => {
+    setRevenueForm((prev) => ({
+      ...prev,
+      features: {
+        ...(prev.features || {}),
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const handleSaveRevenueSettings = useCallback(async () => {
+    setRevenueSettingsSaving(true);
+    setRevenueSettingsMessage('');
+
+    try {
+      const payload = {
+        pricing: {
+          currency: revenueForm.pricing.currency || 'INR',
+          proMonthly: Number(revenueForm.pricing.proMonthly) || 0,
+          proYearly: Number(revenueForm.pricing.proYearly) || 0,
+          premiumMonthly: Number(revenueForm.pricing.premiumMonthly) || 0,
+          premiumYearly: Number(revenueForm.pricing.premiumYearly) || 0,
+        },
+        privateRoomLimits: {
+          pro: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.pro) || 0)),
+          premium: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.premium) || 0)),
+        },
+        features: {
+          proFeatures: revenueForm.features?.proFeatures || '',
+          premiumFeatures: revenueForm.features?.premiumFeatures || '',
+        },
+      };
+
+      const response = await adminAPI.updateSettings(payload);
+      const normalized = normalizeRevenueSettings(response?.data?.data);
+      setRevenueSettings(normalized);
+      setRevenueForm(normalized);
+      setRevenueSettingsMessage('Revenue settings saved successfully.');
+    } catch (error) {
+      console.error('Failed to save revenue settings:', error);
+      setRevenueSettingsMessage('Failed to save revenue settings. Please try again.');
+    } finally {
+      setRevenueSettingsSaving(false);
+    }
+  }, [normalizeRevenueSettings, revenueForm]);
+
+  const handleResetRevenueSettings = useCallback(() => {
+    setRevenueForm(revenueSettings);
+    setRevenueSettingsMessage('Reverted unsaved changes.');
+  }, [revenueSettings]);
 
   const handleExport = useCallback(() => {
     setShowExportDialog(true);
@@ -394,7 +564,7 @@ export default function AdminDashboard() {
                   Revenue
                 </h1>
                 <p className="text-muted-foreground text-sm sm:text-base">
-                  Track subscription revenue and export finance snapshots.
+                  Track subscription revenue and control pricing plus private-room plan limits.
                 </p>
               </div>
               <button
@@ -410,6 +580,168 @@ export default function AdminDashboard() {
               {stats.map((stat, index) => (
                 <DashboardCard key={stat.title} stat={stat} index={index} />
               ))}
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card/50 p-4 sm:p-5">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold tracking-tight">Plan Controllers</h2>
+                <p className="text-sm text-muted-foreground">
+                  Configure Paid and Premium plan pricing and total private communities allowed per user.
+                </p>
+              </div>
+
+              {revenueSettingsLoading ? (
+                <div className="h-24 animate-pulse rounded-lg bg-muted/40" />
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="rounded-xl border border-border bg-background/70 p-4">
+                      <h3 className="mb-3 text-sm font-semibold">Pricing Controller</h3>
+                      <div className="space-y-3">
+                        <label className="block text-xs text-muted-foreground">
+                          Currency
+                          <input
+                            value={revenueForm.pricing.currency}
+                            onChange={(event) => handleRevenuePricingChange('currency', event.target.value)}
+                            maxLength={6}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            placeholder="INR"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Paid (Pro) Monthly
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.proMonthly}
+                            onChange={(event) => handleRevenuePricingChange('proMonthly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Paid (Pro) Yearly
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.proYearly}
+                            onChange={(event) => handleRevenuePricingChange('proYearly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Premium Monthly
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.premiumMonthly}
+                            onChange={(event) => handleRevenuePricingChange('premiumMonthly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Premium Yearly
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.premiumYearly}
+                            onChange={(event) => handleRevenuePricingChange('premiumYearly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-background/70 p-4">
+                      <h3 className="mb-3 text-sm font-semibold">Private Room Controller</h3>
+                      <div className="space-y-3">
+                        <label className="block text-xs text-muted-foreground">
+                          Total private communities for Paid (Pro)
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={revenueForm.privateRoomLimits.pro}
+                            onChange={(event) => handleRevenueLimitChange('pro', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Total private communities for Premium
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={revenueForm.privateRoomLimits.premium}
+                            onChange={(event) => handleRevenueLimitChange('premium', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Limits are enforced for private community creation. Free users remain blocked.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-border bg-background/70 p-4">
+                    <h3 className="mb-3 text-sm font-semibold">Features Controller</h3>
+                    <div className="space-y-3">
+                      <label className="block text-xs text-muted-foreground">
+                        Pro Plan Features (one per line)
+                        <textarea
+                          value={revenueForm.features?.proFeatures || ''}
+                          onChange={(event) => handleFeaturesChange('proFeatures', event.target.value)}
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          placeholder="Create or join up to 3 private rooms (monthly)&#10;Create or join up to 10 private rooms (yearly)&#10;Private room access included"
+                        />
+                      </label>
+
+                      <label className="block text-xs text-muted-foreground">
+                        Premium Plan Features (one per line)
+                        <textarea
+                          value={revenueForm.features?.premiumFeatures || ''}
+                          onChange={(event) => handleFeaturesChange('premiumFeatures', event.target.value)}
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          placeholder="Create or join up to 10 private rooms (monthly)&#10;Create or join up to 20 private rooms (yearly)&#10;Advanced member tools"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      onClick={handleSaveRevenueSettings}
+                      disabled={revenueSettingsSaving}
+                    >
+                      {revenueSettingsSaving ? 'Saving...' : 'Save Controllers'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleResetRevenueSettings}
+                      disabled={revenueSettingsSaving}
+                    >
+                      Reset Unsaved
+                    </Button>
+                    {revenueSettingsMessage ? (
+                      <span className="text-xs text-muted-foreground">{revenueSettingsMessage}</span>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </div>
 
             <Suspense fallback={<SectionLoader />}>
@@ -555,8 +887,16 @@ export default function AdminDashboard() {
     handleExport,
     handleSettings,
     handleToggleHomePage,
+    handleRevenuePricingChange,
+    handleRevenueLimitChange,
+    handleSaveRevenueSettings,
+    handleResetRevenueSettings,
     homePageEnabled,
     homePageToggleLoading,
+    revenueForm,
+    revenueSettingsLoading,
+    revenueSettingsSaving,
+    revenueSettingsMessage,
     activeFilters,
     usersTableRefresh,
     searchQuery,
