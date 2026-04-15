@@ -8,11 +8,12 @@ import { uploadFileToR2, VoiceRecorder, compressImageFile, compressVideoFile, tr
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
+import { Badge } from '../ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -136,6 +137,22 @@ type JoinRequestUser = {
   imageUrl?: string;
 };
 
+type CommunityMember = {
+  id: string;
+  displayName: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  email?: string;
+  avatar?: string;
+  avatarUrl?: string;
+  photoURL?: string;
+  profileImage?: string;
+  profilePicture?: string;
+  imageUrl?: string;
+  role: 'Owner' | 'Member';
+};
+
 const PENDING_PRIVATE_JOIN_ROOMS_KEY = 'abjee:pending-private-join-rooms';
 
 const ChatRoom = () => {
@@ -167,6 +184,7 @@ const ChatRoom = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [imageColors, setImageColors] = useState<{primary: string; secondary: string; accent: string} | null>(null);
+  const [isDarkBackground, setIsDarkBackground] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [uploadingBackground, setUploadingBackground] = useState(false);
   const [uploadingIcon, setUploadingIcon] = useState(false);
@@ -190,6 +208,11 @@ const ChatRoom = () => {
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
+  const [communityMembersLoading, setCommunityMembersLoading] = useState(false);
+  const [membersSearchInput, setMembersSearchInput] = useState('');
+  const [communityUserIndex, setCommunityUserIndex] = useState<Record<string, any>>({});
   const [processingJoinRequestUserId, setProcessingJoinRequestUserId] = useState<string | null>(null);
   const [joinRequestUsersMap, setJoinRequestUsersMap] = useState<Record<string, JoinRequestUser>>({});
   const [voiceRecorder] = useState(() => new VoiceRecorder());
@@ -244,6 +267,29 @@ const ChatRoom = () => {
   const canManageCurrentCommunity = Boolean(
     user && room && ((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid))
   );
+  const participantIds = useMemo(() => {
+    const rawParticipants = room?.participants;
+    const ids: string[] = Array.isArray(rawParticipants)
+      ? rawParticipants
+      : rawParticipants && typeof rawParticipants === 'object'
+        ? Object.values(rawParticipants as Record<string, string>)
+        : [];
+
+    const normalizedIds = Array.from(
+      new Set(
+        ids
+          .map((id) => String(id || '').trim())
+          .filter((id) => id.length > 0),
+      ),
+    );
+
+    const ownerId = String(room?.createdBy || '').trim();
+    if (ownerId && !normalizedIds.includes(ownerId)) {
+      normalizedIds.unshift(ownerId);
+    }
+
+    return normalizedIds;
+  }, [room?.participants, room?.createdBy]);
   const hasMessageAccess = useMemo(() => {
     if (!user || !room) return false;
     if (room.isPublic || isGeneralCommunityRoom(room)) return true;
@@ -251,6 +297,25 @@ const ChatRoom = () => {
     const participants = Array.isArray(room.participants) ? room.participants : [];
     return room.createdBy === user.uid || participants.includes(user.uid);
   }, [room, user]);
+
+  const filteredCommunityMembers = useMemo(() => {
+    const normalizedQuery = membersSearchInput.trim().toLowerCase();
+    if (!normalizedQuery) return communityMembers;
+
+    return communityMembers.filter((member) => {
+      const searchable = [
+        member.displayName,
+        member.firstName,
+        member.lastName,
+        member.username,
+        member.email,
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+
+      return searchable.includes(normalizedQuery);
+    });
+  }, [communityMembers, membersSearchInput]);
 
   // Add Members dialog state
   const [addMembersDialogOpen, setAddMembersDialogOpen] = useState(false);
@@ -279,21 +344,9 @@ const ChatRoom = () => {
   const extractColorsFromImage = useCallback((imageUrl: string) => {
     if (!imageUrl || typeof window === 'undefined') return;
 
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(imageUrl, window.location.origin);
-    } catch {
-      return;
-    }
-
-    // Canvas color extraction on cross-origin images requires ACAO headers.
-    // Skip extraction to avoid noisy CORS failures and keep default theme colors.
-    if (parsedUrl.origin !== window.location.origin) {
-      return;
-    }
-
     const img = new Image();
-    img.src = parsedUrl.href;
+    img.crossOrigin = 'anonymous';
+    img.src = imageUrl;
 
     img.onload = () => {
       try {
@@ -309,6 +362,8 @@ const ChatRoom = () => {
       const imageData = ctx.getImageData(0, 0, 100, 100);
       const data = imageData.data;
       const colorMap: {[key: string]: number} = {};
+      let brightnessTotal = 0;
+      let sampledPixels = 0;
 
       // Sample colors
       for (let i = 0; i < data.length; i += 16) {
@@ -317,6 +372,8 @@ const ChatRoom = () => {
         const b = data[i + 2];
         const key = `${Math.floor(r/10)*10},${Math.floor(g/10)*10},${Math.floor(b/10)*10}`;
         colorMap[key] = (colorMap[key] || 0) + 1;
+        brightnessTotal += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        sampledPixels += 1;
       }
 
       // Get top colors
@@ -338,13 +395,20 @@ const ChatRoom = () => {
         secondary: sortedColors[1] || 'rgb(236, 72, 153)',
         accent: sortedColors[2] || 'rgb(219, 39, 119)'
       });
+
+      const averageBrightness = sampledPixels > 0 ? brightnessTotal / sampledPixels : 255;
+      setIsDarkBackground(averageBrightness < 140);
       } catch {
-        // If image analysis fails for any reason, keep existing/default colors.
+        // If image analysis fails, prefer light text for safer readability on image backgrounds.
+        setImageColors(null);
+        setIsDarkBackground(true);
       }
     };
 
     img.onerror = () => {
-      // Ignore image read failures; UI can continue with fallback colors.
+      // If image cannot be read for analysis (for example due CORS), prefer light text for readability.
+      setImageColors(null);
+      setIsDarkBackground(true);
     };
   }, []);
 
@@ -352,6 +416,9 @@ const ChatRoom = () => {
   useEffect(() => {
     if (room?.backgroundImage?.url) {
       extractColorsFromImage(room.backgroundImage.url);
+    } else {
+      setImageColors(null);
+      setIsDarkBackground(false);
     }
   }, [room?.backgroundImage?.url, extractColorsFromImage]);
 
@@ -668,6 +735,98 @@ const ChatRoom = () => {
 
     return () => cancelAnimationFrame(rafId);
   }, [messages.length, hasMessageAccess]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!room || participantIds.length === 0) {
+      setCommunityMembers([]);
+      setCommunityMembersLoading(false);
+      return;
+    }
+
+    const buildMemberFromSource = (participantId: string, source?: any): CommunityMember => {
+      const displayName = source
+        ? String(source.displayName || '').trim() ||
+          `${String(source.firstName || '').trim()} ${String(source.lastName || '').trim()}`.trim() ||
+          String(source.username || '').trim() ||
+          String(source.email || '').trim() ||
+          `User ${participantId.slice(0, 6)}`
+        : `User ${participantId.slice(0, 6)}`;
+
+      return {
+        id: participantId,
+        displayName,
+        firstName: typeof source?.firstName === 'string' ? source.firstName : '',
+        lastName: typeof source?.lastName === 'string' ? source.lastName : '',
+        username: source?.username,
+        email: source?.email,
+        avatar: source?.avatar,
+        avatarUrl: source?.avatarUrl,
+        photoURL: source?.photoURL,
+        profileImage: source?.profileImage,
+        profilePicture: source?.profilePicture,
+        imageUrl: source?.imageUrl,
+        role: participantId === room.createdBy ? 'Owner' : 'Member',
+      };
+    };
+
+    // Instant UI update from available cached data (no network wait).
+    setCommunityMembers((prevMembers) => {
+      const prevById = new Map(prevMembers.map((member) => [member.id, member]));
+      return participantIds.map((participantId) => {
+        const cachedSource = communityUserIndex[participantId] || prevById.get(participantId);
+        return buildMemberFromSource(participantId, cachedSource);
+      });
+    });
+
+    const hasMissingProfiles = participantIds.some((participantId) => !communityUserIndex[participantId]);
+    if (!hasMissingProfiles) {
+      setCommunityMembersLoading(false);
+      return;
+    }
+
+    const loadCommunityMembers = async () => {
+      setCommunityMembersLoading(true);
+      try {
+        const response = await usersAPI.searchUsers({ q: '', limit: 500 });
+        const users = (response.data?.data?.users || []).map((rawUser: any) => ({
+          ...rawUser,
+          id: String(rawUser?._id || rawUser?.id || '').trim(),
+        }));
+
+        const indexedUsers = users
+          .filter((candidate: any) => candidate.id)
+          .reduce<Record<string, any>>((acc, candidate: any) => {
+            acc[candidate.id] = candidate;
+            return acc;
+          }, {});
+
+        if (!isCancelled) {
+          setCommunityUserIndex((prev) => ({ ...prev, ...indexedUsers }));
+
+          const mergedIndex = { ...communityUserIndex, ...indexedUsers };
+          setCommunityMembers(
+            participantIds.map((participantId) => buildMemberFromSource(participantId, mergedIndex[participantId])),
+          );
+        }
+      } catch {
+        if (!isCancelled) {
+          setCommunityMembers(participantIds.map((participantId) => buildMemberFromSource(participantId)));
+        }
+      } finally {
+        if (!isCancelled) {
+          setCommunityMembersLoading(false);
+        }
+      }
+    };
+
+    void loadCommunityMembers();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [participantIds, room?.createdBy]);
 
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1921,6 +2080,102 @@ const ChatRoom = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Community Members Dialog */}
+      <Dialog
+        open={membersDialogOpen}
+        onOpenChange={(open) => {
+          setMembersDialogOpen(open);
+          if (!open) {
+            setMembersSearchInput('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl w-[95vw] sm:w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-emerald-600" />
+              Community Members
+            </DialogTitle>
+            <DialogDescription>
+              {participantIds.length} member{participantIds.length !== 1 ? 's' : ''} in {room.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or email"
+                value={membersSearchInput}
+                onChange={(e) => setMembersSearchInput(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+          </div>
+
+          <div className="max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-card/60">
+            {communityMembersLoading && communityMembers.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading members...
+              </div>
+            ) : filteredCommunityMembers.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {membersSearchInput.trim() ? `No users match "${membersSearchInput}"` : 'No members found'}
+              </p>
+            ) : (
+              <div className="divide-y divide-border/70">
+                {communityMembersLoading && (
+                  <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Updating member details...
+                  </div>
+                )}
+                {filteredCommunityMembers.map((member) => {
+                  const memberAvatar = resolveAvatarUrl(member as Record<string, unknown>);
+                  return (
+                    <div key={member.id} className="flex items-start justify-between gap-3 px-3 py-3">
+                      <div className="flex min-w-0 items-start gap-2.5">
+                        <Avatar className="h-9 w-9 shrink-0">
+                          <AvatarImage src={memberAvatar || undefined} alt={member.displayName} />
+                          <AvatarFallback>
+                            {member.displayName.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-sm font-semibold">{member.displayName}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            First Name: {member.firstName?.trim() || 'Not provided'}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            Last Name: {member.lastName?.trim() || 'Not provided'}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            Username: {member.username?.trim() ? `@${member.username.trim()}` : 'Not provided'}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            Email: {member.email?.trim() || 'Not provided'}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            User ID: {member.id}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 pt-0.5">
+                        <Badge variant={member.role === 'Owner' ? 'default' : 'secondary'}>
+                          {member.role}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Add Members Dialog */}
       <Dialog open={addMembersDialogOpen} onOpenChange={(open) => {
         setAddMembersDialogOpen(open);
@@ -2490,6 +2745,17 @@ const ChatRoom = () => {
               </div>
             </div>
             <div className="ml-auto flex w-auto items-center justify-end gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMembersDialogOpen(true)}
+                className="h-8 sm:h-9 px-2 sm:px-3 shrink-0"
+                title="View community members"
+              >
+                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="ml-1.5 text-[10px] sm:text-xs font-semibold">{participantIds.length}</span>
+                <span className="ml-1 hidden md:inline">Members</span>
+              </Button>
               <div className="shrink-0 max-[340px]:hidden">
                 <ModeToggle />
               </div>
@@ -2590,7 +2856,7 @@ const ChatRoom = () => {
                   style={imageColors ? {
                     backgroundColor: `${imageColors.secondary}40`,
                     borderColor: `${imageColors.primary}60`,
-                    color: 'white'
+                    color: isDarkBackground ? '#F8FAFC' : 'white'
                   } : { backgroundColor: 'hsl(var(--card) / 0.9)' }}
                 >
                   {loadingMore ? (
@@ -2619,6 +2885,7 @@ const ChatRoom = () => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
+                const useLightChatText = Boolean(room?.backgroundImage?.url && isDarkBackground);
                 const messageAvatarCandidate = message as unknown as Record<string, unknown>;
                 const messageAvatarUrl =
                   userAvatarMap[message.userId] ||
@@ -2641,8 +2908,8 @@ const ChatRoom = () => {
                     </Avatar>
                     <div className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'} max-w-[85%] sm:max-w-[80%] md:max-w-[70%]`}>
                       <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
-                        <span className="text-xs sm:text-sm font-medium">{message.username}</span>
-                        <span className="text-[10px] sm:text-xs text-muted-foreground">{formatTime(message.timestamp)}</span>
+                        <span className={`text-xs sm:text-sm font-medium ${useLightChatText ? 'text-slate-100' : ''}`}>{message.username}</span>
+                        <span className={`text-[10px] sm:text-xs ${useLightChatText ? 'text-slate-300' : 'text-muted-foreground'}`}>{formatTime(message.timestamp)}</span>
                       </div>
                       <div className={`group relative flex items-center gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                         {/* Inline Edit UI */}
@@ -2684,7 +2951,9 @@ const ChatRoom = () => {
                               className={isOnlyEmoji ? 'text-2xl sm:text-3xl md:text-4xl animate-bounce-in' : `rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 backdrop-blur-sm shadow-md ${
                                 isDeleted 
                                   ? 'bg-muted/70 text-muted-foreground italic'
-                                  : 'text-black dark:text-white'
+                                  : useLightChatText
+                                    ? 'text-slate-100 [text-shadow:0_1px_8px_rgba(0,0,0,0.8)]'
+                                    : 'text-black dark:text-white'
                               }`}
                               style={!isDeleted && !isOnlyEmoji && isOwnMessage && imageColors ? {
                                 background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,

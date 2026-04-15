@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   { name: 'Community', href: '/community' },
   { name: 'Booking Categories', href: '/booking-categories' },
   { name: 'About', href: '/about' },
-  { name: 'Pricing', href: '/pricing' },
+  { name: 'Subscription', href: '/pricing' },
 ];
 
 // Move variants outside component to prevent re-creation

@@ -661,7 +661,13 @@ export default function SimplePricing() {
           transition={{ duration: 0.35, delay: 0.25 }}
           className="w-full max-w-2xl rounded-xl border border-primary/20 bg-card/70 p-4 text-left"
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <form
+            className="flex flex-col gap-3 sm:flex-row sm:items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void validateCouponForCurrentFrequency(couponInput);
+            }}
+          >
             <div className="w-full space-y-1">
               <label className="text-sm font-medium">Have a coupon code?</label>
               <Input
@@ -673,10 +679,9 @@ export default function SimplePricing() {
             </div>
             <div className="flex gap-2">
               <ConfettiButton
-                type="button"
+                type="submit"
                 variant="default"
                 options={{ origin: { x: 0.5, y: 0.5 } }}
-                onClick={() => validateCouponForCurrentFrequency(couponInput)}
                 disabled={applyingCoupon}
               >
                 {applyingCoupon ? 'Applying...' : 'Apply Coupon'}
@@ -696,7 +701,7 @@ export default function SimplePricing() {
                 </Button>
               )}
             </div>
-          </div>
+          </form>
           {appliedCoupon && (
             <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
               Coupon {appliedCoupon} applied to eligible paid plans.
@@ -729,11 +734,13 @@ export default function SimplePricing() {
             >
               {(() => {
                 const isCurrentPlan = Boolean(activePlanId && plan.id === activePlanId);
+                const isFreePlan = plan.id === 'hobby';
                 return (
               <Card
                 className={cn(
                   'relative h-full w-full bg-secondary/20 text-left transition-all duration-300 hover:shadow-lg',
                   isCurrentPlan && 'border-amber-300/70 bg-linear-to-br from-amber-50/80 via-orange-50/70 to-yellow-50/70 shadow-[0_16px_40px_-20px_rgba(251,191,36,0.75)] ring-2 ring-amber-300/65 dark:border-amber-500/40 dark:from-amber-950/35 dark:via-orange-950/25 dark:to-yellow-950/25 dark:ring-amber-500/50',
+                  isFreePlan && 'border-emerald-400/60 bg-linear-to-br from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-emerald-400/45 shadow-[0_0_22px_rgba(16,185,129,0.2)]',
                   plan.popular
                     ? 'shadow-md ring-2 ring-primary/50 dark:shadow-primary/10'
                     : 'hover:border-primary/30',
@@ -741,6 +748,48 @@ export default function SimplePricing() {
                     'bg-linear-to-b from-primary/3 to-transparent',
                 )}
               >
+                {isFreePlan && (
+                  <>
+                    <motion.div
+                      className="pointer-events-none absolute inset-0 z-10 rounded-lg border border-emerald-400/75"
+                      animate={{
+                        opacity: [0.35, 0.85, 0.35],
+                        boxShadow: [
+                          '0 0 0px rgba(16,185,129,0.2)',
+                          '0 0 24px rgba(16,185,129,0.55)',
+                          '0 0 0px rgba(16,185,129,0.2)',
+                        ],
+                      }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <motion.div
+                      className="pointer-events-none absolute -inset-0.5 z-0 rounded-lg border border-emerald-300/40"
+                      animate={{ opacity: [0.2, 0.55, 0.2] }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                    />
+                  </>
+                )}
+                {plan.popular && !isCurrentPlan && (
+                  <>
+                    <motion.div
+                      className="pointer-events-none absolute inset-0 z-10 rounded-lg border border-primary/85"
+                      animate={{
+                        opacity: [0.45, 0.95, 0.45],
+                        boxShadow: [
+                          '0 0 0px rgba(225,29,72,0.25)',
+                          '0 0 30px rgba(225,29,72,0.7)',
+                          '0 0 0px rgba(225,29,72,0.25)',
+                        ],
+                      }}
+                      transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <motion.div
+                      className="pointer-events-none absolute -inset-1 z-0 rounded-xl bg-primary/20 blur-xl"
+                      animate={{ opacity: [0.1, 0.35, 0.1] }}
+                      transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut', delay: 0.12 }}
+                    />
+                  </>
+                )}
                 {isCurrentPlan && (
                   <>
                     <motion.div
@@ -895,6 +944,7 @@ export default function SimplePricing() {
                     className={cn(
                       'w-full font-medium transition-all duration-300',
                       isCurrentPlan && 'border-0 bg-linear-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-md shadow-amber-500/30 hover:brightness-110',
+                      isFreePlan && 'border-emerald-400/65 bg-emerald-500/5 text-emerald-100 shadow-[0_0_14px_rgba(16,185,129,0.2)] hover:border-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-50',
                       plan.popular
                         ? 'bg-primary hover:bg-primary/90 hover:shadow-md hover:shadow-primary/20'
                         : 'hover:border-primary/30 hover:bg-primary/5 hover:text-primary',

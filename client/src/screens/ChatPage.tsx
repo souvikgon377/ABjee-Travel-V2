@@ -3327,9 +3327,19 @@ const ChatRoomsList: React.FC = () => {
                           
                           {/* Gradient overlay on hover */}
                           <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-2 pointer-events-none"></div>
+                          {room.backgroundImage?.url && room.iconImage?.url && (
+                            <div className="absolute inset-0 bg-black/35 backdrop-brightness-75 z-2 pointer-events-none" />
+                          )}
                           
                           <CardHeader className="relative z-10">
-                            <CardTitle className="flex items-center gap-2.5 text-xl text-gray-900 dark:text-white font-bold" style={{ textShadow: 'none' }}>
+                            <CardTitle
+                              className={`flex items-center gap-2.5 text-xl font-bold ${
+                                room.backgroundImage?.url && room.iconImage?.url
+                                  ? 'text-slate-50'
+                                  : 'text-gray-900 dark:text-white'
+                              }`}
+                              style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 12px rgba(0,0,0,0.65)' : 'none' }}
+                            >
                               {/* Room Icon */}
                               {room.iconImage ? (
                                 <Avatar className="h-10 w-10 border-2 border-white/50 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
@@ -3341,27 +3351,52 @@ const ChatRoomsList: React.FC = () => {
                                   <MessageCircle className="h-5 w-5 text-white" />
                                 </div>
                               )}
-                              <span className="flex-1 truncate group-hover:text-rose-600 dark:group-hover:text-rose-300 transition-colors font-bold">
+                              <span
+                                className={`flex-1 truncate transition-colors font-bold ${
+                                  room.backgroundImage?.url && room.iconImage?.url
+                                    ? 'group-hover:text-white'
+                                    : 'group-hover:text-rose-600 dark:group-hover:text-rose-300'
+                                }`}
+                              >
                                 {room.name}
                               </span>
                             </CardTitle>
-                            <CardDescription className="text-base mt-2 text-gray-800 dark:text-white font-medium" style={{ textShadow: 'none' }}>
+                            <CardDescription
+                              className={`text-base mt-2 font-medium ${
+                                room.backgroundImage?.url && room.iconImage?.url
+                                  ? 'text-slate-100'
+                                  : 'text-gray-800 dark:text-white'
+                              }`}
+                              style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 10px rgba(0,0,0,0.6)' : 'none' }}
+                            >
                               {room.description}
                             </CardDescription>
                           </CardHeader>
                           <CardContent className="relative z-10">
                             <div className="space-y-3 text-sm">
-                              <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
+                              <div
+                                className={`flex items-center gap-2.5 ${
+                                  room.backgroundImage?.url && room.iconImage?.url
+                                    ? 'text-slate-50'
+                                    : 'text-gray-900 dark:text-white'
+                                }`}
+                              >
                                 <div className="p-1.5 rounded-lg bg-rose-500/30 backdrop-blur-sm">
                                   <Users className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                                 </div>
-                                <span className="font-semibold" style={{ textShadow: 'none' }}>{room.participants?.length || 0} participants</span>
+                                <span className="font-semibold" style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 8px rgba(0,0,0,0.55)' : 'none' }}>{room.participants?.length || 0} participants</span>
                               </div>
-                              <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
+                              <div
+                                className={`flex items-center gap-2.5 ${
+                                  room.backgroundImage?.url && room.iconImage?.url
+                                    ? 'text-slate-50'
+                                    : 'text-gray-900 dark:text-white'
+                                }`}
+                              >
                                 <div className="p-1.5 rounded-lg bg-pink-500/30 backdrop-blur-sm">
                                   <Clock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                                 </div>
-                                <span className="font-semibold" style={{ textShadow: 'none' }}>Created {formatDate(room.createdAt)}</span>
+                                <span className="font-semibold" style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 8px rgba(0,0,0,0.55)' : 'none' }}>Created {formatDate(room.createdAt)}</span>
                               </div>
                             </div>
                             
@@ -3370,7 +3405,11 @@ const ChatRoomsList: React.FC = () => {
                               <div className="flex items-center gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
                                 <Button
                                   size="sm"
-                                  className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow"
+                                  className={`rounded-xl font-semibold ${
+                                    room.backgroundImage?.url && room.iconImage?.url
+                                      ? 'border border-white/60 bg-white/20 text-slate-50 backdrop-blur-md shadow-[0_0_22px_rgba(255,255,255,0.25)] hover:bg-white/30 hover:text-white hover:shadow-[0_0_30px_rgba(255,255,255,0.38)]'
+                                      : 'bg-linear-to-r from-rose-600 to-pink-600 text-white shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow'
+                                  }`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     router.push(`/chat/room/${room.id}`);
@@ -3627,9 +3666,19 @@ const ChatRoomsList: React.FC = () => {
 
                                   {/* Gradient overlay on hover */}
                                   <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-2 pointer-events-none"></div>
+                                  {room.backgroundImage?.url && room.iconImage?.url && (
+                                    <div className="absolute inset-0 bg-black/35 backdrop-brightness-75 z-2 pointer-events-none" />
+                                  )}
 
                                   <CardHeader className="relative z-10 pb-2">
-                                    <CardTitle className="flex items-center gap-2.5 text-xl sm:text-2xl text-gray-900 dark:text-white font-bold" style={{ textShadow: 'none' }}>
+                                    <CardTitle
+                                      className={`flex items-center gap-2.5 text-xl sm:text-2xl font-bold ${
+                                        room.backgroundImage?.url && room.iconImage?.url
+                                          ? 'text-slate-50'
+                                          : 'text-gray-900 dark:text-white'
+                                      }`}
+                                      style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 12px rgba(0,0,0,0.65)' : 'none' }}
+                                    >
                                       {/* Room Icon */}
                                       {room.iconImage ? (
                                         <Avatar className="h-11 w-11 border-2 border-white/50 shadow-lg" style={{ boxShadow: '0 4px 8px rgba(0,0,0,0.5)' }}>
@@ -3641,7 +3690,13 @@ const ChatRoomsList: React.FC = () => {
                                           <MessageCircle className="h-5.5 w-5.5 text-white" />
                                         </div>
                                       )}
-                                      <span className="flex-1 truncate group-hover:text-rose-600 dark:group-hover:text-rose-300 transition-colors font-bold">
+                                      <span
+                                        className={`flex-1 truncate transition-colors font-bold ${
+                                          room.backgroundImage?.url && room.iconImage?.url
+                                            ? 'group-hover:text-white'
+                                            : 'group-hover:text-rose-600 dark:group-hover:text-rose-300'
+                                        }`}
+                                      >
                                         {room.name}
                                       </span>
                                       {room.password && (
@@ -3650,23 +3705,42 @@ const ChatRoomsList: React.FC = () => {
                                         </div>
                                       )}
                                     </CardTitle>
-                                    <CardDescription className="text-base mt-2 text-gray-800 dark:text-white font-medium" style={{ textShadow: 'none' }}>
+                                    <CardDescription
+                                      className={`text-base mt-2 font-medium ${
+                                        room.backgroundImage?.url && room.iconImage?.url
+                                          ? 'text-slate-100'
+                                          : 'text-gray-800 dark:text-white'
+                                      }`}
+                                      style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 10px rgba(0,0,0,0.6)' : 'none' }}
+                                    >
                                       {room.description}
                                     </CardDescription>
                                   </CardHeader>
                                   <CardContent className="relative z-10">
                                     <div className="space-y-3.5 text-sm sm:text-base">
-                                      <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
+                                      <div
+                                        className={`flex items-center gap-2.5 ${
+                                          room.backgroundImage?.url && room.iconImage?.url
+                                            ? 'text-slate-50'
+                                            : 'text-gray-900 dark:text-white'
+                                        }`}
+                                      >
                                         <div className="p-1.5 rounded-lg bg-rose-500/30 backdrop-blur-sm">
                                           <Users className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                                         </div>
-                                        <span className="font-semibold" style={{ textShadow: 'none' }}>{room.participants?.length || 0} participants</span>
+                                        <span className="font-semibold" style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 8px rgba(0,0,0,0.55)' : 'none' }}>{room.participants?.length || 0} participants</span>
                                       </div>
-                                      <div className="flex items-center gap-2.5 text-gray-900 dark:text-white">
+                                      <div
+                                        className={`flex items-center gap-2.5 ${
+                                          room.backgroundImage?.url && room.iconImage?.url
+                                            ? 'text-slate-50'
+                                            : 'text-gray-900 dark:text-white'
+                                        }`}
+                                      >
                                         <div className="p-1.5 rounded-lg bg-pink-500/30 backdrop-blur-sm">
                                           <Clock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                                         </div>
-                                        <span className="font-semibold" style={{ textShadow: 'none' }}>Created {formatDate(room.createdAt)}</span>
+                                        <span className="font-semibold" style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 8px rgba(0,0,0,0.55)' : 'none' }}>Created {formatDate(room.createdAt)}</span>
                                       </div>
                                     </div>
 
@@ -3675,7 +3749,11 @@ const ChatRoomsList: React.FC = () => {
                                       <div className="flex gap-2 mt-5 pt-4 border-t border-gray-300 dark:border-white/30">
                                         <Button
                                           size="sm"
-                                          className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow"
+                                          className={`rounded-xl font-semibold ${
+                                            room.backgroundImage?.url && room.iconImage?.url
+                                              ? 'border border-white/60 bg-white/20 text-slate-50 backdrop-blur-md shadow-[0_0_22px_rgba(255,255,255,0.25)] hover:bg-white/30 hover:text-white hover:shadow-[0_0_30px_rgba(255,255,255,0.38)]'
+                                              : 'bg-linear-to-r from-rose-600 to-pink-600 text-white shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:from-rose-700 hover:to-pink-700 hover:shadow-[0_0_26px_rgba(244,63,94,0.65)] pulse-glow'
+                                          }`}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             router.push(`/chat/room/${room.id}`);
