@@ -328,14 +328,14 @@ class ChatService {
     backgroundImage?: ChatRoomImage,
     iconImage?: ChatRoomImage,
     visibility?: 'exposed' | 'private',
-    options?: { maxPrivateRooms?: number }
+    options?: { maxPrivateRooms?: number; limits?: { pro?: number; premium?: number } }
   ) {
     const user = this.getCurrentUser();
 
-    await this.assertAdminOrOwner(user.uid, 'Only admins can create community chat.');
-
-    if (!isPublic) {
-      await this.enforcePrivateRoomMembershipLimit(user.uid, options?.maxPrivateRooms);
+    if (isPublic) {
+      await this.assertAdminOrOwner(user.uid, 'Only admins can create public community chat.');
+    } else {
+      await this.enforcePrivateRoomMembershipLimit(user.uid, options?.maxPrivateRooms, options?.limits);
     }
     
     const roomsRef = ref(database, 'chatrooms');
@@ -438,7 +438,7 @@ class ChatService {
     return privateRoomCount;
   }
 
-  private async enforcePrivateRoomMembershipLimit(userId: string, maxOverride?: number): Promise<void> {
+  private async enforcePrivateRoomMembershipLimit(userId: string, maxOverride?: number, limits?: { pro?: number; premium?: number }): Promise<void> {
     const privateRoomCount = await this.getUserPrivateRoomMembershipCount(userId);
 
     if (typeof maxOverride === 'number' && maxOverride >= 0) {
@@ -451,7 +451,7 @@ class ChatService {
     const userRef = doc(firestoreDb, 'users', userId);
     const userSnapshot = await getDoc(userRef);
     const userProfile = userSnapshot.exists() ? userSnapshot.data() : {};
-    const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount);
+    const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount, limits);
 
     if (!allowance.allowed) {
       throw new Error(allowance.reason);

@@ -363,7 +363,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth] Google Sign-In complete');
       }
     } catch (error: any) {
-      if ((process.env.NODE_ENV === "development")) {
+      // User-initiated cancellations (not real errors)
+      const isCancellation = error.code === 'auth/popup-closed-by-user' || 
+                            error.code === 'auth/cancelled-popup-request';
+      
+      if ((process.env.NODE_ENV === "development") && !isCancellation) {
         console.error('[Auth] Google login error:', error);
         console.error('[Auth] Error code:', error.code);
         console.error('[Auth] Error message:', error.message);

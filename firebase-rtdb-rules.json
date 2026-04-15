@@ -5,7 +5,7 @@
       ".write": "auth != null",
       "$roomId": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null && (data.child('createdBy').val() === auth.uid || root.child('chatrooms').child($roomId).child('participants').val().contains(auth.uid))"
       }
     },
     "status": {

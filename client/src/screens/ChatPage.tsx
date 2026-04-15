@@ -1307,6 +1307,7 @@ const ChatRoomsList: React.FC = () => {
         newRoomIsPublic ? undefined : newPrivateVisibility,
         {
           maxPrivateRooms: newRoomIsPublic ? undefined : privateRoomAllowance.maxAllowed,
+          limits: newRoomIsPublic ? undefined : privateRoomLimitSettings,
         }
       );
 
