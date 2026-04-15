@@ -4,7 +4,7 @@ import { chatService, type MessageAttachment } from '../../lib/chatService';
 import { type ChatMessage, type ChatRoom as RoomType } from '../../lib/chatService';
 import { useAuth } from '../../contexts/AuthContext';
 import { uploadImageToR2, createImagePreview, revokeImagePreview } from '../../lib/r2Upload';
-import { uploadFileToR2, VoiceRecorder, compressImageFile, formatFileSize, formatDuration, getFileIcon } from '../../lib/r2FileUpload';
+import { uploadFileToR2, VoiceRecorder, compressImageFile, compressVideoFile, trimVideoFile, formatFileSize, formatDuration, getFileIcon } from '../../lib/r2FileUpload';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card } from '../ui/card';
@@ -178,6 +178,15 @@ const ChatRoom = () => {
   const [selectedIconImage, setSelectedIconImage] = useState<any>(null);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
+  const [videoSizeComparison, setVideoSizeComparison] = useState<{ originalBytes: number; processedBytes: number } | null>(null);
+  const [videoTrimDialogOpen, setVideoTrimDialogOpen] = useState(false);
+  const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
+  const [pendingVideoPreviewUrl, setPendingVideoPreviewUrl] = useState<string | null>(null);
+  const [pendingVideoDurationSeconds, setPendingVideoDurationSeconds] = useState(0);
+  const [videoTrimStartSeconds, setVideoTrimStartSeconds] = useState(0);
+  const [trimmingVideo, setTrimmingVideo] = useState(false);
+  const [videoTrimProgressSeconds, setVideoTrimProgressSeconds] = useState(0);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -253,6 +262,7 @@ const ChatRoom = () => {
   const [addMemberSuccess, setAddMemberSuccess] = useState<string | null>(null);
   const [invitedMemberIds, setInvitedMemberIds] = useState<Set<string>>(new Set());
   const [existingMemberIds, setExistingMemberIds] = useState<Set<string>>(new Set());
+  const videoTrimPreviewRef = useRef<HTMLVideoElement>(null);
   const [messageScrollTop, setMessageScrollTop] = useState(0);
   const [messageViewportHeight, setMessageViewportHeight] = useState(0);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
@@ -674,6 +684,7 @@ const ChatRoom = () => {
     setNewMessage('');
     setAttachmentFile(null);
     setAttachmentPreview(null);
+    setVideoSizeComparison(null);
     
     // Stop typing indicator (don't await)
     if (typingTimeoutRef.current) {
@@ -691,9 +702,14 @@ const ChatRoom = () => {
         setUploadingAttachment(true);
         const isVoiceMessage = fileToSend.name.startsWith('voice-message-');
         const isImage = fileToSend.type.startsWith('image/');
+        const isVideo = fileToSend.type.startsWith('video/');
         attachment = await uploadFileToR2(fileToSend, {
           isVoiceMessage,
-          maxSizeBytes: isImage ? 1024 * 1024 : undefined,
+          maxSizeBytes: isImage
+            ? 1024 * 1024
+            : isVideo
+              ? 15 * 1024 * 1024
+              : undefined,
         });
         setUploadingAttachment(false);
       }
@@ -765,6 +781,30 @@ const ChatRoom = () => {
   const handleBackToChat = useCallback(() => {
     router.push('/chat');
   }, [router]);
+
+  const stabilizeVideoDuration = useCallback((video: HTMLVideoElement) => {
+    const duration = Number(video.duration);
+    if (Number.isFinite(duration) && duration > 0) {
+      return;
+    }
+
+    const restoreToStart = () => {
+      video.removeEventListener('timeupdate', restoreToStart);
+      try {
+        video.currentTime = 0;
+      } catch {
+        // Best effort only.
+      }
+    };
+
+    video.addEventListener('timeupdate', restoreToStart, { once: true });
+    try {
+      // Trigger browser duration probing for streams lacking immediate finite metadata.
+      video.currentTime = 1e101;
+    } catch {
+      // Ignore platforms that disallow this seek probe.
+    }
+  }, []);
 
   const handleDeleteForMe = useCallback(async (message: ChatMessage) => {
     if (!roomId || !message.id) return;
@@ -864,17 +904,89 @@ const ChatRoom = () => {
 
     let preparedFile = file;
 
-    // Public room image: compress and enforce 1MB.
-    if (room?.isPublic && file.type.startsWith('image/')) {
+    // Compress image attachments for all rooms to keep send payloads lightweight.
+    const getVideoDurationSeconds = async (videoFile: File): Promise<number> => {
+      const objectUrl = URL.createObjectURL(videoFile);
+      try {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.src = objectUrl;
+
+        const duration = await new Promise<number>((resolve, reject) => {
+          const onLoaded = () => {
+            cleanup();
+            resolve(Number(video.duration) || 0);
+          };
+          const onError = () => {
+            cleanup();
+            reject(new Error('Failed to read video metadata'));
+          };
+          const cleanup = () => {
+            video.removeEventListener('loadedmetadata', onLoaded);
+            video.removeEventListener('error', onError);
+          };
+
+          video.addEventListener('loadedmetadata', onLoaded);
+          video.addEventListener('error', onError);
+        });
+
+        return Number.isFinite(duration) && duration > 0 ? duration : 0;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+
+    if (file.type.startsWith('image/')) {
+      setVideoSizeComparison(null);
       preparedFile = await compressImageFile(file, { maxSizeBytes: 1024 * 1024, maxDimension: 1600 });
       if (preparedFile.size > 1024 * 1024) {
-        alert('Image must be 1MB or less in public rooms. Please choose a smaller image.');
+        alert('Image must be 1MB or less. Please choose a smaller image.');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
         return;
       }
+    } else if (file.type.startsWith('video/')) {
+      const durationSeconds = await getVideoDurationSeconds(file);
+      if (durationSeconds > 60) {
+        if (pendingVideoPreviewUrl) {
+          URL.revokeObjectURL(pendingVideoPreviewUrl);
+        }
+        setPendingVideoFile(file);
+        setPendingVideoDurationSeconds(durationSeconds);
+        setVideoTrimStartSeconds(0);
+        setPendingVideoPreviewUrl(URL.createObjectURL(file));
+        setVideoTrimDialogOpen(true);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      preparedFile = await compressVideoFile(file, {
+        maxSizeBytes: 15 * 1024 * 1024,
+        maxWidth: 854,
+        maxHeight: 480,
+        frameRate: 30,
+        minVideoBitsPerSecond: 2_000_000,
+        maxVideoBitsPerSecond: 2_000_000,
+        audioBitsPerSecond: 96_000,
+      });
+
+      if (preparedFile.size > 15 * 1024 * 1024) {
+        alert('Video must be less than 15MB after compression. Please choose a shorter video.');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      setVideoSizeComparison({
+        originalBytes: file.size,
+        processedBytes: preparedFile.size,
+      });
     } else if (file.size > 10 * 1024 * 1024) {
+      setVideoSizeComparison(null);
       // Generic max size for non-public-image files.
       alert('File size must be less than 10MB');
       if (fileInputRef.current) {
@@ -898,11 +1010,72 @@ const ChatRoom = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [room?.isPublic]);
+  }, [pendingVideoPreviewUrl]);
+
+  const handleVideoTrimDialogClose = useCallback(() => {
+    setVideoTrimDialogOpen(false);
+    setPendingVideoFile(null);
+    setPendingVideoDurationSeconds(0);
+    setVideoTrimStartSeconds(0);
+    setVideoTrimProgressSeconds(0);
+    if (pendingVideoPreviewUrl) {
+      URL.revokeObjectURL(pendingVideoPreviewUrl);
+      setPendingVideoPreviewUrl(null);
+    }
+  }, [pendingVideoPreviewUrl]);
+
+  const handleConfirmVideoTrim = useCallback(async () => {
+    if (!pendingVideoFile) return;
+
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+
+    try {
+      setTrimmingVideo(true);
+      setVideoTrimProgressSeconds(0);
+
+      progressTimer = setInterval(() => {
+        setVideoTrimProgressSeconds((prev) => Math.min(prev + 1, 60));
+      }, 1000);
+
+      const trimmedVideo = await trimVideoFile(pendingVideoFile, {
+        startTimeSeconds: videoTrimStartSeconds,
+        maxDurationSeconds: 60,
+        maxSizeBytes: 15 * 1024 * 1024,
+        maxWidth: 854,
+        maxHeight: 480,
+        frameRate: 30,
+        minVideoBitsPerSecond: 2_000_000,
+        maxVideoBitsPerSecond: 2_000_000,
+        audioBitsPerSecond: 96_000,
+      });
+
+      if (trimmedVideo.size > 15 * 1024 * 1024) {
+        alert('Video must be less than 15MB after trim and optimization. Please choose a shorter video.');
+        return;
+      }
+
+      setVideoSizeComparison({
+        originalBytes: pendingVideoFile.size,
+        processedBytes: trimmedVideo.size,
+      });
+      setAttachmentFile(trimmedVideo);
+      setAttachmentPreview(null);
+      handleVideoTrimDialogClose();
+    } catch (error: any) {
+      alert(error?.message || 'Failed to trim video. Please try another file.');
+    } finally {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+      }
+      setTrimmingVideo(false);
+      setVideoTrimProgressSeconds(0);
+    }
+  }, [pendingVideoFile, videoTrimStartSeconds, handleVideoTrimDialogClose]);
 
   const handleClearAttachment = useCallback(() => {
     setAttachmentFile(null);
     setAttachmentPreview(null);
+    setVideoSizeComparison(null);
   }, []);
 
   const handleStartRecording = useCallback(async () => {
@@ -2165,6 +2338,107 @@ const ChatRoom = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Video Trim Dialog */}
+      <Dialog open={videoTrimDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          handleVideoTrimDialogClose();
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl w-[95vw] sm:w-full">
+          <DialogHeader>
+            <DialogTitle>Trim Video To 60 Seconds</DialogTitle>
+            <DialogDescription>
+              Select where your 60-second clip should start.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            {pendingVideoPreviewUrl ? (
+              <video
+                ref={videoTrimPreviewRef}
+                src={pendingVideoPreviewUrl}
+                controls
+                className="w-full max-h-72 rounded-lg border"
+                preload="metadata"
+                onPlay={() => setPreviewPlaying(true)}
+                onPause={() => setPreviewPlaying(false)}
+                onLoadedMetadata={(event) => {
+                  const duration = Number(event.currentTarget.duration) || 0;
+                  if (duration > 0 && Number.isFinite(duration)) {
+                    setPendingVideoDurationSeconds(duration);
+                    const maxStart = Math.max(0, Math.floor(duration) - 60);
+                    setVideoTrimStartSeconds((prev) => Math.min(prev, maxStart));
+                  }
+                }}
+                onSeeked={(event) => {
+                  // Sync trim slider only when user explicitly seeks in native controls.
+                  if (trimmingVideo || previewPlaying) return;
+                  const duration = pendingVideoDurationSeconds > 0
+                    ? pendingVideoDurationSeconds
+                    : Number(event.currentTarget.duration) || 0;
+                  const maxStart = Math.max(0, Math.floor(duration) - 60);
+                  const nextStart = Math.min(
+                    Math.max(0, Math.floor(event.currentTarget.currentTime || 0)),
+                    maxStart
+                  );
+                  setVideoTrimStartSeconds((prev) => (prev === nextStart ? prev : nextStart));
+                }}
+              />
+            ) : null}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>Start: {formatDuration(videoTrimStartSeconds)}</span>
+                <span>End: {formatDuration(Math.min(Math.floor(pendingVideoDurationSeconds || videoTrimStartSeconds + 60), videoTrimStartSeconds + 60))}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(0, Math.floor(pendingVideoDurationSeconds) - 60)}
+                step={1}
+                value={videoTrimStartSeconds}
+                onChange={(e) => {
+                  const nextStart = Number(e.target.value) || 0;
+                  setVideoTrimStartSeconds(nextStart);
+                  const preview = videoTrimPreviewRef.current;
+                  if (preview && Number.isFinite(preview.duration)) {
+                    preview.currentTime = Math.min(Math.max(0, nextStart), Math.max(0, Math.floor(preview.duration) - 1));
+                  }
+                }}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Original duration: {formatDuration(Math.floor(pendingVideoDurationSeconds))}. Uploads are limited to a 60-second clip.
+              </p>
+
+              {trimmingVideo && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Trimming in progress... {formatDuration(videoTrimProgressSeconds)} / 1:00
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleVideoTrimDialogClose}
+                disabled={trimmingVideo}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmVideoTrim}
+                disabled={trimmingVideo}
+              >
+                {trimmingVideo ? 'Trimming...' : 'Trim & Attach'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Main Chat UI */}
       <div className="flex h-dvh bg-background overflow-hidden">
         {/* Main Chat Area */}
@@ -2345,9 +2619,10 @@ const ChatRoom = () => {
                 const isOwnMessage = message.userId === user?.uid;
                 const isDeleted = message.deletedForEveryone;
                 const isOnlyEmoji = isEmojiOnly(message.text);
+                const messageAvatarCandidate = message as unknown as Record<string, unknown>;
                 const messageAvatarUrl =
                   userAvatarMap[message.userId] ||
-                  resolveAvatarUrl(message as Record<string, unknown>) ||
+                  resolveAvatarUrl(messageAvatarCandidate) ||
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(message.username)}&background=random`;
                 
                 return (
@@ -2464,7 +2739,11 @@ const ChatRoom = () => {
                                           className="max-w-50 sm:max-w-70 md:max-w-sm max-h-40 sm:max-h-48 md:max-h-64 rounded-lg w-full"
                                           src={message.attachment.url}
                                           controlsList="nodownload"
+                                          preload="metadata"
                                           playsInline
+                                          onLoadedMetadata={(event) => {
+                                            stabilizeVideoDuration(event.currentTarget);
+                                          }}
                                         >
                                           Your browser does not support the video element.
                                         </video>
@@ -2674,6 +2953,13 @@ const ChatRoom = () => {
                       <div className="flex flex-col min-w-0 flex-1">
                         <span className="text-xs sm:text-sm font-medium truncate">{attachmentFile.name}</span>
                         <span className="text-[10px] sm:text-xs opacity-70">{formatFileSize(attachmentFile.size)}</span>
+                        {attachmentFile.type.startsWith('video/') && videoSizeComparison && (
+                          <span className="text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400">
+                            {formatFileSize(videoSizeComparison.originalBytes)} -&gt; {formatFileSize(videoSizeComparison.processedBytes)}
+                            {' '}
+                            ({Math.max(0, Math.round(((videoSizeComparison.originalBytes - videoSizeComparison.processedBytes) / Math.max(1, videoSizeComparison.originalBytes)) * 100))}% smaller)
+                          </span>
+                        )}
                       </div>
                     </div>
                     <Button type="button" size="sm" variant="ghost" onClick={handleClearAttachment} className="shrink-0">
