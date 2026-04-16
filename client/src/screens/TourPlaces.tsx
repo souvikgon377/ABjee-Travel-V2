@@ -104,17 +104,17 @@ const PlaceCard: React.FC<{
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: 0.04 * idx, type: "spring", stiffness: 260, damping: 24 }}
       whileHover={{ y: -8, scale: 1.02 }}
-      onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
       className="group relative w-full max-w-[20rem] cursor-pointer overflow-hidden rounded-[1.65rem] border border-white/10 bg-[#2e3138]/90 text-left shadow-[0_14px_36px_rgba(0,0,0,0.28)] transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:shadow-[0_22px_48px_rgba(0,0,0,0.38)]"
     >
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`Open details for ${place.name}`}
+        className="absolute inset-0 z-10 rounded-[1.65rem] focus:outline-none"
+      >
+        <span className="sr-only">Open {place.name}</span>
+      </button>
+
       <div className="relative h-[13.4rem] overflow-hidden">
         {hasVideo ? (
           <>
@@ -258,7 +258,13 @@ const PlaceCard: React.FC<{
             <MapPin className="h-3 w-3 shrink-0 text-[#ff5d8f]" />
             <span className="line-clamp-1">{[place.area, place.state, place.country].filter(Boolean).join(", ")}</span>
           </div>
-          {place.description && <p className="text-[12px] leading-relaxed text-gray-600 line-clamp-3 dark:text-white/68">{place.description}</p>}
+          <div className="min-h-[3.45rem]">
+            {place.description ? (
+              <p className="text-[12px] leading-relaxed text-gray-600 line-clamp-3 dark:text-white/68">{place.description}</p>
+            ) : (
+              <p className="invisible text-[12px] leading-relaxed line-clamp-3">No description</p>
+            )}
+          </div>
           <div className="mt-3 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-white/50">
             <ImageIcon className="h-3.5 w-3.5" />
             <span>{place.media?.length || 0}</span>

@@ -576,14 +576,19 @@ export function TouristPlacesManager() {
 
   // ── Upload all pending ──────────────────────────────────────────────────────
   const uploadAllPending = async (): Promise<MediaItem[]> => {
-    const todo = pendingFiles.filter((p) => p.progress === 'idle');
-    if (todo.length === 0) return [];
+    const doneResults = pendingFiles
+      .filter((p) => p.progress === 'done' && p.result)
+      .map((p) => p.result as MediaItem);
+
+    const todo = pendingFiles.filter((p) => p.progress === 'idle' || p.progress === 'error');
+    if (todo.length === 0) return doneResults;
     setUploadingCount(todo.length);
 
     const results: MediaItem[] = [];
+    const failedFiles: string[] = [];
     for (const item of todo) {
       setPendingFiles((prev) =>
-        prev.map((p) => p.id === item.id ? { ...p, progress: 'uploading' as const } : p)
+        prev.map((p) => p.id === item.id ? { ...p, progress: 'uploading' as const, errorMsg: undefined } : p)
       );
       try {
         let uploaded: MediaItem;
@@ -607,6 +612,7 @@ export function TouristPlacesManager() {
         results.push(uploaded);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Upload failed';
+        failedFiles.push(item.file.name);
         setPendingFiles((prev) =>
           prev.map((p) => p.id === item.id ? { ...p, progress: 'error' as const, errorMsg: msg } : p)
         );
@@ -614,7 +620,12 @@ export function TouristPlacesManager() {
         setUploadingCount((c) => c - 1);
       }
     }
-    return results;
+
+    if (failedFiles.length > 0) {
+      throw new Error(`Failed to upload ${failedFiles.length} media file${failedFiles.length > 1 ? 's' : ''}. Please retry or remove the failed files.`);
+    }
+
+    return [...doneResults, ...results];
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
