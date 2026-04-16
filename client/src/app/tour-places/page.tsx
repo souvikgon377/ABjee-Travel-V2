@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function TourPlacesRoute() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    router.replace('/tourplaces');
-  }, [router]);
+    const query = searchParams.toString();
+    router.replace(query ? `/tourplaces?${query}` : '/tourplaces');
+  }, [router, searchParams]);
 
   return null;
 }

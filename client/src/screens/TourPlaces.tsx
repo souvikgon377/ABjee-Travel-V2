@@ -32,6 +32,7 @@ import { firestoreDb } from "@/lib/firebaseFirestore";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { htmlToPlainText, sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
+import { addPreviewImageToShareUrl, buildAbjeeShareText } from "@/lib/socialShare";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
 
@@ -62,13 +63,25 @@ const PlaceCard: React.FC<{
 
   const sharePlace = (platform: "facebook" | "instagram" | "whatsapp", event: React.MouseEvent) => {
     event.stopPropagation();
-    const placeLocation = [place.area, place.state, place.country].filter(Boolean).join(", ");
-    const targetUrl = place.googleMapsUrl || window.location.href;
-    const shareText = `Check out ${place.name}${placeLocation ? ` (${placeLocation})` : ""} on ABjee Travel. ${targetUrl}`;
+
+    const previewImage = images[0]?.url || place.coverImage || "";
+    const shareUrl = new URL(window.location.href);
+    shareUrl.pathname = "/tourplaces";
+    shareUrl.searchParams.set("place", place.name);
+    addPreviewImageToShareUrl(shareUrl, previewImage);
+    const url = shareUrl.toString();
+
+    const shortLocation = place.area || place.state || place.country;
+    const shareText = buildAbjeeShareText({
+      title: place.name,
+      location: shortLocation,
+      url,
+      imageUrl: previewImage,
+    });
 
     if (platform === "facebook") {
       window.open(
-        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(targetUrl)}&quote=${encodeURIComponent(shareText)}`,
+        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(shareText)}`,
         "_blank",
         "noopener,noreferrer",
       );
@@ -383,11 +396,20 @@ const TourPlaces: React.FC = () => {
   const handlePlaceShare = async (type: "whatsapp" | "facebook" | "copy") => {
     if (!selectedPlace) return;
 
+    const selectedImage = selectedPlace.media?.find((item) => item.type === "image")?.url || selectedPlace.coverImage || "";
     const shareUrl = new URL(window.location.href);
     shareUrl.pathname = "/tourplaces";
     shareUrl.searchParams.set("place", selectedPlace.name);
+    addPreviewImageToShareUrl(shareUrl, selectedImage);
     const url = shareUrl.toString();
-    const message = `Check out ${selectedPlace.name}${selectedPlace.area ? ` (${selectedPlace.area})` : ""} on ABjee Travel. ${url}`;
+
+    const shortLocation = selectedPlace.area || selectedPlace.state || selectedPlace.country;
+    const message = buildAbjeeShareText({
+      title: selectedPlace.name,
+      location: shortLocation,
+      url,
+      imageUrl: selectedImage,
+    });
 
     if (type === "whatsapp") {
       window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
@@ -395,7 +417,7 @@ const TourPlaces: React.FC = () => {
     }
 
     if (type === "facebook") {
-      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank", "noopener,noreferrer");
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
       return;
     }
 

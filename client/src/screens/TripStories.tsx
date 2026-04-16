@@ -17,6 +17,7 @@ import {
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
+import { addPreviewImageToShareUrl, buildAbjeeShareText } from '@/lib/socialShare';
 
 // --------------------------- Types ---------------------------
 
@@ -776,15 +777,27 @@ function StoryModal({
   };
 
   const handleShare = async (platform: string) => {
-    const url = `${window.location.origin}/trip-stories?story=${story.id}`;
+    const previewImage = story.coverImage || story.photos?.[0]?.url || '';
+    const shareUrl = new URL(`${window.location.origin}/trip-stories`);
+    shareUrl.searchParams.set('story', story.id);
+    shareUrl.searchParams.set('storyTitle', story.title);
+    addPreviewImageToShareUrl(shareUrl, previewImage);
+    const url = shareUrl.toString();
+    const shareText = buildAbjeeShareText({
+      title: story.title,
+      location: story.destination,
+      url,
+      imageUrl: previewImage,
+    });
+
     if (platform === 'copy') {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 1000);
     } else if (platform === 'whatsapp') {
-      window.open(`https://wa.me/?text=${encodeURIComponent(story.title + ' - ' + url)}`);
+      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`);
     } else if (platform === 'facebook') {
-      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`);
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(shareText)}`);
     }
   };
 
