@@ -1069,7 +1069,7 @@ const ChatRoomsList: React.FC = () => {
 
   useEffect(() => {
     if (shouldOpenExploreInterest) {
-      setSelectedCategory('outdoors');
+      router.replace('/tourplaces');
     }
   }, [shouldOpenExploreInterest]);
 
@@ -1105,8 +1105,8 @@ const ChatRoomsList: React.FC = () => {
   }, []);
 
   const scrollToExploreOutdoors = useCallback(() => {
-    setSelectedCategory('outdoors');
-  }, []);
+    router.push('/tourplaces');
+  }, [router]);
 
   const openTripStories = useCallback(() => {
     router.push('/trip-stories');
