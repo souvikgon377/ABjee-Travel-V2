@@ -1134,11 +1134,9 @@ const ChatRoomsList: React.FC = () => {
         const createdByUser = loadedRooms.filter(room => room.createdBy === user.uid);
         setUserCreatedRoomsCount(createdByUser.length);
 
-        // Policy limit is based on private rooms the user participates in (create or join)
-        const privateMembershipCount = loadedRooms.filter(
-          room => !room.isPublic && (room.participants?.includes(user.uid) || room.createdBy === user.uid)
-        ).length;
-        setUserCreatedPrivateRoomsCount(privateMembershipCount);
+        // Policy limit is based on private rooms the user creates.
+        const createdPrivateCount = createdByUser.filter((room) => !room.isPublic).length;
+        setUserCreatedPrivateRoomsCount(createdPrivateCount);
 
         // If a requested private room gets approved, open it immediately.
         if (typeof window !== 'undefined') {
@@ -1264,11 +1262,12 @@ const ChatRoomsList: React.FC = () => {
     }
 
     if (!newRoomIsPublic && !isAdminOrOwner) {
-      const latestPrivateMembershipCount = await chatService.getUserPrivateRoomMembershipCount(user.uid);
-      setUserCreatedPrivateRoomsCount(latestPrivateMembershipCount);
+      const latestCreateStats = await chatService.getUserCreatedRoomStats(user.uid);
+      const latestPrivateCreatedCount = latestCreateStats.private;
+      setUserCreatedPrivateRoomsCount(latestPrivateCreatedCount);
       const latestAllowance = getPrivateRoomCreateAllowance(
         userProfile,
-        latestPrivateMembershipCount,
+        latestPrivateCreatedCount,
         privateRoomLimitSettings
       );
       if (!latestAllowance.allowed) {
@@ -2983,8 +2982,8 @@ const ChatRoomsList: React.FC = () => {
                     <Crown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
                     <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
                       {paidMember
-                        ? `Unlimited Private Communities (${userCreatedPrivateRoomsCount} joined/created)`
-                        : 'Private Communities Locked (Paid Plan Required)'
+                        ? `Private Community Creation: ${userCreatedPrivateRoomsCount}/${Number.isFinite(privateRoomAllowance.maxAllowed) ? privateRoomAllowance.maxAllowed : 'Unlimited'} (Joining is unlimited)`
+                        : 'Private Community Creation Locked (Paid Plan Required). Joining is unlimited.'
                       }
                     </span>
                   </div>

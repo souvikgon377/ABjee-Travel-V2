@@ -94,13 +94,19 @@ export const getPaidPrivateRoomLimit = (
   subscription: UserSubscriptionInfo,
   limits?: PrivateRoomLimitOverrides
 ): number => {
-  void limits;
   if (!hasPaidAccess(subscription)) return 0;
-  return Number.POSITIVE_INFINITY;
+
+  const normalizedLimits = normalizePrivateRoomLimits(limits);
+  if (subscription.type === 'premium') return normalizedLimits.premium;
+  if (subscription.type === 'pro') return normalizedLimits.pro;
+
+  // Unknown paid tiers fall back to the pro limit.
+  return normalizedLimits.pro;
 };
 
 export const canJoinPrivateRoom = (subscription: UserSubscriptionInfo): boolean => {
-  return hasPaidAccess(subscription);
+  void subscription;
+  return true;
 };
 
 export const getFreePrivateTrialState = (
@@ -118,22 +124,13 @@ export const getPrivateRoomParticipationAllowance = (
   privateRoomCount: number,
   limits?: PrivateRoomLimitOverrides
 ): { allowed: boolean; maxAllowed: number; reason: string } => {
+  void userProfile;
   void privateRoomCount;
-  const subscription = getSubscriptionInfo(userProfile);
-
-  if (hasPaidAccess(subscription)) {
-    const maxAllowed = getPaidPrivateRoomLimit(subscription, limits);
-    return {
-      allowed: true,
-      maxAllowed,
-      reason: 'Paid member: unlimited private communities.',
-    };
-  }
-
+  void limits;
   return {
-    allowed: false,
-    maxAllowed: 0,
-    reason: 'Private communities require an active paid subscription.',
+    allowed: true,
+    maxAllowed: Number.POSITIVE_INFINITY,
+    reason: 'Any user can join unlimited private communities.',
   };
 };
 
@@ -142,5 +139,28 @@ export const getPrivateRoomCreateAllowance = (
   privateRoomCount: number,
   limits?: PrivateRoomLimitOverrides
 ): { allowed: boolean; maxAllowed: number; reason: string } => {
-  return getPrivateRoomParticipationAllowance(userProfile, privateRoomCount, limits);
+  const subscription = getSubscriptionInfo(userProfile);
+
+  if (!hasPaidAccess(subscription)) {
+    return {
+      allowed: false,
+      maxAllowed: 0,
+      reason: 'Private community creation requires an active paid subscription.',
+    };
+  }
+
+  const maxAllowed = getPaidPrivateRoomLimit(subscription, limits);
+  if (privateRoomCount >= maxAllowed) {
+    return {
+      allowed: false,
+      maxAllowed,
+      reason: `You have reached your private community creation limit (${maxAllowed}).`,
+    };
+  }
+
+  return {
+    allowed: true,
+    maxAllowed,
+    reason: `You can create up to ${maxAllowed} private communities.`,
+  };
 };

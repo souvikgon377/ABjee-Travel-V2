@@ -30,7 +30,6 @@ import { usersAPI } from '../../lib/api';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { firestoreDb } from '../../lib/firebaseFirestore';
 import { resolveAvatarUrl } from '../../lib/avatar';
-import { getPrivateRoomParticipationAllowance } from '../../lib/subscriptionPolicy';
 import { modernConfirm } from '../../lib/modernDialog';
 
 // Emoji list constant (moved outside component for performance)
@@ -259,10 +258,6 @@ const ChatRoom = () => {
       // Local tracking is best-effort only.
     }
   }, []);
-  const privateRoomAllowance = useMemo(
-    () => getPrivateRoomParticipationAllowance(userProfile, 0),
-    [userProfile]
-  );
   const isAdminOrOwner = useMemo(() => {
     const role = typeof userProfile?.role === 'string' ? userProfile.role.toLowerCase() : '';
     return role === 'admin' || role === 'owner';
@@ -482,17 +477,6 @@ const ChatRoom = () => {
         const isParticipant = participants.includes(user.uid);
         
         if (!isParticipant) {
-          if (!roomData.isPublic && !generalCommunity) {
-            const privateRoomCount = await chatService.getUserPrivateRoomMembershipCount(user.uid);
-            const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount);
-
-            if (!allowance.allowed) {
-              alert(allowance.reason || privateRoomAllowance.reason);
-              router.push('/chat');
-              return;
-            }
-          }
-
           // Check for invite token in URL
           const inviteToken = searchParams.get('invite');
           
@@ -609,7 +593,7 @@ const ChatRoom = () => {
     };
 
     init();
-  }, [roomId, user, userProfile, router, searchParams, privateRoomAllowance.reason, clearPrivateRoomNotifications, joinApprovalSyncKey]);
+  }, [roomId, user, userProfile, router, searchParams, clearPrivateRoomNotifications, joinApprovalSyncKey]);
 
   useEffect(() => {
     if (!roomId || !user || !room || !joinRequestPending || hasMessageAccess) return;

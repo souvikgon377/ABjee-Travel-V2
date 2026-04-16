@@ -64,8 +64,8 @@ const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
     premium: 10,
   },
   features: {
-    proFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nExpose private rooms for join requests\nPriority support',
-    premiumFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nAdvanced member tools\nPriority assistance',
+    proFeatures: 'Create up to 3 private communities (monthly)\nCreate up to 10 private communities (yearly)\nUnlimited private community joining\nExpose private rooms for join requests\nPriority support',
+    premiumFeatures: 'Create up to 10 private communities (monthly)\nCreate up to 20 private communities (yearly)\nUnlimited private community joining\nAdvanced member tools\nPriority assistance',
   },
 };
 
@@ -663,7 +663,7 @@ export default function AdminDashboard() {
                       <h3 className="mb-3 text-sm font-semibold">Private Room Controller</h3>
                       <div className="space-y-3">
                         <label className="block text-xs text-muted-foreground">
-                          Total private communities for Paid (Pro)
+                          Max private communities a Paid (Pro) user can create
                           <input
                             type="number"
                             min={0}
@@ -675,7 +675,7 @@ export default function AdminDashboard() {
                         </label>
 
                         <label className="block text-xs text-muted-foreground">
-                          Total private communities for Premium
+                          Max private communities a Premium user can create
                           <input
                             type="number"
                             min={0}
@@ -688,7 +688,7 @@ export default function AdminDashboard() {
                       </div>
 
                       <p className="mt-3 text-xs text-muted-foreground">
-                        Limits are enforced for private community creation. Free users remain blocked.
+                        This controller applies to private community creation only. Joining private communities is unlimited for all users.
                       </p>
                     </div>
                   </div>
@@ -703,7 +703,7 @@ export default function AdminDashboard() {
                           onChange={(event) => handleFeaturesChange('proFeatures', event.target.value)}
                           rows={4}
                           className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                          placeholder="Create or join up to 3 private rooms (monthly)&#10;Create or join up to 10 private rooms (yearly)&#10;Private room access included"
+                          placeholder="Create up to 3 private communities (monthly)&#10;Create up to 10 private communities (yearly)&#10;Unlimited private community joining"
                         />
                       </label>
 
@@ -714,7 +714,7 @@ export default function AdminDashboard() {
                           onChange={(event) => handleFeaturesChange('premiumFeatures', event.target.value)}
                           rows={4}
                           className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
-                          placeholder="Create or join up to 10 private rooms (monthly)&#10;Create or join up to 20 private rooms (yearly)&#10;Advanced member tools"
+                          placeholder="Create up to 10 private communities (monthly)&#10;Create up to 20 private communities (yearly)&#10;Unlimited private community joining"
                         />
                       </label>
                     </div>

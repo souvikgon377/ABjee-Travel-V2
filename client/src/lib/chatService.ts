@@ -21,7 +21,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { database, auth } from './firebase';
 import { firestoreDb } from './firebaseFirestore';
-import { getPrivateRoomParticipationAllowance } from './subscriptionPolicy';
+import { getPrivateRoomCreateAllowance } from './subscriptionPolicy';
 
 // ==================== INTERFACES ====================
 
@@ -335,7 +335,7 @@ class ChatService {
     if (isPublic) {
       await this.assertAdminOrOwner(user.uid, 'Only admins can create public community chat.');
     } else {
-      await this.enforcePrivateRoomMembershipLimit(user.uid, options?.maxPrivateRooms, options?.limits);
+      await this.enforcePrivateRoomCreateLimit(user.uid, options?.maxPrivateRooms, options?.limits);
     }
     
     const roomsRef = ref(database, 'chatrooms');
@@ -438,8 +438,9 @@ class ChatService {
     return privateRoomCount;
   }
 
-  private async enforcePrivateRoomMembershipLimit(userId: string, maxOverride?: number, limits?: { pro?: number; premium?: number }): Promise<void> {
-    const privateRoomCount = await this.getUserPrivateRoomMembershipCount(userId);
+  private async enforcePrivateRoomCreateLimit(userId: string, maxOverride?: number, limits?: { pro?: number; premium?: number }): Promise<void> {
+    const createStats = await this.getUserCreatedRoomStats(userId);
+    const privateRoomCount = createStats.private;
 
     if (typeof maxOverride === 'number' && maxOverride >= 0) {
       if (privateRoomCount >= maxOverride) {
@@ -451,7 +452,7 @@ class ChatService {
     const userRef = doc(firestoreDb, 'users', userId);
     const userSnapshot = await getDoc(userRef);
     const userProfile = userSnapshot.exists() ? userSnapshot.data() : {};
-    const allowance = getPrivateRoomParticipationAllowance(userProfile, privateRoomCount, limits);
+    const allowance = getPrivateRoomCreateAllowance(userProfile, privateRoomCount, limits);
 
     if (!allowance.allowed) {
       throw new Error(allowance.reason);
@@ -608,8 +609,6 @@ class ChatService {
     
     // For public rooms and General Community, skip private-membership checks
     if (!room.isPublic && !generalCommunity) {
-      await this.enforcePrivateRoomMembershipLimit(userId);
-
       // For private rooms, invite token is required unless user is already a participant
       if (inviteToken) {
         // Validate invite token
@@ -705,8 +704,6 @@ class ChatService {
       throw new Error('You are already a member of this community');
     }
   
-    await this.enforcePrivateRoomMembershipLimit(userId);
-
     // Check if user already requested
     const joinRequests = room.joinRequests || [];
     if (joinRequests.includes(userId)) {
@@ -745,8 +742,6 @@ class ChatService {
       throw new Error('Join request not found');
     }
   
-    await this.enforcePrivateRoomMembershipLimit(requestUserId);
-
     // Remove from join requests and add to participants
     const updatedRequests = joinRequests.filter((uid: string) => uid !== requestUserId);
     const updatedParticipants = [...participants, requestUserId];
