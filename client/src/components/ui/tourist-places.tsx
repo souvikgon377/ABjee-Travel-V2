@@ -31,6 +31,16 @@ import {
   Star,
   FileText,
   Globe,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  Palette,
+  Highlighter,
+  Eraser,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -255,6 +265,189 @@ function parseExtraInfo(value: string): InfoSection[] {
     .filter((section) => section.heading || section.description);
 }
 
+function stripRichTextTags(value: string): string {
+  if (!value) return '';
+  return value
+    .replace(/<br\s*\/?>(\s*)/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeDescriptionForEditor(value: string): string {
+  if (!value) return '';
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(value);
+  if (hasHtml) return value;
+  return escapeHtml(value).replace(/\n/g, '<br>');
+}
+
+function sanitizeDescriptionHtml(input: string): string {
+  if (typeof window === 'undefined') return input;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = input;
+
+  const allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'P', 'DIV', 'SPAN', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR']);
+  const allowFontSizeOn = new Set(['P', 'DIV', 'SPAN', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+
+  const isValidCssColor = (value: string) => {
+    const v = value.trim().toLowerCase();
+    if (!v) return false;
+    if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(v)) return true;
+    if (/^rgba?\((\s*\d+\s*,){2}\s*\d+\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/.test(v)) return true;
+    if (/^hsla?\((\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*)(,\s*(0|1|0?\.\d+)\s*)?\)$/.test(v)) return true;
+    return false;
+  };
+
+  const sanitizeNode = (node: Node): Node | null => {
+    if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent ?? '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+    const element = node as HTMLElement;
+    const tag = element.tagName.toUpperCase();
+
+    if (!allowed.has(tag)) {
+      const fragment = document.createDocumentFragment();
+      Array.from(element.childNodes).forEach((child) => {
+        const cleaned = sanitizeNode(child);
+        if (cleaned) fragment.appendChild(cleaned);
+      });
+      return fragment;
+    }
+
+    const out = document.createElement(tag.toLowerCase());
+
+    if (allowFontSizeOn.has(tag)) {
+      const rawFontSize = element.style.fontSize?.trim();
+      if (rawFontSize) {
+        const matched = rawFontSize.match(/^(\d{1,2})px$/);
+        if (matched) {
+          const size = Number(matched[1]);
+          if (size >= 10 && size <= 48) out.style.fontSize = `${size}px`;
+        }
+      }
+
+      const rawColor = element.style.color?.trim();
+      if (rawColor && isValidCssColor(rawColor)) out.style.color = rawColor;
+
+      const rawBackgroundColor = element.style.backgroundColor?.trim();
+      if (rawBackgroundColor && isValidCssColor(rawBackgroundColor)) out.style.backgroundColor = rawBackgroundColor;
+    }
+
+    Array.from(element.childNodes).forEach((child) => {
+      const cleaned = sanitizeNode(child);
+      if (cleaned) out.appendChild(cleaned);
+    });
+
+    return out;
+  };
+
+  const cleanRoot = document.createElement('div');
+  Array.from(wrapper.childNodes).forEach((child) => {
+    const cleaned = sanitizeNode(child);
+    if (cleaned) cleanRoot.appendChild(cleaned);
+  });
+
+  return cleanRoot.innerHTML
+    .replace(/<div><br><\/div>/gi, '<br>')
+    .replace(/(<br>\s*){3,}/gi, '<br><br>')
+    .replace(/\u200B/g, '')
+    .trim();
+}
+
+function markdownInlineToHtml(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    .replace(/(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)/g, '<em>$1</em>')
+    .replace(/(?<!_)_(?!\s)(.+?)(?<!\s)_(?!_)/g, '<em>$1</em>');
+}
+
+function plainTextToHtml(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: string[] = [];
+
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    if (/^([-*_])\1{2,}$/.test(line)) {
+      blocks.push('<hr />');
+      index += 1;
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      blocks.push(`<h${level}>${markdownInlineToHtml(headingMatch[2].trim())}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    const bulletMatch = line.match(/^([-*•])\s+(.+)$/);
+    const orderedMatch = line.match(/^(\d+)\.\s+(.+)$/);
+    if (bulletMatch || orderedMatch) {
+      const isOrdered = Boolean(orderedMatch);
+      const items: string[] = [];
+
+      while (index < lines.length) {
+        const current = lines[index].trim();
+        const currentBullet = current.match(/^([-*•])\s+(.+)$/);
+        const currentOrdered = current.match(/^(\d+)\.\s+(.+)$/);
+        if (!current) break;
+        if (isOrdered && !currentOrdered) break;
+        if (!isOrdered && !currentBullet) break;
+
+        const itemText = (currentOrdered?.[2] ?? currentBullet?.[2] ?? '').trim();
+        items.push(`<li>${markdownInlineToHtml(itemText)}</li>`);
+        index += 1;
+      }
+
+      blocks.push(`<${isOrdered ? 'ol' : 'ul'}>${items.join('')}</${isOrdered ? 'ol' : 'ul'}>`);
+      continue;
+    }
+
+    const paragraphLines = [line];
+    index += 1;
+
+    while (index < lines.length) {
+      const current = lines[index].trim();
+      if (!current) break;
+      if (/^([-*•])\s+/.test(current) || /^\d+\.\s+/.test(current)) break;
+      paragraphLines.push(current);
+      index += 1;
+    }
+
+    blocks.push(`<p>${markdownInlineToHtml(paragraphLines.join(' '))}</p>`);
+  }
+
+  return blocks.join('');
+}
+
+function getSelectedDescriptionRange(editor: HTMLDivElement | null): Range | null {
+  if (typeof window === 'undefined' || !editor) return null;
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer)) return null;
+  return range;
+}
+
 // ─── Pending file item ───────────────────────────────────────────────────────
 interface PendingFile {
   id: string;
@@ -414,8 +607,22 @@ export function TouristPlacesManager() {
   const csvInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);      // for saved video thumbnails
   const pendingThumbInputRef = useRef<HTMLInputElement>(null);   // for pending video thumbnails
+  const descriptionEditorRef = useRef<HTMLDivElement>(null);
+  const syncingDescriptionRef = useRef(false);
+  const savedDescriptionRangeRef = useRef<Range | null>(null);
+  const descriptionHistoryRef = useRef<string[]>([]);
+  const descriptionHistoryIndexRef = useRef<number>(-1);
+  const applyingDescriptionHistoryRef = useRef(false);
   const [thumbnailTarget, setThumbnailTarget] = useState<string | null>(null);
   const [pendingThumbTarget, setPendingThumbTarget] = useState<string | null>(null);
+  const [descriptionTextSize, setDescriptionTextSize] = useState<number>(16);
+  const [descriptionTextColor, setDescriptionTextColor] = useState<string>('#111827');
+  const [descriptionHighlightColor, setDescriptionHighlightColor] = useState<string>('#fff59d');
+  const [descriptionCommandState, setDescriptionCommandState] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+  });
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchPlaces = useCallback(async () => {
@@ -476,6 +683,413 @@ export function TouristPlacesManager() {
     setPendingFiles([]);
     setEditingId(place.id!);
     setShowForm(true);
+  };
+
+  useEffect(() => {
+    if (!showForm || !descriptionEditorRef.current) return;
+    const nextHtml = normalizeDescriptionForEditor(form.description);
+    if (descriptionEditorRef.current.innerHTML !== nextHtml) {
+      syncingDescriptionRef.current = true;
+      descriptionEditorRef.current.innerHTML = nextHtml;
+      syncingDescriptionRef.current = false;
+
+      const seeded = sanitizeDescriptionHtml(nextHtml);
+      descriptionHistoryRef.current = [seeded];
+      descriptionHistoryIndexRef.current = 0;
+    }
+  }, [form.description, showForm]);
+
+  const refreshDescriptionCommandState = () => {
+    const editor = descriptionEditorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) {
+      setDescriptionCommandState({ bold: false, italic: false, underline: false });
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) {
+      setDescriptionCommandState({ bold: false, italic: false, underline: false });
+      return;
+    }
+
+    try {
+      setDescriptionCommandState({
+        bold: document.queryCommandState('bold'),
+        italic: document.queryCommandState('italic'),
+        underline: document.queryCommandState('underline'),
+      });
+    } catch {
+      setDescriptionCommandState({ bold: false, italic: false, underline: false });
+    }
+  };
+
+  useEffect(() => {
+    if (!showForm || typeof document === 'undefined') return;
+
+    const handleSelectionChange = () => {
+      const editor = descriptionEditorRef.current;
+      const selection = window.getSelection();
+      if (!editor || !selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (editor.contains(range.commonAncestorContainer)) {
+        savedDescriptionRangeRef.current = range.cloneRange();
+        refreshDescriptionCommandState();
+      } else {
+        setDescriptionCommandState({ bold: false, italic: false, underline: false });
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [showForm]);
+
+  const pushDescriptionHistory = (sanitizedHtml: string) => {
+    if (applyingDescriptionHistoryRef.current) return;
+    const history = descriptionHistoryRef.current;
+    const currentIndex = descriptionHistoryIndexRef.current;
+    const currentValue = history[currentIndex];
+    if (currentValue === sanitizedHtml) return;
+
+    const nextHistory = history.slice(0, currentIndex + 1);
+    nextHistory.push(sanitizedHtml);
+    if (nextHistory.length > 200) nextHistory.shift();
+    descriptionHistoryRef.current = nextHistory;
+    descriptionHistoryIndexRef.current = nextHistory.length - 1;
+  };
+
+  const syncDescriptionToForm = (recordHistory = true) => {
+    const editor = descriptionEditorRef.current;
+    if (!editor) return;
+    const sanitized = sanitizeDescriptionHtml(editor.innerHTML);
+    setForm((prev) => (prev.description === sanitized ? prev : { ...prev, description: sanitized }));
+    if (recordHistory) pushDescriptionHistory(sanitized);
+    refreshDescriptionCommandState();
+  };
+
+  const saveDescriptionSelection = () => {
+    if (typeof window === 'undefined') return;
+    const editor = descriptionEditorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+    savedDescriptionRangeRef.current = range.cloneRange();
+  };
+
+  const restoreDescriptionSelection = () => {
+    if (typeof window === 'undefined') return null;
+    const editor = descriptionEditorRef.current;
+    const savedRange = savedDescriptionRangeRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || !savedRange) return null;
+
+    selection.removeAllRanges();
+    selection.addRange(savedRange);
+    return savedRange;
+  };
+
+  const insertDescriptionHtml = (html: string) => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof window === 'undefined') return;
+
+    editor.focus();
+    const restored = restoreDescriptionSelection();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+
+    const sanitized = sanitizeDescriptionHtml(html);
+    const container = document.createElement('div');
+    container.innerHTML = sanitized;
+    const fragment = document.createDocumentFragment();
+
+    while (container.firstChild) {
+      fragment.appendChild(container.firstChild);
+    }
+
+    range.deleteContents();
+    const lastNode = fragment.lastChild;
+    range.insertNode(fragment);
+
+    if (lastNode) {
+      const nextRange = document.createRange();
+      nextRange.setStartAfter(lastNode);
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+      savedDescriptionRangeRef.current = nextRange.cloneRange();
+    } else if (restored) {
+      savedDescriptionRangeRef.current = restored.cloneRange();
+    }
+
+    syncDescriptionToForm();
+  };
+
+  const applyInlineDescriptionFormat = (tagName: 'strong' | 'em' | 'u') => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof window === 'undefined') return;
+
+    editor.focus();
+    restoreDescriptionSelection();
+    const selection = window.getSelection();
+    const range = getSelectedDescriptionRange(editor);
+    if (!selection || !range) return;
+
+    const wrapper = document.createElement(tagName);
+    if (range.collapsed) {
+      wrapper.appendChild(document.createTextNode('\u200B'));
+      range.insertNode(wrapper);
+    } else {
+      const contents = range.extractContents();
+      wrapper.appendChild(contents);
+      range.insertNode(wrapper);
+    }
+
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(wrapper);
+    nextRange.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedDescriptionRangeRef.current = nextRange.cloneRange();
+    syncDescriptionToForm();
+  };
+
+  const applyInlineDescriptionStyle = (styles: { color?: string; backgroundColor?: string }) => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof window === 'undefined') return;
+
+    editor.focus();
+    restoreDescriptionSelection();
+    const selection = window.getSelection();
+    const range = getSelectedDescriptionRange(editor);
+    if (!selection || !range) return;
+
+    const wrapper = document.createElement('span');
+    if (styles.color) wrapper.style.color = styles.color;
+    if (styles.backgroundColor) wrapper.style.backgroundColor = styles.backgroundColor;
+
+    if (range.collapsed) {
+      wrapper.innerHTML = '&#8203;';
+      range.insertNode(wrapper);
+    } else {
+      const contents = range.extractContents();
+      wrapper.appendChild(contents);
+      range.insertNode(wrapper);
+    }
+
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(wrapper);
+    nextRange.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedDescriptionRangeRef.current = nextRange.cloneRange();
+    syncDescriptionToForm();
+  };
+
+  const createListFromSelection = (listTag: 'ul' | 'ol') => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof window === 'undefined') return;
+
+    editor.focus();
+    restoreDescriptionSelection();
+    const selection = window.getSelection();
+    const range = getSelectedDescriptionRange(editor);
+    if (!selection || !range) return;
+    if (!editor.contains(range.commonAncestorContainer)) return;
+
+    const list = document.createElement(listTag);
+    const li = document.createElement('li');
+
+    if (range.collapsed) {
+      li.innerHTML = '<br>';
+      list.appendChild(li);
+      range.insertNode(list);
+    } else {
+      const contents = range.extractContents();
+      li.appendChild(contents);
+      list.appendChild(li);
+      range.insertNode(list);
+    }
+
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(li);
+    nextRange.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedDescriptionRangeRef.current = nextRange.cloneRange();
+    syncDescriptionToForm();
+  };
+
+  const applyDescriptionCommand = (command: 'bold' | 'italic' | 'underline') => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof document === 'undefined') return;
+
+    editor.focus();
+    restoreDescriptionSelection();
+    // Use semantic tags (<b>/<i>/<u>) so sanitizer reliably preserves formatting.
+    document.execCommand('styleWithCSS', false, 'false');
+    document.execCommand(command, false);
+    saveDescriptionSelection();
+    syncDescriptionToForm();
+  };
+
+  const handleDescriptionPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const html = event.clipboardData.getData('text/html');
+    if (html) {
+      insertDescriptionHtml(html);
+      return;
+    }
+
+    const text = event.clipboardData.getData('text/plain');
+    insertDescriptionHtml(plainTextToHtml(text));
+  };
+
+  const applyDescriptionTextSize = (size: number) => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof window === 'undefined') return;
+    setDescriptionTextSize(size);
+    editor.focus();
+    restoreDescriptionSelection();
+
+    const selection = window.getSelection();
+    const range = getSelectedDescriptionRange(editor);
+    if (!selection || !range) return;
+
+    if (range.collapsed) {
+      const span = document.createElement('span');
+      span.style.fontSize = `${size}px`;
+      span.innerHTML = '&#8203;';
+      range.insertNode(span);
+      const nextRange = document.createRange();
+      nextRange.selectNodeContents(span);
+      nextRange.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+      savedDescriptionRangeRef.current = nextRange.cloneRange();
+      syncDescriptionToForm();
+      return;
+    }
+
+    const extracted = range.extractContents();
+    const span = document.createElement('span');
+    span.style.fontSize = `${size}px`;
+    span.appendChild(extracted);
+    range.insertNode(span);
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(span);
+    nextRange.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedDescriptionRangeRef.current = nextRange.cloneRange();
+    syncDescriptionToForm();
+  };
+
+  const applyDescriptionTextColor = (color: string) => {
+    setDescriptionTextColor(color);
+    applyInlineDescriptionStyle({ color });
+  };
+
+  const applyDescriptionHighlightColor = (color: string) => {
+    setDescriptionHighlightColor(color);
+    applyInlineDescriptionStyle({ backgroundColor: color });
+  };
+
+  const clearDescriptionFormatting = () => {
+    const editor = descriptionEditorRef.current;
+    if (!editor || typeof window === 'undefined') return;
+
+    editor.focus();
+    restoreDescriptionSelection();
+    const selection = window.getSelection();
+    const range = getSelectedDescriptionRange(editor);
+    if (!selection || !range || range.collapsed) return;
+
+    const fragment = range.cloneContents();
+    const container = document.createElement('div');
+    container.appendChild(fragment);
+    const plain = container.textContent ?? '';
+
+    range.deleteContents();
+    const textNode = document.createTextNode(plain);
+    range.insertNode(textNode);
+
+    const nextRange = document.createRange();
+    nextRange.setStartAfter(textNode);
+    nextRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    savedDescriptionRangeRef.current = nextRange.cloneRange();
+    syncDescriptionToForm();
+  };
+
+  const applyDescriptionHistory = (action: 'undo' | 'redo') => {
+    const editor = descriptionEditorRef.current;
+    if (!editor) return;
+
+    const history = descriptionHistoryRef.current;
+    if (history.length === 0) return;
+
+    if (action === 'undo') {
+      if (descriptionHistoryIndexRef.current <= 0) return;
+      descriptionHistoryIndexRef.current -= 1;
+    } else {
+      if (descriptionHistoryIndexRef.current >= history.length - 1) return;
+      descriptionHistoryIndexRef.current += 1;
+    }
+
+    const snapshot = history[descriptionHistoryIndexRef.current];
+    applyingDescriptionHistoryRef.current = true;
+    syncingDescriptionRef.current = true;
+    editor.innerHTML = snapshot;
+    syncingDescriptionRef.current = false;
+    applyingDescriptionHistoryRef.current = false;
+    saveDescriptionSelection();
+    syncDescriptionToForm(false);
+  };
+
+  const handleDescriptionKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+    if (!isCtrlOrCmd) return;
+
+    // Keep shortcut handling scoped to the editor so admin-level global
+    // shortcuts do not fire while typing/formatting description content.
+    event.stopPropagation();
+    event.nativeEvent.stopImmediatePropagation?.();
+
+    const key = event.key.toLowerCase();
+    if (key === 'b') {
+      event.preventDefault();
+      applyDescriptionCommand('bold');
+      return;
+    }
+
+    if (key === 'i') {
+      event.preventDefault();
+      applyDescriptionCommand('italic');
+      return;
+    }
+
+    if (key === 'u') {
+      event.preventDefault();
+      applyDescriptionCommand('underline');
+      return;
+    }
+
+    if (key === 'z' && !event.shiftKey) {
+      event.preventDefault();
+      applyDescriptionHistory('undo');
+      return;
+    }
+
+    if (key === 'y' || (key === 'z' && event.shiftKey)) {
+      event.preventDefault();
+      applyDescriptionHistory('redo');
+    }
   };
 
   // ── File picking ───────────────────────────────────────────────────────────
@@ -1017,10 +1631,154 @@ export function TouristPlacesManager() {
               </div>
               <div className="space-y-1.5 md:col-span-2">
                 <Label htmlFor="tp-desc">Description</Label>
-                <textarea id="tp-desc" rows={3} placeholder="Brief description of the place…"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
+                <div className="rounded-xl border border-input bg-background overflow-hidden" onMouseDownCapture={saveDescriptionSelection} onPointerDownCapture={saveDescriptionSelection}>
+                  <div className="flex flex-wrap items-center gap-2 border-b border-border px-2 py-2 bg-muted/35">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyDescriptionCommand('bold')}
+                      className={descriptionCommandState.bold ? "h-8 px-2 bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 dark:hover:bg-zinc-200" : "h-8 px-2"}
+                    >
+                      <Bold className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyDescriptionCommand('italic')}
+                      className={descriptionCommandState.italic ? "h-8 px-2 bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 dark:hover:bg-zinc-200" : "h-8 px-2"}
+                    >
+                      <Italic className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyDescriptionCommand('underline')}
+                      className={descriptionCommandState.underline ? "h-8 px-2 bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 dark:hover:bg-zinc-200" : "h-8 px-2"}
+                    >
+                      <Underline className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => createListFromSelection('ul')}
+                      className="h-8 px-2"
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => createListFromSelection('ol')}
+                      className="h-8 px-2"
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={clearDescriptionFormatting}
+                      className="h-8 px-2"
+                    >
+                      <Eraser className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyDescriptionHistory('undo')}
+                      className="h-8 px-2"
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyDescriptionHistory('redo')}
+                      className="h-8 px-2"
+                    >
+                      <Redo2 className="h-4 w-4" />
+                    </Button>
+
+                    <div className="ml-1 flex items-center gap-2">
+                      <Label htmlFor="tp-desc-size" className="text-xs text-muted-foreground">Text Size</Label>
+                      <select
+                        id="tp-desc-size"
+                        value={descriptionTextSize}
+                        onMouseDown={saveDescriptionSelection}
+                        onPointerDown={saveDescriptionSelection}
+                        onChange={(event) => applyDescriptionTextSize(Number(event.target.value))}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      >
+                        {[12, 14, 16, 18, 20, 24, 28, 32].map((size) => (
+                          <option key={size} value={size}>{size}px</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="ml-1 flex items-center gap-1.5">
+                      <Palette className="h-4 w-4 text-muted-foreground" />
+                      <input
+                        type="color"
+                        aria-label="Text color"
+                        value={descriptionTextColor}
+                        onMouseDown={saveDescriptionSelection}
+                        onPointerDown={saveDescriptionSelection}
+                        onChange={(event) => applyDescriptionTextColor(event.target.value)}
+                        className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0"
+                      />
+                    </div>
+
+                    <div className="ml-1 flex items-center gap-1.5">
+                      <Highlighter className="h-4 w-4 text-muted-foreground" />
+                      <input
+                        type="color"
+                        aria-label="Highlight color"
+                        value={descriptionHighlightColor}
+                        onMouseDown={saveDescriptionSelection}
+                        onPointerDown={saveDescriptionSelection}
+                        onChange={(event) => applyDescriptionHighlightColor(event.target.value)}
+                        className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    id="tp-desc"
+                    ref={descriptionEditorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={() => {
+                      if (syncingDescriptionRef.current) return;
+                      saveDescriptionSelection();
+                      syncDescriptionToForm();
+                    }}
+                    onMouseUp={saveDescriptionSelection}
+                    onKeyUp={saveDescriptionSelection}
+                    onKeyDown={handleDescriptionKeyDown}
+                    onBlur={saveDescriptionSelection}
+                    onPaste={handleDescriptionPaste}
+                    className="min-h-36 max-h-104 w-full resize-y overflow-auto px-3 py-2 text-sm leading-relaxed focus:outline-none [&_ul]:my-2 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:ml-6 [&_ol]:list-decimal [&_li]:my-1 [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-black [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-bold [&_h4]:mb-1 [&_h4]:text-base [&_h4]:font-semibold [&_h5]:mb-1 [&_h5]:text-sm [&_h5]:font-semibold [&_h6]:mb-1 [&_h6]:text-xs [&_h6]:font-semibold [&_hr]:my-3 [&_hr]:border-border"
+                    aria-label="Description editor"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Supports bold, italic, underline, lists, headings, text size, text color, highlight, clear formatting, and undo/redo. Drag the bottom-right corner to expand the editor.
+                </p>
               </div>
               {/* ── Extra Info Sections ── */}
               <div className="space-y-3 md:col-span-2">
@@ -1640,7 +2398,7 @@ export function TouristPlacesManager() {
                     <span className="truncate">{[place.area, place.state, place.country].filter(Boolean).join(', ')}</span>
                   </div>
                   {place.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{place.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{stripRichTextTags(place.description)}</p>
                   )}
 
                   {/* Photo thumbnails row */}
