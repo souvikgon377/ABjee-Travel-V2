@@ -32,7 +32,7 @@ import { firestoreDb } from "@/lib/firebaseFirestore";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { htmlToPlainText, sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
-import { addPreviewImageToShareUrl, buildAbjeeShareText } from "@/lib/socialShare";
+import { buildAbjeeShareText } from "@/lib/socialShare";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
 
@@ -64,11 +64,9 @@ const PlaceCard: React.FC<{
   const sharePlace = (platform: "facebook" | "instagram" | "whatsapp", event: React.MouseEvent) => {
     event.stopPropagation();
 
-    const previewImage = images[0]?.url || place.coverImage || "";
     const shareUrl = new URL(window.location.href);
     shareUrl.pathname = "/tourplaces";
     shareUrl.searchParams.set("place", place.name);
-    addPreviewImageToShareUrl(shareUrl, previewImage);
     const url = shareUrl.toString();
 
     const shortLocation = place.area || place.state || place.country;
@@ -76,7 +74,6 @@ const PlaceCard: React.FC<{
       title: place.name,
       location: shortLocation,
       url,
-      imageUrl: previewImage,
     });
 
     if (platform === "facebook") {
@@ -396,11 +393,9 @@ const TourPlaces: React.FC = () => {
   const handlePlaceShare = async (type: "whatsapp" | "facebook" | "copy") => {
     if (!selectedPlace) return;
 
-    const selectedImage = selectedPlace.media?.find((item) => item.type === "image")?.url || selectedPlace.coverImage || "";
     const shareUrl = new URL(window.location.href);
     shareUrl.pathname = "/tourplaces";
     shareUrl.searchParams.set("place", selectedPlace.name);
-    addPreviewImageToShareUrl(shareUrl, selectedImage);
     const url = shareUrl.toString();
 
     const shortLocation = selectedPlace.area || selectedPlace.state || selectedPlace.country;
@@ -408,7 +403,6 @@ const TourPlaces: React.FC = () => {
       title: selectedPlace.name,
       location: shortLocation,
       url,
-      imageUrl: selectedImage,
     });
 
     if (type === "whatsapp") {

@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -19,7 +20,7 @@ import {
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
-import { addPreviewImageToShareUrl, buildAbjeeShareText } from '@/lib/socialShare';
+import { buildAbjeeShareText } from '@/lib/socialShare';
 
 // --------------------------- Types ---------------------------
 
@@ -779,17 +780,14 @@ function StoryModal({
   };
 
   const handleShare = async (platform: string) => {
-    const previewImage = story.coverImage || story.photos?.[0]?.url || '';
     const shareUrl = new URL(`${window.location.origin}/trip-stories`);
     shareUrl.searchParams.set('story', story.id);
     shareUrl.searchParams.set('storyTitle', story.title);
-    addPreviewImageToShareUrl(shareUrl, previewImage);
     const url = shareUrl.toString();
     const shareText = buildAbjeeShareText({
       title: story.title,
       location: story.destination,
       url,
-      imageUrl: previewImage,
     });
 
     if (platform === 'copy') {
@@ -1673,6 +1671,8 @@ export default function TripStoriesPage() {
   const [filterType, setFilterType] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
+  const searchParams = useSearchParams();
+  const handledStoryParamRef = useRef(false);
   const heroRef = useRef<HTMLDivElement>(null);
 
   // Load stories from Firestore (merged with sample)
@@ -1687,6 +1687,19 @@ export default function TripStoriesPage() {
     });
     return unsub;
   }, []);
+
+  // Auto-open story from query parameter (?story=...)
+  useEffect(() => {
+    if (handledStoryParamRef.current) return;
+    const storyId = searchParams.get('story');
+    if (!storyId) return;
+
+    const matchedStory = stories.find(s => s.id === storyId);
+    if (matchedStory) {
+      setSelectedStory(matchedStory);
+      handledStoryParamRef.current = true;
+    }
+  }, [stories, searchParams]);
 
   // Apply filters
   useEffect(() => {

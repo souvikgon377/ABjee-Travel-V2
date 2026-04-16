@@ -41,7 +41,7 @@ import {
 	sanitizeRichTextHtmlForDisplay,
 	RICH_TEXT_DISPLAY_CLASS,
 } from '@/lib/richTextDisplay';
-import { addPreviewImageToShareUrl, buildAbjeeShareText } from '@/lib/socialShare';
+import { buildAbjeeShareText } from '@/lib/socialShare';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
 
@@ -614,18 +614,15 @@ function TravelDetailModal({
 	};
 
 	const handleShare = async (type: 'whatsapp' | 'facebook' | 'copy') => {
-		const previewImage = (result.images || []).find((img) => img && img.trim()) || null;
 		const shareUrl = new URL(window.location.href);
 		shareUrl.pathname = window.location.pathname.includes('/travel-itinerary') ? '/travel-itinerary' : '/travel-destinations';
 		shareUrl.searchParams.set('story', shareStoryId);
 		shareUrl.searchParams.set('place', result.place);
-		addPreviewImageToShareUrl(shareUrl, previewImage);
 		const url = shareUrl.toString();
 		const shareText = buildAbjeeShareText({
 			title: result.place,
 			location: result.country,
 			url,
-			imageUrl: previewImage,
 		});
 		if (type === 'whatsapp') {
 			window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`);
