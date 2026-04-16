@@ -31,21 +31,12 @@ import {
   Star,
   FileText,
   Globe,
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Palette,
-  Highlighter,
-  Eraser,
-  Undo2,
-  Redo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { modernConfirm } from '@/lib/modernDialog';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface MediaItem {
@@ -1629,157 +1620,12 @@ export function TouristPlacesManager() {
                 <Input id="tp-area" placeholder="e.g. Tirumala Hills, Old Town"
                   value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} />
               </div>
-              <div className="space-y-1.5 md:col-span-2">
-                <Label htmlFor="tp-desc">Description</Label>
-                <div className="rounded-xl border border-input bg-background overflow-hidden" onMouseDownCapture={saveDescriptionSelection} onPointerDownCapture={saveDescriptionSelection}>
-                  <div className="flex flex-wrap items-center gap-2 border-b border-border px-2 py-2 bg-muted/35">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => applyDescriptionCommand('bold')}
-                      className={descriptionCommandState.bold ? "h-8 px-2 bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 dark:hover:bg-zinc-200" : "h-8 px-2"}
-                    >
-                      <Bold className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => applyDescriptionCommand('italic')}
-                      className={descriptionCommandState.italic ? "h-8 px-2 bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 dark:hover:bg-zinc-200" : "h-8 px-2"}
-                    >
-                      <Italic className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => applyDescriptionCommand('underline')}
-                      className={descriptionCommandState.underline ? "h-8 px-2 bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 dark:hover:bg-zinc-200" : "h-8 px-2"}
-                    >
-                      <Underline className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => createListFromSelection('ul')}
-                      className="h-8 px-2"
-                    >
-                      <List className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => createListFromSelection('ol')}
-                      className="h-8 px-2"
-                    >
-                      <ListOrdered className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={clearDescriptionFormatting}
-                      className="h-8 px-2"
-                    >
-                      <Eraser className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => applyDescriptionHistory('undo')}
-                      className="h-8 px-2"
-                    >
-                      <Undo2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => applyDescriptionHistory('redo')}
-                      className="h-8 px-2"
-                    >
-                      <Redo2 className="h-4 w-4" />
-                    </Button>
-
-                    <div className="ml-1 flex items-center gap-2">
-                      <Label htmlFor="tp-desc-size" className="text-xs text-muted-foreground">Text Size</Label>
-                      <select
-                        id="tp-desc-size"
-                        value={descriptionTextSize}
-                        onMouseDown={saveDescriptionSelection}
-                        onPointerDown={saveDescriptionSelection}
-                        onChange={(event) => applyDescriptionTextSize(Number(event.target.value))}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                      >
-                        {[12, 14, 16, 18, 20, 24, 28, 32].map((size) => (
-                          <option key={size} value={size}>{size}px</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="ml-1 flex items-center gap-1.5">
-                      <Palette className="h-4 w-4 text-muted-foreground" />
-                      <input
-                        type="color"
-                        aria-label="Text color"
-                        value={descriptionTextColor}
-                        onMouseDown={saveDescriptionSelection}
-                        onPointerDown={saveDescriptionSelection}
-                        onChange={(event) => applyDescriptionTextColor(event.target.value)}
-                        className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0"
-                      />
-                    </div>
-
-                    <div className="ml-1 flex items-center gap-1.5">
-                      <Highlighter className="h-4 w-4 text-muted-foreground" />
-                      <input
-                        type="color"
-                        aria-label="Highlight color"
-                        value={descriptionHighlightColor}
-                        onMouseDown={saveDescriptionSelection}
-                        onPointerDown={saveDescriptionSelection}
-                        onChange={(event) => applyDescriptionHighlightColor(event.target.value)}
-                        className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0"
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                    id="tp-desc"
-                    ref={descriptionEditorRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onInput={() => {
-                      if (syncingDescriptionRef.current) return;
-                      saveDescriptionSelection();
-                      syncDescriptionToForm();
-                    }}
-                    onMouseUp={saveDescriptionSelection}
-                    onKeyUp={saveDescriptionSelection}
-                    onKeyDown={handleDescriptionKeyDown}
-                    onBlur={saveDescriptionSelection}
-                    onPaste={handleDescriptionPaste}
-                    className="min-h-36 max-h-104 w-full resize-y overflow-auto px-3 py-2 text-sm leading-relaxed focus:outline-none [&_ul]:my-2 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:ml-6 [&_ol]:list-decimal [&_li]:my-1 [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-black [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-bold [&_h4]:mb-1 [&_h4]:text-base [&_h4]:font-semibold [&_h5]:mb-1 [&_h5]:text-sm [&_h5]:font-semibold [&_h6]:mb-1 [&_h6]:text-xs [&_h6]:font-semibold [&_hr]:my-3 [&_hr]:border-border"
-                    aria-label="Description editor"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Supports bold, italic, underline, lists, headings, text size, text color, highlight, clear formatting, and undo/redo. Drag the bottom-right corner to expand the editor.
-                </p>
-              </div>
+              <RichTextEditor
+                id="tp-desc"
+                label="Description"
+                value={form.description}
+                onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
+              />
               {/* ── Extra Info Sections ── */}
               <div className="space-y-3 md:col-span-2">
                 <AnimatePresence>
