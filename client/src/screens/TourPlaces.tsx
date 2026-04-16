@@ -31,15 +31,9 @@ import type { TouristPlace } from "@/components/ui/tourist-places";
 import { firestoreDb } from "@/lib/firebaseFirestore";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { htmlToPlainText, sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
-
-const stripRichTextTags = (value: string) =>
-  value
-    .replace(/<br\s*\/?>(\s*)/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 
 const PlaceCard: React.FC<{
   place: TouristPlace;
@@ -56,6 +50,7 @@ const PlaceCard: React.FC<{
   const [shareMessage, setShareMessage] = useState("");
   const dragRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const safeDescriptionHtml = place.description ? sanitizeRichTextHtmlForDisplay(place.description) : "";
 
   useEffect(() => {
     if (hasVideo || images.length <= 1) return;
@@ -269,7 +264,7 @@ const PlaceCard: React.FC<{
             {place.description ? (
               <div
                 className="text-[12px] leading-relaxed text-gray-600 line-clamp-3 dark:text-white/68 [&_div]:inline [&_p]:inline [&_ul]:my-1 [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:my-1 [&_ol]:ml-4 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:mb-2 [&_h1]:text-[1.05rem] [&_h1]:font-extrabold [&_h2]:mb-2 [&_h2]:text-[0.98rem] [&_h2]:font-bold [&_h3]:mb-1.5 [&_h3]:text-[0.94rem] [&_h3]:font-bold [&_h4]:mb-1.5 [&_h4]:text-[0.9rem] [&_h4]:font-semibold [&_h5]:mb-1 [&_h5]:text-[0.86rem] [&_h5]:font-semibold [&_h6]:mb-1 [&_h6]:text-[0.82rem] [&_h6]:font-semibold"
-                dangerouslySetInnerHTML={{ __html: place.description }}
+                dangerouslySetInnerHTML={{ __html: safeDescriptionHtml }}
               />
             ) : (
               <p className="invisible text-[12px] leading-relaxed line-clamp-3">No description</p>
@@ -288,6 +283,7 @@ const PlaceCard: React.FC<{
 const TourPlaces: React.FC = () => {
   const router = useRouter();
   const isMobile = useIsMobile();
+  const handledPlaceParamRef = useRef<string | null>(null);
 
   const [searchDestination, setSearchDestination] = useState("");
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -327,11 +323,41 @@ const TourPlaces: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (firestorePlaces.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const rawPlace = params.get("place");
+    if (!rawPlace) {
+      handledPlaceParamRef.current = null;
+      return;
+    }
+
+    const decodedPlace = rawPlace.replace(/\+/g, " ").trim();
+    const normalizedQuery = decodedPlace.toLowerCase().replace(/\s+/g, " ");
+    if (!normalizedQuery) return;
+    if (handledPlaceParamRef.current === normalizedQuery) return;
+
+    const match = firestorePlaces.find((place) =>
+      place.name
+        ?.toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim() === normalizedQuery,
+    );
+
+    if (!match) return;
+
+    handledPlaceParamRef.current = normalizedQuery;
+    setSelectedPlace(match);
+    setSearchDestination((prev) => prev || match.name);
+  }, [firestorePlaces]);
+
   const filteredPlaces = useMemo(() => {
     const q = searchDestination.trim().toLowerCase();
     if (!q) return firestorePlaces;
     return firestorePlaces.filter((place) =>
-      [place.name, place.area, place.state, place.country, place.category, stripRichTextTags(place.description ?? "")]
+      [place.name, place.area, place.state, place.country, place.category, htmlToPlainText(place.description ?? "")]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -695,7 +721,7 @@ const TourPlaces: React.FC = () => {
                         {selectedPlace.description && (
                           <div
                             className="text-base leading-relaxed text-foreground/80 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:ml-6 [&_ol]:list-decimal [&_li]:my-1 [&_h1]:mb-3 [&_h1]:text-3xl [&_h1]:font-black [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_h4]:mb-2 [&_h4]:text-lg [&_h4]:font-semibold [&_h5]:mb-2 [&_h5]:text-base [&_h5]:font-semibold [&_h6]:mb-2 [&_h6]:text-sm [&_h6]:font-semibold"
-                            dangerouslySetInnerHTML={{ __html: selectedPlace.description }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtmlForDisplay(selectedPlace.description) }}
                           />
                         )}
 

@@ -35,6 +35,12 @@ import { Textarea } from '@/components/ui/textarea';
 import type { TravelData } from '@/types/travel';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
+import {
+	hasRichTextHtml,
+	htmlToPlainText,
+	sanitizeRichTextHtmlForDisplay,
+	RICH_TEXT_DISPLAY_CLASS,
+} from '@/lib/richTextDisplay';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
 
@@ -60,10 +66,10 @@ const getCardBadge = (index: number) => {
 };
 
 const getPreviewText = (result: TravelData) => {
-	if (result.introduction) return result.introduction;
-	if (result.overview) return result.overview;
+	if (result.introduction) return htmlToPlainText(result.introduction);
+	if (result.overview) return htmlToPlainText(result.overview);
 	const firstLine = result.itinerary?.split('\n').find(line => line.trim().length > 0);
-	if (firstLine) return firstLine;
+	if (firstLine) return htmlToPlainText(firstLine);
 	if (result.places.length > 0) return `Explore ${result.places.slice(0, 3).join(', ')} and more highlights.`;
 	return 'Curated travel itinerary with handpicked places, restaurants, and stays.';
 };
@@ -254,6 +260,11 @@ const formatGeminiItinerary = (structured: Record<string, any> | null | undefine
 };
 
 const renderFormattedItinerary = (itinerary: string) => {
+	if (hasRichTextHtml(itinerary)) {
+		const safeHtml = sanitizeRichTextHtmlForDisplay(itinerary);
+		return <div className={RICH_TEXT_DISPLAY_CLASS} dangerouslySetInnerHTML={{ __html: safeHtml }} />;
+	}
+
 	const normalizedItinerary = itinerary
 		.replace(/\r\n/g, '\n')
 		.replace(/\s*;\s*(?=Day\s*\d+)/gi, '\n')
@@ -1144,13 +1155,27 @@ function TravelDetailModal({
 
 								<section>
 									<h2 className="text-xl font-bold text-foreground mb-3">Introduction</h2>
-									<p className="text-muted-foreground text-sm leading-relaxed">{getPreviewText(result)}</p>
+									{result.introduction && hasRichTextHtml(result.introduction) ? (
+										<div
+											className={RICH_TEXT_DISPLAY_CLASS}
+											dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtmlForDisplay(result.introduction) }}
+										/>
+									) : (
+										<p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{getPreviewText(result)}</p>
+									)}
 								</section>
 
 								{result.overview && result.overview !== (result.introduction || '').trim() && result.overview !== getPreviewText(result) && (
 									<section>
 										<h3 className="text-xl font-bold text-foreground mb-3">Itinerary Overview</h3>
-										<p className="text-muted-foreground text-sm leading-relaxed">{result.overview}</p>
+										{hasRichTextHtml(result.overview) ? (
+											<div
+												className={RICH_TEXT_DISPLAY_CLASS}
+												dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtmlForDisplay(result.overview) }}
+											/>
+										) : (
+											<p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{result.overview}</p>
+										)}
 									</section>
 								)}
 

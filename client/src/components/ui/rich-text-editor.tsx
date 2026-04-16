@@ -22,6 +22,7 @@ interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
   helperText?: string;
+  disabled?: boolean;
 }
 
 function escapeHtml(value: string): string {
@@ -222,6 +223,7 @@ export function RichTextEditor({
   value,
   onChange,
   helperText = "Supports bold, italic, underline, lists, headings, text size, text color, highlight, clear formatting, and undo/redo. Drag the bottom-right corner to expand the editor.",
+  disabled = false,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
@@ -309,6 +311,7 @@ export function RichTextEditor({
   };
 
   const syncToParent = (recordHistory = true) => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor) return;
     const sanitized = sanitizeDescriptionHtml(editor.innerHTML);
@@ -338,6 +341,7 @@ export function RichTextEditor({
   };
 
   const applyInlineStyle = (styles: { color?: string; backgroundColor?: string }) => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor || typeof window === "undefined") return;
 
@@ -370,6 +374,7 @@ export function RichTextEditor({
   };
 
   const applyList = (tag: "ul" | "ol") => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor || typeof window === "undefined") return;
 
@@ -402,6 +407,7 @@ export function RichTextEditor({
   };
 
   const applyCommand = (command: "bold" | "italic" | "underline") => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor || typeof document === "undefined") return;
 
@@ -414,6 +420,7 @@ export function RichTextEditor({
   };
 
   const applyTextSize = (size: number) => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor || typeof window === "undefined") return;
 
@@ -447,6 +454,7 @@ export function RichTextEditor({
   };
 
   const clearFormatting = () => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor || typeof window === "undefined") return;
 
@@ -475,6 +483,7 @@ export function RichTextEditor({
   };
 
   const applyHistory = (action: "undo" | "redo") => {
+    if (disabled) return;
     const editor = editorRef.current;
     if (!editor) return;
 
@@ -536,6 +545,7 @@ export function RichTextEditor({
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     event.preventDefault();
 
     const html = event.clipboardData.getData("text/html");
@@ -551,6 +561,7 @@ export function RichTextEditor({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
     const isCtrlOrCmd = event.ctrlKey || event.metaKey;
     if (!isCtrlOrCmd) return;
 
@@ -591,34 +602,34 @@ export function RichTextEditor({
       <Label htmlFor={id}>{label}</Label>
       <div className="rounded-xl border border-input bg-background overflow-hidden" onMouseDownCapture={saveSelection} onPointerDownCapture={saveSelection}>
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-2 py-2 bg-muted/35">
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("bold")} className={commandState.bold ? activeButtonClass : "h-8 px-2"}>
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("bold")} className={commandState.bold ? activeButtonClass : "h-8 px-2"}>
             <Bold className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("italic")} className={commandState.italic ? activeButtonClass : "h-8 px-2"}>
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("italic")} className={commandState.italic ? activeButtonClass : "h-8 px-2"}>
             <Italic className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("underline")} className={commandState.underline ? activeButtonClass : "h-8 px-2"}>
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyCommand("underline")} className={commandState.underline ? activeButtonClass : "h-8 px-2"}>
             <Underline className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("ul")} className="h-8 px-2">
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("ul")} className="h-8 px-2">
             <List className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("ol")} className="h-8 px-2">
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyList("ol")} className="h-8 px-2">
             <ListOrdered className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={clearFormatting} className="h-8 px-2">
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={clearFormatting} className="h-8 px-2">
             <Eraser className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyHistory("undo")} className="h-8 px-2">
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyHistory("undo")} className="h-8 px-2">
             <Undo2 className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="outline" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => applyHistory("redo")} className="h-8 px-2">
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => applyHistory("redo")} className="h-8 px-2">
             <Redo2 className="h-4 w-4" />
           </Button>
 
           <div className="ml-1 flex items-center gap-2">
             <Label htmlFor={`${id}-size`} className="text-xs text-muted-foreground">Text Size</Label>
-            <select id={`${id}-size`} value={textSize} onMouseDown={saveSelection} onPointerDown={saveSelection} onChange={(event) => applyTextSize(Number(event.target.value))} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+            <select id={`${id}-size`} value={textSize} disabled={disabled} onMouseDown={saveSelection} onPointerDown={saveSelection} onChange={(event) => applyTextSize(Number(event.target.value))} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
               {[12, 14, 16, 18, 20, 24, 28, 32].map((size) => (
                 <option key={size} value={size}>{size}px</option>
               ))}
@@ -627,12 +638,12 @@ export function RichTextEditor({
 
           <div className="ml-1 flex items-center gap-1.5">
             <Palette className="h-4 w-4 text-muted-foreground" />
-            <input type="color" aria-label="Text color" value={textColor} onMouseDown={saveSelection} onPointerDown={saveSelection} onChange={(event) => { setTextColor(event.target.value); applyInlineStyle({ color: event.target.value }); }} className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0" />
+            <input type="color" aria-label="Text color" value={textColor} disabled={disabled} onMouseDown={saveSelection} onPointerDown={saveSelection} onChange={(event) => { setTextColor(event.target.value); applyInlineStyle({ color: event.target.value }); }} className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0" />
           </div>
 
           <div className="ml-1 flex items-center gap-1.5">
             <Highlighter className="h-4 w-4 text-muted-foreground" />
-            <input type="color" aria-label="Highlight color" value={highlightColor} onMouseDown={saveSelection} onPointerDown={saveSelection} onChange={(event) => { setHighlightColor(event.target.value); applyInlineStyle({ backgroundColor: event.target.value }); }} className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0" />
+            <input type="color" aria-label="Highlight color" value={highlightColor} disabled={disabled} onMouseDown={saveSelection} onPointerDown={saveSelection} onChange={(event) => { setHighlightColor(event.target.value); applyInlineStyle({ backgroundColor: event.target.value }); }} className="h-8 w-8 cursor-pointer rounded border border-input bg-background p-0" />
           </div>
         </div>
 
@@ -640,6 +651,7 @@ export function RichTextEditor({
           id={id}
           ref={editorRef}
           contentEditable
+          contentEditable={!disabled}
           suppressContentEditableWarning
           onInput={() => {
             if (syncingRef.current) return;

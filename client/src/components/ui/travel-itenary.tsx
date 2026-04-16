@@ -6,6 +6,7 @@ import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader,
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { modernConfirm } from '@/lib/modernDialog';
@@ -1719,32 +1720,24 @@ export default function AdminTravelItenary() {
 								</div>
 
 								<div>
-									<label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-										Introduction
-									</label>
-									<Textarea
-										name="introduction"
+									<RichTextEditor
+										id="travel-introduction-rich-text"
+										label="Introduction"
 										value={form.introduction}
-										onChange={handleInputChange}
-										placeholder="Short summary for the destination and trip vibe..."
-										rows={5}
+										onChange={(html) => setForm((prev) => ({ ...prev, introduction: html }))}
 										disabled={uploadState.uploading}
-										className="w-full"
+										helperText="Add a short formatted overview. Supports bold, lists, headings, color, and clean paste from ChatGPT."
 									/>
 								</div>
 
 								<div>
-									<label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-										Travel Itinerary
-									</label>
-									<Textarea
-										name="itinerary"
+									<RichTextEditor
+										id="travel-itinerary-rich-text"
+										label="Travel Itinerary"
 										value={form.itinerary}
-										onChange={handleInputChange}
-										placeholder="Day 1: Arrival and check-in...&#10;Day 2: Beach visit...&#10;Day 3: Cultural tour..."
-										rows={12}
+										onChange={(html) => setForm((prev) => ({ ...prev, itinerary: html }))}
 										disabled={uploadState.uploading}
-										className="w-full"
+										helperText="Use day-wise headings, bullets, highlights, and rich formatting. Paste from ChatGPT to auto-preserve structure."
 									/>
 								</div>
 
