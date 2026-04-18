@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef, memo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -26,9 +26,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import type { TouristPlace } from "@/components/ui/tourist-places";
-import { firestoreDb } from "@/lib/firebaseFirestore";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
@@ -44,6 +42,24 @@ const normalizeSearchText = (value?: string) =>
     .trim();
 
 const splitSearchTerms = (value: string) => value.split(" ").filter(Boolean);
+
+const SEARCH_DEBOUNCE_MS = 450;
+const SEARCH_PAGE_SIZE = 4;
+const SEARCH_API_PATH = "/api/tour-places/search";
+
+type SearchCursorValue = {
+  value: string;
+  id: string;
+};
+
+type SearchResponse = {
+  results?: TouristPlace[];
+  lastDoc?: string | null;
+  hasMore?: boolean;
+  searchTerm?: string;
+};
+
+const normalizeSearchInput = (value: string) => value.replace(/\+/g, " ").replace(/\s+/g, " ").trim();
 
 const PlaceCard: React.FC<{
   place: TouristPlace;
@@ -310,11 +326,20 @@ const TourPlaces: React.FC = () => {
   const router = useRouter();
   const isMobile = useIsMobile();
   const handledPlaceParamRef = useRef<string | null>(null);
+  const lastSearchTermRef = useRef<string>("");
+  const searchRequestIdRef = useRef(0);
+  const clientSearchCacheRef = useRef(new Map<string, SearchResponse>());
+  const inFlightSearchRef = useRef(new Map<string, Promise<SearchResponse>>());
 
   const [searchInput, setSearchInput] = useState("");
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
-  const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
+  const [searchResults, setSearchResults] = useState<TouristPlace[]>([]);
+  const [searchLastDoc, setSearchLastDoc] = useState<string | null>(null);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [activeSearchTerm, setActiveSearchTerm] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<TouristPlace | null>(null);
   const [isWindowExpanded, setIsWindowExpanded] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -323,8 +348,6 @@ const TourPlaces: React.FC = () => {
   const [photoComments, setPhotoComments] = useState<Record<string, Array<{ author: string; text: string }>>>({});
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
-
-  // Remove the debounce effect entirely - update search instantly
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -343,17 +366,17 @@ const TourPlaces: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const q = query(collection(firestoreDb, "touristPlaces"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const items = snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<TouristPlace, "id">) }));
-      setFirestorePlaces(items);
-    });
-    return () => unsubscribe();
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const rawPlace = params.get("place");
+    if (!rawPlace) return;
+
+    setSearchInput(normalizeSearchInput(rawPlace));
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (firestorePlaces.length === 0) return;
+    if (searchResults.length === 0) return;
 
     const params = new URLSearchParams(window.location.search);
     const rawPlace = params.get("place");
@@ -367,7 +390,7 @@ const TourPlaces: React.FC = () => {
     if (!normalizedQuery) return;
     if (handledPlaceParamRef.current === normalizedQuery) return;
 
-    const match = firestorePlaces.find((place) =>
+    const match = searchResults.find((place: TouristPlace) =>
       place.name
         ?.toLowerCase()
         .replace(/\s+/g, " ")
@@ -379,98 +402,139 @@ const TourPlaces: React.FC = () => {
     handledPlaceParamRef.current = normalizedQuery;
     setSelectedPlace(match);
     setSearchInput((prev) => prev || match.name);
-  }, [firestorePlaces]);
+  }, [searchResults]);
 
-  const indexedPlaces = useMemo(
-    () =>
-      firestorePlaces.map((place) => {
-        const name = normalizeSearchText(place.name);
-        const area = normalizeSearchText(place.area);
-        const state = normalizeSearchText(place.state);
-        const country = normalizeSearchText(place.country);
-        const searchKey = [name, area, state, country].filter(Boolean).join(" ");
+  const resetSearchState = useCallback(() => {
+    setSearchResults([]);
+    setSearchLastDoc(null);
+    setSearchHasMore(false);
+    setSearchLoading(false);
+    setSearchError("");
+    setActiveSearchTerm("");
+    lastSearchTermRef.current = "";
+  }, []);
 
-        return {
-          place,
-          name,
-          area,
-          state,
-          country,
-          searchKey,
-        };
-      }),
-    [firestorePlaces],
-  );
+  const buildClientCacheKey = useCallback((query: string, lastDoc: string | null) => {
+    return `search:${query.toLowerCase()}:after:${lastDoc || "start"}`;
+  }, []);
 
-  const filteredPlaces = useMemo(() => {
-    const q = normalizeSearchText(searchInput);
-    if (!q) return firestorePlaces;
-
-    const terms = splitSearchTerms(q);
-    if (terms.length === 0) return firestorePlaces;
-
-    const scoredMatches: Array<{ place: TouristPlace; score: number; nameLength: number }> = [];
-
-    for (const entry of indexedPlaces) {
-      // Fast path: check all termsearchInput
-      let allTermsMatch = true;
-      for (let i = 0; i < terms.length; i++) {
-        if (!entry.searchKey.includes(terms[i])) {
-          allTermsMatch = false;
-          break;
-        }
-      }
-      if (!allTermsMatch) continue;
-
-      // Compute score only for matches
-      const locationFields = [entry.area, entry.state, entry.country].filter(Boolean);
-      let score = 6;
-      
-      if (entry.name === q) {
-        score = 0;
-      } else if (entry.name.startsWith(q)) {
-        score = 1;
-      } else {
-        const queryMatchesLocationExactly = locationFields.some((field) => field === q);
-        if (queryMatchesLocationExactly) {
-          score = 2;
-        } else {
-          const queryStartsLocation = locationFields.some((field) => field.startsWith(q));
-          if (queryStartsLocation) {
-            score = 3;
-          } else {
-            const nameWords = splitSearchTerms(entry.name);
-            const hasWordPrefix = nameWords.some((word) => word.startsWith(q));
-            if (hasWordPrefix) {
-              score = 4;
-            } else {
-              const queryInLocation = locationFields.some((field) => field.includes(q));
-              score = entry.name.includes(q) || queryInLocation ? 5 : 6;
-            }
-          }
-        }
-      }
-
-      scoredMatches.push({
-        place: entry.place,
-        score,
-        nameLength: entry.name.length,
-      });
+  const requestSearchPage = useCallback(async (query: string, lastDoc: string | null): Promise<SearchResponse> => {
+    const cacheKey = buildClientCacheKey(query, lastDoc);
+    const cached = clientSearchCacheRef.current.get(cacheKey);
+    if (cached) {
+      return cached;
     }
 
-    // Fast sort with early termination potential
-    if (scoredMatches.length === 0) return [];
-    scoredMatches.sort((a, b) => {
-      if (a.score !== b.score) return a.score - b.score;
-      if (a.nameLength !== b.nameLength) return a.nameLength - b.nameLength;
-      return a.place.name.localeCompare(b.place.name);
-    });
-    
-    return scoredMatches.map((item) => item.place);
-  }, [searchInput, firestorePlaces, indexedPlaces]);
+    const existingRequest = inFlightSearchRef.current.get(cacheKey);
+    if (existingRequest) {
+      return existingRequest;
+    }
 
-  const searchQuery = searchInput.trim();
-  const showSuggestions = searchInput.trim().length === 0;
+    const request = fetch(SEARCH_API_PATH, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        lastDoc,
+        pageSize: SEARCH_PAGE_SIZE,
+      }),
+    }).then(async (response) => {
+      const payload = (await response.json().catch(() => null)) as { success?: boolean; data?: SearchResponse; message?: string } | null;
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.message || `Search failed with status ${response.status}`);
+      }
+
+      clientSearchCacheRef.current.set(cacheKey, payload.data);
+      return payload.data;
+    }).finally(() => {
+      inFlightSearchRef.current.delete(cacheKey);
+    });
+
+    inFlightSearchRef.current.set(cacheKey, request);
+    return request;
+  }, [buildClientCacheKey]);
+
+  const fetchSearchResults = useCallback(async (term: string, options?: { append?: boolean; lastDoc?: string | null }) => {
+    const normalizedTerm = normalizeSearchInput(term);
+    if (normalizedTerm.length < 3) {
+      resetSearchState();
+      return;
+    }
+
+    const requestId = ++searchRequestIdRef.current;
+    const append = options?.append ?? false;
+    const lastDoc = options?.lastDoc ?? null;
+
+    if (!append) {
+      setSearchLoading(true);
+      setSearchResults([]);
+      setSearchLastDoc(null);
+      setSearchHasMore(false);
+      setSearchError("");
+    } else {
+      setSearchLoading(true);
+      setSearchError("");
+    }
+
+    try {
+      const payload = await requestSearchPage(normalizedTerm, lastDoc);
+      const nextResults = Array.isArray(payload.results) ? payload.results : [];
+
+      if (requestId !== searchRequestIdRef.current) {
+        return;
+      }
+
+      setActiveSearchTerm(normalizedTerm);
+      setSearchLastDoc(payload.lastDoc ?? null);
+      setSearchHasMore(Boolean(payload.hasMore));
+      setSearchResults((prev) => (append ? [...prev, ...nextResults] : nextResults));
+      setSearchError("");
+      lastSearchTermRef.current = normalizedTerm;
+    } catch (error) {
+      if (requestId !== searchRequestIdRef.current) {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : "Failed to search tourist places.";
+      setSearchError(message);
+      if (!append) {
+        setSearchResults([]);
+        setSearchLastDoc(null);
+        setSearchHasMore(false);
+      }
+    } finally {
+      if (requestId === searchRequestIdRef.current) {
+        setSearchLoading(false);
+      }
+    }
+  }, [requestSearchPage, resetSearchState]);
+
+  useEffect(() => {
+    const normalized = normalizeSearchInput(searchInput);
+
+    if (normalized.length < 3) {
+      resetSearchState();
+      return;
+    }
+
+    if (normalized !== lastSearchTermRef.current) {
+      setSearchResults([]);
+      setSearchLastDoc(null);
+      setSearchHasMore(false);
+      setSearchError("");
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetchSearchResults(normalized, { append: false, lastDoc: null });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [fetchSearchResults, resetSearchState, searchInput]);
+
+  const searchQuery = normalizeSearchInput(searchInput);
+  const showSuggestions = searchQuery.length < 3;
   const suggestionPlaces = ["Tirupati", "Manali", "Goa", "Kerala", "Shimla", "Ladakh"];
 
   const selectedPlaceImages = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "image") ?? [], [selectedPlace?.media]);
@@ -524,9 +588,14 @@ const TourPlaces: React.FC = () => {
     setPhotoCommentInputs((prev) => ({ ...prev, [key]: "" }));
   };
 
+  const handleSeeMore = useCallback(() => {
+    if (!activeSearchTerm || !searchHasMore || searchLoading) return;
+    void fetchSearchResults(activeSearchTerm, { append: true, lastDoc: searchLastDoc });
+  }, [activeSearchTerm, fetchSearchResults, searchHasMore, searchLastDoc, searchLoading]);
+
   const placeCards = useMemo(
     () =>
-      filteredPlaces.map((place, idx) => (
+      searchResults.map((place, idx) => (
         <PlaceCard
           key={place.id ?? idx}
           place={place}
@@ -535,7 +604,7 @@ const TourPlaces: React.FC = () => {
           disableVideoAutoplay={mobilePerformanceMode || isMobile}
         />
       )),
-    [filteredPlaces, isMobile, mobilePerformanceMode],
+    [isMobile, mobilePerformanceMode, searchResults],
   );
 
   return (
@@ -643,15 +712,46 @@ const TourPlaces: React.FC = () => {
                 <div className="text-center">
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-md">
                     <MapPin className="h-4 w-4 text-rose-400" />
-                    {filteredPlaces.length} of {firestorePlaces.length} places for “{searchQuery}”
+                    {searchResults.length} loaded results for “{searchQuery}”
                   </span>
                 </div>
 
+                {searchError && (
+                  <div className="mx-auto w-full max-w-2xl rounded-2xl border border-rose-400/30 bg-rose-500/15 px-4 py-3 text-center text-sm text-rose-100 backdrop-blur-md">
+                    {searchError}
+                  </div>
+                )}
+
+                {searchLoading && searchResults.length === 0 ? (
+                  <div className="mx-auto flex min-h-72 w-full max-w-2xl items-center justify-center rounded-3xl border border-white/10 bg-black/20 px-4 py-10 text-center text-white/70 backdrop-blur-md">
+                    Searching tourist places...
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="mx-auto flex min-h-72 w-full max-w-2xl flex-col items-center justify-center rounded-3xl border border-white/10 bg-black/20 px-4 py-10 text-center text-white/70 backdrop-blur-md">
+                    <Search className="mb-4 h-10 w-10 text-white/50" />
+                    <p className="text-lg font-semibold text-white">No places found</p>
+                    <p className="mt-2 text-sm text-white/60">Try a different place, area, state, or country.</p>
+                  </div>
+                ) : (
                 <motion.div className="w-full" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
                   <div className="grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                     {placeCards}
                   </div>
                 </motion.div>
+                )}
+
+                {searchHasMore && searchResults.length > 0 && (
+                  <div className="flex justify-center pb-6 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSeeMore}
+                      disabled={searchLoading}
+                      className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-6 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-md transition hover:bg-white/18 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {searchLoading ? 'Loading...' : 'See More'}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

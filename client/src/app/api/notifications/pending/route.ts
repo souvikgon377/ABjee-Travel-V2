@@ -5,6 +5,31 @@ import { notificationService } from "@/services/notificationService";
 
 export const runtime = "nodejs";
 
+const isTransientDatastoreError = (error: unknown) => {
+  const rawCode = (error as { code?: unknown })?.code;
+  const code = String(rawCode ?? "").toLowerCase();
+  const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
+
+  return (
+    rawCode === 8 ||
+    code.includes("firestore") ||
+    code.includes("database") ||
+    code.includes("resource-exhausted") ||
+    code.includes("quota") ||
+    code.includes("deadline") ||
+    code.includes("unavailable") ||
+    message.includes("firestore") ||
+    message.includes("database") ||
+    message.includes("resource_exhausted") ||
+    message.includes("resource-exhausted") ||
+    message.includes("quota") ||
+    message.includes("deadline") ||
+    message.includes("unavailable") ||
+    message.includes("default credentials") ||
+    message.includes("project id")
+  );
+};
+
 export async function GET(req: NextRequest) {
   try {
     const user = await authenticateRequest(req);
@@ -16,14 +41,7 @@ export async function GET(req: NextRequest) {
       return fail(error.message, error.status);
     }
 
-    const message = String(error?.message || "").toLowerCase();
-    if (
-      message.includes("firestore") ||
-      message.includes("database") ||
-      message.includes("default credentials") ||
-      message.includes("project id") ||
-      message.includes("unavailable")
-    ) {
+    if (isTransientDatastoreError(error)) {
       return ok([]);
     }
 

@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { adminAPI } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface MediaItem {
@@ -74,6 +75,18 @@ interface TouristImportSummary {
   importedRows: number;
   failedRows: number;
   errors: string[];
+}
+
+interface MigrationProgress {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  total: number;
+  processed: number;
+  updated: number;
+  skipped: number;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -237,6 +250,17 @@ const TOURIST_HEADER_ALIASES: Record<string, string> = {
 function normalizeHeaderToField(value: string): string {
   const n = normalizeHeader(value);
   return TOURIST_HEADER_ALIASES[n] || n;
+}
+
+function buildSearchIndexFields(place: Pick<TouristPlace, 'name' | 'area' | 'state' | 'country'>) {
+  const toSearchText = (value: string) => value.trim().toLowerCase();
+
+  return {
+    searchName: toSearchText(place.name),
+    searchArea: toSearchText(place.area),
+    searchState: toSearchText(place.state),
+    searchCountry: toSearchText(place.country),
+  };
 }
 
 function parseExtraInfo(value: string): InfoSection[] {
@@ -588,6 +612,9 @@ export function TouristPlacesManager() {
   const [importError, setImportError] = useState('');
   const [importSummary, setImportSummary] = useState<TouristImportSummary | null>(null);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
+  const [migrationJobId, setMigrationJobId] = useState<string | null>(null);
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
+  const [migrationStarting, setMigrationStarting] = useState(false);
 
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryMedia, setGalleryMedia] = useState<MediaItem[]>([]);
@@ -1257,6 +1284,12 @@ export function TouristPlacesManager() {
         coverImage,
         media: allMedia,
         extraInfo: form.extraInfo.map(({ heading, description }) => ({ heading, description })),
+        ...buildSearchIndexFields({
+          name: form.name,
+          area: form.area,
+          state: form.state,
+          country: form.country,
+        }),
         updatedAt: serverTimestamp(),
       };
 
@@ -1401,6 +1434,12 @@ export function TouristPlacesManager() {
           coverImage: '',
           media: [],
           extraInfo,
+          ...buildSearchIndexFields({
+            name,
+            area,
+            state,
+            country,
+          }),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -1441,6 +1480,76 @@ export function TouristPlacesManager() {
       setImportError('Could not copy template.');
     }
   };
+
+  const fetchMigrationProgress = useCallback(async (jobId: string) => {
+    const response = await adminAPI.getTourPlaceSearchMigrationStatus(jobId);
+    const progress = response?.data?.data?.progress as MigrationProgress | undefined;
+    if (!progress) {
+      throw new Error('Migration progress unavailable');
+    }
+    setMigrationProgress(progress);
+    return progress;
+  }, []);
+
+  const handleRunMigration = async () => {
+    setMigrationStarting(true);
+    try {
+      const response = await adminAPI.startTourPlaceSearchMigration();
+      const payload = response?.data?.data as {
+        jobId?: string;
+        progress?: MigrationProgress;
+        alreadyRunning?: boolean;
+      } | undefined;
+
+      const jobId = payload?.jobId;
+      if (!jobId) {
+        throw new Error('Migration job ID is missing');
+      }
+
+      setMigrationJobId(jobId);
+      setMigrationProgress(payload?.progress || null);
+      flash(payload?.alreadyRunning ? 'Migration is already running.' : 'Migration started in background.', 'success');
+    } catch (err: unknown) {
+      flash(err instanceof Error ? err.message : 'Failed to start migration.', 'error');
+    } finally {
+      setMigrationStarting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!migrationJobId) return;
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const progress = await fetchMigrationProgress(migrationJobId);
+        if (cancelled) return;
+        if (progress.status === 'completed') {
+          flash('Migration completed successfully.', 'success');
+          await fetchPlaces();
+          if (intervalId) clearInterval(intervalId);
+        }
+        if (progress.status === 'failed') {
+          flash(progress.error || 'Migration failed.', 'error');
+          if (intervalId) clearInterval(intervalId);
+        }
+      } catch {
+        if (intervalId) clearInterval(intervalId);
+      }
+    };
+
+    void poll();
+    intervalId = setInterval(() => {
+      void poll();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [fetchMigrationProgress, fetchPlaces, migrationJobId]);
 
   const formImages = form.media.filter((m) => m.type === 'image');
   const formVideos = form.media.filter((m) => m.type === 'video');
@@ -1513,6 +1622,14 @@ export function TouristPlacesManager() {
               {importingCsv ? `Importing ${importProgress}%` : 'Import Tourist Places'}
             </Button>
             <Button
+              onClick={handleRunMigration}
+              variant="outline"
+              className="bg-white/15 text-white border-white/30 hover:bg-white/25"
+              disabled={migrationStarting || migrationProgress?.status === 'running' || migrationProgress?.status === 'queued'}
+            >
+              {migrationStarting ? 'Starting Migration...' : 'Run Migration'}
+            </Button>
+            <Button
               onClick={() => { resetForm(); setShowForm(true); }}
               className="bg-white text-rose-700 hover:bg-white/90 font-bold gap-2 rounded-2xl px-6 py-5 shadow-lg hover:shadow-xl transition-all"
             >
@@ -1543,6 +1660,36 @@ export function TouristPlacesManager() {
                 </div>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {migrationProgress && (
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">
+              Migration Job: <span className="font-mono text-xs text-muted-foreground">{migrationProgress.jobId}</span>
+            </p>
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-wide text-foreground">
+              {migrationProgress.status}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <p className="rounded-lg bg-muted/50 px-2 py-1.5">Total: <span className="font-semibold">{migrationProgress.total}</span></p>
+            <p className="rounded-lg bg-muted/50 px-2 py-1.5">Processed: <span className="font-semibold">{migrationProgress.processed}</span></p>
+            <p className="rounded-lg bg-muted/50 px-2 py-1.5">Updated: <span className="font-semibold">{migrationProgress.updated}</span></p>
+            <p className="rounded-lg bg-muted/50 px-2 py-1.5">Skipped: <span className="font-semibold">{migrationProgress.skipped}</span></p>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full bg-rose-500 transition-all duration-300"
+              style={{
+                width: `${migrationProgress.total > 0 ? Math.min(100, Math.round((migrationProgress.processed / migrationProgress.total) * 100)) : 0}%`,
+              }}
+            />
+          </div>
+          {migrationProgress.error && (
+            <p className="text-xs text-destructive">{migrationProgress.error}</p>
           )}
         </div>
       )}

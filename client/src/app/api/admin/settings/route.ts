@@ -85,6 +85,33 @@ const normalizeSettingsPayload = (data: Record<string, unknown>) => ({
   features: normalizeFeatures(data.features),
 });
 
+const isDatastoreTransientError = (error: unknown) => {
+  const code = String((error as { code?: unknown })?.code ?? '').toLowerCase();
+  const message = String((error as { message?: unknown })?.message ?? '').toLowerCase();
+
+  return (
+    code === '8' ||
+    code.includes('resource-exhausted') ||
+    code.includes('quota') ||
+    code.includes('unavailable') ||
+    code.includes('deadline') ||
+    message.includes('resource_exhausted') ||
+    message.includes('resource-exhausted') ||
+    message.includes('quota exceeded') ||
+    message.includes('quota') ||
+    message.includes('unavailable') ||
+    message.includes('deadline')
+  );
+};
+
+const DEFAULT_SETTINGS_PAYLOAD = {
+  homePageEnabled: true,
+  bookingCategoriesEnabled: true,
+  pricing: { ...DEFAULT_PRICING },
+  privateRoomLimits: { ...DEFAULT_PRIVATE_ROOM_LIMITS },
+  features: { ...DEFAULT_FEATURES },
+};
+
 export async function GET(req: NextRequest) {
   try {
     const user = await authenticateRequest(req);
@@ -98,6 +125,15 @@ export async function GET(req: NextRequest) {
     if (error instanceof AuthError) {
       return fail(error.message, error.status);
     }
+
+    // For temporary Firestore outages/quota limits, return defaults so the admin UI stays usable.
+    if (isDatastoreTransientError(error)) {
+      return ok({
+        ...DEFAULT_SETTINGS_PAYLOAD,
+        _degraded: true,
+      });
+    }
+
     return fail('Failed to load admin settings', 500);
   }
 }

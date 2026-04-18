@@ -145,6 +145,8 @@ export const adminAPI = {
   updateChatRoom: (roomId: string, data: any) => api.put(`/admin/chatrooms/${roomId}`, data),
   deleteChatRoom: (roomId: string) => api.delete(`/admin/chatrooms/${roomId}`),
   getRoomMembers: (roomId: string) => api.get(`/admin/chatrooms/${roomId}/members`),
+  startTourPlaceSearchMigration: () => api.post('/admin/tour-places/migration/start'),
+  getTourPlaceSearchMigrationStatus: (jobId: string) => api.get('/admin/tour-places/migration/status', { params: { jobId } }),
 };
 
 export default api;
