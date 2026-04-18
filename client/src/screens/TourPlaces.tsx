@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, memo } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -31,17 +31,26 @@ import type { TouristPlace } from "@/components/ui/tourist-places";
 import { firestoreDb } from "@/lib/firebaseFirestore";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { htmlToPlainText, sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
+import { sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
 import { buildAbjeeShareText } from "@/lib/socialShare";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
+
+const normalizeSearchText = (value?: string) =>
+  (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const splitSearchTerms = (value: string) => value.split(" ").filter(Boolean);
 
 const PlaceCard: React.FC<{
   place: TouristPlace;
   idx: number;
   onSelect: () => void;
   disableVideoAutoplay?: boolean;
-}> = ({ place, idx, onSelect, disableVideoAutoplay = false }) => {
+}> = memo(({ place, idx, onSelect, disableVideoAutoplay = false }) => {
   const videos = place.media?.filter((item) => item.type === "video") ?? [];
   const images = place.media?.filter((item) => item.type === "image") ?? [];
   const hasVideo = videos.length > 0;
@@ -288,14 +297,21 @@ const PlaceCard: React.FC<{
       </div>
     </motion.div>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.place.id === nextProps.place.id &&
+    prevProps.disableVideoAutoplay === nextProps.disableVideoAutoplay
+  );
+});
+
+PlaceCard.displayName = "PlaceCard";
 
 const TourPlaces: React.FC = () => {
   const router = useRouter();
   const isMobile = useIsMobile();
   const handledPlaceParamRef = useRef<string | null>(null);
 
-  const [searchDestination, setSearchDestination] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
   const [firestorePlaces, setFirestorePlaces] = useState<TouristPlace[]>([]);
@@ -307,6 +323,8 @@ const TourPlaces: React.FC = () => {
   const [photoComments, setPhotoComments] = useState<Record<string, Array<{ author: string; text: string }>>>({});
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
+
+  // Remove the debounce effect entirely - update search instantly
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -360,23 +378,99 @@ const TourPlaces: React.FC = () => {
 
     handledPlaceParamRef.current = normalizedQuery;
     setSelectedPlace(match);
-    setSearchDestination((prev) => prev || match.name);
+    setSearchInput((prev) => prev || match.name);
   }, [firestorePlaces]);
 
-  const filteredPlaces = useMemo(() => {
-    const q = searchDestination.trim().toLowerCase();
-    if (!q) return firestorePlaces;
-    return firestorePlaces.filter((place) =>
-      [place.name, place.area, place.state, place.country, place.category, htmlToPlainText(place.description ?? "")]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [firestorePlaces, searchDestination]);
+  const indexedPlaces = useMemo(
+    () =>
+      firestorePlaces.map((place) => {
+        const name = normalizeSearchText(place.name);
+        const area = normalizeSearchText(place.area);
+        const state = normalizeSearchText(place.state);
+        const country = normalizeSearchText(place.country);
+        const searchKey = [name, area, state, country].filter(Boolean).join(" ");
 
-  const searchQuery = searchDestination.trim();
-  const showSuggestions = searchQuery.length === 0;
+        return {
+          place,
+          name,
+          area,
+          state,
+          country,
+          searchKey,
+        };
+      }),
+    [firestorePlaces],
+  );
+
+  const filteredPlaces = useMemo(() => {
+    const q = normalizeSearchText(searchInput);
+    if (!q) return firestorePlaces;
+
+    const terms = splitSearchTerms(q);
+    if (terms.length === 0) return firestorePlaces;
+
+    const scoredMatches: Array<{ place: TouristPlace; score: number; nameLength: number }> = [];
+
+    for (const entry of indexedPlaces) {
+      // Fast path: check all termsearchInput
+      let allTermsMatch = true;
+      for (let i = 0; i < terms.length; i++) {
+        if (!entry.searchKey.includes(terms[i])) {
+          allTermsMatch = false;
+          break;
+        }
+      }
+      if (!allTermsMatch) continue;
+
+      // Compute score only for matches
+      const locationFields = [entry.area, entry.state, entry.country].filter(Boolean);
+      let score = 6;
+      
+      if (entry.name === q) {
+        score = 0;
+      } else if (entry.name.startsWith(q)) {
+        score = 1;
+      } else {
+        const queryMatchesLocationExactly = locationFields.some((field) => field === q);
+        if (queryMatchesLocationExactly) {
+          score = 2;
+        } else {
+          const queryStartsLocation = locationFields.some((field) => field.startsWith(q));
+          if (queryStartsLocation) {
+            score = 3;
+          } else {
+            const nameWords = splitSearchTerms(entry.name);
+            const hasWordPrefix = nameWords.some((word) => word.startsWith(q));
+            if (hasWordPrefix) {
+              score = 4;
+            } else {
+              const queryInLocation = locationFields.some((field) => field.includes(q));
+              score = entry.name.includes(q) || queryInLocation ? 5 : 6;
+            }
+          }
+        }
+      }
+
+      scoredMatches.push({
+        place: entry.place,
+        score,
+        nameLength: entry.name.length,
+      });
+    }
+
+    // Fast sort with early termination potential
+    if (scoredMatches.length === 0) return [];
+    scoredMatches.sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      if (a.nameLength !== b.nameLength) return a.nameLength - b.nameLength;
+      return a.place.name.localeCompare(b.place.name);
+    });
+    
+    return scoredMatches.map((item) => item.place);
+  }, [searchInput, firestorePlaces, indexedPlaces]);
+
+  const searchQuery = searchInput.trim();
+  const showSuggestions = searchInput.trim().length === 0;
   const suggestionPlaces = ["Tirupati", "Manali", "Goa", "Kerala", "Shimla", "Ladakh"];
 
   const selectedPlaceImages = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "image") ?? [], [selectedPlace?.media]);
@@ -430,6 +524,20 @@ const TourPlaces: React.FC = () => {
     setPhotoCommentInputs((prev) => ({ ...prev, [key]: "" }));
   };
 
+  const placeCards = useMemo(
+    () =>
+      filteredPlaces.map((place, idx) => (
+        <PlaceCard
+          key={place.id ?? idx}
+          place={place}
+          idx={idx}
+          onSelect={() => setSelectedPlace(place)}
+          disableVideoAutoplay={mobilePerformanceMode || isMobile}
+        />
+      )),
+    [filteredPlaces, isMobile, mobilePerformanceMode],
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -467,15 +575,15 @@ const TourPlaces: React.FC = () => {
                 <input
                   type="text"
                   placeholder="Search by place, area, state, or country"
-                  value={searchDestination}
-                  onChange={(event) => setSearchDestination(event.target.value)}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                   className="w-full rounded-full bg-white/95 py-3.5 pl-12 pr-10 text-sm text-gray-900 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-gray-400 focus:outline-none sm:py-4 sm:pl-14 sm:pr-12 sm:text-base"
                 />
-                {searchDestination && (
+                {searchInput && (
                   <button
                     type="button"
                     onClick={() => {
-                      setSearchDestination("");
+                      setSearchInput("");
                       setSelectedPlace(null);
                     }}
                     className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-rose-100 hover:text-rose-500"
@@ -520,7 +628,7 @@ const TourPlaces: React.FC = () => {
                       key={placeName}
                       type="button"
                       onClick={() => {
-                        setSearchDestination(placeName);
+                        setSearchInput(placeName);
                         closeSelectedPlace();
                       }}
                       className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-md transition hover:bg-white/18"
@@ -541,15 +649,7 @@ const TourPlaces: React.FC = () => {
 
                 <motion.div className="w-full" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
                   <div className="grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                    {filteredPlaces.map((place, idx) => (
-                      <PlaceCard
-                        key={place.id ?? idx}
-                        place={place}
-                        idx={idx}
-                        onSelect={() => setSelectedPlace(place)}
-                        disableVideoAutoplay={mobilePerformanceMode || isMobile}
-                      />
-                    ))}
+                    {placeCards}
                   </div>
                 </motion.div>
               </>

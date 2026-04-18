@@ -13,13 +13,14 @@ const resolveTextParam = (raw?: string | string[]) => {
   return value?.trim() || '';
 };
 
-export function generateMetadata({
+export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: { place?: string | string[]; img?: string | string[] };
-}): Metadata {
-  const place = resolveTextParam(searchParams.place);
-  const image = resolveImageFromSearch(searchParams.img);
+  searchParams: Promise<{ place?: string | string[]; img?: string | string[] }>;
+}): Promise<Metadata> {
+  const resolvedSearchParams = await searchParams;
+  const place = resolveTextParam(resolvedSearchParams.place);
+  const image = resolveImageFromSearch(resolvedSearchParams.img);
   const title = place ? `Check out ${place} on ABjee Travel` : 'Tour Places | ABjee Travel';
   const description = place
     ? `Check out ${place} on ABjee Travel.`
