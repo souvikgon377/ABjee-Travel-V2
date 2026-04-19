@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Search,
   X,
+  Trash2,
   PauseCircle,
   PlayCircle,
   MapPin,
@@ -26,11 +27,25 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+} from "firebase/firestore";
 import type { TouristPlace } from "@/components/ui/tourist-places";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
 import { buildAbjeeShareText } from "@/lib/socialShare";
+import { createImagePreview, revokeImagePreview, uploadImageToR2 } from "@/lib/r2Upload";
+import { firestoreDb } from "@/lib/firebaseFirestore";
+import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
+import { useAuth } from "@/contexts/AuthContext";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
 
@@ -47,6 +62,27 @@ const SEARCH_DEBOUNCE_MS = 450;
 const SEARCH_PAGE_SIZE = 4;
 const SEARCH_API_PATH = "/api/tour-places/search";
 
+type ReviewMediaFile = {
+  file: File;
+  preview: string;
+};
+
+type PlaceReview = {
+  id: string;
+  text: string;
+  author: string;
+  userId: string;
+  rating: number;
+  createdAt: unknown;
+  media: Array<{
+    url: string;
+    publicId: string;
+    type: "image" | "video";
+    caption?: string;
+    thumbnail?: string;
+  }>;
+};
+
 type SearchCursorValue = {
   value: string;
   id: string;
@@ -60,6 +96,25 @@ type SearchResponse = {
 };
 
 const normalizeSearchInput = (value: string) => value.replace(/\+/g, " ").replace(/\s+/g, " ").trim();
+
+async function uploadVideoToR2(file: File): Promise<{ url: string; key: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("folder", "tourist-places/reviews/videos");
+
+  const response = await fetch("/api/upload", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(error.error ?? "Video upload failed");
+  }
+
+  const data = await response.json() as { url: string; key: string };
+  return { url: data.url, key: data.key };
+}
 
 const PlaceCard: React.FC<{
   place: TouristPlace;
@@ -324,6 +379,7 @@ PlaceCard.displayName = "PlaceCard";
 
 const TourPlaces: React.FC = () => {
   const router = useRouter();
+  const { user } = useAuth();
   const isMobile = useIsMobile();
   const handledPlaceParamRef = useRef<string | null>(null);
   const lastSearchTermRef = useRef<string>("");
@@ -346,8 +402,14 @@ const TourPlaces: React.FC = () => {
   const [openPhotoCommentKey, setOpenPhotoCommentKey] = useState<string | null>(null);
   const [photoCommentInputs, setPhotoCommentInputs] = useState<Record<string, string>>({});
   const [photoComments, setPhotoComments] = useState<Record<string, Array<{ author: string; text: string }>>>({});
+  const [placeReviews, setPlaceReviews] = useState<Record<string, PlaceReview[]>>({});
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
+  const [reviewMediaFiles, setReviewMediaFiles] = useState<ReviewMediaFile[]>([]);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewUploadError, setReviewUploadError] = useState("");
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const reviewMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -539,6 +601,14 @@ const TourPlaces: React.FC = () => {
 
   const selectedPlaceImages = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "image") ?? [], [selectedPlace?.media]);
   const selectedPlaceVideos = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "video") ?? [], [selectedPlace?.media]);
+  const selectedPlaceReviewList = useMemo(
+    () => (selectedPlace?.id ? (placeReviews[selectedPlace.id] ?? []) : []),
+    [placeReviews, selectedPlace?.id],
+  );
+  const selectedPlaceAverageRating = useMemo(() => {
+    if (selectedPlaceReviewList.length === 0) return 0;
+    return selectedPlaceReviewList.reduce((sum, review) => sum + review.rating, 0) / selectedPlaceReviewList.length;
+  }, [selectedPlaceReviewList]);
 
   const closeSelectedPlace = () => {
     setSelectedPlace(null);
@@ -546,6 +616,11 @@ const TourPlaces: React.FC = () => {
     setOpenPhotoCommentKey(null);
     setReviewRating(0);
     setReviewText("");
+    setReviewMediaFiles((current) => {
+      current.forEach((item) => revokeImagePreview(item.preview));
+      return [];
+    });
+    setReviewUploadError("");
   };
 
   const handlePlaceShare = async (type: "whatsapp" | "facebook" | "copy") => {
@@ -587,6 +662,189 @@ const TourPlaces: React.FC = () => {
     }));
     setPhotoCommentInputs((prev) => ({ ...prev, [key]: "" }));
   };
+
+  const handleReviewMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const pickedFiles = Array.from(event.target.files ?? []);
+    if (pickedFiles.length === 0) return;
+
+    const validFiles = pickedFiles.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
+    if (validFiles.length === 0) {
+      setReviewUploadError("Select image or video files for your review.");
+      event.target.value = "";
+      return;
+    }
+
+    setReviewMediaFiles((current) => {
+      current.forEach((item) => revokeImagePreview(item.preview));
+      return validFiles.map((file) => ({ file, preview: createImagePreview(file) }));
+    });
+    setReviewUploadError(validFiles.length < pickedFiles.length ? "Some unsupported files were skipped." : "");
+
+    event.target.value = "";
+  };
+
+  const submitPlaceReview = async () => {
+    if (!selectedPlace?.id || reviewRating < 1 || reviewRating > 5) return;
+
+    setReviewSubmitting(true);
+    setReviewUploadError("");
+
+    try {
+      const reviewTextValue = reviewText.trim();
+      const reviewMedia = [] as Array<{
+        url: string;
+        publicId: string;
+        type: "image" | "video";
+        caption?: string;
+      }>;
+
+      for (const { file } of reviewMediaFiles) {
+        const isVideo = file.type.startsWith("video/");
+        const preparedFile = isVideo
+          ? await compressVideoFile(file, {
+              maxSizeBytes: 15 * 1024 * 1024,
+              maxWidth: 1280,
+              maxHeight: 720,
+              frameRate: 24,
+              minVideoBitsPerSecond: 450_000,
+              maxVideoBitsPerSecond: 1_600_000,
+              audioBitsPerSecond: 96_000,
+            })
+          : await compressImageFile(file, {
+              maxSizeBytes: 1024 * 1024,
+              maxDimension: 1600,
+            });
+
+        const uploaded = isVideo
+          ? await uploadVideoToR2(preparedFile)
+          : await uploadImageToR2(preparedFile, { folder: "tourist-places/reviews/images" });
+
+        const mediaItem = {
+          url: uploaded.url,
+          publicId: isVideo ? uploaded.key : uploaded.publicId,
+          type: isVideo ? "video" as const : "image" as const,
+        };
+
+        if (reviewTextValue) {
+          mediaItem.caption = reviewTextValue;
+        }
+
+        reviewMedia.push(mediaItem);
+      }
+
+      await addDoc(collection(firestoreDb, "touristPlaces", selectedPlace.id, "reviews"), {
+        text: reviewTextValue,
+        rating: reviewRating,
+        author: user?.displayName ?? user?.email ?? "Traveller",
+        userId: user?.uid ?? "anonymous",
+        media: reviewMedia,
+        createdAt: serverTimestamp(),
+      });
+
+      setReviewText("");
+      setReviewRating(0);
+      reviewMediaFiles.forEach((item) => revokeImagePreview(item.preview));
+      setReviewMediaFiles([]);
+      if (reviewMediaInputRef.current) reviewMediaInputRef.current.value = "";
+    } catch (error) {
+      setReviewUploadError(error instanceof Error ? error.message : "Failed to post review.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedPlace?.id) {
+      setPlaceReviews({});
+      return;
+    }
+
+    const reviewsQuery = query(
+      collection(firestoreDb, "touristPlaces", selectedPlace.id, "reviews"),
+      orderBy("createdAt", "desc"),
+    );
+
+    const unsubscribe = onSnapshot(reviewsQuery, (snapshot) => {
+      const reviews = snapshot.docs.map((reviewDoc) => {
+        const data = reviewDoc.data() as {
+          text?: unknown;
+          author?: unknown;
+          userId?: unknown;
+          rating?: unknown;
+          createdAt?: unknown;
+          media?: unknown;
+        };
+
+        const media = Array.isArray(data.media)
+          ? data.media
+              .map((item) => {
+                if (!item || typeof item !== "object") return null;
+                const mediaItem = item as {
+                  url?: unknown;
+                  publicId?: unknown;
+                  type?: unknown;
+                  caption?: unknown;
+                  thumbnail?: unknown;
+                };
+
+                if (typeof mediaItem.url !== "string" || typeof mediaItem.publicId !== "string") return null;
+                const mediaType = mediaItem.type === "video" ? "video" : "image";
+
+                return {
+                  url: mediaItem.url,
+                  publicId: mediaItem.publicId,
+                  type: mediaType,
+                  caption: typeof mediaItem.caption === "string" ? mediaItem.caption : undefined,
+                  thumbnail: typeof mediaItem.thumbnail === "string" ? mediaItem.thumbnail : undefined,
+                };
+              })
+              .filter((item): item is PlaceReview["media"][number] => item !== null)
+          : [];
+
+        const rating = Number(data.rating);
+
+        return {
+          id: reviewDoc.id,
+          text: typeof data.text === "string" ? data.text : "",
+          author: typeof data.author === "string" ? data.author : "Traveller",
+          userId: typeof data.userId === "string" ? data.userId : "anonymous",
+          rating: Number.isFinite(rating) ? Math.max(1, Math.min(5, rating)) : 5,
+          createdAt: data.createdAt,
+          media,
+        } satisfies PlaceReview;
+      });
+
+      setPlaceReviews((current) => ({ ...current, [selectedPlace.id]: reviews }));
+    });
+
+    return () => unsubscribe();
+  }, [selectedPlace?.id]);
+
+  useEffect(() => {
+    setReviewRating(0);
+    setReviewText("");
+    setReviewUploadError("");
+    reviewMediaFiles.forEach((item) => revokeImagePreview(item.preview));
+    setReviewMediaFiles([]);
+    if (reviewMediaInputRef.current) reviewMediaInputRef.current.value = "";
+  }, [selectedPlace?.id]);
+
+  const deletePlaceReview = useCallback(async (reviewId: string) => {
+    if (!selectedPlace?.id || !user?.uid || deletingReviewId) return;
+
+    const target = selectedPlaceReviewList.find((review) => review.id === reviewId);
+    if (!target || target.userId !== user.uid) return;
+
+    setDeletingReviewId(reviewId);
+    setReviewUploadError("");
+    try {
+      await deleteDoc(doc(firestoreDb, "touristPlaces", selectedPlace.id, "reviews", reviewId));
+    } catch (error) {
+      setReviewUploadError(error instanceof Error ? error.message : "Failed to delete review.");
+    } finally {
+      setDeletingReviewId(null);
+    }
+  }, [deletingReviewId, selectedPlace?.id, selectedPlaceReviewList, user?.uid]);
 
   const handleSeeMore = useCallback(() => {
     if (!activeSearchTerm || !searchHasMore || searchLoading) return;
@@ -841,11 +1099,16 @@ const TourPlaces: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-0.5">
                             {[1, 2, 3, 4, 5].map((star) => (
-                              <Star key={star} className="h-4 w-4 text-gray-300" />
+                              <Star
+                                key={star}
+                                className={`h-4 w-4 ${star <= Math.round(selectedPlaceAverageRating) ? "fill-amber-400 text-amber-400" : "text-gray-300"}`}
+                              />
                             ))}
                           </div>
-                          <span className="text-sm font-semibold text-gray-700">No rating</span>
-                          <span className="text-xs text-gray-500">(0 reviews)</span>
+                          <span className="text-sm font-semibold text-gray-700">
+                            {selectedPlaceReviewList.length > 0 ? selectedPlaceAverageRating.toFixed(1) : "No rating"}
+                          </span>
+                          <span className="text-xs text-gray-500">({selectedPlaceReviewList.length} reviews)</span>
                         </div>
                       </div>
 
@@ -872,9 +1135,18 @@ const TourPlaces: React.FC = () => {
                           placeholder="Write your review (optional)..."
                           className="mt-3 w-full rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
                         />
+                        <input
+                          ref={reviewMediaInputRef}
+                          type="file"
+                          accept="image/*,video/*"
+                          multiple
+                          onChange={handleReviewMediaFileChange}
+                          className="hidden"
+                        />
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                           <button
                             type="button"
+                            onClick={() => reviewMediaInputRef.current?.click()}
                             className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50"
                           >
                             <ImageIcon className="mr-1.5 h-4 w-4" />
@@ -882,17 +1154,108 @@ const TourPlaces: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            disabled={reviewRating === 0}
+                            onClick={() => void submitPlaceReview()}
+                            disabled={reviewRating === 0 || reviewSubmitting}
                             className="inline-flex items-center justify-center rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
                           >
-                            Post Review + Media
+                            {reviewSubmitting ? "Posting..." : "Post Review + Media"}
                           </button>
                         </div>
+                        {reviewMediaFiles.length > 0 && (
+                          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {reviewMediaFiles.map((item) => (
+                              <div key={item.preview} className="overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                                {item.file.type.startsWith("video/") ? (
+                                  <video src={item.preview} controls playsInline className="h-24 w-full object-cover bg-black" />
+                                ) : (
+                                  <img src={item.preview} alt="Selected review media" className="h-24 w-full object-cover" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <p className="mt-2 text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
+                        {reviewUploadError && <p className="mt-2 text-xs text-red-600">{reviewUploadError}</p>}
                       </div>
 
-                      <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4 text-center text-xs text-gray-500 shadow-sm">
-                        No reviews yet. Be the first to rate this place.
+                      <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm">
+                        {selectedPlaceReviewList.length === 0 ? (
+                          <p className="text-center text-xs text-gray-500">No reviews yet. Be the first to rate this place.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {selectedPlaceReviewList.slice(0, 3).map((review) => (
+                              <div key={review.id} className="rounded-xl border border-gray-100 bg-white p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-semibold text-gray-800">{review.author}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-semibold text-amber-600">{review.rating}/5</span>
+                                    {user?.uid && review.userId === user.uid && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void deletePlaceReview(review.id)}
+                                        disabled={deletingReviewId === review.id}
+                                        className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-white p-1 text-rose-500 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        aria-label="Delete your review"
+                                        title="Delete your review"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {review.text && <p className="mt-1 text-sm text-gray-600">{review.text}</p>}
+                                {review.media.length > 0 && (
+                                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                    {review.media.map((mediaItem, index) => (
+                                      <a
+                                        key={`${review.id}-${index}`}
+                                        href={mediaItem.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="group overflow-hidden rounded-xl border border-rose-100 bg-rose-50/30 shadow-sm"
+                                        title="Open media"
+                                      >
+                                        <div className="relative h-24 w-full bg-black/80">
+                                          {mediaItem.type === "video" ? (
+                                            mediaItem.thumbnail ? (
+                                              <img
+                                                src={mediaItem.thumbnail}
+                                                alt={mediaItem.caption ?? "Review video"}
+                                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                              />
+                                            ) : (
+                                              <video
+                                                src={mediaItem.url}
+                                                className="h-full w-full object-cover"
+                                                muted
+                                                playsInline
+                                                preload="metadata"
+                                              />
+                                            )
+                                          ) : (
+                                            <img
+                                              src={mediaItem.url}
+                                              alt={mediaItem.caption ?? "Review photo"}
+                                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                            />
+                                          )}
+                                          <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                            {mediaItem.type === "video" ? "Video" : "Photo"}
+                                          </span>
+                                        </div>
+                                        {mediaItem.caption && (
+                                          <p className="line-clamp-2 px-2 py-1 text-[11px] font-medium text-rose-700">
+                                            {mediaItem.caption}
+                                          </p>
+                                        )}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </section>
 
