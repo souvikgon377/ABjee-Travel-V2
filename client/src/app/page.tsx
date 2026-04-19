@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import LandingPage from "@/screens/LandingPage";
 import { publicAsset } from "@/lib/publicAsset";
+import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
 
@@ -43,16 +43,9 @@ export const runtime = 'nodejs';
 
 export default async function RootPage() {
   try {
-    const requestHeaders = await headers();
-    const host = requestHeaders.get('host');
-    const protocol = requestHeaders.get('x-forwarded-proto') ?? 'http';
-
-    const settingsResponse = await fetch(new URL('/api/public/settings', `${protocol}://${host}`), {
-      cache: 'no-store',
-    });
-
-    const settingsPayload = await settingsResponse.json().catch(() => null);
-    const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : true;
+    const snapshot = await adminDb.collection('admin_settings').doc('system').get();
+    const settings = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    const homePageEnabled = settings.homePageEnabled !== false;
 
     if (homePageEnabled === false) {
       redirect('/community');
@@ -62,7 +55,7 @@ export default async function RootPage() {
     if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
-    // Fail open: if settings cannot be read, keep the home page accessible.
+    redirect('/community');
   }
 
   const webSiteSchema = {

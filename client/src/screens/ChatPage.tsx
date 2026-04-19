@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit, getDocs, where } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import type { TouristPlace, MediaItem } from '@/components/ui/tourist-places';
@@ -81,6 +81,11 @@ type CountryUserHighlight = {
   country: string;
   profilePictureUrl?: string;
   avatarUrl?: string;
+};
+
+type CommunityOwnerProfile = {
+  displayName: string;
+  avatarUrl: string;
 };
 
 type LiveOffer = {
@@ -500,6 +505,7 @@ const ChatRoomsList: React.FC = () => {
   const [openReviewCommentReviewId, setOpenReviewCommentReviewId] = useState<string | null>(null);
   const [reviewCommentSubmitting, setReviewCommentSubmitting] = useState(false);
   const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
+  const [communityOwnerMap, setCommunityOwnerMap] = useState<Record<string, CommunityOwnerProfile>>({});
   const [countryUsers, setCountryUsers] = useState<CountryUserHighlight[]>([]);
   const [userMediaFiles, setUserMediaFiles] = useState<Array<{ file: File; preview: string }>>([]);
   const [userMediaUploading, setUserMediaUploading] = useState(false);
@@ -730,6 +736,86 @@ const ChatRoomsList: React.FC = () => {
       cancelled = true;
     };
   }, [isMobile, mobilePerformanceMode]);
+
+  useEffect(() => {
+    const creatorIds = Array.from(
+      new Set(
+        privateRooms
+          .map((room) => String(room.createdBy || '').trim())
+          .filter((id) => id.length > 0)
+      )
+    );
+
+    if (creatorIds.length === 0) {
+      setCommunityOwnerMap({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadOwnerProfiles = async () => {
+      const nextMap: Record<string, CommunityOwnerProfile> = {};
+      const chunkSize = 10;
+      const chunks: string[][] = [];
+
+      for (let i = 0; i < creatorIds.length; i += chunkSize) {
+        chunks.push(creatorIds.slice(i, i + chunkSize));
+      }
+
+      await Promise.allSettled(
+        chunks.map(async (chunk) => {
+          const usersQuery = query(collection(firestoreDb, 'users'), where('__name__', 'in', chunk));
+          const usersSnap = await getDocs(usersQuery);
+
+          usersSnap.forEach((userDoc) => {
+            const data = userDoc.data() as Record<string, unknown>;
+            const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
+            const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
+            const displayName = typeof data.displayName === 'string' ? data.displayName.trim() : '';
+            const username = typeof data.username === 'string' ? data.username.trim() : '';
+            const email = typeof data.email === 'string' ? data.email.trim() : '';
+            const emailHandle = email.includes('@') ? email.split('@')[0] : email;
+            const resolvedName = displayName || `${firstName} ${lastName}`.trim() || username || emailHandle || `User ${userDoc.id.slice(0, 6)}`;
+
+            nextMap[userDoc.id] = {
+              displayName: resolvedName,
+              avatarUrl: resolveAvatarUrl(data) || '',
+            };
+          });
+        })
+      );
+
+      creatorIds.forEach((creatorId) => {
+        if (!nextMap[creatorId]) {
+          const selfDisplayName =
+            creatorId === user?.uid
+              ? (
+                String(userProfile?.displayName || '').trim() ||
+                String(user?.displayName || '').trim() ||
+                String(userProfile?.username || '').trim() ||
+                String(user?.email || '').split('@')[0] ||
+                `User ${creatorId.slice(0, 6)}`
+              )
+              : `User ${creatorId.slice(0, 6)}`;
+
+          nextMap[creatorId] = {
+            displayName: selfDisplayName,
+            avatarUrl: creatorId === user?.uid ? currentUserAvatar || '' : '',
+          };
+        }
+      });
+
+      if (!cancelled) {
+        setCommunityOwnerMap(nextMap);
+      }
+    };
+
+    void loadOwnerProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [privateRooms, user?.displayName, user?.email, user?.uid, userProfile?.displayName, userProfile?.username, currentUserAvatar]);
 
   const filteredPlaces = useMemo(() => {
     if (!hasSearchQuery) return [];
@@ -3352,7 +3438,7 @@ const ChatRoomsList: React.FC = () => {
                   </span>
                 </div>
                 <motion.div 
-                  className="grid grid-cols-1 gap-6"
+                  className="max-h-136 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(34,197,94,0.55)_transparent] grid grid-cols-1 gap-6"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.5 }}
@@ -3752,7 +3838,7 @@ const ChatRoomsList: React.FC = () => {
                             : section.emptyMessage}
                         </div>
                       ) : (
-                        <div className="relative z-10 max-h-156 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(245,158,11,0.6)_transparent]">
+                        <div className="relative z-10 max-h-136 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(245,158,11,0.6)_transparent]">
                           <motion.div
                             className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-1"
                             initial={{ opacity: 0 }}
@@ -3770,6 +3856,13 @@ const ChatRoomsList: React.FC = () => {
                                   whileHover={{ y: -10, transition: { duration: 0.2 } }}
                                   layout
                                 >
+                                {(() => {
+                                  const ownerProfile = room.createdBy ? communityOwnerMap[room.createdBy] : undefined;
+                                  const ownerName = ownerProfile?.displayName || (room.createdBy ? `User ${room.createdBy.slice(0, 6)}` : 'Community Owner');
+                                  const ownerAvatar = ownerProfile?.avatarUrl || '';
+                                  const ownerInitial = (ownerName.charAt(0) || 'U').toUpperCase();
+
+                                  return (
                                 <Card
                                   className={`cursor-pointer h-full min-h-96 border-2 shadow-lg hover:shadow-2xl transition-all duration-300 rounded-2xl overflow-hidden group relative ${
                                     room.visibility === 'exposed'
@@ -3830,6 +3923,49 @@ const ChatRoomsList: React.FC = () => {
                                     animate={{ opacity: [0.35, 1, 0.35] }}
                                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                                   />
+                                  <motion.div
+                                    className={`pointer-events-none absolute top-2 left-2 z-40 flex items-center gap-2 rounded-full border px-2.5 py-1.5 backdrop-blur-md max-w-46 ${
+                                      room.visibility === 'exposed'
+                                        ? 'border-green-300/80 bg-green-100/85 dark:border-green-500/70 dark:bg-green-950/55'
+                                        : 'border-blue-300/80 bg-blue-100/85 dark:border-blue-500/70 dark:bg-blue-950/55'
+                                    }`}
+                                    animate={{
+                                      boxShadow:
+                                        room.visibility === 'exposed'
+                                          ? [
+                                              '0 0 0 rgba(34,197,94,0)',
+                                              '0 0 18px rgba(34,197,94,0.65)',
+                                              '0 0 0 rgba(34,197,94,0)',
+                                            ]
+                                          : [
+                                              '0 0 0 rgba(59,130,246,0)',
+                                              '0 0 18px rgba(59,130,246,0.65)',
+                                              '0 0 0 rgba(59,130,246,0)',
+                                            ],
+                                    }}
+                                    transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                                  >
+                                    <div className="relative shrink-0">
+                                      <motion.div
+                                        aria-hidden="true"
+                                        className={`absolute inset-0 rounded-full ${
+                                          room.visibility === 'exposed' ? 'bg-green-400/45' : 'bg-blue-400/45'
+                                        }`}
+                                        animate={{ scale: [1, 1.35, 1], opacity: [0.55, 0, 0.55] }}
+                                        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                                      />
+                                      <Avatar className="relative h-8 w-8 border-2 border-white/80 dark:border-white/50 shadow-sm">
+                                        <AvatarImage src={ownerAvatar} alt={ownerName} />
+                                        <AvatarFallback className="text-[11px] font-bold uppercase bg-linear-to-br from-amber-500 to-rose-600 text-white">
+                                          {ownerInitial}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    </div>
+                                    <div className="min-w-0 pl-1 pr-1.5">
+                                      <p className="text-[9px] leading-3 font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Owner</p>
+                                      <p className="truncate text-xs font-extrabold text-slate-900 dark:text-slate-50">{ownerName}</p>
+                                    </div>
+                                  </motion.div>
                                   {!room.isPublic && (
                                     <Badge
                                       variant="outline"
@@ -3985,6 +4121,8 @@ const ChatRoomsList: React.FC = () => {
                                     )}
                                   </CardContent>
                                 </Card>
+                                  );
+                                })()}
                                 </motion.div>
                               ))}
                             </AnimatePresence>

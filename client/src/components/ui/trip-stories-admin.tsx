@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { adminAPI } from '@/lib/api';
+import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCollectionCache';
 import {
   collection,
   collectionGroup,
@@ -114,6 +115,8 @@ function formatDateTime(value: any): string {
 
 const PANEL_CARD_CLASS =
   'border-border/70 bg-card/90 backdrop-blur-sm shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl';
+const TRIP_STORIES_CACHE_KEY = 'trip-stories-admin-data';
+const TRIP_STORIES_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function TripStoriesAdminPanel() {
   const [stories, setStories] = useState<TripStoryAdminRow[]>([]);
@@ -138,6 +141,20 @@ export function TripStoriesAdminPanel() {
     }
 
     try {
+      if (!isManualRefresh) {
+        const cached = getAdminCollectionCache<{
+          stories: TripStoryAdminRow[];
+          comments: TripStoryCommentRow[];
+        }>(TRIP_STORIES_CACHE_KEY);
+
+        if (cached) {
+          setStories(cached.stories);
+          setComments(cached.comments);
+          setCommentsError('');
+          return;
+        }
+      }
+
       const storiesQuery = query(
         collection(firestoreDb, 'stories'),
         orderBy('createdAt', 'desc'),
@@ -170,7 +187,7 @@ export function TripStoriesAdminPanel() {
           commentCount: typeof data.commentCount === 'number' ? data.commentCount : 0,
           photos: Array.isArray(data.photos) ? data.photos : [],
           videos: Array.isArray(data.videos) ? data.videos : [],
-          createdAt: data.createdAt,
+          createdAt: safeDate(data.createdAt)?.toISOString() ?? null,
         } as TripStoryAdminRow;
       });
 
@@ -181,13 +198,17 @@ export function TripStoriesAdminPanel() {
           storyId: docSnap.ref.parent.parent?.id ?? '',
           userName: data.userName ?? 'Unknown user',
           text: data.text ?? '',
-          createdAt: data.createdAt,
+          createdAt: safeDate(data.createdAt)?.toISOString() ?? null,
         } as TripStoryCommentRow;
       });
 
       setStories(storyRows);
       setComments(commentRows);
       setCommentsError('');
+      setAdminCollectionCache(TRIP_STORIES_CACHE_KEY, {
+        stories: storyRows,
+        comments: commentRows,
+      }, TRIP_STORIES_CACHE_TTL_MS);
     } catch (error: any) {
       setStories([]);
       setComments([]);

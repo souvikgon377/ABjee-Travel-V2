@@ -38,6 +38,7 @@ import { Label } from '@/components/ui/label';
 import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
+import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCollectionCache';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface MediaItem {
@@ -115,6 +116,8 @@ const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
 
 const TOURIST_CSV_TEMPLATE_TEXT = `Name,Area,State,Country,Category,Description,Google Maps URL,Extra Info
 Mysore Palace,Karnataka Heritage Zone,Karnataka,India,Historical / Heritage,"A grand palace known for Indo-Saracenic architecture and evening illumination.","https://maps.google.com/?q=Mysore+Palace","Best Time::Oct to Mar|Highlights::Palace illumination, museum galleries"`;
+const TOURIST_PLACES_CACHE_KEY = 'tourist-places-admin-list';
+const TOURIST_PLACES_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ─── Video upload (raw fetch, no extra SDK) ──────────────────────────────────
 // ─── Video upload (R2 S3-compatible API) ───────────────────────────────────
@@ -644,15 +647,23 @@ export function TouristPlacesManager() {
   });
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
-  const fetchPlaces = useCallback(async () => {
+  const fetchPlaces = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     try {
+      if (!forceRefresh) {
+        const cachedPlaces = getAdminCollectionCache<TouristPlace[]>(TOURIST_PLACES_CACHE_KEY);
+        if (cachedPlaces) {
+          setPlaces(cachedPlaces);
+          return;
+        }
+      }
+
       const snap = await getDocs(
         query(collection(firestoreDb, 'touristPlaces'), orderBy('createdAt', 'desc'))
       );
-      setPlaces(
-        snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TouristPlace, 'id'>) }))
-      );
+      const nextPlaces = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TouristPlace, 'id'>) }));
+      setPlaces(nextPlaces);
+      setAdminCollectionCache(TOURIST_PLACES_CACHE_KEY, nextPlaces, TOURIST_PLACES_CACHE_TTL_MS);
     } catch {
       flash('Failed to load tourist places.', 'error');
     } finally {
@@ -1273,8 +1284,10 @@ export function TouristPlacesManager() {
       const newMedia = await uploadAllPending();
       const allMedia = [...form.media, ...newMedia];
       const coverImage = form.coverImage || (allMedia.find((m) => m.type === 'image')?.url ?? '');
+      let createdId: string | null = null;
+      const nowIso = new Date().toISOString();
 
-      const payload = {
+      const writePayload = {
         name: form.name,
         area: form.area,
         state: form.state,
@@ -1294,15 +1307,36 @@ export function TouristPlacesManager() {
         updatedAt: serverTimestamp(),
       };
 
+      const cachePayload = {
+        name: form.name,
+        area: form.area,
+        state: form.state,
+        country: form.country,
+        description: form.description,
+        category: form.category,
+        googleMapsUrl: form.googleMapsUrl,
+        coverImage,
+        media: allMedia,
+        extraInfo: form.extraInfo.map(({ heading, description }) => ({ heading, description })),
+        ...buildSearchIndexFields({
+          name: form.name,
+          area: form.area,
+          state: form.state,
+          country: form.country,
+        }),
+        updatedAt: nowIso,
+      };
+
       if (editingId) {
-        await updateDoc(doc(firestoreDb, 'touristPlaces', editingId), payload);
+        await updateDoc(doc(firestoreDb, 'touristPlaces', editingId), writePayload);
         flash('Place updated!', 'success');
         resetForm();
       } else {
         const createdRef = await addDoc(collection(firestoreDb, 'touristPlaces'), {
-          ...payload,
+          ...writePayload,
           createdAt: serverTimestamp(),
         });
+        createdId = createdRef.id;
         flash('Place added!', 'success');
 
         // Keep editor open after create and switch to edit mode for the new place.
@@ -1321,7 +1355,14 @@ export function TouristPlacesManager() {
           coverImage,
         }));
       }
-      fetchPlaces();
+
+      setPlaces((prev) => {
+        const nextPlaces = editingId
+          ? prev.map((place) => (place.id === editingId ? { ...place, ...cachePayload } : place))
+          : [{ id: createdId ?? '', ...cachePayload, createdAt: nowIso }, ...prev];
+        setAdminCollectionCache(TOURIST_PLACES_CACHE_KEY, nextPlaces, TOURIST_PLACES_CACHE_TTL_MS);
+        return nextPlaces;
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save.';
       flash(msg, 'error');
@@ -1342,7 +1383,11 @@ export function TouristPlacesManager() {
     try {
       await deleteDoc(doc(firestoreDb, 'touristPlaces', id));
       flash('Place deleted.', 'success');
-      fetchPlaces();
+      setPlaces((prev) => {
+        const nextPlaces = prev.filter((place) => place.id !== id);
+        setAdminCollectionCache(TOURIST_PLACES_CACHE_KEY, nextPlaces, TOURIST_PLACES_CACHE_TTL_MS);
+        return nextPlaces;
+      });
     } catch {
       flash('Failed to delete.', 'error');
     }
@@ -1480,7 +1525,7 @@ export function TouristPlacesManager() {
       }
 
       setImportFile(null);
-      await fetchPlaces();
+      await fetchPlaces(true);
     } catch (err: unknown) {
       setImportError(err instanceof Error ? err.message : 'Import failed.');
     } finally {
@@ -1545,7 +1590,7 @@ export function TouristPlacesManager() {
         if (cancelled) return;
         if (progress.status === 'completed') {
           flash('Migration completed successfully.', 'success');
-          await fetchPlaces();
+          await fetchPlaces(true);
           if (intervalId) clearInterval(intervalId);
         }
         if (progress.status === 'failed') {

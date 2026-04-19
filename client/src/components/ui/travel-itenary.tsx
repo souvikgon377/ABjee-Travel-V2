@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { modernConfirm } from '@/lib/modernDialog';
 import { adminAPI } from '@/lib/api';
+import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCollectionCache';
 
 interface FormState {
 	id?: string;
@@ -80,6 +81,8 @@ interface MigrationProgress {
 
 const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Introduction,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
 Goa,India,"A coastal escape with beaches, old churches, and vibrant nightlife.","Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
+const TRAVEL_ITINERARY_CACHE_KEY = 'travel-itinerary-admin-list';
+const TRAVEL_ITINERARY_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const normalizeCoordinateInput = (value: string) => value.replace(/\s+/g, '').replace(/,/g, '.');
 
@@ -230,9 +233,17 @@ export default function AdminTravelItenary() {
 	}, []);
 
 	// Fetch existing itineraries from API
-	const fetchItineraries = async () => {
+	const fetchItineraries = async (forceRefresh = false) => {
 		try {
 			setLoadingItineraries(true);
+			if (!forceRefresh) {
+				const cachedItineraries = getAdminCollectionCache<TravelItem[]>(TRAVEL_ITINERARY_CACHE_KEY);
+				if (cachedItineraries) {
+					setExistingItineraries(cachedItineraries);
+					return;
+				}
+			}
+
 			const res = await fetch('/api/travel');
 			if (!res.ok) throw new Error('Failed to fetch itineraries');
 			const data = await res.json();
@@ -241,6 +252,7 @@ export default function AdminTravelItenary() {
 				return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
 			});
 			setExistingItineraries(sortedResults);
+			setAdminCollectionCache(TRAVEL_ITINERARY_CACHE_KEY, sortedResults, TRAVEL_ITINERARY_CACHE_TTL_MS);
 		} catch (error: any) {
 			setUploadState(prev => ({
 				...prev,
@@ -302,7 +314,11 @@ export default function AdminTravelItenary() {
 				throw new Error(errorBody.message || 'Failed to delete itinerary');
 			}
 
-			setExistingItineraries(prev => prev.filter(item => item.id !== id));
+			setExistingItineraries((prev) => {
+				const nextItineraries = prev.filter(item => item.id !== id);
+				setAdminCollectionCache(TRAVEL_ITINERARY_CACHE_KEY, nextItineraries, TRAVEL_ITINERARY_CACHE_TTL_MS);
+				return nextItineraries;
+			});
 			setUploadState(prev => ({
 				...prev,
 				uploading: false,
@@ -355,6 +371,7 @@ export default function AdminTravelItenary() {
 			}
 
 			setExistingItineraries([]);
+			setAdminCollectionCache(TRAVEL_ITINERARY_CACHE_KEY, [], TRAVEL_ITINERARY_CACHE_TTL_MS);
 			setUploadState((prev) => ({
 				...prev,
 				uploading: false,
@@ -729,7 +746,7 @@ export default function AdminTravelItenary() {
 			}));
 
 			// Refresh itineraries list
-			await fetchItineraries();
+			await fetchItineraries(true);
 
 			// Reset form
 			setTimeout(() => {
@@ -1511,7 +1528,7 @@ export default function AdminTravelItenary() {
 								New Itinerary
 							</Button>
 							<Button
-								onClick={fetchItineraries}
+								onClick={() => { void fetchItineraries(true); }}
 								variant="outline"
 								size="sm"
 								disabled={loadingItineraries}

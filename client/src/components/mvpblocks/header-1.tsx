@@ -224,6 +224,7 @@ export default function Header1() {
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
   const isPaidSubscriber = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+  const isAdminRoute = pathname?.startsWith('/admin') === true;
 
   useEffect(() => {
     setProfileAvatarError(false);
@@ -315,6 +316,10 @@ export default function Header1() {
 
   const visibleNavItems = useMemo(
     () => navItems.filter((item) => {
+      if (isAdminRoute && (item.href === '/' || item.href === '/booking-categories')) {
+        return false;
+      }
+
       if (item.href === '/') {
         return homePageEnabled === true;
       }
@@ -329,7 +334,7 @@ export default function Header1() {
 
       return true;
     }),
-    [bookingCategoriesEnabled, homePageEnabled, navSettingsResolved],
+    [bookingCategoriesEnabled, homePageEnabled, isAdminRoute, navSettingsResolved],
   );
 
   const mobileNavItems = useMemo(() => visibleNavItems, [visibleNavItems]);
