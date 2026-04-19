@@ -138,6 +138,19 @@ export const adminAPI = {
   getActivity: (params?: any) => api.get('/admin/activity', { params }),
   getRevenue: (params?: any) => api.get('/admin/revenue', { params }),
   getSystemStatus: () => api.get('/admin/system-status'),
+  getActivityOverview: () => api.get('/admin/activity/overview'),
+  getQuotaTelemetry: () => api.get('/admin/quota-telemetry'),
+  exportSectionChunk: (params: {
+    section: string;
+    limit?: number;
+    cursor?: string | null;
+    userId?: string;
+    area?: string;
+    state?: string;
+    country?: string;
+    place?: string;
+    type?: 'all' | 'review' | 'comment';
+  }) => api.get('/admin/export', { params }),
   // Chat Communities
   getChatRooms: (params?: any) => api.get('/admin/chatrooms', { params }),
   getChatRoom: (roomId: string) => api.get(`/admin/chatrooms/${roomId}`),

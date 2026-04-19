@@ -1,11 +1,8 @@
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { User, MessageSquare, UserPlus, Search } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
-import { ref, get } from 'firebase/database';
-import { firestoreDb } from '@/lib/firebaseFirestore';
-import { database } from '@/lib/firebase';
 import { Input } from '@/components/ui/input';
+import { adminAPI } from '@/lib/api';
 
 type ActivityType = {
   id: string;
@@ -37,19 +34,6 @@ function getDisplayName(profile: UserProfile): string {
   return profile.displayName || profile.username || profile.email || 'Unknown user';
 }
 
-function getTimeAgo(timestamp: Date): string {
-  const now = new Date();
-  const diff = now.getTime() - new Date(timestamp).getTime();
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
-  if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-  if (minutes > 0) return `${minutes} min ago`;
-  return 'Just now';
-}
-
 export const RecentActivity = memo(() => {
   const [activities, setActivities] = useState<ActivityType[]>([]);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -58,134 +42,49 @@ export const RecentActivity = memo(() => {
   const [loading, setLoading] = useState(true);
 
   const fetchActivity = useCallback(async () => {
-      try {
-        const combined: ActivityType[] = [];
-        const identityToUserId = new Map<string, string>();
-        const loadedProfiles: UserProfile[] = [];
+    try {
+      const response = await adminAPI.getActivityOverview();
+      const payload = response?.data?.data as {
+        profiles?: UserProfile[];
+        activities?: Array<{
+          id: string;
+          userId: string | null;
+          action: string;
+          user: string;
+          timestamp: string;
+          time: string;
+          color: string;
+          kind: 'registration' | 'presence';
+        }>;
+      };
 
-        // Source 1: User profiles and registration activity from Firestore.
-        try {
-          const usersSnap = await getDocs(collection(firestoreDb, 'users'));
-          usersSnap.forEach((doc) => {
-            const d = doc.data();
-            const ts: Date = d.createdAt?.toDate?.() ?? (d.createdAt ? new Date(d.createdAt) : new Date());
+      const loadedProfiles = Array.isArray(payload?.profiles) ? payload.profiles : [];
+      const loadedActivities: ActivityType[] = Array.isArray(payload?.activities)
+        ? payload.activities.map((item) => ({
+            id: item.id,
+            userId: item.userId,
+            action: item.action,
+            user: item.user,
+            timestamp: new Date(item.timestamp),
+            time: item.time,
+            icon: item.kind === 'registration' ? UserPlus : User,
+            color: item.color || (item.kind === 'registration' ? 'text-blue-500' : 'text-purple-500'),
+          }))
+        : [];
 
-            const profile: UserProfile = {
-              id: doc.id,
-              displayName: d.displayName || `${d.firstName || ''} ${d.lastName || ''}`.trim(),
-              username: d.username || '',
-              email: d.email || '',
-              area: d.area || d.address || '',
-              state: d.state || d.province || '',
-              country: d.country || '',
-              city: d.city || '',
-            };
+      setActivities(loadedActivities);
+      setProfiles(loadedProfiles);
 
-            loadedProfiles.push(profile);
-
-            [
-              profile.id,
-              profile.displayName,
-              profile.username,
-              profile.email,
-            ].forEach((identity) => {
-              const key = normalize(identity);
-              if (key) identityToUserId.set(key, profile.id);
-            });
-
-            combined.push({
-              id: `register-${doc.id}`,
-              userId: doc.id,
-              action: `New user registered: ${d.displayName || d.email || 'Unknown'}`,
-              user: d.email || d.username || 'Unknown',
-              timestamp: ts,
-              time: getTimeAgo(ts),
-              icon: UserPlus,
-              color: 'text-blue-500',
-            });
-          });
-        } catch {
-          // Ignore profile source failures to keep dashboard usable.
-        }
-
-        // Source 2: Messages across RTDB chatrooms.
-        try {
-          const roomsSnap = await get(ref(database, 'chatrooms'));
-          const roomsData = roomsSnap.val();
-          if (roomsData) {
-            Object.entries(roomsData).forEach(([roomId, room]: [string, any]) => {
-              const msgs = room?.messages;
-              if (!msgs || typeof msgs !== 'object') return;
-
-              Object.entries(msgs).forEach(([messageId, msg]: [string, any]) => {
-                if (!msg?.timestamp) return;
-                const label = msg.username || msg.email || 'Unknown';
-                const userId =
-                  identityToUserId.get(normalize(msg.userId || '')) ||
-                  identityToUserId.get(normalize(label)) ||
-                  null;
-                const ts = new Date(msg.timestamp);
-
-                combined.push({
-                  id: `msg-${roomId}-${messageId}`,
-                  userId,
-                  action: `Message in "${room.name || 'room'}": ${String(msg.text || 'attachment').slice(0, 50)}`,
-                  user: label,
-                  timestamp: ts,
-                  time: getTimeAgo(ts),
-                  icon: MessageSquare,
-                  color: 'text-green-500',
-                });
-              });
-            });
-          }
-        } catch {
-          // Ignore RTDB chat source failures.
-        }
-
-        // Source 3: Online/offline events from RTDB status nodes.
-        try {
-          const statusSnap = await get(ref(database, 'status'));
-          const statusData = statusSnap.val();
-          if (statusData) {
-            Object.entries(statusData).forEach(([statusUserId, s]: [string, any]) => {
-              if (s?.username && s?.lastSeen) {
-                const userId =
-                  identityToUserId.get(normalize(statusUserId)) ||
-                  identityToUserId.get(normalize(s.username)) ||
-                  null;
-                const ts = new Date(s.lastSeen);
-
-                combined.push({
-                  id: `status-${statusUserId}-${ts.getTime()}`,
-                  userId,
-                  action: `User came online: ${s.username}`,
-                  user: s.username,
-                  timestamp: ts,
-                  time: getTimeAgo(ts),
-                  icon: User,
-                  color: 'text-purple-500',
-                });
-              }
-            });
-          }
-        } catch {
-          // Ignore status source failures.
-        }
-
-        // Sort newest first and keep the full stream for filtering/drill-down.
-        combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        setActivities(combined);
-        setProfiles(loadedProfiles);
-
-        if (!selectedUserId && loadedProfiles.length > 0) {
-          setSelectedUserId(loadedProfiles[0].id);
-        }
-      } catch (error) {
-        if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch activity:', error);
-      } finally {
-        setLoading(false);
+      if (!selectedUserId && loadedProfiles.length > 0) {
+        setSelectedUserId(loadedProfiles[0].id);
       }
+    } catch (error) {
+      if ((process.env.NODE_ENV === 'development')) console.error('Failed to fetch activity:', error);
+      setActivities([]);
+      setProfiles([]);
+    } finally {
+      setLoading(false);
+    }
   }, [selectedUserId]);
 
   useEffect(() => { fetchActivity(); }, [fetchActivity]);

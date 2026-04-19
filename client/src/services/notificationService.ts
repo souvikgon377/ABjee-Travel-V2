@@ -269,32 +269,57 @@ class NotificationService {
   }
 
   async getUserNotifications(userId: string, limit = 50) {
-    const snapshot = await this.collection.where("toUserId", "==", userId).get();
-    const notifications = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .sort((a: AnyObj, b: AnyObj) => {
-        const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
-        const bTs = b.createdAt?.toDate?.()?.getTime?.() ?? new Date(b.createdAt || 0).getTime();
-        return bTs - aTs;
-      });
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.floor(limit))) : 50;
 
-    return notifications.slice(0, limit);
+    try {
+      const snapshot = await this.collection
+        .where("toUserId", "==", userId)
+        .orderBy("createdAt", "desc")
+        .limit(safeLimit)
+        .get();
+
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } catch {
+      // Fallback if composite index is not available yet.
+      const snapshot = await this.collection.where("toUserId", "==", userId).get();
+      const notifications = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a: AnyObj, b: AnyObj) => {
+          const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
+          const bTs = b.createdAt?.toDate?.()?.getTime?.() ?? new Date(b.createdAt || 0).getTime();
+          return bTs - aTs;
+        });
+
+      return notifications.slice(0, safeLimit);
+    }
   }
 
   async getPendingInvitations(userId: string) {
-    const snapshot = await this.collection
-      .where("toUserId", "==", userId)
-      .where("type", "==", "room_invite")
-      .where("status", "==", "pending")
-      .get();
+    try {
+      const snapshot = await this.collection
+        .where("toUserId", "==", userId)
+        .where("type", "==", "room_invite")
+        .where("status", "==", "pending")
+        .orderBy("createdAt", "desc")
+        .limit(100)
+        .get();
 
-    return snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .sort((a: AnyObj, b: AnyObj) => {
-        const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
-        const bTs = b.createdAt?.toDate?.()?.getTime?.() ?? new Date(b.createdAt || 0).getTime();
-        return bTs - aTs;
-      });
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } catch {
+      const snapshot = await this.collection
+        .where("toUserId", "==", userId)
+        .where("type", "==", "room_invite")
+        .where("status", "==", "pending")
+        .get();
+
+      return snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a: AnyObj, b: AnyObj) => {
+          const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
+          const bTs = b.createdAt?.toDate?.()?.getTime?.() ?? new Date(b.createdAt || 0).getTime();
+          return bTs - aTs;
+        });
+    }
   }
 
   async acceptInvitation(notificationId: string) {

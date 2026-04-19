@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, collectionGroup, documentId, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { Button } from '@/components/ui/button';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -34,6 +34,8 @@ interface PlaceFeedbackTableProps {
 }
 
 const ITEMS_PER_PAGE = 12;
+const FEEDBACK_FETCH_LIMIT = 300;
+const IN_CLAUSE_CHUNK_SIZE = 10;
 
 function toMillis(value: unknown): number {
   if (!value) return 0;
@@ -71,102 +73,135 @@ export const PlaceFeedbackTable = memo(({ externalSearchQuery = '' }: PlaceFeedb
   const [typeFilter, setTypeFilter] = useState<'all' | FeedbackType>('all');
   const [page, setPage] = useState(1);
 
+  const chunkIds = useCallback((ids: string[]) => {
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += IN_CLAUSE_CHUNK_SIZE) {
+      chunks.push(ids.slice(i, i + IN_CLAUSE_CHUNK_SIZE));
+    }
+    return chunks;
+  }, []);
+
   const fetchFeedback = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const [placesSnap, usersSnap] = await Promise.all([
-        getDocs(collection(firestoreDb, 'touristPlaces')),
-        getDocs(collection(firestoreDb, 'users')),
+      const reviewsQuery = query(
+        collectionGroup(firestoreDb, 'reviews'),
+        orderBy('createdAt', 'desc'),
+        limit(FEEDBACK_FETCH_LIMIT)
+      );
+      const commentsQuery = query(
+        collectionGroup(firestoreDb, 'mediaComments'),
+        orderBy('createdAt', 'desc'),
+        limit(FEEDBACK_FETCH_LIMIT)
+      );
+
+      const [reviewsSnap, commentsSnap] = await Promise.all([
+        getDocs(reviewsQuery),
+        getDocs(commentsQuery),
       ]);
 
-      const placePairs = placesSnap.docs.map((d) => {
-        const data = d.data() as { name?: string };
-        return [d.id, data.name?.trim() || 'Unknown place'] as const;
-      });
-      const placeNameById = Object.fromEntries(placePairs);
+      const placeIds = new Set<string>();
+      const userIds = new Set<string>();
 
-      const usersMap: Record<string, UserDetails> = {};
-      usersSnap.docs.forEach((d) => {
-        const data = d.data() as {
-          displayName?: string;
-          email?: string;
-          username?: string;
-          role?: string;
+      const reviewRows = reviewsSnap.docs.map((reviewDoc) => {
+        const data = reviewDoc.data() as {
+          text?: string;
+          author?: string;
+          userId?: string;
+          rating?: number;
+          media?: unknown[];
+          createdAt?: unknown;
         };
-        usersMap[d.id] = {
-          id: d.id,
-          displayName: data.displayName,
-          email: data.email,
-          username: data.username,
-          role: data.role,
+        const placeId = reviewDoc.ref.parent.parent?.id || 'unknown-place';
+        placeIds.add(placeId);
+        if (data.userId) userIds.add(data.userId);
+
+        return {
+          id: reviewDoc.id,
+          type: 'review' as const,
+          placeId,
+          placeName: 'Unknown place',
+          text: data.text || '(No text)',
+          author: data.author || 'Traveller',
+          userId: data.userId || 'anonymous',
+          rating: typeof data.rating === 'number' ? data.rating : undefined,
+          mediaCount: Array.isArray(data.media) ? data.media.length : 0,
+          createdAt: data.createdAt,
         };
       });
-      setUsersById(usersMap);
 
-      const perPlaceResults = await Promise.all(
-        placesSnap.docs.map(async (placeDoc) => {
-          const placeId = placeDoc.id;
-          const placeName = placeNameById[placeId] || 'Unknown place';
+      const commentRows = commentsSnap.docs.map((commentDoc) => {
+        const data = commentDoc.data() as {
+          text?: string;
+          author?: string;
+          userId?: string;
+          mediaKey?: string;
+          createdAt?: unknown;
+        };
+        const placeId = commentDoc.ref.parent.parent?.id || 'unknown-place';
+        placeIds.add(placeId);
+        if (data.userId) userIds.add(data.userId);
 
-          const [reviewsSnap, commentsSnap] = await Promise.all([
-            getDocs(collection(firestoreDb, 'touristPlaces', placeId, 'reviews')),
-            getDocs(collection(firestoreDb, 'touristPlaces', placeId, 'mediaComments')),
-          ]);
+        return {
+          id: commentDoc.id,
+          type: 'comment' as const,
+          placeId,
+          placeName: 'Unknown place',
+          text: data.text || '(No text)',
+          author: data.author || 'Traveller',
+          userId: data.userId || 'anonymous',
+          mediaKey: data.mediaKey,
+          createdAt: data.createdAt,
+        };
+      });
 
-          const reviewItems: FeedbackItem[] = reviewsSnap.docs.map((reviewDoc) => {
-            const data = reviewDoc.data() as {
-              text?: string;
-              author?: string;
-              userId?: string;
-              rating?: number;
-              media?: unknown[];
-              createdAt?: unknown;
-            };
-
-            return {
-              id: reviewDoc.id,
-              type: 'review',
-              placeId,
-              placeName,
-              text: data.text || '(No text)',
-              author: data.author || 'Traveller',
-              userId: data.userId || 'anonymous',
-              rating: typeof data.rating === 'number' ? data.rating : undefined,
-              mediaCount: Array.isArray(data.media) ? data.media.length : 0,
-              createdAt: data.createdAt,
-            };
+      const placeNameById: Record<string, string> = {};
+      const placeIdChunks = chunkIds(Array.from(placeIds).filter((id) => id !== 'unknown-place'));
+      await Promise.all(
+        placeIdChunks.map(async (ids) => {
+          const placeSnap = await getDocs(
+            query(collection(firestoreDb, 'touristPlaces'), where(documentId(), 'in', ids))
+          );
+          placeSnap.docs.forEach((docSnap) => {
+            const data = docSnap.data() as { name?: string };
+            placeNameById[docSnap.id] = data.name?.trim() || 'Unknown place';
           });
-
-          const commentItems: FeedbackItem[] = commentsSnap.docs.map((commentDoc) => {
-            const data = commentDoc.data() as {
-              text?: string;
-              author?: string;
-              userId?: string;
-              mediaKey?: string;
-              createdAt?: unknown;
-            };
-
-            return {
-              id: commentDoc.id,
-              type: 'comment',
-              placeId,
-              placeName,
-              text: data.text || '(No text)',
-              author: data.author || 'Traveller',
-              userId: data.userId || 'anonymous',
-              mediaKey: data.mediaKey,
-              createdAt: data.createdAt,
-            };
-          });
-
-          return [...reviewItems, ...commentItems];
         })
       );
 
-      const merged = perPlaceResults
-        .flat()
+      const usersMap: Record<string, UserDetails> = {};
+      const userIdChunks = chunkIds(Array.from(userIds).filter((id) => id !== 'anonymous'));
+      await Promise.all(
+        userIdChunks.map(async (ids) => {
+          const userSnap = await getDocs(
+            query(collection(firestoreDb, 'users'), where(documentId(), 'in', ids))
+          );
+          userSnap.docs.forEach((docSnap) => {
+            const data = docSnap.data() as {
+              displayName?: string;
+              email?: string;
+              username?: string;
+              role?: string;
+            };
+            usersMap[docSnap.id] = {
+              id: docSnap.id,
+              displayName: data.displayName,
+              email: data.email,
+              username: data.username,
+              role: data.role,
+            };
+          });
+        })
+      );
+      setUsersById(usersMap);
+
+      const merged = [...reviewRows, ...commentRows]
+        .map((item) => ({
+          ...item,
+          placeName: placeNameById[item.placeId] || 'Unknown place',
+        }))
         .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
 
       setItems(merged);
@@ -180,7 +215,7 @@ export const PlaceFeedbackTable = memo(({ externalSearchQuery = '' }: PlaceFeedb
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [chunkIds]);
 
   useEffect(() => {
     fetchFeedback();
@@ -234,13 +269,13 @@ export const PlaceFeedbackTable = memo(({ externalSearchQuery = '' }: PlaceFeedb
   const commentCount = filteredItems.filter((item) => item.type === 'comment').length;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-slate-900/95 via-slate-800/95 to-zinc-900/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35)] sm:p-6">
+    <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-linear-to-br from-slate-900/95 via-slate-800/95 to-zinc-900/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35)] sm:p-6">
       <div className="pointer-events-none absolute -top-24 -right-20 h-52 w-52 rounded-full bg-cyan-400/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 -left-20 h-52 w-52 rounded-full bg-rose-400/20 blur-3xl" />
 
       <div className="relative mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xl font-extrabold tracking-tight text-transparent bg-gradient-to-r from-cyan-300 via-sky-300 to-rose-300 bg-clip-text">
+          <h3 className="text-xl font-extrabold tracking-tight text-transparent bg-linear-to-r from-cyan-300 via-sky-300 to-rose-300 bg-clip-text">
             Reviews & Comments
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
@@ -335,8 +370,8 @@ export const PlaceFeedbackTable = memo(({ externalSearchQuery = '' }: PlaceFeedb
                   transition={{ delay: index * 0.03, duration: 0.22 }}
                   className={`rounded-xl border p-4 shadow-lg transition-colors ${
                     item.type === 'review'
-                      ? 'border-amber-300/20 bg-gradient-to-r from-amber-500/10 to-slate-900/30'
-                      : 'border-blue-300/20 bg-gradient-to-r from-blue-500/10 to-slate-900/30'
+                      ? 'border-amber-300/20 bg-linear-to-r from-amber-500/10 to-slate-900/30'
+                      : 'border-blue-300/20 bg-linear-to-r from-blue-500/10 to-slate-900/30'
                   }`}
                 >
                   <div className="mb-2 flex flex-wrap items-center gap-2">

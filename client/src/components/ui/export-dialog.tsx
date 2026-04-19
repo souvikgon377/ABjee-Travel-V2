@@ -28,12 +28,17 @@ import {
   UserCircle2,
   MapPin,
 } from 'lucide-react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { database } from '@/lib/firebase';
 import { loadAboutPageContent } from '@/lib/aboutContent';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { adminAPI } from '@/lib/api';
+
+const EXPORT_PAGE_SIZE = 200;
+const MAX_EXPORT_ROWS_PER_SECTION = 1000;
+const OPTION_FETCH_LIMIT = 300;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface ExportSection {
@@ -1830,6 +1835,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   const [selected, setSelected]             = useState<Set<string>>(new Set(['stats', 'users']));
   const [exporting, setExporting]           = useState<'csv' | 'pdf' | null>(null);
   const [done, setDone]                     = useState<'csv' | 'pdf' | null>(null);
+  const [exportNotice, setExportNotice]     = useState<string>('');
   const doneTimerRef                        = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Online Status live count state
@@ -1892,7 +1898,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   useEffect(() => {
     if ((!usersChecked && !activityChecked && !tripStoriesChecked && !feedbackChecked) || usersList.length > 0 || usersLoading) return;
     setUsersLoading(true);
-    getDocs(collection(firestoreDb, 'users'))
+    getDocs(query(collection(firestoreDb, 'users'), limit(OPTION_FETCH_LIMIT)))
       .then(snap => {
         setUsersList(snap.docs.map(d => {
           const u = d.data();
@@ -1968,7 +1974,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     if (!tripStoriesChecked || tripStoriesLoading || tripStoriesList.length > 0) return;
 
     setTripStoriesLoading(true);
-    getDocs(collection(firestoreDb, 'stories'))
+    getDocs(query(collection(firestoreDb, 'stories'), orderBy('createdAt', 'desc'), limit(OPTION_FETCH_LIMIT)))
       .then((snap) => {
         const stories = snap.docs.map((doc) => {
           const s: any = doc.data();
@@ -2005,7 +2011,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     if (!touristPlacesChecked || touristPlacesLoading || touristPlacesList.length > 0) return;
 
     setTouristPlacesLoading(true);
-    getDocs(collection(firestoreDb, 'touristPlaces'))
+    getDocs(query(collection(firestoreDb, 'touristPlaces'), limit(OPTION_FETCH_LIMIT)))
       .then((snap) => {
         const places = snap.docs.map((doc) => {
           const p: any = doc.data();
@@ -2037,7 +2043,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     if (!travelItinerariesChecked || travelItinerariesLoading || travelItinerariesList.length > 0) return;
 
     setTravelItinerariesLoading(true);
-    getDocs(collection(firestoreDb, 'travel-destinations'))
+    getDocs(query(collection(firestoreDb, 'travel-destinations'), limit(OPTION_FETCH_LIMIT)))
       .then((snap) => {
         const itineraries = snap.docs.map((doc) => {
           const t: any = doc.data();
@@ -2069,7 +2075,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     if (!feedbackChecked || feedbackLoading || feedbackList.length > 0) return;
 
     setFeedbackLoading(true);
-    getDocs(collection(firestoreDb, 'touristPlaces'))
+    getDocs(query(collection(firestoreDb, 'touristPlaces'), limit(40)))
       .then(async (placesSnap) => {
         const parseTs = (value: any): number => {
           if (!value) return 0;
@@ -2131,6 +2137,63 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
       })
       .finally(() => setFeedbackLoading(false));
   }, [feedbackChecked, feedbackLoading, feedbackList.length]);
+
+  const fetchSectionFromServer = useCallback(async (id: string) => {
+    // Keep local fetch only for about-page rich CMS flattening.
+    if (id === 'about-page') {
+      return fetchSectionData(id, stats, usersList.length > 0 ? usersList : undefined);
+    }
+
+    let cursor: string | null = null;
+    const rows: Record<string, unknown>[] = [];
+
+    while (rows.length < MAX_EXPORT_ROWS_PER_SECTION) {
+      const remaining = MAX_EXPORT_ROWS_PER_SECTION - rows.length;
+      const pageSize = Math.min(EXPORT_PAGE_SIZE, remaining);
+
+      const response = await adminAPI.exportSectionChunk({
+        section: id,
+        limit: pageSize,
+        cursor,
+        userId: id === 'activity' ? selectedActivityUserId : id === 'trip-stories' ? selectedTripStoryUserId : id === 'reviews-comments' ? selectedFeedbackUserId : undefined,
+        area: id === 'trip-stories' ? selectedTripStoryArea : id === 'tourist-places' ? selectedTouristPlaceArea : undefined,
+        state: id === 'trip-stories' ? selectedTripStoryState : id === 'tourist-places' ? selectedTouristPlaceState : undefined,
+        country: id === 'trip-stories'
+          ? selectedTripStoryCountry
+          : id === 'tourist-places'
+          ? selectedTouristPlaceCountry
+          : id === 'travel-itineraries'
+          ? selectedTravelCountry
+          : undefined,
+        place: id === 'travel-itineraries' ? selectedTravelPlace : undefined,
+        type: id === 'reviews-comments' ? selectedFeedbackType : undefined,
+      });
+
+      const payload = response?.data?.data as { rows?: Record<string, unknown>[]; nextCursor?: string | null; hasMore?: boolean };
+      const pageRows = Array.isArray(payload?.rows) ? payload.rows : [];
+      rows.push(...pageRows);
+
+      if (!payload?.hasMore || !payload?.nextCursor || pageRows.length === 0) break;
+      cursor = payload.nextCursor;
+    }
+
+    return rows;
+  }, [
+    stats,
+    usersList,
+    selectedActivityUserId,
+    selectedTripStoryUserId,
+    selectedTripStoryArea,
+    selectedTripStoryState,
+    selectedTripStoryCountry,
+    selectedTouristPlaceArea,
+    selectedTouristPlaceState,
+    selectedTouristPlaceCountry,
+    selectedTravelPlace,
+    selectedTravelCountry,
+    selectedFeedbackUserId,
+    selectedFeedbackType,
+  ]);
 
   // Load rooms when chatrooms section is first checked
   useEffect(() => {
@@ -2254,6 +2317,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     if (!selected.size) return;
     setExporting(format);
     setDone(null);
+    setExportNotice('');
 
     try {
       // ── Single-user detailed PDF ──────────────────────────────────────────
@@ -2323,10 +2387,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
 
       // ── Activity-only dedicated PDF ───────────────────────────────────────
       if (isActivityOnly && format === 'pdf') {
-        const cachedUsers = usersList.length > 0 ? usersList : undefined;
-        const rows = await fetchSectionData('activity', stats, cachedUsers, {
-          activityUserId: selectedActivityUserId,
-        });
+        const rows = await fetchSectionFromServer('activity');
         printActivityPdf(rows);
         scheduleDone('pdf');
         return;
@@ -2334,57 +2395,20 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
 
       // ── Bulk export (all sections) ────────────────────────────────────────
       const ids = [...selected];
-      // Pass the already-loaded users list to avoid a redundant Firestore read
-      const cachedUsers = usersList.length > 0 ? usersList : undefined;
       const results = await Promise.allSettled(
-        ids.map(id =>
-          fetchSectionData(
-            id,
-            stats,
-            cachedUsers,
-            id === 'activity'
-              ? { activityUserId: selectedActivityUserId }
-              : id === 'trip-stories'
-              ? {
-                  tripStories: {
-                    userId: selectedTripStoryUserId,
-                    area: selectedTripStoryArea,
-                    state: selectedTripStoryState,
-                    country: selectedTripStoryCountry,
-                  },
-                }
-              : id === 'tourist-places'
-              ? {
-                  touristPlaces: {
-                    area: selectedTouristPlaceArea,
-                    state: selectedTouristPlaceState,
-                    country: selectedTouristPlaceCountry,
-                  },
-                }
-              : id === 'travel-itineraries'
-              ? {
-                  travelItineraries: {
-                    place: selectedTravelPlace,
-                    country: selectedTravelCountry,
-                  },
-                }
-              : id === 'reviews-comments'
-              ? {
-                  feedback: {
-                    userId: selectedFeedbackUserId,
-                    type: selectedFeedbackType,
-                    placeId: selectedFeedbackPlaceId,
-                    itemId: selectedFeedbackItemId,
-                  },
-                }
-              : undefined
-          )
-        )
+        ids.map((id) => fetchSectionFromServer(id))
       );
       const allData: Record<string, Record<string, unknown>[]> = {};
+      let cappedSections = 0;
       results.forEach((r, i) => {
-        allData[ids[i]] = r.status === 'fulfilled' ? r.value : [];
+        const rows = r.status === 'fulfilled' ? r.value : [];
+        if (rows.length >= MAX_EXPORT_ROWS_PER_SECTION) cappedSections += 1;
+        allData[ids[i]] = rows;
       });
+
+      if (cappedSections > 0) {
+        setExportNotice(`Export capped to ${MAX_EXPORT_ROWS_PER_SECTION} rows for ${cappedSections} section(s) to protect quota.`);
+      }
 
       if (format === 'csv') {
         ids.forEach(id => {
@@ -2424,6 +2448,7 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
     selectedFeedbackType,
     selectedFeedbackPlaceId,
     selectedFeedbackItemId,
+    fetchSectionFromServer,
   ]);
 
   return (
@@ -2455,6 +2480,11 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
 
         {/* ── Section picker ── */}
         <div className="px-6 py-4 space-y-2 max-h-95 overflow-y-auto">
+          {exportNotice && (
+            <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              {exportNotice}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Select sections ({selected.size}/{SECTIONS.length})

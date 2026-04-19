@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       return fail('jobId is required', 400);
     }
 
-    const progress = getTourPlaceSearchMigrationProgress(jobId);
+    const progress = await getTourPlaceSearchMigrationProgress(jobId);
     if (!progress) {
       return fail('Migration job not found', 404);
     }

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const user = await authenticateRequest(req);
     requireAdmin(user);
 
-    const started = startTourPlaceSearchMigration();
+    const started = await startTourPlaceSearchMigration();
     return ok({
       jobId: started.jobId,
       alreadyRunning: started.alreadyRunning,

@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
-import { collection, query, orderBy, deleteDoc, doc, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { collection, query, orderBy, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { UserActionsDialog } from '@/components/ui/user-actions-dialog';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -49,73 +49,42 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
   const [currentPage, setCurrentPage] = useState(1);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const usersListenerRef = useRef<Unsubscribe | null>(null);
 
   // Load all users from Firestore (same collection the Overview card reads)
-  const fetchUsers = useCallback(() => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
-    usersListenerRef.current?.();
 
-    const applyUsers = (docs: any[]) => {
-      setAllUsers(docs);
-      setLoading(false);
-    };
-
-    const attachFallbackListener = () => {
-      usersListenerRef.current = onSnapshot(
-        collection(firestoreDb, 'users'),
-        (snap) => {
-          const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          docs.sort((a: any, b: any) => {
-            const ta = a.createdAt?.toDate?.()?.getTime() ?? a.createdAt ?? 0;
-            const tb = b.createdAt?.toDate?.()?.getTime() ?? b.createdAt ?? 0;
-            return tb - ta;
-          });
-          applyUsers(docs);
-        },
-        (err: any) => {
-          if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
-          setFetchError(
-            err?.code === 'permission-denied'
-              ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
-              : `Failed to load users: ${err?.message ?? err}`
-          );
-          setLoading(false);
-        }
-      );
-    };
-
-    usersListenerRef.current = onSnapshot(
-      query(collection(firestoreDb, 'users'), orderBy('createdAt', 'desc')),
-      (snap) => {
-        const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        applyUsers(docs);
-      },
-      (err: any) => {
-        if (err?.code === 'failed-precondition') {
-          attachFallbackListener();
-          return;
-        }
-
-        if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
-        setFetchError(
-          err?.code === 'permission-denied'
-            ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
-            : `Failed to load users: ${err?.message ?? err}`
-        );
-        setLoading(false);
+    try {
+      let snap;
+      try {
+        snap = await getDocs(query(collection(firestoreDb, 'users'), orderBy('createdAt', 'desc')));
+      } catch (err: any) {
+        if (err?.code !== 'failed-precondition') throw err;
+        snap = await getDocs(collection(firestoreDb, 'users'));
       }
-    );
+
+      const docs: any[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      docs.sort((a: any, b: any) => {
+        const ta = a.createdAt?.toDate?.()?.getTime() ?? a.createdAt ?? 0;
+        const tb = b.createdAt?.toDate?.()?.getTime() ?? b.createdAt ?? 0;
+        return tb - ta;
+      });
+      setAllUsers(docs);
+    } catch (err: any) {
+      if ((process.env.NODE_ENV === "development")) console.error('Failed to fetch users:', err);
+      setFetchError(
+        err?.code === 'permission-denied'
+          ? 'Access denied - update Firestore security rules to allow admin reads on the users collection.'
+          : `Failed to load users: ${err?.message ?? err}`
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    fetchUsers();
-
-    return () => {
-      usersListenerRef.current?.();
-      usersListenerRef.current = null;
-    };
+    void fetchUsers();
   }, [fetchUsers, refreshTrigger]);
 
   // Sync both external filters in a single effect

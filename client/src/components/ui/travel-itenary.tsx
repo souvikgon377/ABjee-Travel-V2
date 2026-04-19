@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { modernConfirm } from '@/lib/modernDialog';
+import { adminAPI } from '@/lib/api';
 
 interface FormState {
 	id?: string;
@@ -63,6 +64,18 @@ interface CsvImportSummary {
 	importedRows: number;
 	failedRows: number;
 	errors: string[];
+}
+
+interface MigrationProgress {
+	jobId: string;
+	status: 'queued' | 'running' | 'completed' | 'failed';
+	total: number;
+	processed: number;
+	updated: number;
+	skipped: number;
+	startedAt: string;
+	finishedAt?: string;
+	error?: string;
 }
 
 const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Introduction,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
@@ -122,6 +135,7 @@ const getTravelItemImage = (item: TravelItem): string => {
 
 export default function AdminTravelItenary() {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
+	const [itinerarySearch, setItinerarySearch] = useState('');
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
 	const [isEditing, setIsEditing] = useState(false);
 	const [form, setForm] = useState<FormState>({
@@ -153,9 +167,31 @@ export default function AdminTravelItenary() {
 	const [csvImportSummary, setCsvImportSummary] = useState<CsvImportSummary | null>(null);
 	const [csvImportError, setCsvImportError] = useState<string | null>(null);
 	const [copiedCsvTemplate, setCopiedCsvTemplate] = useState(false);
+	const [migrationJobId, setMigrationJobId] = useState<string | null>(null);
+	const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
+	const [migrationStarting, setMigrationStarting] = useState(false);
+	const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
 	const [isEditorOpen, setIsEditorOpen] = useState(false);
 	const validPinCount = form.routePoints.filter((point) => point.name.trim() && !getRoutePointErrorMessage(point)).length;
+	const filteredItineraries = useMemo(() => {
+		const q = itinerarySearch.trim().toLowerCase();
+		if (!q) return existingItineraries;
+
+		return existingItineraries.filter((item) => {
+			const text = [
+				item.place,
+				item.country,
+				item.budget,
+				item.itinerary || '',
+				(item.places || []).join(' '),
+			]
+				.join(' ')
+				.toLowerCase();
+
+			return text.includes(q);
+		});
+	}, [existingItineraries, itinerarySearch]);
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const videoInputRef = useRef<HTMLInputElement>(null);
@@ -1343,6 +1379,76 @@ export default function AdminTravelItenary() {
 		}
 	};
 
+	const fetchMigrationProgress = useCallback(async (jobId: string) => {
+		const response = await adminAPI.getTourPlaceSearchMigrationStatus(jobId);
+		const progress = response?.data?.data?.progress as MigrationProgress | undefined;
+		if (!progress) {
+			throw new Error('Migration progress unavailable');
+		}
+		setMigrationProgress(progress);
+		return progress;
+	}, []);
+
+	const handleRunMigration = async () => {
+		setMigrationStarting(true);
+		setMigrationNotice(null);
+		try {
+			const response = await adminAPI.startTourPlaceSearchMigration();
+			const payload = response?.data?.data as {
+				jobId?: string;
+				alreadyRunning?: boolean;
+				progress?: MigrationProgress;
+			} | undefined;
+
+			const jobId = payload?.jobId;
+			if (!jobId) {
+				throw new Error('Migration job ID is missing');
+			}
+
+			setMigrationJobId(jobId);
+			setMigrationProgress(payload?.progress || null);
+			setMigrationNotice(payload?.alreadyRunning ? 'Migration already running.' : 'Migration started in background.');
+		} catch (error: unknown) {
+			setMigrationNotice(error instanceof Error ? error.message : 'Failed to start migration.');
+		} finally {
+			setMigrationStarting(false);
+		}
+	};
+
+	useEffect(() => {
+		if (!migrationJobId) return;
+
+		let intervalId: ReturnType<typeof setInterval> | null = null;
+		let cancelled = false;
+
+		const poll = async () => {
+			try {
+				const progress = await fetchMigrationProgress(migrationJobId);
+				if (cancelled) return;
+				if (progress.status === 'completed') {
+					setMigrationNotice('Migration completed successfully.');
+					if (intervalId) clearInterval(intervalId);
+				}
+				if (progress.status === 'failed') {
+					setMigrationNotice(progress.error || 'Migration failed.');
+					if (intervalId) clearInterval(intervalId);
+				}
+			} catch {
+				if (intervalId) clearInterval(intervalId);
+			}
+		};
+
+		void poll();
+		intervalId = setInterval(() => {
+			void poll();
+		}, 2000);
+
+		return () => {
+			cancelled = true;
+			if (intervalId) clearInterval(intervalId);
+		};
+	}, [fetchMigrationProgress, migrationJobId]);
+
 	return (
 		<div className="min-h-screen bg-linear-to-br from-rose-50 dark:from-slate-950 via-white dark:via-rose-950/30 to-orange-50 dark:to-slate-900 p-6">
 			<AnimatePresence>
@@ -1466,6 +1572,13 @@ export default function AdminTravelItenary() {
 								>
 									{csvImporting ? 'Importing...' : 'Import File'}
 								</Button>
+								<Button
+									onClick={handleRunMigration}
+									variant="outline"
+									disabled={migrationStarting || migrationProgress?.status === 'running' || migrationProgress?.status === 'queued'}
+								>
+									{migrationStarting ? 'Starting Migration...' : 'Run Migration'}
+								</Button>
 							</div>
 							{csvFile && (
 								<p className="mt-2 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
@@ -1505,8 +1618,44 @@ export default function AdminTravelItenary() {
 											))}
 										</div>
 									)}
+									{(migrationProgress || migrationNotice) && (
+										<div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 p-3 text-sm">
+											{migrationNotice && <p className="text-xs text-slate-600 dark:text-slate-300 mb-2">{migrationNotice}</p>}
+											{migrationProgress && (
+												<>
+													<div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+														<span className="font-mono text-slate-500 dark:text-slate-400">{migrationProgress.jobId}</span>
+														<span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 font-semibold uppercase">{migrationProgress.status}</span>
+													</div>
+													<div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+														<span>Total: {migrationProgress.total}</span>
+														<span>Processed: {migrationProgress.processed}</span>
+														<span>Updated: {migrationProgress.updated}</span>
+														<span>Skipped: {migrationProgress.skipped}</span>
+													</div>
+													<div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+														<div
+															className="h-full bg-linear-to-r from-rose-500 to-orange-500 transition-all duration-300"
+															style={{ width: `${migrationProgress.total > 0 ? Math.min(100, Math.round((migrationProgress.processed / migrationProgress.total) * 100)) : 0}%` }}
+														/>
+													</div>
+												</>
+											)}
+										</div>
+									)}
 								</div>
 							)}
+						</div>
+
+						<div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/40 p-3">
+							<Input
+								value={itinerarySearch}
+								onChange={(e) => setItinerarySearch(e.target.value)}
+								placeholder="Search by place, country, budget, itinerary, or places..."
+							/>
+							<p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+								Showing {filteredItineraries.length} of {existingItineraries.length} itineraries
+							</p>
 						</div>
 
 						{loadingItineraries ? (
@@ -1514,14 +1663,14 @@ export default function AdminTravelItenary() {
 								<Loader className="w-8 h-8 animate-spin mx-auto text-rose-500 mb-3" />
 								<p className="text-slate-600 dark:text-slate-400">Loading itineraries from database...</p>
 							</div>
-						) : existingItineraries.length === 0 ? (
+						) : filteredItineraries.length === 0 ? (
 							<div className="p-8 text-center rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40">
-								<p className="text-slate-700 dark:text-slate-200 font-medium">No travel itineraries found in database.</p>
-								<p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Create one using the form below and it will appear here.</p>
+								<p className="text-slate-700 dark:text-slate-200 font-medium">No matching travel itineraries found.</p>
+								<p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Try another search keyword or create a new itinerary.</p>
 							</div>
 						) : (
 							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-								{existingItineraries.map((item) => (
+								{filteredItineraries.map((item) => (
 									<motion.div
 										key={item.id}
 										initial={{ opacity: 0, y: 10 }}

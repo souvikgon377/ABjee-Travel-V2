@@ -1,10 +1,6 @@
 import { memo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Database, Zap, Activity, Bot } from 'lucide-react';
-import { ref, get } from 'firebase/database';
-import { getCountFromServer, collection } from 'firebase/firestore';
-import { database } from '@/lib/firebase';
-import { firestoreDb } from '@/lib/firebaseFirestore';
 import { adminAPI } from '@/lib/api';
 
 export const SystemStatus = memo(() => {
@@ -15,6 +11,20 @@ export const SystemStatus = memo(() => {
     { label: 'Gemini API',      status: 'Checking...', color: 'text-gray-500', icon: Bot,      percentage: 0 },
     { label: 'Response Time',   status: 'Checking...', color: 'text-gray-500', icon: Activity, percentage: 0 },
   ]);
+  const [quotaTelemetry, setQuotaTelemetry] = useState<{
+    generatedAt: string;
+    datasetCounts: {
+      users: number;
+      stories: number;
+      touristPlaces: number;
+      itineraries: number;
+      notifications: number;
+      subscriptions: number;
+      payments: number;
+    };
+    risk: { score: number; level: string; note: string };
+    safeguards: { exportPageSize: number; maxExportRowsPerSection: number; adminPollIntervalSeconds: number };
+  } | null>(null);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -67,67 +77,20 @@ export const SystemStatus = memo(() => {
             icon:       r.icon,
             percentage: r.pct,
           })));
-          return;
         }
       } catch {
-        // Fallback to client-side checks below.
+        // Keep default checking state if server call fails.
       }
 
-      // Check Firestore connectivity
-      const fsStart = Date.now();
       try {
-        await getCountFromServer(collection(firestoreDb, 'users'));
-        const fsMs = Date.now() - fsStart;
-        results[0].ok = true; results[0].detail = 'Healthy'; results[0].pct = 100; // Auth OK if Firestore OK
-        results[1].ok = true; results[1].detail = 'Healthy'; results[1].pct = 100;
-        results[4].ok = fsMs < 600; results[4].detail = `${fsMs}ms`;
-        results[4].pct = Math.max(0, Math.min(100, Math.round(100 - (fsMs / 20))));
+        const telemetryRes = await adminAPI.getQuotaTelemetry();
+        const telemetry = telemetryRes?.data?.data;
+        if (telemetry) {
+          setQuotaTelemetry(telemetry);
+        }
       } catch {
-        results[0].detail = 'Degraded'; results[0].pct = 50;
-        results[1].detail = 'Offline';  results[1].pct = 0;
+        setQuotaTelemetry(null);
       }
-
-      // Check RTDB connectivity
-      try {
-        const rtStart = Date.now();
-        const connectedSnapshot = await get(ref(database, '.info/connected'));
-        const isConnected = connectedSnapshot.val() === true;
-        const rtMs = Date.now() - rtStart;
-
-        if (isConnected) {
-          results[2].ok = true;
-          results[2].detail = `${rtMs}ms`;
-          results[2].pct = 100;
-        } else {
-          // The local connection can briefly report false right after load; probe a protected node next.
-          try {
-            await get(ref(database, 'status'));
-            results[2].ok = true;
-            results[2].detail = 'Connected';
-            results[2].pct = 90;
-          } catch (fallbackError) {
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('RTDB probe failed:', fallbackError);
-            }
-            results[2].detail = 'Offline';
-            results[2].pct = 0;
-          }
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('RTDB connection check failed:', error);
-        }
-        results[2].detail = 'Offline';
-        results[2].pct = 0;
-      }
-
-      setStatusItems(results.map(r => ({
-        label:      r.label,
-        status:     r.detail,
-        color:      r.ok ? 'text-green-500' : 'text-red-500',
-        icon:       r.icon,
-        percentage: r.pct,
-      })));
     };
 
     checkStatus();
@@ -171,6 +134,24 @@ export const SystemStatus = memo(() => {
           );
         })}
       </div>
+      {quotaTelemetry && (
+        <div className="mt-5 rounded-lg border border-border/70 bg-background/60 p-3">
+          <p className="text-sm font-semibold">Quota Telemetry</p>
+          <p className="mt-1 text-xs text-muted-foreground">Risk: {quotaTelemetry.risk.level} ({quotaTelemetry.risk.score}/100)</p>
+          <p className="text-xs text-muted-foreground">{quotaTelemetry.risk.note}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+            <span>Users: {quotaTelemetry.datasetCounts.users}</span>
+            <span>Stories: {quotaTelemetry.datasetCounts.stories}</span>
+            <span>Places: {quotaTelemetry.datasetCounts.touristPlaces}</span>
+            <span>Itineraries: {quotaTelemetry.datasetCounts.itineraries}</span>
+            <span>Notifications: {quotaTelemetry.datasetCounts.notifications}</span>
+            <span>Subscriptions: {quotaTelemetry.datasetCounts.subscriptions}</span>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Safe caps: page {quotaTelemetry.safeguards.exportPageSize}, per-section {quotaTelemetry.safeguards.maxExportRowsPerSection}, poll {quotaTelemetry.safeguards.adminPollIntervalSeconds}s.
+          </p>
+        </div>
+      )}
     </div>
   );
 });

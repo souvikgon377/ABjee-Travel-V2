@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   MessageCircle,
@@ -13,11 +13,12 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import { adminAPI } from '@/lib/api';
 import {
   collection,
   collectionGroup,
+  getDocs,
   limit,
-  onSnapshot,
   orderBy,
   query,
 } from 'firebase/firestore';
@@ -65,6 +66,18 @@ interface ActionStyle {
   pillClass: string;
 }
 
+interface MigrationProgress {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  total: number;
+  processed: number;
+  updated: number;
+  skipped: number;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+}
+
 const ACTION_STYLES: Record<TripStoryAction['actionType'], ActionStyle> = {
   'story-created': {
     label: 'Story Published',
@@ -110,83 +123,85 @@ export function TripStoriesAdminPanel() {
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsError, setCommentsError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [migrationJobId, setMigrationJobId] = useState<string | null>(null);
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
+  const [migrationStarting, setMigrationStarting] = useState(false);
+  const [migrationNotice, setMigrationNotice] = useState('');
 
-  useEffect(() => {
-    const storiesQuery = query(
-      collection(firestoreDb, 'stories'),
-      orderBy('createdAt', 'desc'),
-      limit(500)
-    );
+  const loadTripStoriesData = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) {
+      setRefreshing(true);
+    } else {
+      setStoriesLoading(true);
+      setCommentsLoading(true);
+    }
 
-    const unsubscribe = onSnapshot(
-      storiesQuery,
-      (snapshot) => {
-        const rows = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() as any;
-          return {
-            id: docSnap.id,
-            title: data.title ?? 'Untitled Story',
-            destination: data.destination ?? 'Unknown destination',
-            authorName: data.authorName ?? 'Unknown user',
-            authorEmail: data.authorEmail,
-            authorId: data.authorId,
-            travelType: data.travelType,
-            duration: data.duration,
-            budget: data.budget,
-            likes: Array.isArray(data.likes) ? data.likes : [],
-            commentCount: typeof data.commentCount === 'number' ? data.commentCount : 0,
-            photos: Array.isArray(data.photos) ? data.photos : [],
-            videos: Array.isArray(data.videos) ? data.videos : [],
-            createdAt: data.createdAt,
-          } as TripStoryAdminRow;
-        });
+    try {
+      const storiesQuery = query(
+        collection(firestoreDb, 'stories'),
+        orderBy('createdAt', 'desc'),
+        limit(300)
+      );
+      const commentsQuery = query(
+        collectionGroup(firestoreDb, 'comments'),
+        orderBy('createdAt', 'desc'),
+        limit(400)
+      );
 
-        setStories(rows);
-        setStoriesLoading(false);
-      },
-      () => {
-        setStories([]);
-        setStoriesLoading(false);
-      }
-    );
+      const [storiesSnap, commentsSnap] = await Promise.all([
+        getDocs(storiesQuery),
+        getDocs(commentsQuery),
+      ]);
 
-    return unsubscribe;
+      const storyRows = storiesSnap.docs.map((docSnap) => {
+        const data = docSnap.data() as any;
+        return {
+          id: docSnap.id,
+          title: data.title ?? 'Untitled Story',
+          destination: data.destination ?? 'Unknown destination',
+          authorName: data.authorName ?? 'Unknown user',
+          authorEmail: data.authorEmail,
+          authorId: data.authorId,
+          travelType: data.travelType,
+          duration: data.duration,
+          budget: data.budget,
+          likes: Array.isArray(data.likes) ? data.likes : [],
+          commentCount: typeof data.commentCount === 'number' ? data.commentCount : 0,
+          photos: Array.isArray(data.photos) ? data.photos : [],
+          videos: Array.isArray(data.videos) ? data.videos : [],
+          createdAt: data.createdAt,
+        } as TripStoryAdminRow;
+      });
+
+      const commentRows = commentsSnap.docs.map((docSnap) => {
+        const data = docSnap.data() as any;
+        return {
+          id: docSnap.id,
+          storyId: docSnap.ref.parent.parent?.id ?? '',
+          userName: data.userName ?? 'Unknown user',
+          text: data.text ?? '',
+          createdAt: data.createdAt,
+        } as TripStoryCommentRow;
+      });
+
+      setStories(storyRows);
+      setComments(commentRows);
+      setCommentsError('');
+    } catch (error: any) {
+      setStories([]);
+      setComments([]);
+      setCommentsError(error?.message || 'Unable to load comments.');
+    } finally {
+      setStoriesLoading(false);
+      setCommentsLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => {
-    const commentsQuery = query(
-      collectionGroup(firestoreDb, 'comments'),
-      orderBy('createdAt', 'desc'),
-      limit(1000)
-    );
-
-    const unsubscribe = onSnapshot(
-      commentsQuery,
-      (snapshot) => {
-        const rows = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data() as any;
-          return {
-            id: docSnap.id,
-            storyId: docSnap.ref.parent.parent?.id ?? '',
-            userName: data.userName ?? 'Unknown user',
-            text: data.text ?? '',
-            createdAt: data.createdAt,
-          } as TripStoryCommentRow;
-        });
-
-        setComments(rows);
-        setCommentsError('');
-        setCommentsLoading(false);
-      },
-      (error) => {
-        setComments([]);
-        setCommentsLoading(false);
-        setCommentsError(error?.message || 'Unable to load comments.');
-      }
-    );
-
-    return unsubscribe;
-  }, []);
+    void loadTripStoriesData();
+  }, [loadTripStoriesData]);
 
   const storyTitleMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -306,6 +321,77 @@ export function TripStoriesAdminPanel() {
     return score.toFixed(1);
   }, [summary]);
 
+  const fetchMigrationProgress = useCallback(async (jobId: string) => {
+    const response = await adminAPI.getTourPlaceSearchMigrationStatus(jobId);
+    const progress = response?.data?.data?.progress as MigrationProgress | undefined;
+    if (!progress) {
+      throw new Error('Migration progress unavailable');
+    }
+    setMigrationProgress(progress);
+    return progress;
+  }, []);
+
+  const handleRunMigration = useCallback(async () => {
+    setMigrationStarting(true);
+    setMigrationNotice('');
+    try {
+      const response = await adminAPI.startTourPlaceSearchMigration();
+      const payload = response?.data?.data as {
+        jobId?: string;
+        alreadyRunning?: boolean;
+        progress?: MigrationProgress;
+      } | undefined;
+
+      const jobId = payload?.jobId;
+      if (!jobId) {
+        throw new Error('Migration job ID is missing');
+      }
+
+      setMigrationJobId(jobId);
+      setMigrationProgress(payload?.progress || null);
+      setMigrationNotice(payload?.alreadyRunning ? 'Migration already running.' : 'Migration started in background.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start migration.';
+      setMigrationNotice(message);
+    } finally {
+      setMigrationStarting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!migrationJobId) return;
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const progress = await fetchMigrationProgress(migrationJobId);
+        if (cancelled) return;
+        if (progress.status === 'completed') {
+          setMigrationNotice('Migration completed successfully.');
+          if (intervalId) clearInterval(intervalId);
+        }
+        if (progress.status === 'failed') {
+          setMigrationNotice(progress.error || 'Migration failed.');
+          if (intervalId) clearInterval(intervalId);
+        }
+      } catch {
+        if (intervalId) clearInterval(intervalId);
+      }
+    };
+
+    void poll();
+    intervalId = setInterval(() => {
+      void poll();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [fetchMigrationProgress, migrationJobId]);
+
   return (
     <div className="relative mx-auto max-w-370 space-y-6 overflow-x-clip rounded-3xl px-2 py-2 sm:px-0 xl:space-y-7">
       <motion.div
@@ -325,13 +411,23 @@ export function TripStoriesAdminPanel() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
-          <motion.span
-            className="h-2 w-2 rounded-full bg-emerald-500"
-            animate={{ opacity: [0.4, 1, 0.4], scale: [1, 1.2, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity }}
-          />
-          Live data stream
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
+            <motion.span
+              className="h-2 w-2 rounded-full bg-emerald-500"
+              animate={{ opacity: [0.4, 1, 0.4], scale: [1, 1.2, 1] }}
+              transition={{ duration: 1.8, repeat: Infinity }}
+            />
+            Live data stream
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRunMigration()}
+            disabled={migrationStarting || migrationProgress?.status === 'running' || migrationProgress?.status === 'queued'}
+            className="rounded-full border border-primary/30 bg-background/80 px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {migrationStarting ? 'Starting Migration...' : 'Run Migration'}
+          </button>
         </div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Trip Stories Control Room</h1>
         <p className="mt-1 text-sm text-muted-foreground sm:text-base">
@@ -342,6 +438,32 @@ export function TripStoriesAdminPanel() {
           animate={{ width: ['10rem', '12rem', '10rem'] }}
           transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         />
+
+        {(migrationProgress || migrationNotice) && (
+          <div className="mt-4 rounded-xl border border-primary/20 bg-background/80 p-3">
+            {migrationNotice && <p className="mb-2 text-xs text-muted-foreground">{migrationNotice}</p>}
+            {migrationProgress && (
+              <>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="font-mono text-muted-foreground">{migrationProgress.jobId}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 font-semibold uppercase">{migrationProgress.status}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                  <span>Total: {migrationProgress.total}</span>
+                  <span>Processed: {migrationProgress.processed}</span>
+                  <span>Updated: {migrationProgress.updated}</span>
+                  <span>Skipped: {migrationProgress.skipped}</span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-linear-to-r from-blue-500 via-violet-500 to-rose-500 transition-all duration-300"
+                    style={{ width: `${migrationProgress.total > 0 ? Math.min(100, Math.round((migrationProgress.processed / migrationProgress.total) * 100)) : 0}%` }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </motion.div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4 xl:gap-5">
@@ -430,12 +552,21 @@ export function TripStoriesAdminPanel() {
           <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
             Search across stories, actions, and comments
           </p>
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search story title, destination, user..."
-            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary sm:max-w-sm"
-          />
+          <div className="flex w-full gap-2 sm:max-w-xl">
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search story title, destination, user..."
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+            />
+            <button
+              onClick={() => void loadTripStoriesData(true)}
+              disabled={refreshing || storiesLoading || commentsLoading}
+              className="h-10 shrink-0 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
       </motion.div>
 

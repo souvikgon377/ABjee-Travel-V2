@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MessageCircle, Users, Camera, Map, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, getDocs } from 'firebase/firestore'
 import { firestoreDb } from '@/lib/firebaseFirestore'
 import { publicAsset } from '@/lib/publicAsset'
 
@@ -82,15 +82,28 @@ function LandingPage() {
   }, [])
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(firestoreDb, 'offers'), (snapshot) => {
-      const rows = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<HomeOffer, 'id'>) }))
-        .filter((offer) => offer.isActive)
-        .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
-      setOffers(rows)
-    })
+    let cancelled = false
 
-    return () => unsub()
+    const loadOffers = async () => {
+      try {
+        const snapshot = await getDocs(collection(firestoreDb, 'offers'))
+        if (cancelled) return
+
+        const rows = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<HomeOffer, 'id'>) }))
+          .filter((offer) => offer.isActive)
+          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+        setOffers(rows)
+      } catch {
+        if (!cancelled) setOffers([])
+      }
+    }
+
+    void loadOffers()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const closeCommunityPopup = () => {

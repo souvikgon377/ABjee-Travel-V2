@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit, getDocs } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import type { TouristPlace, MediaItem } from '@/components/ui/tourist-places';
@@ -681,43 +681,54 @@ const ChatRoomsList: React.FC = () => {
   useEffect(() => {
     if (isMobile || mobilePerformanceMode) return;
 
-    const usersRef = query(collection(firestoreDb, 'users'), limit(120));
+    let cancelled = false;
 
-    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
-      const usersFromDb: CountryUserHighlight[] = [];
+    const loadUsers = async () => {
+      try {
+        const usersRef = query(collection(firestoreDb, 'users'), limit(120));
+        const snapshot = await getDocs(usersRef);
+        if (cancelled) return;
 
-      snapshot.forEach((userDoc) => {
-        const data = userDoc.data() as Record<string, unknown>;
-        const country = getCountryFromUserData(data) || 'Not specified';
+        const usersFromDb: CountryUserHighlight[] = [];
 
-        const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
-        const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
-        const displayName = typeof data.displayName === 'string' ? data.displayName.trim() : '';
-        const username = typeof data.username === 'string' ? data.username.trim() : '';
-        const email = typeof data.email === 'string' ? data.email.trim() : '';
-        const emailHandle = email.includes('@') ? email.split('@')[0] : email;
-        const profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture.trim() : '';
-        const resolvedAvatar = profilePicture || resolveAvatarUrl(data);
+        snapshot.forEach((userDoc) => {
+          const data = userDoc.data() as Record<string, unknown>;
+          const country = getCountryFromUserData(data) || 'Not specified';
 
-        const name = displayName || `${firstName} ${lastName}`.trim() || username || emailHandle || 'Traveller';
-        const handle = username || emailHandle || 'traveller';
+          const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
+          const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
+          const displayName = typeof data.displayName === 'string' ? data.displayName.trim() : '';
+          const username = typeof data.username === 'string' ? data.username.trim() : '';
+          const email = typeof data.email === 'string' ? data.email.trim() : '';
+          const emailHandle = email.includes('@') ? email.split('@')[0] : email;
+          const profilePicture = typeof data.profilePicture === 'string' ? data.profilePicture.trim() : '';
+          const resolvedAvatar = profilePicture || resolveAvatarUrl(data);
 
-        usersFromDb.push({
-          id: userDoc.id,
-          name,
-          username: handle,
-          country,
-          profilePictureUrl: resolvedAvatar,
-          avatarUrl: resolvedAvatar,
+          const name = displayName || `${firstName} ${lastName}`.trim() || username || emailHandle || 'Traveller';
+          const handle = username || emailHandle || 'traveller';
+
+          usersFromDb.push({
+            id: userDoc.id,
+            name,
+            username: handle,
+            country,
+            profilePictureUrl: resolvedAvatar,
+            avatarUrl: resolvedAvatar,
+          });
         });
-      });
 
-      const nextCountryUsers = usersFromDb.sort((a, b) => a.name.localeCompare(b.name));
+        const nextCountryUsers = usersFromDb.sort((a, b) => a.name.localeCompare(b.name));
+        setCountryUsers(nextCountryUsers);
+      } catch {
+        if (!cancelled) setCountryUsers([]);
+      }
+    };
 
-      setCountryUsers(nextCountryUsers);
-    });
+    void loadUsers();
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+    };
   }, [isMobile, mobilePerformanceMode]);
 
   const filteredPlaces = useMemo(() => {
@@ -4137,15 +4148,28 @@ const ChatPage: React.FC = () => {
   }, [authLoading, userProfile]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(firestoreDb, 'offers'), (snapshot) => {
-      const rows = snapshot.docs
-        .map((entry) => ({ id: entry.id, ...(entry.data() as Omit<LiveOffer, 'id'>) }))
-        .filter((offer) => offer.isActive)
-        .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
-      setOffers(rows);
-    });
+    let cancelled = false;
 
-    return () => unsub();
+    const loadOffers = async () => {
+      try {
+        const snapshot = await getDocs(collection(firestoreDb, 'offers'));
+        if (cancelled) return;
+
+        const rows = snapshot.docs
+          .map((entry) => ({ id: entry.id, ...(entry.data() as Omit<LiveOffer, 'id'>) }))
+          .filter((offer) => offer.isActive)
+          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+        setOffers(rows);
+      } catch {
+        if (!cancelled) setOffers([]);
+      }
+    };
+
+    void loadOffers();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   collection,
@@ -594,6 +594,7 @@ function GalleryModal({
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function TouristPlacesManager() {
   const [places, setPlaces] = useState<TouristPlace[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1296,14 +1297,30 @@ export function TouristPlacesManager() {
       if (editingId) {
         await updateDoc(doc(firestoreDb, 'touristPlaces', editingId), payload);
         flash('Place updated!', 'success');
+        resetForm();
       } else {
-        await addDoc(collection(firestoreDb, 'touristPlaces'), {
+        const createdRef = await addDoc(collection(firestoreDb, 'touristPlaces'), {
           ...payload,
           createdAt: serverTimestamp(),
         });
         flash('Place added!', 'success');
+
+        // Keep editor open after create and switch to edit mode for the new place.
+        setEditingId(createdRef.id);
+        setShowForm(true);
+        setPendingFiles((prev) => {
+          prev.forEach((p) => {
+            URL.revokeObjectURL(p.preview);
+            if (p.thumbnailPreview) URL.revokeObjectURL(p.thumbnailPreview);
+          });
+          return [];
+        });
+        setForm((prev) => ({
+          ...prev,
+          media: allMedia,
+          coverImage,
+        }));
       }
-      resetForm();
       fetchPlaces();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save.';
@@ -1556,6 +1573,27 @@ export function TouristPlacesManager() {
   const pendingImages = pendingFiles.filter((p) => p.type === 'image');
   const pendingVideos = pendingFiles.filter((p) => p.type === 'video');
 
+  const filteredPlaces = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return places;
+
+    return places.filter((place) => {
+      const haystack = [
+        place.name,
+        place.area,
+        place.state,
+        place.country,
+        place.category,
+        stripRichTextTags(place.description || ''),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(q);
+    });
+  }, [places, searchQuery]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -1640,6 +1678,18 @@ export function TouristPlacesManager() {
         </div>
       </motion.div>
 
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search places by name, area, state, country, category..."
+          className="h-10"
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Showing {filteredPlaces.length} of {places.length} place{places.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+
       {(importFile || importError || importSummary) && (
         <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
           {importFile && (
@@ -1714,27 +1764,36 @@ export function TouristPlacesManager() {
       <AnimatePresence>
       {showForm && (
         <motion.div
-          initial={{ opacity: 0, y: 16, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 16, scale: 0.98 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="rounded-3xl border border-border bg-card shadow-xl overflow-hidden"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+          className="fixed inset-0 z-80 overflow-y-auto bg-black/45 p-4 backdrop-blur-sm"
+          onClick={resetForm}
         >
-          {/* Form header band */}
-          <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-rose-600/10 via-pink-500/5 to-transparent border-b border-border">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-rose-600/10">
-                <MapPin className="h-5 w-5 text-rose-600" />
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            onClick={(e) => e.stopPropagation()}
+            className="mx-auto w-full max-w-6xl rounded-3xl border border-border bg-card shadow-xl overflow-hidden"
+          >
+            {/* Form header band */}
+            <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-rose-600/10 via-pink-500/5 to-transparent border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-rose-600/10">
+                  <MapPin className="h-5 w-5 text-rose-600" />
+                </div>
+                <h2 className="text-lg font-bold">
+                  {editingId ? 'Edit Tourist Place' : 'New Tourist Place'}
+                </h2>
               </div>
-              <h2 className="text-lg font-bold">
-                {editingId ? 'Edit Tourist Place' : 'New Tourist Place'}
-              </h2>
+              <button onClick={resetForm} className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <button onClick={resetForm} className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="p-6 space-y-8">
+            <div className="p-6 space-y-8">
 
           <form onSubmit={handleSubmit} className="space-y-8">
             {/* Basic info grid */}
@@ -2245,8 +2304,9 @@ export function TouristPlacesManager() {
                   : editingId ? 'Update Place' : 'Add Place'}
               </Button>
             </div>
-          </form>
-          </div>
+            </form>
+            </div>
+          </motion.div>
         </motion.div>
       )}
       </AnimatePresence>
@@ -2285,7 +2345,7 @@ export function TouristPlacesManager() {
             </motion.div>
           ))}
         </div>
-      ) : places.length === 0 ? (
+      ) : filteredPlaces.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -2311,8 +2371,8 @@ export function TouristPlacesManager() {
             <div className="absolute inset-0 rounded-3xl bg-rose-400/20 blur-xl -z-10 scale-110" />
           </motion.div>
           <div className="space-y-2">
-            <p className="text-2xl font-extrabold text-foreground">No tourist places yet</p>
-            <p className="text-sm text-muted-foreground">Click <span className="font-semibold text-rose-500">"Add Place"</span> above to get started</p>
+            <p className="text-2xl font-extrabold text-foreground">No matching tourist places</p>
+            <p className="text-sm text-muted-foreground">Try another search or click <span className="font-semibold text-rose-500">"Add Place"</span> to create one</p>
           </div>
         </motion.div>
       ) : (
@@ -2322,7 +2382,7 @@ export function TouristPlacesManager() {
           variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
         >
-          {places.map((place) => {
+          {filteredPlaces.map((place) => {
             const placeImages = (place.media ?? []).filter((m) => m.type === 'image');
             const placeVideos = (place.media ?? []).filter((m) => m.type === 'video');
             const allMedia = place.media ?? [];
