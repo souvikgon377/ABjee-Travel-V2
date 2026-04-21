@@ -1,12 +1,23 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   collection,
   addDoc,
   getDocs,
+  getDoc,
   deleteDoc,
   doc,
   updateDoc,
+  setDoc,
+  writeBatch,
+  increment,
+  where,
+  startAfter,
+  limit,
+  Timestamp,
+  type QueryConstraint,
+  type QueryDocumentSnapshot,
+  type DocumentData,
   serverTimestamp,
   orderBy,
   query,
@@ -59,10 +70,12 @@ export interface TouristPlace {
   id?: string;
   name: string;
   area: string;
+  city?: string;
   state: string;
   country: string;
   description: string;
   category: string;
+  isActive?: boolean;
   googleMapsUrl: string;
   coverImage: string;
   media: MediaItem[];
@@ -90,6 +103,24 @@ interface MigrationProgress {
   error?: string;
 }
 
+interface TouristPlacesSummary {
+  totalCount: number;
+  categories: Record<string, number>;
+  updatedAtLabel: string | null;
+}
+
+interface TouristPlacesListCache {
+  places: TouristPlace[];
+  hasMore: boolean;
+  lastFetchMs: number;
+}
+
+interface TouristPlacesFilters {
+  search: string;
+  location: string;
+  status: 'all' | 'active' | 'inactive';
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 const CATEGORIES = [
   'Temple / Religious',
@@ -104,10 +135,12 @@ const CATEGORIES = [
 const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '',
   area: '',
+  city: '',
   state: '',
   country: 'India',
   description: '',
   category: 'Other',
+  isActive: true,
   googleMapsUrl: '',
   coverImage: '',
   media: [],
@@ -118,6 +151,10 @@ const TOURIST_CSV_TEMPLATE_TEXT = `Name,Area,State,Country,Category,Description,
 Mysore Palace,Karnataka Heritage Zone,Karnataka,India,Historical / Heritage,"A grand palace known for Indo-Saracenic architecture and evening illumination.","https://maps.google.com/?q=Mysore+Palace","Best Time::Oct to Mar|Highlights::Palace illumination, museum galleries"`;
 const TOURIST_PLACES_CACHE_KEY = 'tourist-places-admin-list';
 const TOURIST_PLACES_CACHE_TTL_MS = 5 * 60 * 1000;
+const TOURIST_PLACES_PAGE_SIZE = 30;
+const TOURIST_PLACES_INCREMENTAL_LIMIT = 200;
+const TOURIST_PLACES_SUMMARY_COLLECTION = 'tourPlaces_summary';
+const TOURIST_PLACES_SUMMARY_DOC = 'metadata';
 
 // ─── Video upload (raw fetch, no extra SDK) ──────────────────────────────────
 // ─── Video upload (R2 S3-compatible API) ───────────────────────────────────
@@ -264,6 +301,10 @@ function buildSearchIndexFields(place: Pick<TouristPlace, 'name' | 'area' | 'sta
     searchState: toSearchText(place.state),
     searchCountry: toSearchText(place.country),
   };
+}
+
+function buildSummaryCategoryKey(category: string) {
+  return category.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'other';
 }
 
 function parseExtraInfo(value: string): InfoSection[] {
@@ -597,15 +638,32 @@ function GalleryModal({
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function TouristPlacesManager() {
   const [places, setPlaces] = useState<TouristPlace[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [cityInput, setCityInput] = useState('');
+  const [statusInput, setStatusInput] = useState<'all' | 'active' | 'inactive'>('all');
+  const [appliedFilters, setAppliedFilters] = useState<TouristPlacesFilters>({
+    search: '',
+    location: '',
+    status: 'all',
+  });
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastFetchMs, setLastFetchMs] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [summary, setSummary] = useState<TouristPlacesSummary>({
+    totalCount: 0,
+    categories: {},
+    updatedAtLabel: null,
+  });
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
 
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -646,32 +704,258 @@ export function TouristPlacesManager() {
     underline: false,
   });
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
-  const fetchPlaces = useCallback(async (forceRefresh = false) => {
-    setLoading(true);
+  const buildFilterCacheKey = useCallback((filters: TouristPlacesFilters) => {
+    return `${TOURIST_PLACES_CACHE_KEY}:${filters.search.trim().toLowerCase()}:${filters.location.trim().toLowerCase()}:${filters.status}`;
+  }, []);
+
+  const matchesStatusFilter = useCallback((value: TouristPlace['isActive'], status: TouristPlacesFilters['status']) => {
+    if (status === 'active') return value !== false;
+    if (status === 'inactive') return value === false;
+    return true;
+  }, []);
+
+  const matchesLocationFilter = useCallback((place: TouristPlace, locationInput: string) => {
+    const normalized = locationInput.trim().toLowerCase();
+    if (!normalized) return true;
+
+    const haystack = [place.city, place.area, place.state, place.country]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(normalized);
+  }, []);
+
+  const matchesSearchFilter = useCallback((place: TouristPlace, searchInputValue: string) => {
+    const normalized = searchInputValue.trim().toLowerCase();
+    if (!normalized) return true;
+
+    const searchName = place.name?.trim().toLowerCase() || '';
+    return searchName.includes(normalized);
+  }, []);
+
+  const applyClientFilters = useCallback((items: TouristPlace[], filters: TouristPlacesFilters) => {
+    return items.filter((place) => (
+      matchesStatusFilter(place.isActive, filters.status)
+      && matchesLocationFilter(place, filters.location)
+      && matchesSearchFilter(place, filters.search)
+    ));
+  }, [matchesLocationFilter, matchesSearchFilter, matchesStatusFilter]);
+
+  const mapTouristPlaceDoc = useCallback((docSnap: QueryDocumentSnapshot<DocumentData>): TouristPlace => {
+    const raw = docSnap.data() as Omit<TouristPlace, 'id'>;
+    return {
+      id: docSnap.id,
+      city: raw.city || raw.area || '',
+      isActive: raw.isActive ?? true,
+      ...raw,
+    };
+  }, []);
+
+  const mergePlaces = useCallback((current: TouristPlace[], updates: TouristPlace[]) => {
+    const byId = new Map<string, TouristPlace>();
+    current.forEach((place) => {
+      if (place.id) byId.set(place.id, place);
+    });
+    updates.forEach((place) => {
+      if (place.id) byId.set(place.id, place);
+    });
+    return Array.from(byId.values());
+  }, []);
+
+  const fetchSummary = useCallback(async () => {
     try {
-      if (!forceRefresh) {
-        const cachedPlaces = getAdminCollectionCache<TouristPlace[]>(TOURIST_PLACES_CACHE_KEY);
-        if (cachedPlaces) {
-          setPlaces(cachedPlaces);
+      const summaryRef = doc(firestoreDb, TOURIST_PLACES_SUMMARY_COLLECTION, TOURIST_PLACES_SUMMARY_DOC);
+      const summarySnap = await getDoc(summaryRef);
+      if (!summarySnap.exists()) return;
+
+      const data = summarySnap.data() as {
+        totalCount?: number;
+        categories?: Record<string, number>;
+        updatedAt?: { toDate?: () => Date };
+      };
+
+      const updatedDate = data.updatedAt?.toDate ? data.updatedAt.toDate() : null;
+      setSummary({
+        totalCount: data.totalCount || 0,
+        categories: data.categories || {},
+        updatedAtLabel: updatedDate ? updatedDate.toLocaleString() : null,
+      });
+    } catch {
+      // Summary is optional and should not block list operations.
+    }
+  }, []);
+
+  const updateSummary = useCallback(async (delta: { total?: number; categoryDelta?: Record<string, number> }) => {
+    const payload: Record<string, unknown> = {
+      updatedAt: serverTimestamp(),
+    };
+
+    if (delta.total) {
+      payload.totalCount = increment(delta.total);
+    }
+
+    if (delta.categoryDelta) {
+      Object.entries(delta.categoryDelta).forEach(([category, value]) => {
+        if (!value) return;
+        payload[`categories.${buildSummaryCategoryKey(category)}`] = increment(value);
+      });
+    }
+
+    try {
+      await setDoc(doc(firestoreDb, TOURIST_PLACES_SUMMARY_COLLECTION, TOURIST_PLACES_SUMMARY_DOC), payload, { merge: true });
+      await fetchSummary();
+    } catch {
+      // Skip non-critical summary write failures.
+    }
+  }, [fetchSummary]);
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  const buildPlacesQuery = useCallback((options: {
+    filters: TouristPlacesFilters;
+    cursor?: QueryDocumentSnapshot<DocumentData> | null;
+    incrementalSinceMs?: number;
+  }) => {
+    const constraints: QueryConstraint[] = [];
+    const normalizedSearch = options.filters.search.trim().toLowerCase();
+
+    if (options.incrementalSinceMs) {
+      constraints.push(where('updatedAt', '>', Timestamp.fromMillis(options.incrementalSinceMs)));
+      constraints.push(orderBy('updatedAt', 'desc'));
+      constraints.push(limit(TOURIST_PLACES_INCREMENTAL_LIMIT));
+      return query(collection(firestoreDb, 'touristPlaces'), ...constraints);
+    }
+
+    if (normalizedSearch) {
+      constraints.push(where('searchName', '>=', normalizedSearch));
+      constraints.push(where('searchName', '<=', `${normalizedSearch}\uf8ff`));
+      constraints.push(orderBy('searchName'));
+    } else {
+      constraints.push(orderBy('updatedAt', 'desc'));
+    }
+
+    if (options.cursor) {
+      constraints.push(startAfter(options.cursor));
+    }
+
+    constraints.push(limit(TOURIST_PLACES_PAGE_SIZE));
+    return query(collection(firestoreDb, 'touristPlaces'), ...constraints);
+  }, []);
+
+  const fetchPlaces = useCallback(async (options?: { reset?: boolean; forceRefresh?: boolean; filters?: TouristPlacesFilters }) => {
+    const selectedFilters = options?.filters ?? appliedFilters;
+    const reset = options?.reset ?? false;
+    const forceRefresh = options?.forceRefresh ?? false;
+    if (reset) setLoading(true);
+    else setLoadingMore(true);
+
+    try {
+      const cacheKey = buildFilterCacheKey(selectedFilters);
+      if (reset && !forceRefresh) {
+        const cached = getAdminCollectionCache<TouristPlacesListCache>(cacheKey);
+        if (cached && cached.places?.length > 0 && !cached.hasMore) {
+          setPlaces(cached.places);
+          setHasMore(cached.hasMore);
+          setLastFetchMs(cached.lastFetchMs);
+          lastDocRef.current = null;
           return;
         }
       }
 
-      const snap = await getDocs(
-        query(collection(firestoreDb, 'touristPlaces'), orderBy('createdAt', 'desc'))
-      );
-      const nextPlaces = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TouristPlace, 'id'>) }));
-      setPlaces(nextPlaces);
-      setAdminCollectionCache(TOURIST_PLACES_CACHE_KEY, nextPlaces, TOURIST_PLACES_CACHE_TTL_MS);
+      let snap;
+      try {
+        snap = await getDocs(buildPlacesQuery({
+          filters: selectedFilters,
+          cursor: reset ? null : lastDocRef.current,
+        }));
+      } catch {
+        // Fallback path for missing composite indexes.
+        snap = await getDocs(
+          query(
+            collection(firestoreDb, 'touristPlaces'),
+            orderBy('updatedAt', 'desc'),
+            limit(TOURIST_PLACES_PAGE_SIZE * 2),
+          ),
+        );
+      }
+
+      const incoming = snap.docs.map((item) => mapTouristPlaceDoc(item));
+      let nextFilteredPlaces: TouristPlace[] = [];
+      setPlaces((prev) => {
+        const merged = reset ? incoming : mergePlaces(prev, incoming);
+        nextFilteredPlaces = applyClientFilters(merged, selectedFilters);
+        return nextFilteredPlaces;
+      });
+      lastDocRef.current = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+      setHasMore(snap.docs.length === TOURIST_PLACES_PAGE_SIZE);
+
+      const now = Date.now();
+      setLastFetchMs(now);
+      if (reset) {
+        setAdminCollectionCache(
+          cacheKey,
+          {
+            places: nextFilteredPlaces,
+            hasMore: snap.docs.length === TOURIST_PLACES_PAGE_SIZE,
+            lastFetchMs: now,
+          },
+          TOURIST_PLACES_CACHE_TTL_MS,
+        );
+      }
     } catch {
       flash('Failed to load tourist places.', 'error');
     } finally {
+      if (reset) setLoading(false);
+      else setLoadingMore(false);
+    }
+  }, [appliedFilters, applyClientFilters, buildFilterCacheKey, buildPlacesQuery, mapTouristPlaceDoc, mergePlaces]);
+
+  const handleManualRefresh = useCallback(async () => {
+    if (!lastFetchMs) {
+      await fetchPlaces({ reset: true, forceRefresh: true });
+      await fetchSummary();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const snap = await getDocs(buildPlacesQuery({ filters: appliedFilters, incrementalSinceMs: lastFetchMs }));
+      const updates = applyClientFilters(snap.docs.map((item) => mapTouristPlaceDoc(item)), appliedFilters);
+      let mergedForCache: TouristPlace[] = [];
+      setPlaces((prev) => {
+        mergedForCache = updates.length > 0 ? mergePlaces(prev, updates) : prev;
+        return mergedForCache;
+      });
+      const now = Date.now();
+      setLastFetchMs(now);
+      setAdminCollectionCache(
+        buildFilterCacheKey(appliedFilters),
+        {
+          places: mergedForCache,
+          hasMore,
+          lastFetchMs: now,
+        },
+        TOURIST_PLACES_CACHE_TTL_MS,
+      );
+      await fetchSummary();
+    } catch {
+      flash('Failed to refresh recent updates.', 'error');
+    } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliedFilters, applyClientFilters, buildFilterCacheKey, buildPlacesQuery, fetchPlaces, fetchSummary, hasMore, lastFetchMs, mapTouristPlaceDoc, mergePlaces]);
 
-  useEffect(() => { fetchPlaces(); }, [fetchPlaces]);
+  useEffect(() => {
+    void fetchPlaces({
+      reset: true,
+      filters: {
+        search: '',
+        location: '',
+        status: 'all',
+      },
+    });
+    void fetchSummary();
+  }, [fetchSummary]);
 
   const flash = (msg: string, type: 'success' | 'error') => {
     if (type === 'success') { setSuccess(msg); setTimeout(() => setSuccess(''), 1200); }
@@ -690,29 +974,50 @@ export function TouristPlacesManager() {
     setThumbnailTarget(null);
     setPendingThumbTarget(null);
     setEditingId(null);
+    setEditingCategory(null);
     setShowForm(false);
     setError('');
   };
 
-  const handleEdit = (place: TouristPlace) => {
-    setForm({
-      name: place.name,
-      area: place.area || '',
-      state: place.state,
-      country: place.country,
-      description: place.description,
-      category: place.category,
-      googleMapsUrl: place.googleMapsUrl || '',
-      coverImage: place.coverImage || '',
-      media: place.media || [],
-      extraInfo: (place.extraInfo || []).map((s) => ({
-        ...s,
-        id: s.id || `${Date.now()}-${Math.random()}`,
-      })),
-    });
-    setPendingFiles([]);
-    setEditingId(place.id!);
-    setShowForm(true);
+  const handleEdit = async (placeId: string) => {
+    try {
+      const placeSnap = await getDoc(doc(firestoreDb, 'touristPlaces', placeId));
+      if (!placeSnap.exists()) {
+        flash('Tourist place no longer exists.', 'error');
+        return;
+      }
+
+      const raw = placeSnap.data() as Omit<TouristPlace, 'id'>;
+      const place: TouristPlace = {
+        id: placeSnap.id,
+        city: raw.city || raw.area || '',
+        isActive: raw.isActive ?? true,
+        ...raw,
+      };
+      setForm({
+        name: place.name,
+        area: place.area || '',
+        city: place.city || place.area || '',
+        state: place.state,
+        country: place.country,
+        description: place.description,
+        category: place.category,
+        isActive: place.isActive ?? true,
+        googleMapsUrl: place.googleMapsUrl || '',
+        coverImage: place.coverImage || '',
+        media: place.media || [],
+        extraInfo: (place.extraInfo || []).map((s) => ({
+          ...s,
+          id: s.id || `${Date.now()}-${Math.random()}`,
+        })),
+      });
+      setPendingFiles([]);
+      setEditingId(place.id!);
+      setEditingCategory(place.category);
+      setShowForm(true);
+    } catch {
+      flash('Failed to load selected place.', 'error');
+    }
   };
 
   useEffect(() => {
@@ -1290,10 +1595,12 @@ export function TouristPlacesManager() {
       const writePayload = {
         name: form.name,
         area: form.area,
+        city: (form.city || form.area || '').trim().toLowerCase(),
         state: form.state,
         country: form.country,
         description: form.description,
         category: form.category,
+        isActive: form.isActive !== false,
         googleMapsUrl: form.googleMapsUrl,
         coverImage,
         media: allMedia,
@@ -1310,10 +1617,12 @@ export function TouristPlacesManager() {
       const cachePayload = {
         name: form.name,
         area: form.area,
+        city: (form.city || form.area || '').trim().toLowerCase(),
         state: form.state,
         country: form.country,
         description: form.description,
         category: form.category,
+        isActive: form.isActive !== false,
         googleMapsUrl: form.googleMapsUrl,
         coverImage,
         media: allMedia,
@@ -1329,6 +1638,14 @@ export function TouristPlacesManager() {
 
       if (editingId) {
         await updateDoc(doc(firestoreDb, 'touristPlaces', editingId), writePayload);
+        if (editingCategory && editingCategory !== form.category) {
+          await updateSummary({
+            categoryDelta: {
+              [editingCategory]: -1,
+              [form.category]: 1,
+            },
+          });
+        }
         flash('Place updated!', 'success');
         resetForm();
       } else {
@@ -1337,6 +1654,12 @@ export function TouristPlacesManager() {
           createdAt: serverTimestamp(),
         });
         createdId = createdRef.id;
+        await updateSummary({
+          total: 1,
+          categoryDelta: {
+            [form.category]: 1,
+          },
+        });
         flash('Place added!', 'success');
 
         // Keep editor open after create and switch to edit mode for the new place.
@@ -1360,7 +1683,15 @@ export function TouristPlacesManager() {
         const nextPlaces = editingId
           ? prev.map((place) => (place.id === editingId ? { ...place, ...cachePayload } : place))
           : [{ id: createdId ?? '', ...cachePayload, createdAt: nowIso }, ...prev];
-        setAdminCollectionCache(TOURIST_PLACES_CACHE_KEY, nextPlaces, TOURIST_PLACES_CACHE_TTL_MS);
+        setAdminCollectionCache(
+          buildFilterCacheKey(appliedFilters),
+          {
+            places: nextPlaces,
+            hasMore,
+            lastFetchMs: Date.now(),
+          },
+          TOURIST_PLACES_CACHE_TTL_MS,
+        );
         return nextPlaces;
       });
     } catch (err: unknown) {
@@ -1381,11 +1712,28 @@ export function TouristPlacesManager() {
     });
     if (!confirmed) return;
     try {
+      const toDelete = places.find((place) => place.id === id) || null;
       await deleteDoc(doc(firestoreDb, 'touristPlaces', id));
+      if (toDelete?.category) {
+        await updateSummary({
+          total: -1,
+          categoryDelta: {
+            [toDelete.category]: -1,
+          },
+        });
+      }
       flash('Place deleted.', 'success');
       setPlaces((prev) => {
         const nextPlaces = prev.filter((place) => place.id !== id);
-        setAdminCollectionCache(TOURIST_PLACES_CACHE_KEY, nextPlaces, TOURIST_PLACES_CACHE_TTL_MS);
+        setAdminCollectionCache(
+          buildFilterCacheKey(appliedFilters),
+          {
+            places: nextPlaces,
+            hasMore,
+            lastFetchMs: Date.now(),
+          },
+          TOURIST_PLACES_CACHE_TTL_MS,
+        );
         return nextPlaces;
       });
     } catch {
@@ -1464,6 +1812,8 @@ export function TouristPlacesManager() {
       const rows = await parseImportRows(importFile);
       const errors: string[] = [];
       let importedRows = 0;
+      const preparedDocs: Array<Omit<TouristPlace, 'id'> & { createdAt: ReturnType<typeof serverTimestamp>; updatedAt: ReturnType<typeof serverTimestamp> }> = [];
+      const categoryDelta: Record<string, number> = {};
 
       for (let i = 0; i < rows.length; i += 1) {
         const { rowNumber, data } = rows[i];
@@ -1484,14 +1834,17 @@ export function TouristPlacesManager() {
         }
 
         const safeCategory = CATEGORIES.includes(category) ? category : 'Other';
+        categoryDelta[safeCategory] = (categoryDelta[safeCategory] || 0) + 1;
 
-        await addDoc(collection(firestoreDb, 'touristPlaces'), {
+        preparedDocs.push({
           name,
           area,
+          city: area.trim().toLowerCase(),
           state,
           country,
           description,
           category: safeCategory,
+          isActive: true,
           googleMapsUrl,
           coverImage: '',
           media: [],
@@ -1506,8 +1859,25 @@ export function TouristPlacesManager() {
           updatedAt: serverTimestamp(),
         });
 
-        importedRows += 1;
         setImportProgress(Math.round(((i + 1) / rows.length) * 100));
+      }
+
+      for (let start = 0; start < preparedDocs.length; start += 450) {
+        const chunk = preparedDocs.slice(start, start + 450);
+        const batch = writeBatch(firestoreDb);
+        chunk.forEach((payload) => {
+          const ref = doc(collection(firestoreDb, 'touristPlaces'));
+          batch.set(ref, payload);
+        });
+        await batch.commit();
+        importedRows += chunk.length;
+      }
+
+      if (importedRows > 0) {
+        await updateSummary({
+          total: importedRows,
+          categoryDelta,
+        });
       }
 
       const summary: TouristImportSummary = {
@@ -1525,7 +1895,7 @@ export function TouristPlacesManager() {
       }
 
       setImportFile(null);
-      await fetchPlaces(true);
+      await fetchPlaces({ reset: true, forceRefresh: true });
     } catch (err: unknown) {
       setImportError(err instanceof Error ? err.message : 'Import failed.');
     } finally {
@@ -1590,7 +1960,7 @@ export function TouristPlacesManager() {
         if (cancelled) return;
         if (progress.status === 'completed') {
           flash('Migration completed successfully.', 'success');
-          await fetchPlaces(true);
+          await fetchPlaces({ reset: true, forceRefresh: true });
           if (intervalId) clearInterval(intervalId);
         }
         if (progress.status === 'failed') {
@@ -1618,26 +1988,30 @@ export function TouristPlacesManager() {
   const pendingImages = pendingFiles.filter((p) => p.type === 'image');
   const pendingVideos = pendingFiles.filter((p) => p.type === 'video');
 
-  const filteredPlaces = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return places;
+  const handleApplyFilters = () => {
+    const nextFilters: TouristPlacesFilters = {
+      search: searchInput.trim(),
+      location: cityInput.trim(),
+      status: statusInput,
+    };
+    setAppliedFilters(nextFilters);
+    lastDocRef.current = null;
+    void fetchPlaces({ reset: true, forceRefresh: true, filters: nextFilters });
+  };
 
-    return places.filter((place) => {
-      const haystack = [
-        place.name,
-        place.area,
-        place.state,
-        place.country,
-        place.category,
-        stripRichTextTags(place.description || ''),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      return haystack.includes(q);
-    });
-  }, [places, searchQuery]);
+  const handleResetFilters = () => {
+    setSearchInput('');
+    setCityInput('');
+    setStatusInput('all');
+    const resetFilters: TouristPlacesFilters = {
+      search: '',
+      location: '',
+      status: 'all',
+    };
+    setAppliedFilters(resetFilters);
+    lastDocRef.current = null;
+    void fetchPlaces({ reset: true, forceRefresh: true, filters: resetFilters });
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -1667,8 +2041,13 @@ export function TouristPlacesManager() {
             </p>
             <div className="flex items-center gap-2 mt-4">
               <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full">
-                <MapPin className="h-3.5 w-3.5" /> {places.length} place{places.length !== 1 ? 's' : ''}
+                <MapPin className="h-3.5 w-3.5" /> {summary.totalCount || places.length} place{(summary.totalCount || places.length) !== 1 ? 's' : ''}
               </span>
+              {summary.updatedAtLabel && (
+                <span className="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white/85 text-xs font-medium px-3 py-1.5 rounded-full">
+                  Updated {summary.updatedAtLabel}
+                </span>
+              )}
             </div>
           </div>
           <div className="shrink-0 flex flex-wrap gap-2 justify-start sm:justify-end">
@@ -1723,16 +2102,46 @@ export function TouristPlacesManager() {
         </div>
       </motion.div>
 
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search places by name, area, state, country, category..."
-          className="h-10"
-        />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Showing {filteredPlaces.length} of {places.length} place{places.length !== 1 ? 's' : ''}
-        </p>
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by name prefix..."
+            className="h-10"
+          />
+          <Input
+            value={cityInput}
+            onChange={(e) => setCityInput(e.target.value)}
+            placeholder="Location filter (city/area/state/country)"
+            className="h-10"
+          />
+          <select
+            value={statusInput}
+            onChange={(e) => setStatusInput(e.target.value as 'all' | 'active' | 'inactive')}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={handleApplyFilters}>
+              Apply Filters
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={handleResetFilters}>
+              Reset
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Loaded {places.length} places in current view. Reads are scoped to query filters and page size.
+          </p>
+          <Button variant="outline" onClick={handleManualRefresh} disabled={loading}>
+            {loading ? 'Refreshing...' : 'Manual Refresh'}
+          </Button>
+        </div>
       </div>
 
       {(importFile || importError || importSummary) && (
@@ -1857,6 +2266,18 @@ export function TouristPlacesManager() {
                 </select>
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="tp-status">Status</Label>
+                <select
+                  id="tp-status"
+                  value={form.isActive === false ? 'inactive' : 'active'}
+                  onChange={(e) => setForm({ ...form, isActive: e.target.value === 'active' })}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="tp-state">State / Region <span className="text-destructive">*</span></Label>
                 <Input id="tp-state" placeholder="e.g. Andhra Pradesh"
                   value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} required />
@@ -1867,9 +2288,11 @@ export function TouristPlacesManager() {
                   value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
               </div>
               <div className="space-y-1.5 md:col-span-2">
-                <Label htmlFor="tp-area">Area / Locality</Label>
+                <Label htmlFor="tp-area">City / Area</Label>
                 <Input id="tp-area" placeholder="e.g. Tirumala Hills, Old Town"
-                  value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} />
+                  value={form.area}
+                  onChange={(e) => setForm({ ...form, area: e.target.value, city: e.target.value })}
+                />
               </div>
               <RichTextEditor
                 id="tp-desc"
@@ -2390,7 +2813,7 @@ export function TouristPlacesManager() {
             </motion.div>
           ))}
         </div>
-      ) : filteredPlaces.length === 0 ? (
+      ) : places.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -2427,7 +2850,7 @@ export function TouristPlacesManager() {
           variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
         >
-          {filteredPlaces.map((place) => {
+          {places.map((place) => {
             const placeImages = (place.media ?? []).filter((m) => m.type === 'image');
             const placeVideos = (place.media ?? []).filter((m) => m.type === 'video');
             const allMedia = place.media ?? [];
@@ -2463,7 +2886,7 @@ export function TouristPlacesManager() {
                   {/* Actions - always show on mobile, hover on desktop */}
                   <div className="absolute top-3 right-3 flex gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                      onClick={() => handleEdit(place)}
+                      onClick={() => place.id && void handleEdit(place.id)}
                       className="p-1.5 rounded-lg bg-white/90 hover:bg-white shadow-md text-gray-700 hover:text-rose-600 transition-colors">
                       <Pencil className="h-3.5 w-3.5" />
                     </motion.button>
@@ -2564,6 +2987,18 @@ export function TouristPlacesManager() {
             );
           })}
         </motion.div>
+      )}
+
+      {!loading && places.length > 0 && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => void fetchPlaces({ reset: false, forceRefresh: true })}
+            disabled={!hasMore || loadingMore}
+          >
+            {loadingMore ? 'Loading More...' : hasMore ? 'Load More' : 'No More Results'}
+          </Button>
+        </div>
       )}
 
       {/* Gallery Modal */}

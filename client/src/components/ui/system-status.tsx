@@ -1,15 +1,19 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Database, Zap, Activity, Bot } from 'lucide-react';
 import { adminAPI } from '@/lib/api';
 
-export const SystemStatus = memo(() => {
+interface SystemStatusProps {
+  refreshTrigger?: number;
+}
+
+export const SystemStatus = memo(({ refreshTrigger = 0 }: SystemStatusProps) => {
   const [statusItems, setStatusItems] = useState([
-    { label: 'Firebase Auth',   status: 'Checking...', color: 'text-gray-500', icon: Shield,   percentage: 0 },
-    { label: 'Firestore DB',    status: 'Checking...', color: 'text-gray-500', icon: Database, percentage: 0 },
-    { label: 'Realtime DB',     status: 'Checking...', color: 'text-gray-500', icon: Zap,      percentage: 0 },
-    { label: 'Gemini API',      status: 'Checking...', color: 'text-gray-500', icon: Bot,      percentage: 0 },
-    { label: 'Response Time',   status: 'Checking...', color: 'text-gray-500', icon: Activity, percentage: 0 },
+    { label: 'Firebase Auth', status: 'Checking...', color: 'text-gray-500', icon: Shield, percentage: 0 },
+    { label: 'Firestore DB', status: 'Checking...', color: 'text-gray-500', icon: Database, percentage: 0 },
+    { label: 'Realtime DB', status: 'Checking...', color: 'text-gray-500', icon: Zap, percentage: 0 },
+    { label: 'Gemini API', status: 'Checking...', color: 'text-gray-500', icon: Bot, percentage: 0 },
+    { label: 'Response Time', status: 'Checking...', color: 'text-gray-500', icon: Activity, percentage: 0 },
   ]);
   const [quotaTelemetry, setQuotaTelemetry] = useState<{
     generatedAt: string;
@@ -27,16 +31,17 @@ export const SystemStatus = memo(() => {
   } | null>(null);
 
   useEffect(() => {
+    if (!refreshTrigger) return;
+
     const checkStatus = async () => {
       const results = [
-        { label: 'Firebase Auth',   icon: Shield,   ok: false, detail: 'Offline', pct: 0 },
-        { label: 'Firestore DB',    icon: Database, ok: false, detail: 'Offline', pct: 0 },
-        { label: 'Realtime DB',     icon: Zap,      ok: false, detail: 'Offline', pct: 0 },
-        { label: 'Gemini API',      icon: Bot,      ok: false, detail: 'Offline', pct: 0 },
-        { label: 'Response Time',   icon: Activity, ok: false, detail: 'Unknown', pct: 0 },
+        { label: 'Firebase Auth', icon: Shield, ok: false, detail: 'Offline', pct: 0 },
+        { label: 'Firestore DB', icon: Database, ok: false, detail: 'Offline', pct: 0 },
+        { label: 'Realtime DB', icon: Zap, ok: false, detail: 'Offline', pct: 0 },
+        { label: 'Gemini API', icon: Bot, ok: false, detail: 'Offline', pct: 0 },
+        { label: 'Response Time', icon: Activity, ok: false, detail: 'Unknown', pct: 0 },
       ];
 
-      // Prefer server-side health checks to avoid client auth/rules timing false negatives.
       try {
         const serverRes = await adminAPI.getSystemStatus();
         const payload = serverRes?.data?.data;
@@ -60,9 +65,7 @@ export const SystemStatus = memo(() => {
 
           const geminiMs = Number(payload?.gemini?.ms || 0);
           results[3].ok = payload?.gemini?.ok === true;
-          results[3].detail = results[3].ok
-            ? `${geminiMs}ms`
-            : String(payload?.gemini?.detail || 'Offline');
+          results[3].detail = results[3].ok ? `${geminiMs}ms` : String(payload?.gemini?.detail || 'Offline');
           results[3].pct = results[3].ok ? 100 : 0;
 
           const rtForUi = totalMs > 0 ? totalMs : Math.max(firestoreMs, rtdbMs);
@@ -70,12 +73,12 @@ export const SystemStatus = memo(() => {
           results[4].detail = `${rtForUi}ms`;
           results[4].pct = Math.max(0, Math.min(100, Math.round(100 - (rtForUi / 20))));
 
-          setStatusItems(results.map(r => ({
-            label:      r.label,
-            status:     r.detail,
-            color:      r.ok ? 'text-green-500' : 'text-red-500',
-            icon:       r.icon,
-            percentage: r.pct,
+          setStatusItems(results.map((result) => ({
+            label: result.label,
+            status: result.detail,
+            color: result.ok ? 'text-green-500' : 'text-red-500',
+            icon: result.icon,
+            percentage: result.pct,
           })));
         }
       } catch {
@@ -93,10 +96,20 @@ export const SystemStatus = memo(() => {
       }
     };
 
-    checkStatus();
-    const interval = setInterval(checkStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    void checkStatus();
+  }, [refreshTrigger]);
+
+  if (!refreshTrigger) {
+    return (
+      <div className="border-border bg-card/40 rounded-xl border p-6">
+        <h3 className="mb-4 text-xl font-semibold">System Status</h3>
+        <p className="text-sm text-muted-foreground">
+          Click Refresh Dashboard to load system health and quota telemetry.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="border-border bg-card/40 rounded-xl border p-6">
       <h3 className="mb-4 text-xl font-semibold">System Status</h3>
@@ -124,9 +137,7 @@ export const SystemStatus = memo(() => {
                     className={`h-full rounded-full ${item.color.replace('text-', 'bg-')}`}
                   />
                 </div>
-                <span
-                  className={`text-sm font-medium ${item.color} min-w-15 text-right`}
-                >
+                <span className={`min-w-15 text-right text-sm font-medium ${item.color}`}>
                   {item.status}
                 </span>
               </div>

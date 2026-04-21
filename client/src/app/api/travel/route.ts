@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
 import { adminDb as db } from '@/lib/server/firebaseAdminFirestore';
+import { FieldPath } from 'firebase-admin/firestore';
 
 interface TravelDestinationDoc {
   place?: string;
@@ -85,34 +86,84 @@ const normalizeTravelDoc = (id: string, doc: Record<string, unknown>) => ({
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const searchQuery = searchParams.get('search');
+    const searchQuery = (searchParams.get('search') || '').trim().toLowerCase();
+    const countryFilter = (searchParams.get('country') || '').trim().toLowerCase();
+    const cursor = (searchParams.get('cursor') || '').trim();
+    const requestedLimit = Number(searchParams.get('limit') || '30');
+    const pageLimit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
+      : 30;
 
     if (!db) {
       return fail('Database not initialized', 500);
     }
 
-    let query = db.collection('travel-destinations');
+    const hasFilters = Boolean(searchQuery || countryFilter);
 
-    if (searchQuery && searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const snapshot = await query.get();
-      
-      const results = snapshot.docs
-        .map(doc => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>))
-        .filter((doc: TravelDestinationDoc) => {
-          const place = (doc.place || '').toLowerCase();
-          const country = (doc.country || '').toLowerCase();
-          return place.includes(q) || country.includes(q);
-        });
+    if (!hasFilters) {
+      let pageQuery = db
+        .collection('travel-destinations')
+        .orderBy(FieldPath.documentId())
+        .limit(pageLimit);
 
-      return ok({ results }, 200);
+      if (cursor) {
+        pageQuery = pageQuery.startAfter(cursor);
+      }
+
+      const snapshot = await pageQuery.get();
+      const results = snapshot.docs.map((doc) => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
+      const hasMore = snapshot.size === pageLimit;
+      const nextCursor = hasMore ? snapshot.docs[snapshot.docs.length - 1]?.id || null : null;
+      return ok({ results, hasMore, nextCursor }, 200);
     }
 
-    // Return all documents if no search query
-    const snapshot = await query.get();
-    const results = snapshot.docs.map(doc => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
+    const matchesFilters = (doc: TravelDestinationDoc) => {
+      const place = String(doc.place || '').toLowerCase();
+      const country = String(doc.country || '').toLowerCase();
+      const matchesSearch = searchQuery ? place.includes(searchQuery) || country.includes(searchQuery) : true;
+      const matchesCountry = countryFilter ? country.includes(countryFilter) : true;
+      return matchesSearch && matchesCountry;
+    };
 
-    return ok({ results }, 200);
+    const scanChunkSize = Math.max(pageLimit * 2, 50);
+    const maxScanRounds = 8;
+    let round = 0;
+    let scanCursor = cursor;
+    let hasMore = true;
+    const collected: ReturnType<typeof normalizeTravelDoc>[] = [];
+
+    while (collected.length < pageLimit && round < maxScanRounds && hasMore) {
+      let scanQuery = db
+        .collection('travel-destinations')
+        .orderBy(FieldPath.documentId())
+        .limit(scanChunkSize);
+
+      if (scanCursor) {
+        scanQuery = scanQuery.startAfter(scanCursor);
+      }
+
+      const snapshot = await scanQuery.get();
+      if (snapshot.empty) {
+        hasMore = false;
+        break;
+      }
+
+      snapshot.docs.forEach((doc) => {
+        const normalized = normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>);
+        if (matchesFilters(normalized)) {
+          collected.push(normalized);
+        }
+      });
+
+      scanCursor = snapshot.docs[snapshot.docs.length - 1]?.id || scanCursor;
+      hasMore = snapshot.size === scanChunkSize;
+      round += 1;
+    }
+
+    const results = collected.slice(0, pageLimit);
+    const nextCursor = hasMore ? scanCursor || null : null;
+
+    return ok({ results, hasMore, nextCursor }, 200);
   } catch (error: any) {
     console.error('GET /api/travel error:', error);
     return fail(error.message || 'Failed to fetch travel data', 500);

@@ -5,11 +5,19 @@ import { BarChart3, Calendar } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 
-export const RevenueChart = memo(() => {
+interface RevenueChartProps {
+  refreshTrigger?: number;
+}
+
+export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => {
   const [chartData, setChartData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const fetchRevenueData = useCallback(async () => {
+    setLoading(true);
+    setHasLoaded(true);
+
     try {
       const paymentsSnap = await getDocs(
         query(collection(firestoreDb, 'subscriptionPayments'), where('status', '==', 'paid')),
@@ -56,7 +64,10 @@ export const RevenueChart = memo(() => {
     }
   }, []);
 
-  useEffect(() => { fetchRevenueData(); }, [fetchRevenueData]);
+  useEffect(() => {
+    if (!refreshTrigger) return;
+    void fetchRevenueData();
+  }, [fetchRevenueData, refreshTrigger]);
 
   // Derive summary stats without extra state
   const { totalRevenue, maxValue, avgRevenue, totalGrowth } = useMemo(() => {
@@ -75,6 +86,19 @@ export const RevenueChart = memo(() => {
         <div className="text-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading revenue data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasLoaded) {
+    return (
+      <div className="border-border bg-card/40 rounded-xl border p-6">
+        <div className="py-12 text-center">
+          <h3 className="text-lg font-semibold">Revenue Analytics</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Click Refresh Dashboard to load revenue data.
+          </p>
         </div>
       </div>
     );

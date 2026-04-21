@@ -1154,14 +1154,22 @@ const ChatRoomsList: React.FC = () => {
     e.target.value = '';
   };
 
-  // Fetch tourist places from Firestore when explore section opens
+  // Fetch tourist places once when the explore section opens.
   useEffect(() => {
     if (selectedCategory !== 'outdoors') return;
-    const q = query(collection(firestoreDb, 'touristPlaces'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
+    let cancelled = false;
+
+    const fetchPlaces = async () => {
+      const q = query(collection(firestoreDb, 'touristPlaces'), orderBy('createdAt', 'desc'), limit(60));
+      const snap = await getDocs(q);
+      if (cancelled) return;
       setFirestorePlaces(snap.docs.map((d) => ({ id: d.id, ...d.data() } as TouristPlace)));
-    });
-    return () => unsub();
+    };
+
+    void fetchPlaces();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCategory]);
 
   useEffect(() => {

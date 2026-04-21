@@ -18,10 +18,12 @@ import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCol
 import {
   collection,
   collectionGroup,
+  documentId,
   getDocs,
   limit,
   orderBy,
   query,
+  startAfter,
 } from 'firebase/firestore';
 
 interface TripStoryAdminRow {
@@ -117,14 +119,23 @@ const PANEL_CARD_CLASS =
   'border-border/70 bg-card/90 backdrop-blur-sm shadow-lg transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl';
 const TRIP_STORIES_CACHE_KEY = 'trip-stories-admin-data';
 const TRIP_STORIES_CACHE_TTL_MS = 5 * 60 * 1000;
+const TRIP_STORIES_PAGE_SIZE = 40;
+const TRIP_STORIES_COMMENTS_PAGE_SIZE = 80;
 
 export function TripStoriesAdminPanel() {
   const [stories, setStories] = useState<TripStoryAdminRow[]>([]);
   const [comments, setComments] = useState<TripStoryCommentRow[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [activeActionFilter, setActiveActionFilter] = useState<ActionFilter>('all');
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [commentsLoading, setCommentsLoading] = useState(true);
+  const [loadingMoreStories, setLoadingMoreStories] = useState(false);
+  const [loadingMoreComments, setLoadingMoreComments] = useState(false);
+  const [hasMoreStories, setHasMoreStories] = useState(false);
+  const [hasMoreComments, setHasMoreComments] = useState(false);
+  const [storiesCursor, setStoriesCursor] = useState<string | null>(null);
+  const [commentsCursor, setCommentsCursor] = useState<string | null>(null);
   const [commentsError, setCommentsError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [migrationJobId, setMigrationJobId] = useState<string | null>(null);
@@ -132,96 +143,206 @@ export function TripStoriesAdminPanel() {
   const [migrationStarting, setMigrationStarting] = useState(false);
   const [migrationNotice, setMigrationNotice] = useState('');
 
-  const loadTripStoriesData = useCallback(async (isManualRefresh = false) => {
-    if (isManualRefresh) {
-      setRefreshing(true);
-    } else {
+  const mergeById = useCallback(<T extends { id: string }>(current: T[], incoming: T[]) => {
+    const byId = new Map<string, T>();
+    current.forEach((item) => byId.set(item.id, item));
+    incoming.forEach((item) => byId.set(item.id, item));
+    return Array.from(byId.values());
+  }, []);
+
+  const sortStories = useCallback((items: TripStoryAdminRow[]) => {
+    return [...items].sort((a, b) => (safeDate(b.createdAt)?.getTime() ?? 0) - (safeDate(a.createdAt)?.getTime() ?? 0));
+  }, []);
+
+  const sortComments = useCallback((items: TripStoryCommentRow[]) => {
+    return [...items].sort((a, b) => (safeDate(b.createdAt)?.getTime() ?? 0) - (safeDate(a.createdAt)?.getTime() ?? 0));
+  }, []);
+
+  const loadTripStoriesData = useCallback(async (options?: {
+    isManualRefresh?: boolean;
+    reset?: boolean;
+    loadMoreStories?: boolean;
+    loadMoreComments?: boolean;
+    forceRefresh?: boolean;
+  }) => {
+    const isManualRefresh = options?.isManualRefresh ?? false;
+    const reset = options?.reset ?? false;
+    const loadMoreStoriesRequest = options?.loadMoreStories ?? false;
+    const loadMoreCommentsRequest = options?.loadMoreComments ?? false;
+    const forceRefresh = options?.forceRefresh ?? false;
+
+    if (isManualRefresh) setRefreshing(true);
+    if (reset) {
       setStoriesLoading(true);
       setCommentsLoading(true);
     }
+    if (loadMoreStoriesRequest) setLoadingMoreStories(true);
+    if (loadMoreCommentsRequest) setLoadingMoreComments(true);
 
     try {
-      if (!isManualRefresh) {
+      if (reset && !forceRefresh && !isManualRefresh) {
         const cached = getAdminCollectionCache<{
           stories: TripStoryAdminRow[];
           comments: TripStoryCommentRow[];
+          hasMoreStories: boolean;
+          hasMoreComments: boolean;
+          storiesCursor: string | null;
+          commentsCursor: string | null;
         }>(TRIP_STORIES_CACHE_KEY);
 
         if (cached) {
           setStories(cached.stories);
           setComments(cached.comments);
+          setHasMoreStories(cached.hasMoreStories);
+          setHasMoreComments(cached.hasMoreComments);
+          setStoriesCursor(cached.storiesCursor);
+          setCommentsCursor(cached.commentsCursor);
           setCommentsError('');
           return;
         }
       }
 
-      const storiesQuery = query(
-        collection(firestoreDb, 'stories'),
-        orderBy('createdAt', 'desc'),
-        limit(300)
-      );
-      const commentsQuery = query(
-        collectionGroup(firestoreDb, 'comments'),
-        orderBy('createdAt', 'desc'),
-        limit(400)
-      );
+      const shouldLoadStories = reset || loadMoreStoriesRequest || isManualRefresh;
+      const shouldLoadComments = reset || loadMoreCommentsRequest || isManualRefresh;
 
-      const [storiesSnap, commentsSnap] = await Promise.all([
-        getDocs(storiesQuery),
-        getDocs(commentsQuery),
-      ]);
+      let storyRows: TripStoryAdminRow[] | null = null;
+      let commentRows: TripStoryCommentRow[] | null = null;
+      let nextStoriesCursor: string | null = storiesCursor;
+      let nextCommentsCursor: string | null = commentsCursor;
+      let nextHasMoreStories = hasMoreStories;
+      let nextHasMoreComments = hasMoreComments;
 
-      const storyRows = storiesSnap.docs.map((docSnap) => {
-        const data = docSnap.data() as any;
-        return {
-          id: docSnap.id,
-          title: data.title ?? 'Untitled Story',
-          destination: data.destination ?? 'Unknown destination',
-          authorName: data.authorName ?? 'Unknown user',
-          authorEmail: data.authorEmail,
-          authorId: data.authorId,
-          travelType: data.travelType,
-          duration: data.duration,
-          budget: data.budget,
-          likes: Array.isArray(data.likes) ? data.likes : [],
-          commentCount: typeof data.commentCount === 'number' ? data.commentCount : 0,
-          photos: Array.isArray(data.photos) ? data.photos : [],
-          videos: Array.isArray(data.videos) ? data.videos : [],
-          createdAt: safeDate(data.createdAt)?.toISOString() ?? null,
-        } as TripStoryAdminRow;
-      });
+      if (shouldLoadStories) {
+        let storiesQuery = query(
+          collection(firestoreDb, 'stories'),
+          orderBy(documentId()),
+          limit(TRIP_STORIES_PAGE_SIZE),
+        );
+        if (!reset && storiesCursor) {
+          storiesQuery = query(
+            collection(firestoreDb, 'stories'),
+            orderBy(documentId()),
+            startAfter(storiesCursor),
+            limit(TRIP_STORIES_PAGE_SIZE),
+          );
+        }
 
-      const commentRows = commentsSnap.docs.map((docSnap) => {
-        const data = docSnap.data() as any;
-        return {
-          id: docSnap.id,
-          storyId: docSnap.ref.parent.parent?.id ?? '',
-          userName: data.userName ?? 'Unknown user',
-          text: data.text ?? '',
-          createdAt: safeDate(data.createdAt)?.toISOString() ?? null,
-        } as TripStoryCommentRow;
-      });
+        const storiesSnap = await getDocs(storiesQuery);
+        storyRows = storiesSnap.docs.map((docSnap) => {
+          const data = docSnap.data() as any;
+          return {
+            id: docSnap.id,
+            title: data.title ?? 'Untitled Story',
+            destination: data.destination ?? 'Unknown destination',
+            authorName: data.authorName ?? 'Unknown user',
+            authorEmail: data.authorEmail,
+            authorId: data.authorId,
+            travelType: data.travelType,
+            duration: data.duration,
+            budget: data.budget,
+            likes: Array.isArray(data.likes) ? data.likes : [],
+            commentCount: typeof data.commentCount === 'number' ? data.commentCount : 0,
+            photos: Array.isArray(data.photos) ? data.photos : [],
+            videos: Array.isArray(data.videos) ? data.videos : [],
+            createdAt: safeDate(data.createdAt)?.toISOString() ?? null,
+          } as TripStoryAdminRow;
+        });
 
-      setStories(storyRows);
-      setComments(commentRows);
+        nextHasMoreStories = storiesSnap.size === TRIP_STORIES_PAGE_SIZE;
+        nextStoriesCursor = storiesSnap.docs.length > 0
+          ? storiesSnap.docs[storiesSnap.docs.length - 1].id
+          : (reset ? null : storiesCursor);
+      }
+
+      if (shouldLoadComments) {
+        let commentsQuery = query(
+          collectionGroup(firestoreDb, 'comments'),
+          orderBy(documentId()),
+          limit(TRIP_STORIES_COMMENTS_PAGE_SIZE),
+        );
+        if (!reset && commentsCursor) {
+          commentsQuery = query(
+            collectionGroup(firestoreDb, 'comments'),
+            orderBy(documentId()),
+            startAfter(commentsCursor),
+            limit(TRIP_STORIES_COMMENTS_PAGE_SIZE),
+          );
+        }
+
+        const commentsSnap = await getDocs(commentsQuery);
+        commentRows = commentsSnap.docs.map((docSnap) => {
+          const data = docSnap.data() as any;
+          return {
+            id: docSnap.id,
+            storyId: docSnap.ref.parent.parent?.id ?? '',
+            userName: data.userName ?? 'Unknown user',
+            text: data.text ?? '',
+            createdAt: safeDate(data.createdAt)?.toISOString() ?? null,
+          } as TripStoryCommentRow;
+        });
+
+        nextHasMoreComments = commentsSnap.size === TRIP_STORIES_COMMENTS_PAGE_SIZE;
+        nextCommentsCursor = commentsSnap.docs.length > 0
+          ? commentsSnap.docs[commentsSnap.docs.length - 1].id
+          : (reset ? null : commentsCursor);
+      }
+
+      if (storyRows) {
+        setStories((prev) => sortStories(reset ? storyRows! : mergeById(prev, storyRows!)));
+      }
+      if (commentRows) {
+        setComments((prev) => sortComments(reset ? commentRows! : mergeById(prev, commentRows!)));
+      }
+
+      setHasMoreStories(nextHasMoreStories);
+      setHasMoreComments(nextHasMoreComments);
+      setStoriesCursor(nextStoriesCursor);
+      setCommentsCursor(nextCommentsCursor);
       setCommentsError('');
-      setAdminCollectionCache(TRIP_STORIES_CACHE_KEY, {
-        stories: storyRows,
-        comments: commentRows,
-      }, TRIP_STORIES_CACHE_TTL_MS);
+
+      if (reset) {
+        const cacheStories = storyRows ? sortStories(storyRows) : stories;
+        const cacheComments = commentRows ? sortComments(commentRows) : comments;
+        setAdminCollectionCache(
+          TRIP_STORIES_CACHE_KEY,
+          {
+            stories: cacheStories,
+            comments: cacheComments,
+            hasMoreStories: nextHasMoreStories,
+            hasMoreComments: nextHasMoreComments,
+            storiesCursor: nextStoriesCursor,
+            commentsCursor: nextCommentsCursor,
+          },
+          TRIP_STORIES_CACHE_TTL_MS,
+        );
+      }
     } catch (error: any) {
-      setStories([]);
-      setComments([]);
+      if (reset) {
+        setStories([]);
+        setComments([]);
+      }
       setCommentsError(error?.message || 'Unable to load comments.');
     } finally {
       setStoriesLoading(false);
       setCommentsLoading(false);
       setRefreshing(false);
+      setLoadingMoreStories(false);
+      setLoadingMoreComments(false);
     }
-  }, []);
+  }, [
+    comments,
+    commentsCursor,
+    hasMoreComments,
+    hasMoreStories,
+    mergeById,
+    sortComments,
+    sortStories,
+    stories,
+    storiesCursor,
+  ]);
 
   useEffect(() => {
-    void loadTripStoriesData();
+    void loadTripStoriesData({ reset: true });
   }, [loadTripStoriesData]);
 
   const storyTitleMap = useMemo(() => {
@@ -288,7 +409,7 @@ export function TripStoriesAdminPanel() {
   }, [stories, comments, storyTitleMap]);
 
   const filteredStories = useMemo(() => {
-    const queryText = searchTerm.trim().toLowerCase();
+    const queryText = appliedSearch.trim().toLowerCase();
     if (!queryText) return stories;
 
     return stories.filter((story) => {
@@ -298,10 +419,10 @@ export function TripStoriesAdminPanel() {
         .toLowerCase();
       return haystack.includes(queryText);
     });
-  }, [stories, searchTerm]);
+  }, [appliedSearch, stories]);
 
   const filteredRecentActions = useMemo(() => {
-    const queryText = searchTerm.trim().toLowerCase();
+    const queryText = appliedSearch.trim().toLowerCase();
 
     return recentActions.filter((action) => {
       const matchesFilter = activeActionFilter === 'all' || action.actionType === activeActionFilter;
@@ -311,10 +432,10 @@ export function TripStoriesAdminPanel() {
       const haystack = `${action.storyTitle} ${action.actor} ${action.description}`.toLowerCase();
       return haystack.includes(queryText);
     });
-  }, [recentActions, activeActionFilter, searchTerm]);
+  }, [activeActionFilter, appliedSearch, recentActions]);
 
   const filteredComments = useMemo(() => {
-    const queryText = searchTerm.trim().toLowerCase();
+    const queryText = appliedSearch.trim().toLowerCase();
     if (!queryText) return comments;
 
     return comments.filter((comment) => {
@@ -322,7 +443,7 @@ export function TripStoriesAdminPanel() {
       const haystack = `${comment.userName} ${comment.text} ${storyTitle}`.toLowerCase();
       return haystack.includes(queryText);
     });
-  }, [comments, searchTerm, storyTitleMap]);
+  }, [appliedSearch, comments, storyTitleMap]);
 
   const topDestinations = useMemo(() => {
     const countMap = new Map<string, number>();
@@ -573,15 +694,30 @@ export function TripStoriesAdminPanel() {
           <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
             Search across stories, actions, and comments
           </p>
-          <div className="flex w-full gap-2 sm:max-w-xl">
+          <div className="flex w-full flex-wrap gap-2 sm:max-w-2xl">
             <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Search story title, destination, user..."
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+              className="h-10 min-w-70 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
             />
             <button
-              onClick={() => void loadTripStoriesData(true)}
+              onClick={() => setAppliedSearch(searchInput.trim())}
+              className="h-10 shrink-0 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
+            >
+              Apply
+            </button>
+            <button
+              onClick={() => {
+                setSearchInput('');
+                setAppliedSearch('');
+              }}
+              className="h-10 shrink-0 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => void loadTripStoriesData({ isManualRefresh: true, reset: true, forceRefresh: true })}
               disabled={refreshing || storiesLoading || commentsLoading}
               className="h-10 shrink-0 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -649,6 +785,16 @@ export function TripStoriesAdminPanel() {
                     ) : null}
                   </motion.div>
                 ))}
+                <div className="flex justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => void loadTripStoriesData({ loadMoreStories: true })}
+                    disabled={!hasMoreStories || loadingMoreStories}
+                    className="rounded-lg border border-border px-3 py-2 text-xs text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loadingMoreStories ? 'Loading...' : hasMoreStories ? 'Load More Stories' : 'No More Stories'}
+                  </button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -765,6 +911,16 @@ export function TripStoriesAdminPanel() {
                   </p>
                 </motion.div>
               ))}
+              <div className="flex justify-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => void loadTripStoriesData({ loadMoreComments: true })}
+                  disabled={!hasMoreComments || loadingMoreComments}
+                  className="rounded-lg border border-border px-3 py-2 text-xs text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loadingMoreComments ? 'Loading...' : hasMoreComments ? 'Load More Comments' : 'No More Comments'}
+                </button>
+              </div>
             </div>
           )}
         </CardContent>

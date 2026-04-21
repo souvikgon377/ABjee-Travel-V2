@@ -83,6 +83,12 @@ const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Introduction,Travel
 Goa,India,"A coastal escape with beaches, old churches, and vibrant nightlife.","Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
 const TRAVEL_ITINERARY_CACHE_KEY = 'travel-itinerary-admin-list';
 const TRAVEL_ITINERARY_CACHE_TTL_MS = 5 * 60 * 1000;
+const TRAVEL_ITINERARY_PAGE_SIZE = 30;
+
+interface TravelListFilters {
+	search: string;
+	country: string;
+}
 
 const normalizeCoordinateInput = (value: string) => value.replace(/\s+/g, '').replace(/,/g, '.');
 
@@ -138,8 +144,16 @@ const getTravelItemImage = (item: TravelItem): string => {
 
 export default function AdminTravelItenary() {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
-	const [itinerarySearch, setItinerarySearch] = useState('');
+	const [itinerarySearchInput, setItinerarySearchInput] = useState('');
+	const [countryFilterInput, setCountryFilterInput] = useState('');
+	const [appliedFilters, setAppliedFilters] = useState<TravelListFilters>({
+		search: '',
+		country: '',
+	});
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
+	const [loadingMoreItineraries, setLoadingMoreItineraries] = useState(false);
+	const [hasMoreItineraries, setHasMoreItineraries] = useState(false);
+	const [itineraryCursor, setItineraryCursor] = useState<string | null>(null);
 	const [isEditing, setIsEditing] = useState(false);
 	const [form, setForm] = useState<FormState>({
 		place: '',
@@ -177,24 +191,7 @@ export default function AdminTravelItenary() {
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
 	const [isEditorOpen, setIsEditorOpen] = useState(false);
 	const validPinCount = form.routePoints.filter((point) => point.name.trim() && !getRoutePointErrorMessage(point)).length;
-	const filteredItineraries = useMemo(() => {
-		const q = itinerarySearch.trim().toLowerCase();
-		if (!q) return existingItineraries;
-
-		return existingItineraries.filter((item) => {
-			const text = [
-				item.place,
-				item.country,
-				item.budget,
-				item.itinerary || '',
-				(item.places || []).join(' '),
-			]
-				.join(' ')
-				.toLowerCase();
-
-			return text.includes(q);
-		});
-	}, [existingItineraries, itinerarySearch]);
+	const filteredItineraries = existingItineraries;
 
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const videoInputRef = useRef<HTMLInputElement>(null);
@@ -227,41 +224,95 @@ export default function AdminTravelItenary() {
 		};
 	}, [form.imagePreviews, form.videoPreviews]);
 
-	// Fetch existing itineraries on mount
-	useEffect(() => {
-		fetchItineraries();
+	const buildTravelListCacheKey = useCallback((filters: TravelListFilters) => {
+		return `${TRAVEL_ITINERARY_CACHE_KEY}:${filters.search.toLowerCase()}:${filters.country.toLowerCase()}`;
 	}, []);
 
 	// Fetch existing itineraries from API
-	const fetchItineraries = async (forceRefresh = false) => {
+	const fetchItineraries = async (options?: {
+		reset?: boolean;
+		forceRefresh?: boolean;
+		filters?: TravelListFilters;
+		cursor?: string | null;
+	}) => {
+		const reset = options?.reset ?? true;
+		const forceRefresh = options?.forceRefresh ?? false;
+		const selectedFilters = options?.filters ?? appliedFilters;
+		const nextCursor = options?.cursor ?? null;
+
 		try {
-			setLoadingItineraries(true);
-			if (!forceRefresh) {
-				const cachedItineraries = getAdminCollectionCache<TravelItem[]>(TRAVEL_ITINERARY_CACHE_KEY);
+			if (reset) setLoadingItineraries(true);
+			else setLoadingMoreItineraries(true);
+
+			if (reset && !forceRefresh) {
+				const cachedItineraries = getAdminCollectionCache<{
+					items: TravelItem[];
+					hasMore: boolean;
+					cursor: string | null;
+				}>(buildTravelListCacheKey(selectedFilters));
 				if (cachedItineraries) {
-					setExistingItineraries(cachedItineraries);
+					setExistingItineraries(cachedItineraries.items);
+					setHasMoreItineraries(cachedItineraries.hasMore);
+					setItineraryCursor(cachedItineraries.cursor);
 					return;
 				}
 			}
 
-			const res = await fetch('/api/travel');
+			const params = new URLSearchParams();
+			params.set('limit', String(TRAVEL_ITINERARY_PAGE_SIZE));
+			if (nextCursor) params.set('cursor', nextCursor);
+			if (selectedFilters.search) params.set('search', selectedFilters.search);
+			if (selectedFilters.country) params.set('country', selectedFilters.country);
+
+			const res = await fetch(`/api/travel?${params.toString()}`);
 			if (!res.ok) throw new Error('Failed to fetch itineraries');
 			const data = await res.json();
 			const results = data.results || data.data?.results || [];
-			const sortedResults = [...results].sort((a: TravelItem, b: TravelItem) => {
+			const normalizedResults = [...results].sort((a: TravelItem, b: TravelItem) => {
 				return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
 			});
-			setExistingItineraries(sortedResults);
-			setAdminCollectionCache(TRAVEL_ITINERARY_CACHE_KEY, sortedResults, TRAVEL_ITINERARY_CACHE_TTL_MS);
+
+			setExistingItineraries((prev) => {
+				if (reset) return normalizedResults;
+				const byId = new Map<string, TravelItem>();
+				prev.forEach((item) => byId.set(item.id, item));
+				normalizedResults.forEach((item) => byId.set(item.id, item));
+				return Array.from(byId.values());
+			});
+
+			const hasMore = Boolean(data.hasMore ?? data.data?.hasMore);
+			const returnedCursor = (data.nextCursor ?? data.data?.nextCursor ?? null) as string | null;
+			setHasMoreItineraries(hasMore);
+			setItineraryCursor(returnedCursor);
+
+			if (reset) {
+				setAdminCollectionCache(
+					buildTravelListCacheKey(selectedFilters),
+					{ items: normalizedResults, hasMore, cursor: returnedCursor },
+					TRAVEL_ITINERARY_CACHE_TTL_MS,
+				);
+			}
 		} catch (error: any) {
 			setUploadState(prev => ({
 				...prev,
 				error: error.message || 'Failed to load itineraries',
 			}));
 		} finally {
-			setLoadingItineraries(false);
+			if (reset) setLoadingItineraries(false);
+			else setLoadingMoreItineraries(false);
 		}
 	};
+
+	// Fetch existing itineraries on mount
+	useEffect(() => {
+		void fetchItineraries({
+			reset: true,
+			filters: {
+				search: '',
+				country: '',
+			},
+		});
+	}, []);
 
 	// Load itinerary for editing
 	const loadForEditing = useCallback((itinerary: TravelItem) => {
@@ -316,7 +367,11 @@ export default function AdminTravelItenary() {
 
 			setExistingItineraries((prev) => {
 				const nextItineraries = prev.filter(item => item.id !== id);
-				setAdminCollectionCache(TRAVEL_ITINERARY_CACHE_KEY, nextItineraries, TRAVEL_ITINERARY_CACHE_TTL_MS);
+				setAdminCollectionCache(
+					buildTravelListCacheKey(appliedFilters),
+					{ items: nextItineraries, hasMore: hasMoreItineraries, cursor: itineraryCursor },
+					TRAVEL_ITINERARY_CACHE_TTL_MS,
+				);
 				return nextItineraries;
 			});
 			setUploadState(prev => ({
@@ -371,7 +426,11 @@ export default function AdminTravelItenary() {
 			}
 
 			setExistingItineraries([]);
-			setAdminCollectionCache(TRAVEL_ITINERARY_CACHE_KEY, [], TRAVEL_ITINERARY_CACHE_TTL_MS);
+			setAdminCollectionCache(
+				buildTravelListCacheKey(appliedFilters),
+				{ items: [], hasMore: false, cursor: null },
+				TRAVEL_ITINERARY_CACHE_TTL_MS,
+			);
 			setUploadState((prev) => ({
 				...prev,
 				uploading: false,
@@ -746,7 +805,11 @@ export default function AdminTravelItenary() {
 			}));
 
 			// Refresh itineraries list
-			await fetchItineraries(true);
+			await fetchItineraries({
+				reset: true,
+				forceRefresh: true,
+				filters: appliedFilters,
+			});
 
 			// Reset form
 			setTimeout(() => {
@@ -840,6 +903,35 @@ export default function AdminTravelItenary() {
 		const segments = mapValue.split('/');
 		return segments[segments.length - 1] || mapValue;
 	};
+
+	const handleApplyListFilters = useCallback(() => {
+		const nextFilters: TravelListFilters = {
+			search: itinerarySearchInput.trim(),
+			country: countryFilterInput.trim(),
+		};
+		setAppliedFilters(nextFilters);
+		setItineraryCursor(null);
+		void fetchItineraries({ reset: true, forceRefresh: true, filters: nextFilters, cursor: null });
+	}, [countryFilterInput, fetchItineraries, itinerarySearchInput]);
+
+	const handleResetListFilters = useCallback(() => {
+		setItinerarySearchInput('');
+		setCountryFilterInput('');
+		const resetFilters: TravelListFilters = { search: '', country: '' };
+		setAppliedFilters(resetFilters);
+		setItineraryCursor(null);
+		void fetchItineraries({ reset: true, forceRefresh: true, filters: resetFilters, cursor: null });
+	}, [fetchItineraries]);
+
+	const handleLoadMoreItineraries = useCallback(() => {
+		if (!hasMoreItineraries || loadingMoreItineraries) return;
+		void fetchItineraries({
+			reset: false,
+			forceRefresh: true,
+			filters: appliedFilters,
+			cursor: itineraryCursor,
+		});
+	}, [appliedFilters, fetchItineraries, hasMoreItineraries, itineraryCursor, loadingMoreItineraries]);
 
 	const parseCsvTable = (text: string, delimiter: ',' | ';' | '\t' | '|'): string[][] => {
 		const rows: string[][] = [];
@@ -1377,7 +1469,11 @@ export default function AdminTravelItenary() {
 				}));
 			}
 
-			await fetchItineraries();
+			await fetchItineraries({
+				reset: true,
+				forceRefresh: true,
+				filters: appliedFilters,
+			});
 		} catch (error: any) {
 			setCsvImportError(error?.message || 'Failed to import file.');
 		} finally {
@@ -1528,7 +1624,13 @@ export default function AdminTravelItenary() {
 								New Itinerary
 							</Button>
 							<Button
-								onClick={() => { void fetchItineraries(true); }}
+								onClick={() => {
+									void fetchItineraries({
+										reset: true,
+										forceRefresh: true,
+										filters: appliedFilters,
+									});
+								}}
 								variant="outline"
 								size="sm"
 								disabled={loadingItineraries}
@@ -1664,14 +1766,23 @@ export default function AdminTravelItenary() {
 							)}
 						</div>
 
-						<div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/40 p-3">
-							<Input
-								value={itinerarySearch}
-								onChange={(e) => setItinerarySearch(e.target.value)}
-								placeholder="Search by place, country, budget, itinerary, or places..."
-							/>
-							<p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-								Showing {filteredItineraries.length} of {existingItineraries.length} itineraries
+						<div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/40 p-3 space-y-3">
+							<div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+								<Input
+									value={itinerarySearchInput}
+									onChange={(e) => setItinerarySearchInput(e.target.value)}
+									placeholder="Search place or itinerary..."
+								/>
+								<Input
+									value={countryFilterInput}
+									onChange={(e) => setCountryFilterInput(e.target.value)}
+									placeholder="Country filter"
+								/>
+								<Button variant="outline" onClick={handleApplyListFilters}>Apply Filters</Button>
+								<Button variant="outline" onClick={handleResetListFilters}>Reset</Button>
+							</div>
+							<p className="text-xs text-slate-500 dark:text-slate-400">
+								Loaded {filteredItineraries.length} itinerary records for current filters.
 							</p>
 						</div>
 
@@ -1686,7 +1797,8 @@ export default function AdminTravelItenary() {
 								<p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Try another search keyword or create a new itinerary.</p>
 							</div>
 						) : (
-							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+							<div className="space-y-4">
+								<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 								{filteredItineraries.map((item) => (
 									<motion.div
 										key={item.id}
@@ -1735,6 +1847,16 @@ export default function AdminTravelItenary() {
 										</div>
 									</motion.div>
 								))}
+								</div>
+								<div className="flex justify-center">
+									<Button
+										variant="outline"
+										onClick={handleLoadMoreItineraries}
+										disabled={!hasMoreItineraries || loadingMoreItineraries}
+									>
+										{loadingMoreItineraries ? 'Loading More...' : hasMoreItineraries ? 'Load More' : 'No More Results'}
+									</Button>
+								</div>
 							</div>
 						)}
 					</Card>

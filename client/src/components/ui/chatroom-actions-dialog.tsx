@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { ref, get, update, onValue } from 'firebase/database';
+import { ref, get, update } from 'firebase/database';
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { database } from '@/lib/firebase';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -94,9 +94,6 @@ export const ChatRoomActionsDialog = memo(
     const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['details']));
     // Cache the full room snapshot — shared by fetchMembers and fetchMessages
     const roomDataRef = useRef<any>(null);
-    // Unsubscribe handles for live listeners
-    const msgsUnsubRef = useRef<(() => void) | null>(null);
-    const membersUnsubRef = useRef<(() => void) | null>(null);
     const backgroundInputRef = useRef<HTMLInputElement | null>(null);
     const iconInputRef = useRef<HTMLInputElement | null>(null);
     const [formData, setFormData] = useState({
@@ -118,11 +115,6 @@ export const ChatRoomActionsDialog = memo(
     // Reset tab + data when room changes to avoid stale state
     useEffect(() => {
       if (room) {
-        // Tear down any live subscriptions for the previous room
-        msgsUnsubRef.current?.();
-        msgsUnsubRef.current = null;
-        membersUnsubRef.current?.();
-        membersUnsubRef.current = null;
         setActiveTab('details');
         setVisitedTabs(new Set(['details']));
         setMembers([]);
@@ -170,144 +162,127 @@ export const ChatRoomActionsDialog = memo(
     // Tear down live listeners when dialog is closed
     useEffect(() => {
       if (!open) {
-        msgsUnsubRef.current?.();
-        msgsUnsubRef.current = null;
-        membersUnsubRef.current?.();
-        membersUnsubRef.current = null;
+        setMembers([]);
+        setMessages([]);
       }
     }, [open]);
 
-    const fetchMembers = useCallback(() => {
+    const fetchMembers = useCallback(async () => {
       if (!room?.id) return;
-      membersUnsubRef.current?.();
-      membersUnsubRef.current = null;
       setLoadingMembers(true);
 
       const participantsRef = ref(database, `chatrooms/${room.id}/participants`);
-      membersUnsubRef.current = onValue(
-        participantsRef,
-        async (snap) => {
-          const raw = snap.val();
-          // participants can be stored as an array or an object map
-          const participants: string[] = Array.isArray(raw)
-            ? raw.filter(Boolean)
-            : raw && typeof raw === 'object'
-            ? Object.values(raw).filter(Boolean) as string[]
-            : [];
+      try {
+        const snap = await get(participantsRef);
+        const raw = snap.val();
+        const participants: string[] = Array.isArray(raw)
+          ? raw.filter(Boolean)
+          : raw && typeof raw === 'object'
+          ? Object.values(raw).filter(Boolean) as string[]
+          : [];
 
-          // Resolve names: source 1 — status/{uid} nodes (parallel)
-          const nameMap: Record<string, { displayName: string; avatar: string | null }> = {};
-          const statusSnaps = await Promise.all(
-            participants.map((uid) =>
-              get(ref(database, `status/${uid}`))
-                .then((s) => ({ uid, val: s.val() }))
-                .catch(() => ({ uid, val: null }))
-            )
-          );
-          for (const { uid, val } of statusSnaps) {
-            const displayName = pickDisplayName(val as Record<string, unknown>);
-            if (displayName) {
-              nameMap[uid] = {
+        const nameMap: Record<string, { displayName: string; avatar: string | null }> = {};
+        const statusSnaps = await Promise.all(
+          participants.map((uid) =>
+            get(ref(database, `status/${uid}`))
+              .then((s) => ({ uid, val: s.val() }))
+              .catch(() => ({ uid, val: null }))
+          )
+        );
+        for (const { uid, val } of statusSnaps) {
+          const displayName = pickDisplayName(val as Record<string, unknown>);
+          if (displayName) {
+            nameMap[uid] = {
+              displayName,
+              avatar: resolveAvatarUrl(val as Record<string, unknown>) || null,
+            };
+          }
+        }
+
+        const messagesData = roomDataRef.current?.messages;
+        if (messagesData && typeof messagesData === 'object') {
+          for (const msg of Object.values(messagesData) as any[]) {
+            const displayName = pickDisplayName(msg as Record<string, unknown>);
+            if (msg?.userId && displayName && !nameMap[msg.userId]) {
+              nameMap[msg.userId] = {
                 displayName,
-                avatar: resolveAvatarUrl(val as Record<string, unknown>) || null,
+                avatar: resolveAvatarUrl(msg as Record<string, unknown>) || null,
               };
             }
           }
-
-          // Source 2 — any messages already cached (no extra RTDB call)
-          const messagesData = roomDataRef.current?.messages;
-          if (messagesData && typeof messagesData === 'object') {
-            for (const msg of Object.values(messagesData) as any[]) {
-              const displayName = pickDisplayName(msg as Record<string, unknown>);
-              if (msg?.userId && displayName && !nameMap[msg.userId]) {
-                nameMap[msg.userId] = {
-                  displayName,
-                  avatar: resolveAvatarUrl(msg as Record<string, unknown>) || null,
-                };
-              }
-            }
-          }
-
-          // Source 3 — Firestore users collection by uid for unresolved names.
-          const unresolvedUids = participants.filter((uid) => !nameMap[uid]);
-          if (unresolvedUids.length > 0) {
-            const chunks: string[][] = [];
-            for (let i = 0; i < unresolvedUids.length; i += 10) {
-              chunks.push(unresolvedUids.slice(i, i + 10));
-            }
-
-            await Promise.all(
-              chunks.map(async (uidsChunk) => {
-                const usersQ = query(
-                  collection(firestoreDb, 'users'),
-                  where(documentId(), 'in', uidsChunk),
-                );
-                const usersSnap = await getDocs(usersQ);
-
-                usersSnap.forEach((docSnap) => {
-                  const uid = docSnap.id;
-                  if (nameMap[uid]) return;
-
-                  const data = docSnap.data() as Record<string, unknown>;
-                  const displayName = pickDisplayName(data);
-
-                  if (!displayName) return;
-                  nameMap[uid] = {
-                    displayName,
-                    avatar: resolveAvatarUrl(data) || null,
-                  };
-                });
-              })
-            ).catch(() => {
-              // Ignore profile lookup failures and fall back to uid.
-            });
-          }
-
-          setMembers(participants.map((uid: string) => ({
-            id: uid,
-            displayName: nameMap[uid]?.displayName || uid,
-            avatar: nameMap[uid]?.avatar || null,
-            email: '',
-            role: uid === room.createdBy ? 'admin' : 'member',
-          })));
-          setLoadingMembers(false);
-        },
-        (err) => {
-          console.error('members onValue error:', err);
-          setMembers([]);
-          setLoadingMembers(false);
         }
-      );
+
+        const unresolvedUids = participants.filter((uid) => !nameMap[uid]);
+        if (unresolvedUids.length > 0) {
+          const chunks: string[][] = [];
+          for (let i = 0; i < unresolvedUids.length; i += 10) {
+            chunks.push(unresolvedUids.slice(i, i + 10));
+          }
+
+          await Promise.all(
+            chunks.map(async (uidsChunk) => {
+              const usersQ = query(
+                collection(firestoreDb, 'users'),
+                where(documentId(), 'in', uidsChunk),
+              );
+              const usersSnap = await getDocs(usersQ);
+
+              usersSnap.forEach((docSnap) => {
+                const uid = docSnap.id;
+                if (nameMap[uid]) return;
+
+                const data = docSnap.data() as Record<string, unknown>;
+                const displayName = pickDisplayName(data);
+
+                if (!displayName) return;
+                nameMap[uid] = {
+                  displayName,
+                  avatar: resolveAvatarUrl(data) || null,
+                };
+              });
+            })
+          ).catch(() => {
+            // Ignore profile lookup failures and fall back to uid.
+          });
+        }
+
+        setMembers(participants.map((uid: string) => ({
+          id: uid,
+          displayName: nameMap[uid]?.displayName || uid,
+          avatar: nameMap[uid]?.avatar || null,
+          email: '',
+          role: uid === room.createdBy ? 'admin' : 'member',
+        })));
+      } catch (err) {
+        console.error('members fetch error:', err);
+        setMembers([]);
+      } finally {
+        setLoadingMembers(false);
+      }
     }, [room?.id, room?.createdBy]);
 
-    const fetchMessages = useCallback(() => {
+    const fetchMessages = useCallback(async () => {
       if (!room?.id) return;
-      // Tear down any previous listener before creating a new one
-      msgsUnsubRef.current?.();
-      msgsUnsubRef.current = null;
       setLoadingMessages(true);
       setMessagesError(null);
       const msgsRef = ref(database, `chatrooms/${room.id}/messages`);
-      msgsUnsubRef.current = onValue(
-        msgsRef,
-        (snap) => {
-          const raw = snap.val();
-          if (!raw || typeof raw !== 'object') {
-            setMessages([]);
-          } else {
-            const list = Object.entries(raw).map(([key, val]: [string, any]) => ({ id: key, ...val }));
-            list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)); // newest first
-            setMessages(list);
-          }
-          setLoadingMessages(false);
-        },
-        (err) => {
-          console.error('messages onValue error:', err);
-          setMessagesError(err.message || 'Failed to load messages');
+      try {
+        const snap = await get(msgsRef);
+        const raw = snap.val();
+        if (!raw || typeof raw !== 'object') {
           setMessages([]);
-          setLoadingMessages(false);
+        } else {
+          const list = Object.entries(raw).map(([key, val]: [string, any]) => ({ id: key, ...val }));
+          list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          setMessages(list);
         }
-      );
+      } catch (err) {
+        console.error('messages fetch error:', err);
+        setMessagesError(err instanceof Error ? err.message : 'Failed to load messages');
+        setMessages([]);
+      } finally {
+        setLoadingMessages(false);
+      }
     }, [room?.id]);
 
     const handleTabChange = useCallback((tab: string) => {

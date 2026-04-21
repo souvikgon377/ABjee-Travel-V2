@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import {
   Users,
@@ -23,6 +23,11 @@ import { DashboardHeader, DEFAULT_FILTERS, type DashboardFilters } from '@/compo
 import { AdminSidebar } from '@/components/ui/admin-sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminAPI } from '@/lib/api';
+import {
+  useAdminDashboardCacheStore,
+  type DashboardStatsCache,
+  type RevenueSettingsCache,
+} from '@/lib/adminDashboardCacheStore';
 import { motion } from 'framer-motion';
 
 // ── Static stat shape (reset between fetches) ──────────────────────────────
@@ -69,6 +74,32 @@ const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
   },
 };
 
+function buildStatsFromSnapshot(snapshot: DashboardStatsCache) {
+  return [
+    {
+      ...STAT_DEFAULTS[0],
+      value: snapshot.totalUsers.toLocaleString(),
+      change: snapshot.totalUsers > 0 ? `${snapshot.totalUsers} registered` : '+0%',
+    },
+    {
+      ...STAT_DEFAULTS[1],
+      value: `$${snapshot.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      change: snapshot.paidTxnCount > 0 ? `${snapshot.paidTxnCount} paid txns` : '+0%',
+    },
+    {
+      ...STAT_DEFAULTS[2],
+      value: snapshot.activeUsers.toLocaleString(),
+      change: snapshot.activeUsers > 0 ? `${snapshot.activeUsers} online` : '+0%',
+    },
+    {
+      ...STAT_DEFAULTS[3],
+      value: snapshot.pageViews.toLocaleString(),
+      change: snapshot.pageViews > 0 ? `${snapshot.pageViews} total` : '+0%',
+      changeType: 'positive' as const,
+    },
+  ];
+}
+
 const RevenueChart = lazy(() => import('@/components/ui/revenue-chart').then((module) => ({ default: module.RevenueChart })));
 const UsersTable = lazy(() => import('@/components/ui/users-table').then((module) => ({ default: module.UsersTable })));
 const ChatRoomsTable = lazy(() => import('@/components/ui/chatrooms-table').then((module) => ({ default: module.ChatRoomsTable })));
@@ -91,27 +122,47 @@ function SectionLoader() {
 
 export default function AdminDashboard() {
   const { userProfile } = useAuth();
+  const cachedStatsSnapshot = useAdminDashboardCacheStore((state) => state.stats);
+  const cachedHomePageEnabled = useAdminDashboardCacheStore((state) => state.homePageEnabled);
+  const cachedRevenueSettings = useAdminDashboardCacheStore((state) => state.revenueSettings);
+  const cachedLastUpdatedAt = useAdminDashboardCacheStore((state) => state.lastUpdatedAt);
+  const setCachedStats = useAdminDashboardCacheStore((state) => state.setStats);
+  const setCachedHomePageEnabled = useAdminDashboardCacheStore((state) => state.setHomePageEnabled);
+  const setCachedRevenueSettings = useAdminDashboardCacheStore((state) => state.setRevenueSettings);
+  const setCachedLastUpdatedAt = useAdminDashboardCacheStore((state) => state.setLastUpdatedAt);
   const [currentView, setCurrentView] = useState('dashboard');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [homePageEnabled, setHomePageEnabled] = useState(true);
+  const [dashboardRefreshVersion, setDashboardRefreshVersion] = useState(0);
+  const [autoRefreshMinutes, setAutoRefreshMinutes] = useState(30);
+  const [autoRefreshArmed, setAutoRefreshArmed] = useState(false);
+  const [isPageActive, setIsPageActive] = useState(true);
+  const [homePageEnabled, setHomePageEnabled] = useState(cachedHomePageEnabled ?? true);
   const [homePageToggleLoading, setHomePageToggleLoading] = useState(false);
-  const [revenueSettings, setRevenueSettings] = useState<RevenueSettings>(REVENUE_SETTINGS_DEFAULTS);
-  const [revenueForm, setRevenueForm] = useState<RevenueSettings>(REVENUE_SETTINGS_DEFAULTS);
+  const [revenueSettings, setRevenueSettings] = useState<RevenueSettings>(
+    (cachedRevenueSettings as RevenueSettings | null) ?? REVENUE_SETTINGS_DEFAULTS
+  );
+  const [revenueForm, setRevenueForm] = useState<RevenueSettings>(
+    (cachedRevenueSettings as RevenueSettings | null) ?? REVENUE_SETTINGS_DEFAULTS
+  );
   const [revenueSettingsLoading, setRevenueSettingsLoading] = useState(false);
   const [revenueSettingsSaving, setRevenueSettingsSaving] = useState(false);
   const [revenueSettingsMessage, setRevenueSettingsMessage] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(cachedLastUpdatedAt);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddUserDialog, setShowAddUserDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showExportDialog,   setShowExportDialog]   = useState(false);
   const [usersTableRefresh, setUsersTableRefresh] = useState(0);
   const [activeFilters, setActiveFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
+  const autoRefreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setActiveFilters(filters);
   }, []);
-  const [stats, setStats] = useState(STAT_DEFAULTS);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState(
+    cachedStatsSnapshot ? buildStatsFromSnapshot(cachedStatsSnapshot) : STAT_DEFAULTS
+  );
+  const [loading, setLoading] = useState(false);
 
   // Fetch all 4 sources in parallel — one failure never affects the rest
   const fetchStats = useCallback(async (options?: { withLoader?: boolean }) => {
@@ -131,12 +182,16 @@ export default function AdminDashboard() {
       const pageViews = Number(data.pageViews ?? 0);
       const paidTxnCount = Number(data.paidTransactions ?? 0);
 
-      setStats([
-        { ...STAT_DEFAULTS[0], value: totalUsers.toLocaleString(), change: totalUsers > 0 ? `${totalUsers} registered` : '+0%' },
-        { ...STAT_DEFAULTS[1], value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, change: paidTxnCount > 0 ? `${paidTxnCount} paid txns` : '+0%' },
-        { ...STAT_DEFAULTS[2], value: activeUsers.toLocaleString(), change: activeUsers > 0 ? `${activeUsers} online` : '+0%' },
-        { ...STAT_DEFAULTS[3], value: pageViews.toLocaleString(), change: pageViews > 0 ? `${pageViews} total` : '+0%', changeType: 'positive' as const },
-      ]);
+      const snapshot: DashboardStatsCache = {
+        totalUsers,
+        activeUsers,
+        totalRevenue,
+        pageViews,
+        paidTxnCount,
+      };
+
+      setStats(buildStatsFromSnapshot(snapshot));
+      setCachedStats(snapshot);
     } catch (error) {
       if ((process.env.NODE_ENV === "development")) {
         console.warn('Dashboard stats fetch failed:', error);
@@ -190,10 +245,12 @@ export default function AdminDashboard() {
       const settings = response?.data?.data;
       const enabledValue = settings?.homePageEnabled;
       setHomePageEnabled(enabledValue !== false);
+      setCachedHomePageEnabled(enabledValue !== false);
 
       const normalizedRevenueSettings = normalizeRevenueSettings(settings);
       setRevenueSettings(normalizedRevenueSettings);
       setRevenueForm(normalizedRevenueSettings);
+      setCachedRevenueSettings(normalizedRevenueSettings as RevenueSettingsCache);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Failed to load home page setting:', error);
@@ -207,26 +264,62 @@ export default function AdminDashboard() {
   }, [normalizeRevenueSettings]);
 
   useEffect(() => {
-    fetchStats({ withLoader: true });
-    fetchHomePageSetting();
-    
-    // Poll stats every 60 seconds (reduced from 30) to reduce server load
-    const statsInterval = setInterval(() => {
-      fetchStats().catch((err) => {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Error polling stats:', err);
-        }
-      });
-    }, 60000); // 60 seconds instead of 30 for less frequent updates
+    if (typeof document === 'undefined') return;
 
-    return () => clearInterval(statsInterval);
-  }, [fetchHomePageSetting, fetchStats]);
+    const updatePageActive = () => {
+      setIsPageActive(document.visibilityState === 'visible' && document.hasFocus());
+    };
+
+    updatePageActive();
+    document.addEventListener('visibilitychange', updatePageActive);
+    window.addEventListener('focus', updatePageActive);
+    window.addEventListener('blur', updatePageActive);
+
+    return () => {
+      document.removeEventListener('visibilitychange', updatePageActive);
+      window.removeEventListener('focus', updatePageActive);
+      window.removeEventListener('blur', updatePageActive);
+    };
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([fetchStats(), fetchHomePageSetting()]);
-    setIsRefreshing(false);
-  }, [fetchHomePageSetting, fetchStats]);
+    setAutoRefreshArmed(true);
+    setDashboardRefreshVersion((prev) => prev + 1);
+
+    try {
+      await Promise.all([fetchStats({ withLoader: true }), fetchHomePageSetting()]);
+      const refreshedAt = Date.now();
+      setLastUpdatedAt(refreshedAt);
+      setCachedLastUpdatedAt(refreshedAt);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchHomePageSetting, fetchStats, setCachedLastUpdatedAt]);
+
+  useEffect(() => {
+    if (autoRefreshTimerRef.current) {
+      clearInterval(autoRefreshTimerRef.current);
+      autoRefreshTimerRef.current = null;
+    }
+
+    if (!autoRefreshArmed || autoRefreshMinutes <= 0 || !isPageActive) {
+      return;
+    }
+
+    autoRefreshTimerRef.current = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus()) {
+        void handleRefresh();
+      }
+    }, autoRefreshMinutes * 60000);
+
+    return () => {
+      if (autoRefreshTimerRef.current) {
+        clearInterval(autoRefreshTimerRef.current);
+        autoRefreshTimerRef.current = null;
+      }
+    };
+  }, [autoRefreshArmed, autoRefreshMinutes, handleRefresh, isPageActive]);
 
   const handleToggleHomePage = useCallback(async () => {
     setHomePageToggleLoading(true);
@@ -236,6 +329,7 @@ export default function AdminDashboard() {
       const response = await adminAPI.updateSettings({ homePageEnabled: nextValue });
       const savedValue = response?.data?.data?.homePageEnabled;
       setHomePageEnabled(savedValue !== false);
+      setCachedHomePageEnabled(savedValue !== false);
     } catch (error) {
       console.error('Failed to update home page status:', error);
       alert('Unable to update Home page status. Please try again.');
@@ -315,6 +409,7 @@ export default function AdminDashboard() {
       const normalized = normalizeRevenueSettings(response?.data?.data);
       setRevenueSettings(normalized);
       setRevenueForm(normalized);
+      setCachedRevenueSettings(normalized as RevenueSettingsCache);
       setRevenueSettingsMessage('Revenue settings saved successfully.');
     } catch (error) {
       console.error('Failed to save revenue settings:', error);
@@ -468,7 +563,7 @@ export default function AdminDashboard() {
               {/* Charts Section */}
               <div id="analytics" className="space-y-4 sm:space-y-6 xl:col-span-2">
                 <Suspense fallback={<SectionLoader />}>
-                  <RevenueChart />
+                  <RevenueChart refreshTrigger={dashboardRefreshVersion} />
                 </Suspense>
               </div>
 
@@ -482,7 +577,7 @@ export default function AdminDashboard() {
                 />
                 <div id="settings">
                   <Suspense fallback={<SectionLoader />}>
-                    <SystemStatus />
+                    <SystemStatus refreshTrigger={dashboardRefreshVersion} />
                   </Suspense>
                 </div>
               </div>
@@ -533,7 +628,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             <Suspense fallback={<SectionLoader />}>
-              <RevenueChart />
+              <RevenueChart refreshTrigger={dashboardRefreshVersion} />
             </Suspense>
           </div>
         );
@@ -745,7 +840,7 @@ export default function AdminDashboard() {
             </div>
 
             <Suspense fallback={<SectionLoader />}>
-              <RevenueChart />
+              <RevenueChart refreshTrigger={dashboardRefreshVersion} />
             </Suspense>
           </div>
         );
@@ -779,7 +874,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             <Suspense fallback={<SectionLoader />}>
-              <SystemStatus />
+              <SystemStatus refreshTrigger={dashboardRefreshVersion} />
             </Suspense>
             <div className="mt-6">
               <button
@@ -912,6 +1007,10 @@ export default function AdminDashboard() {
           onRefresh={handleRefresh}
           onExport={handleExport}
           isRefreshing={isRefreshing}
+          lastUpdatedAt={lastUpdatedAt}
+          autoRefreshMinutes={autoRefreshMinutes}
+          autoRefreshArmed={autoRefreshArmed}
+          onAutoRefreshMinutesChange={setAutoRefreshMinutes}
           currentView={currentView}
           activeFilters={activeFilters}
           onFilterChange={handleFilterChange}

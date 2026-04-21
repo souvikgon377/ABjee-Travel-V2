@@ -167,6 +167,10 @@ interface DashboardHeaderProps {
   onRefresh: () => void;
   onExport: () => void;
   isRefreshing: boolean;
+  lastUpdatedAt: number | null;
+  autoRefreshMinutes: number;
+  autoRefreshArmed: boolean;
+  onAutoRefreshMinutesChange: (minutes: number) => void;
   currentView: string;
   activeFilters: DashboardFilters;
   onFilterChange: (filters: DashboardFilters) => void;
@@ -192,6 +196,10 @@ export const DashboardHeader = memo(
     onRefresh,
     onExport,
     isRefreshing,
+    lastUpdatedAt,
+    autoRefreshMinutes,
+    autoRefreshArmed,
+    onAutoRefreshMinutesChange,
     currentView,
     activeFilters,
     onFilterChange,
@@ -205,6 +213,17 @@ export const DashboardHeader = memo(
     const [readIds, setReadIds] = useState<Set<string>>(new Set());
     const [notificationActionId, setNotificationActionId] = useState<string | null>(null);
     const activeCount = countActiveFilters(activeFilters, currentView);
+    const lastUpdatedLabel = useMemo(() => {
+      if (!lastUpdatedAt) return 'Never';
+
+      return new Date(lastUpdatedAt).toLocaleString([], {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }, [lastUpdatedAt]);
 
     useEffect(() => {
       if (typeof window === 'undefined') return;
@@ -520,6 +539,35 @@ export const DashboardHeader = memo(
                 />
                 Refresh
               </Button>
+
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-2 py-1.5">
+                <span className="text-xs text-muted-foreground">Auto</span>
+                <Select
+                  value={String(autoRefreshMinutes)}
+                  onValueChange={(value) => onAutoRefreshMinutesChange(Number(value))}
+                >
+                  <SelectTrigger className="h-8 w-24 border-0 bg-transparent px-2 text-xs shadow-none focus:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Off</SelectItem>
+                    <SelectItem value="15">15m</SelectItem>
+                    <SelectItem value="30">30m</SelectItem>
+                    <SelectItem value="45">45m</SelectItem>
+                    <SelectItem value="60">60m</SelectItem>
+                  </SelectContent>
+                </Select>
+                {!autoRefreshArmed && (
+                  <span className="hidden text-[11px] text-muted-foreground xl:inline">
+                    starts after refresh
+                  </span>
+                )}
+              </div>
+
+              <div className="hidden rounded-lg border border-border bg-background px-3 py-1.5 lg:block">
+                <p className="text-[11px] text-muted-foreground">Last updated</p>
+                <p className="text-xs font-medium">{lastUpdatedLabel}</p>
+              </div>
             </div>
 
             {/* Mobile Menu */}

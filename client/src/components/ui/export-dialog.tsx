@@ -39,6 +39,8 @@ import { adminAPI } from '@/lib/api';
 const EXPORT_PAGE_SIZE = 200;
 const MAX_EXPORT_ROWS_PER_SECTION = 1000;
 const OPTION_FETCH_LIMIT = 300;
+const OPTION_FETCH_PAGE_SIZE = 100;
+const OPTION_FETCH_MAX_PAGES = 3;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface ExportSection {
@@ -1973,37 +1975,68 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   useEffect(() => {
     if (!tripStoriesChecked || tripStoriesLoading || tripStoriesList.length > 0) return;
 
-    setTripStoriesLoading(true);
-    getDocs(query(collection(firestoreDb, 'stories'), orderBy('createdAt', 'desc'), limit(OPTION_FETCH_LIMIT)))
-      .then((snap) => {
-        const stories = snap.docs.map((doc) => {
-          const s: any = doc.data();
-          const geo = deriveStoryGeo(s);
-          return {
-            id: doc.id,
-            title: s.title || 'Untitled Story',
-            destination: s.destination || '',
-            authorId: s.authorId || '',
-            authorName: s.authorName || '',
-            authorEmail: s.authorEmail || '',
-            travelType: s.travelType || '',
-            duration: s.duration || '',
-            budget: s.budget || '',
-            area: geo.area,
-            state: geo.state,
-            country: geo.country,
-            likesCount: Array.isArray(s.likes) ? s.likes.length : 0,
-            commentCount: Number(s.commentCount || 0),
-            mediaCount: (Array.isArray(s.photos) ? s.photos.length : 0) + (Array.isArray(s.videos) ? s.videos.length : 0),
-            createdAt: s.createdAt?.toDate?.()?.toISOString?.() || s.createdAt || '',
-          } as TripStoryRecord;
-        });
+    let cancelled = false;
+    const loadTripStoriesOptions = async () => {
+      setTripStoriesLoading(true);
+      try {
+        const rows: Record<string, unknown>[] = [];
+        let cursor: string | null = null;
+        let page = 0;
+
+        while (page < OPTION_FETCH_MAX_PAGES && rows.length < OPTION_FETCH_LIMIT) {
+          const remaining = OPTION_FETCH_LIMIT - rows.length;
+          const response = await adminAPI.exportSectionChunk({
+            section: 'trip-stories',
+            limit: Math.min(OPTION_FETCH_PAGE_SIZE, remaining),
+            cursor,
+          });
+
+          const payload = response?.data?.data as {
+            rows?: Record<string, unknown>[];
+            nextCursor?: string | null;
+            hasMore?: boolean;
+          } | undefined;
+
+          const pageRows = Array.isArray(payload?.rows) ? payload.rows : [];
+          rows.push(...pageRows);
+
+          if (!payload?.hasMore || !payload?.nextCursor || pageRows.length === 0) break;
+          cursor = payload.nextCursor;
+          page += 1;
+        }
+
+        if (cancelled) return;
+        const stories = rows.slice(0, OPTION_FETCH_LIMIT).map((row) => ({
+          id: String(row.storyId || ''),
+          title: String(row.title || 'Untitled Story'),
+          destination: String(row.destination || ''),
+          authorId: String(row.authorId || ''),
+          authorName: String(row.authorName || ''),
+          authorEmail: String(row.authorEmail || ''),
+          travelType: String(row.travelType || ''),
+          duration: String(row.duration || ''),
+          budget: String(row.budget || ''),
+          area: String(row.area || ''),
+          state: String(row.state || ''),
+          country: String(row.country || ''),
+          likesCount: Number(row.likesCount || 0),
+          commentCount: Number(row.commentCount || 0),
+          mediaCount: Number(row.mediaCount || 0),
+          createdAt: String(row.createdAt || ''),
+        } as TripStoryRecord));
+
         setTripStoriesList(stories);
-      })
-      .catch(() => {
-        setTripStoriesList([]);
-      })
-      .finally(() => setTripStoriesLoading(false));
+      } catch {
+        if (!cancelled) setTripStoriesList([]);
+      } finally {
+        if (!cancelled) setTripStoriesLoading(false);
+      }
+    };
+
+    void loadTripStoriesOptions();
+    return () => {
+      cancelled = true;
+    };
   }, [tripStoriesChecked, tripStoriesLoading, tripStoriesList.length]);
 
   // Load tourist places when section is first checked
@@ -2042,32 +2075,64 @@ export const ExportDialog = memo(({ open, onOpenChange, stats }: ExportDialogPro
   useEffect(() => {
     if (!travelItinerariesChecked || travelItinerariesLoading || travelItinerariesList.length > 0) return;
 
-    setTravelItinerariesLoading(true);
-    getDocs(query(collection(firestoreDb, 'travel-destinations'), limit(OPTION_FETCH_LIMIT)))
-      .then((snap) => {
-        const itineraries = snap.docs.map((doc) => {
-          const t: any = doc.data();
-          return {
-            id: doc.id,
-            place: t.place || 'Unnamed Place',
-            country: t.country || 'India',
-            itinerary: t.itinerary || '',
-            placesCount: (Array.isArray(t.places) ? t.places.length : 0),
-            restaurantsCount: (Array.isArray(t.restaurants) ? t.restaurants.length : 0),
-            hotelsCount: (Array.isArray(t.hotels) ? t.hotels.length : 0),
-            imageCount: (Array.isArray(t.images) ? t.images.length : 0),
-            videoCount: (Array.isArray(t.videos) ? t.videos.length : 0),
-            budget: t.budget || '',
-            createdAt: t.createdAt?.toDate?.()?.toISOString?.() || t.createdAt || '',
-            updatedAt: t.updatedAt?.toDate?.()?.toISOString?.() || t.updatedAt || '',
-          } as TravelItineraryRecord;
-        });
+    let cancelled = false;
+    const loadTravelItineraryOptions = async () => {
+      setTravelItinerariesLoading(true);
+      try {
+        const rows: Record<string, unknown>[] = [];
+        let cursor: string | null = null;
+        let page = 0;
+
+        while (page < OPTION_FETCH_MAX_PAGES && rows.length < OPTION_FETCH_LIMIT) {
+          const remaining = OPTION_FETCH_LIMIT - rows.length;
+          const response = await adminAPI.exportSectionChunk({
+            section: 'travel-itineraries',
+            limit: Math.min(OPTION_FETCH_PAGE_SIZE, remaining),
+            cursor,
+          });
+
+          const payload = response?.data?.data as {
+            rows?: Record<string, unknown>[];
+            nextCursor?: string | null;
+            hasMore?: boolean;
+          } | undefined;
+
+          const pageRows = Array.isArray(payload?.rows) ? payload.rows : [];
+          rows.push(...pageRows);
+
+          if (!payload?.hasMore || !payload?.nextCursor || pageRows.length === 0) break;
+          cursor = payload.nextCursor;
+          page += 1;
+        }
+
+        if (cancelled) return;
+        const itineraries = rows.slice(0, OPTION_FETCH_LIMIT).map((row) => ({
+          id: String(row.itineraryId || ''),
+          place: String(row.place || 'Unnamed Place'),
+          country: String(row.country || 'India'),
+          itinerary: String(row.itinerary || ''),
+          placesCount: Number(row.placesCount || 0),
+          restaurantsCount: Number(row.restaurantsCount || 0),
+          hotelsCount: Number(row.hotelsCount || 0),
+          imageCount: Number(row.imageCount || 0),
+          videoCount: Number(row.videoCount || 0),
+          budget: String(row.budget || ''),
+          createdAt: String(row.createdAt || ''),
+          updatedAt: String(row.updatedAt || ''),
+        } as TravelItineraryRecord));
+
         setTravelItinerariesList(itineraries);
-      })
-      .catch(() => {
-        setTravelItinerariesList([]);
-      })
-      .finally(() => setTravelItinerariesLoading(false));
+      } catch {
+        if (!cancelled) setTravelItinerariesList([]);
+      } finally {
+        if (!cancelled) setTravelItinerariesLoading(false);
+      }
+    };
+
+    void loadTravelItineraryOptions();
+    return () => {
+      cancelled = true;
+    };
   }, [travelItinerariesChecked, travelItinerariesLoading, travelItinerariesList.length]);
 
   // Load reviews and comments when section is first checked

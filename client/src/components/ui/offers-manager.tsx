@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, deleteDoc, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { addDoc, collection, deleteDoc, doc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -82,33 +82,29 @@ export function OffersManager() {
   const [couponForm, setCouponForm] = useState<CouponForm>(EMPTY_COUPON_FORM);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const offersRef = collection(firestoreDb, 'offers');
-    const unsub = onSnapshot(offersRef, (snapshot) => {
-      const rows = snapshot.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Omit<OfferDoc, 'id'>) }))
-        .sort((a, b) => {
-          const pDiff = (a.priority ?? 999) - (b.priority ?? 999);
-          if (pDiff !== 0) return pDiff;
-          return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
-        });
-      setOffers(rows);
-    });
+  const fetchOffers = useCallback(async () => {
+    const snapshot = await getDocs(collection(firestoreDb, 'offers'));
+    const rows = snapshot.docs
+      .map((d) => ({ id: d.id, ...(d.data() as Omit<OfferDoc, 'id'>) }))
+      .sort((a, b) => {
+        const pDiff = (a.priority ?? 999) - (b.priority ?? 999);
+        if (pDiff !== 0) return pDiff;
+        return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+      });
+    setOffers(rows);
+  }, []);
 
-    return () => unsub();
+  const fetchCoupons = useCallback(async () => {
+    const snapshot = await getDocs(collection(firestoreDb, 'coupons'));
+    const rows = snapshot.docs
+      .map((d) => ({ id: d.id, ...(d.data() as Omit<CouponDoc, 'id'>) }))
+      .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    setCoupons(rows);
   }, []);
 
   useEffect(() => {
-    const couponsRef = collection(firestoreDb, 'coupons');
-    const unsub = onSnapshot(couponsRef, (snapshot) => {
-      const rows = snapshot.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Omit<CouponDoc, 'id'>) }))
-        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-      setCoupons(rows);
-    });
-
-    return () => unsub();
-  }, []);
+    void Promise.all([fetchOffers(), fetchCoupons()]);
+  }, [fetchCoupons, fetchOffers]);
 
   const activeCount = useMemo(() => offers.filter((o) => o.isActive).length, [offers]);
 
@@ -136,6 +132,7 @@ export function OffersManager() {
         createdAt: now,
       });
       setForm(EMPTY_FORM);
+      await fetchOffers();
     } finally {
       setSaving(false);
     }
@@ -146,6 +143,7 @@ export function OffersManager() {
       ...patch,
       updatedAt: Date.now(),
     });
+    await fetchOffers();
   };
 
   const removeOffer = async (id: string) => {
@@ -157,6 +155,7 @@ export function OffersManager() {
     });
     if (!confirmed) return;
     await deleteDoc(doc(firestoreDb, 'offers', id));
+    await fetchOffers();
   };
 
   const addCoupon = async () => {
@@ -203,6 +202,7 @@ export function OffersManager() {
       ...patch,
       updatedAt: Date.now(),
     });
+    await fetchCoupons();
   };
 
   const removeCoupon = async (id: string) => {
@@ -214,6 +214,7 @@ export function OffersManager() {
     });
     if (!confirmed) return;
     await deleteDoc(doc(firestoreDb, 'coupons', id));
+    await fetchCoupons();
   };
 
   return (

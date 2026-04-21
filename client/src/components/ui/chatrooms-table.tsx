@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ref, onValue, remove } from 'firebase/database';
+import { ref, get, remove } from 'firebase/database';
 import { database } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -168,8 +168,6 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
   const currentPageRef  = useRef(1);
   // Prevent the filter-effect from re-running applyFilters right after fetchRooms just did
   const justFetchedRef  = useRef(false);
-  // Live RTDB unsubscribe handle — cleaned up on unmount
-  const rtdbUnsubRef = useRef<(() => void) | null>(null);
 
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,46 +208,43 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
     setTotalRooms(total);
   }, []);
 
-  // Subscribe to live RTDB updates — fires immediately with current data, then on every change
-  const fetchRooms = useCallback(() => {
-    // Tear down any previous subscription first
-    rtdbUnsubRef.current?.();
-    rtdbUnsubRef.current = null;
+  // Fetch RTDB state once per refresh action; no live subscription remains active.
+  const fetchRooms = useCallback(async () => {
     setLoading(true);
-    rtdbUnsubRef.current = onValue(
-      ref(database, 'chatrooms'),
-      (snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
-          allRoomsRef.current = [];
-          setRooms([]); setTotalPages(1); setTotalRooms(0);
-          setLoading(false);
-          return;
-        }
-        const normalized = Object.entries(data).map(([id, raw]) => normalizeRoom(id, raw as any));
-        allRoomsRef.current = normalized;
-        justFetchedRef.current = true;
-        applyFilters(
-          normalized,
-          typeFilterRef.current,
-          statusFilterRef.current,
-          searchQueryRef.current,
-          currentPageRef.current,
-        );
-        setLoading(false);
-      },
-      (err) => {
-        console.error('Failed to listen to chat communities from RTDB:', err);
-        setRooms([]); setTotalPages(1); setTotalRooms(0);
-        setLoading(false);
+    try {
+      const snapshot = await get(ref(database, 'chatrooms'));
+      const data = snapshot.val();
+      if (!data) {
+        allRoomsRef.current = [];
+        setRooms([]);
+        setTotalPages(1);
+        setTotalRooms(0);
+        return;
       }
-    );
+
+      const normalized = Object.entries(data).map(([id, raw]) => normalizeRoom(id, raw as any));
+      allRoomsRef.current = normalized;
+      justFetchedRef.current = true;
+      applyFilters(
+        normalized,
+        typeFilterRef.current,
+        statusFilterRef.current,
+        searchQueryRef.current,
+        currentPageRef.current,
+      );
+    } catch (err) {
+      console.error('Failed to load chat communities from RTDB:', err);
+      setRooms([]);
+      setTotalPages(1);
+      setTotalRooms(0);
+    } finally {
+      setLoading(false);
+    }
   }, [applyFilters]);
 
-  // Start live subscription on mount and on external refreshTrigger; clean up on unmount
+  // Load once on mount and on explicit refresh requests.
   useEffect(() => {
-    fetchRooms();
-    return () => { rtdbUnsubRef.current?.(); rtdbUnsubRef.current = null; };
+    void fetchRooms();
   }, [refreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter/search/page changes → client-side only, no RTDB call
