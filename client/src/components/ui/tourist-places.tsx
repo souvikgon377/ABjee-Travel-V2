@@ -34,7 +34,7 @@ import {
   Image as ImageIcon,
   Check,
   Video,
-  Map,
+  Map as MapIcon,
   Play,
   ChevronLeft,
   ChevronRight,
@@ -869,12 +869,16 @@ export function TouristPlacesManager() {
           cursor: reset ? null : lastDocRef.current,
         }));
       } catch {
-        // Fallback path for missing composite indexes.
+        // Fallback path for pagination queries that fail on Firestore indexes.
+        const fallbackConstraints: QueryConstraint[] = [orderBy('updatedAt', 'desc')];
+        if (!reset && lastDocRef.current) {
+          fallbackConstraints.push(startAfter(lastDocRef.current));
+        }
+        fallbackConstraints.push(limit(TOURIST_PLACES_PAGE_SIZE));
         snap = await getDocs(
           query(
             collection(firestoreDb, 'touristPlaces'),
-            orderBy('updatedAt', 'desc'),
-            limit(TOURIST_PLACES_PAGE_SIZE * 2),
+            ...fallbackConstraints,
           ),
         );
       }
@@ -2352,7 +2356,7 @@ export function TouristPlacesManager() {
               {/* Google Maps */}
               <div className="space-y-1.5 md:col-span-2">
                 <Label htmlFor="tp-maps" className="flex items-center gap-1.5">
-                  <Map className="h-4 w-4 text-rose-500" /> Google Maps Link
+                    <MapIcon className="h-4 w-4 text-rose-500" /> Google Maps Link
                 </Label>
                 <Input id="tp-maps" type="url"
                   placeholder="https://maps.google.com/?q=Tirumala+Temple"
@@ -2979,7 +2983,7 @@ export function TouristPlacesManager() {
                   {place.googleMapsUrl && (
                     <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer"
                       className="mt-auto inline-flex items-center gap-1.5 text-xs font-semibold text-rose-500 hover:text-rose-600 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-1.5 rounded-full transition-colors">
-                      <Map className="h-3.5 w-3.5" /> View on Google Maps
+                      <MapIcon className="h-3.5 w-3.5" /> View on Google Maps
                     </a>
                   )}
                 </div>
