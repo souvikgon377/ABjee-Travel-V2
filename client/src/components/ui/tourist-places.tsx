@@ -20,6 +20,7 @@ import {
   type DocumentData,
   serverTimestamp,
   orderBy,
+  documentId,
   query,
 } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -831,7 +832,8 @@ export function TouristPlacesManager() {
       constraints.push(where('searchName', '<=', `${normalizedSearch}\uf8ff`));
       constraints.push(orderBy('searchName'));
     } else {
-      constraints.push(orderBy('updatedAt', 'desc'));
+      // Use documentId ordering to include legacy docs that may not have updatedAt.
+      constraints.push(orderBy(documentId()));
     }
 
     if (options.cursor) {
@@ -870,7 +872,7 @@ export function TouristPlacesManager() {
         }));
       } catch {
         // Fallback path for pagination queries that fail on Firestore indexes.
-        const fallbackConstraints: QueryConstraint[] = [orderBy('updatedAt', 'desc')];
+        const fallbackConstraints: QueryConstraint[] = [orderBy(documentId())];
         if (!reset && lastDocRef.current) {
           fallbackConstraints.push(startAfter(lastDocRef.current));
         }
@@ -2844,7 +2846,11 @@ export function TouristPlacesManager() {
           </motion.div>
           <div className="space-y-2">
             <p className="text-2xl font-extrabold text-foreground">No matching tourist places</p>
-            <p className="text-sm text-muted-foreground">Try another search or click <span className="font-semibold text-rose-500">"Add Place"</span> to create one</p>
+            <p className="text-sm text-muted-foreground">
+              {hasMore
+                ? 'No matches in loaded pages yet. Click "Load More" to scan more places.'
+                : <>Try another search or click <span className="font-semibold text-rose-500">"Add Place"</span> to create one</>}
+            </p>
           </div>
         </motion.div>
       ) : (
@@ -2993,7 +2999,7 @@ export function TouristPlacesManager() {
         </motion.div>
       )}
 
-      {!loading && places.length > 0 && (
+      {!loading && (places.length > 0 || hasMore || loadingMore) && (
         <div className="flex justify-center">
           <Button
             variant="outline"
