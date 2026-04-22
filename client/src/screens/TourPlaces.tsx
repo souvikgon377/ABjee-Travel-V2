@@ -982,11 +982,7 @@ const TourPlaces: React.FC = () => {
                       <MapPin className="h-4 w-4 text-rose-400" />
                       {searchResults.length} loaded results for “{searchQuery}”
                     </span>
-                    {searchCacheStatus && (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${searchCacheStatus === 'hit' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                        Redis {searchCacheStatus}
-                      </span>
-                    )}
+
                   </div>
                 </div>
                 {searchError && (
