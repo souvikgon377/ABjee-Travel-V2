@@ -58,14 +58,25 @@ const normalizeTouristPlace = (doc: FirebaseFirestore.QueryDocumentSnapshot) => 
   };
 };
 
-const matchesFilters = (place: ReturnType<typeof normalizeTouristPlace>, filters: { search: string; location: string; status: TouristPlacesStatus }) => {
+const matchesFilters = (place: ReturnType<typeof normalizeTouristPlace>, filters: { name: string; location: string; status: TouristPlacesStatus }) => {
   if (filters.status === 'active' && place.isActive === false) return false;
   if (filters.status === 'inactive' && place.isActive !== false) return false;
 
   // Only apply search filter if it's not "all" (normalized empty value)
-  if (filters.search && filters.search !== 'all') {
-    const haystack = place.name.toLowerCase();
-    if (!haystack.includes(filters.search)) return false;
+  if (filters.name && filters.name !== 'all') {
+    const searchTokens = filters.name.split(/\s+/).filter(Boolean);
+    const haystack = [
+      place.name,
+      place.searchName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    const phraseMatch = haystack.includes(filters.name);
+    const tokenMatch = searchTokens.length > 0 && searchTokens.every((token) => haystack.includes(token));
+
+    if (!phraseMatch && !tokenMatch) return false;
   }
 
   // Only apply location filter if it's not "all" (normalized empty value)

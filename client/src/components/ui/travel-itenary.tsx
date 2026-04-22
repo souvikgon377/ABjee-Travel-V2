@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { modernConfirm } from '@/lib/modernDialog';
 import { adminAPI } from '@/lib/api';
 import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCollectionCache';
+import { auth } from '@/lib/firebase';
 
 interface FormState {
 	id?: string;
@@ -247,7 +248,9 @@ export default function AdminTravelItenary() {
 				const cachedItineraries = getAdminCollectionCache<{
 					items: TravelItem[];
 					hasMore: boolean;
-				}>(buildTravelListCacheKey(selectedFilters));
+				}>(buildTravelListCacheKey(selectedFilters), {
+					userId: auth.currentUser?.uid,
+				});
 				if (cachedItineraries) {
 					setExistingItineraries(cachedItineraries.items);
 					setHasMoreItineraries(cachedItineraries.hasMore);
@@ -286,6 +289,9 @@ export default function AdminTravelItenary() {
 					buildTravelListCacheKey(selectedFilters),
 					{ items: normalizedResults, hasMore },
 					TRAVEL_ITINERARY_CACHE_TTL_MS,
+					{
+						userId: auth.currentUser?.uid,
+					},
 				);
 			}
 		} catch (error: any) {
@@ -367,6 +373,9 @@ export default function AdminTravelItenary() {
 					buildTravelListCacheKey(appliedFilters),
 					{ items: nextItineraries, hasMore: hasMoreItineraries },
 					TRAVEL_ITINERARY_CACHE_TTL_MS,
+					{
+						userId: auth.currentUser?.uid,
+					},
 				);
 				return nextItineraries;
 			});
@@ -426,6 +435,9 @@ export default function AdminTravelItenary() {
 				buildTravelListCacheKey(appliedFilters),
 				{ items: [], hasMore: false },
 				TRAVEL_ITINERARY_CACHE_TTL_MS,
+				{
+					userId: auth.currentUser?.uid,
+				},
 			);
 			setUploadState((prev) => ({
 				...prev,

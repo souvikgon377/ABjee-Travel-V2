@@ -8,6 +8,24 @@ let activityDebounceTimer: NodeJS.Timeout | null = null;
 let pageViewDebounceTimer: NodeJS.Timeout | null = null;
 let lastActivityUserId: string | null = null;
 
+const isAbortLikeError = (error: unknown) => {
+  if (!error) return false;
+
+  const err = error as { name?: string; code?: string; message?: string };
+  const name = String(err.name || '').toLowerCase();
+  const code = String(err.code || '').toLowerCase();
+  const message = String(err.message || '').toLowerCase();
+
+  return (
+    name === 'aborterror'
+    || code === 'aborted'
+    || code === 'econnreset'
+    || message.includes('aborted')
+    || message.includes('econnreset')
+    || message.includes('socket hang up')
+  );
+};
+
 /**
  * Internal fetch with request deduplication
  */
@@ -49,6 +67,7 @@ export async function trackPageView(pagePath: string) {
           `pageView:${pagePath}`,
           {
             method: 'POST',
+            keepalive: true,
             headers: {
               'Content-Type': 'application/json',
             },
@@ -80,6 +99,7 @@ export async function trackUserSession(userId: string, userEmail?: string) {
       `session:${userId}`,
       {
         method: 'POST',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -93,7 +113,7 @@ export async function trackUserSession(userId: string, userEmail?: string) {
       '/api/analytics/track-event'
     );
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' && !isAbortLikeError(error)) {
       console.error('Error tracking user session:', error);
     }
   }
@@ -111,6 +131,7 @@ export async function trackUserLogout(userId: string) {
       `logout:${userId}`,
       {
         method: 'POST',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -123,7 +144,7 @@ export async function trackUserLogout(userId: string) {
       '/api/analytics/track-event'
     );
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' && !isAbortLikeError(error)) {
       console.error('Error tracking user logout:', error);
     }
   }
@@ -152,6 +173,7 @@ export async function updateUserActivity(userId: string) {
           `activity:${userId}`,
           {
             method: 'POST',
+            keepalive: true,
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${await getAuthToken()}`,
@@ -169,7 +191,7 @@ export async function updateUserActivity(userId: string) {
       }
     }, 30000); // Debounce for 30 seconds
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' && !isAbortLikeError(error)) {
       console.error('Error in updateUserActivity:', error);
     }
   }

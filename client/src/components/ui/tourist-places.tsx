@@ -51,6 +51,7 @@ import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
 import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCollectionCache';
+import { auth } from '@/lib/firebase';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface MediaItem {
@@ -734,8 +735,14 @@ export function TouristPlacesManager() {
     const normalized = searchInputValue.trim().toLowerCase();
     if (!normalized) return true;
 
-    const searchName = place.name?.trim().toLowerCase() || '';
-    return searchName.includes(normalized);
+    const tokens = normalized.split(/\s+/).filter(Boolean);
+    const haystack = [place.name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    if (haystack.includes(normalized)) return true;
+    return tokens.length > 0 && tokens.every((token) => haystack.includes(token));
   }, []);
 
   const applyClientFilters = useCallback((items: TouristPlace[], filters: TouristPlacesFilters) => {
@@ -892,7 +899,9 @@ export function TouristPlacesManager() {
     try {
       const cacheKey = buildFilterCacheKey(selectedFilters);
       if (reset && !forceRefresh) {
-        const cached = getAdminCollectionCache<TouristPlacesListCache>(cacheKey);
+        const cached = getAdminCollectionCache<TouristPlacesListCache>(cacheKey, {
+          userId: auth.currentUser?.uid,
+        });
         const cachedMeetsMinimum = !hasActiveFilters || cached?.places?.length >= TOURIST_PLACES_PAGE_SIZE || !cached?.hasMore;
         if (cached && cached.places?.length > 0 && !cached.hasMore && cachedMeetsMinimum) {
           setPlaces(cached.places);
@@ -942,6 +951,9 @@ export function TouristPlacesManager() {
             lastFetchMs: now,
           },
           TOURIST_PLACES_CACHE_TTL_MS,
+          {
+            userId: auth.currentUser?.uid,
+          },
         );
       }
     } catch (error) {
@@ -982,6 +994,9 @@ export function TouristPlacesManager() {
           lastFetchMs: now,
         },
         TOURIST_PLACES_CACHE_TTL_MS,
+        {
+          userId: auth.currentUser?.uid,
+        },
       );
       await fetchSummary();
     } catch {
@@ -1737,6 +1752,9 @@ export function TouristPlacesManager() {
             lastFetchMs: Date.now(),
           },
           TOURIST_PLACES_CACHE_TTL_MS,
+          {
+            userId: auth.currentUser?.uid,
+          },
         );
         return nextPlaces;
       });
@@ -1779,6 +1797,9 @@ export function TouristPlacesManager() {
             lastFetchMs: Date.now(),
           },
           TOURIST_PLACES_CACHE_TTL_MS,
+          {
+            userId: auth.currentUser?.uid,
+          },
         );
         return nextPlaces;
       });
@@ -2042,7 +2063,7 @@ export function TouristPlacesManager() {
     };
     setAppliedFilters(nextFilters);
     lastDocRef.current = null;
-    void fetchPlaces({ reset: true, forceRefresh: true, filters: nextFilters });
+    void fetchPlaces({ reset: true, forceRefresh: false, filters: nextFilters });
   };
 
   const handleResetFilters = () => {
@@ -2056,7 +2077,13 @@ export function TouristPlacesManager() {
     };
     setAppliedFilters(resetFilters);
     lastDocRef.current = null;
-    void fetchPlaces({ reset: true, forceRefresh: true, filters: resetFilters });
+    void fetchPlaces({ reset: true, forceRefresh: false, filters: resetFilters });
+  };
+
+  const handleFilterInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleApplyFilters();
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -2153,12 +2180,14 @@ export function TouristPlacesManager() {
           <Input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={handleFilterInputKeyDown}
             placeholder="Search by name prefix..."
             className="h-10"
           />
           <Input
             value={cityInput}
             onChange={(e) => setCityInput(e.target.value)}
+            onKeyDown={handleFilterInputKeyDown}
             placeholder="Location filter (city/area/state/country)"
             className="h-10"
           />
@@ -2172,10 +2201,10 @@ export function TouristPlacesManager() {
             <option value="inactive">Inactive</option>
           </select>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={handleApplyFilters}>
+            <Button type="button" variant="outline" className="flex-1" onClick={handleApplyFilters}>
               Apply Filters
             </Button>
-            <Button variant="outline" className="flex-1" onClick={handleResetFilters}>
+            <Button type="button" variant="outline" className="flex-1" onClick={handleResetFilters}>
               Reset
             </Button>
           </div>
@@ -2185,7 +2214,7 @@ export function TouristPlacesManager() {
             Loaded {places.length} places in current view. Reads are scoped to query filters and page size.
             {scanningFilters && (loading || loadingMore) && ' Scanning additional pages for filtered matches...'}
           </p>
-          <Button variant="outline" onClick={handleManualRefresh} disabled={loading}>
+          <Button type="button" variant="outline" onClick={handleManualRefresh} disabled={loading}>
             {loading ? 'Refreshing...' : 'Manual Refresh'}
           </Button>
         </div>

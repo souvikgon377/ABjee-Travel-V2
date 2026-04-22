@@ -15,6 +15,24 @@ const analyticsCache: {
 
 const CACHE_TTL_MS = 5000; // 5 second cache
 
+const isAbortLikeError = (error: unknown) => {
+  if (!error) return false;
+
+  const err = error as { name?: string; code?: string; message?: string };
+  const name = String(err.name || '').toLowerCase();
+  const code = String(err.code || '').toLowerCase();
+  const message = String(err.message || '').toLowerCase();
+
+  return (
+    name === 'aborterror'
+    || code === 'aborted'
+    || code === 'econnreset'
+    || message.includes('aborted')
+    || message.includes('econnreset')
+    || message.includes('socket hang up')
+  );
+};
+
 export async function POST(req: NextRequest) {
   try {
     // Authenticate user (optional for analytics)
@@ -157,6 +175,10 @@ export async function POST(req: NextRequest) {
       timestamp,
     });
   } catch (error) {
+    if (isAbortLikeError(error)) {
+      // Browser/navigation aborts are expected for fire-and-forget analytics.
+      return ok({ success: false, ignored: true, reason: 'request_aborted' });
+    }
     console.error('Analytics tracking error:', error);
     return fail('Failed to track event', 500);
   }

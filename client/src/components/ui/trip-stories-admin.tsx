@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { adminAPI } from '@/lib/api';
 import { getAdminCollectionCache, setAdminCollectionCache } from '@/lib/adminCollectionCache';
+import { auth } from '@/lib/firebase';
 import {
   collection,
   collectionGroup,
@@ -188,7 +189,9 @@ export function TripStoriesAdminPanel() {
           hasMoreComments: boolean;
           storiesCursor: string | null;
           commentsCursor: string | null;
-        }>(TRIP_STORIES_CACHE_KEY);
+        }>(TRIP_STORIES_CACHE_KEY, {
+          userId: auth.currentUser?.uid,
+        });
 
         if (cached) {
           setStories(cached.stories);
@@ -314,6 +317,9 @@ export function TripStoriesAdminPanel() {
             commentsCursor: nextCommentsCursor,
           },
           TRIP_STORIES_CACHE_TTL_MS,
+          {
+            userId: auth.currentUser?.uid,
+          },
         );
       }
     } catch (error: any) {
