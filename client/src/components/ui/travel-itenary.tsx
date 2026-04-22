@@ -153,7 +153,7 @@ export default function AdminTravelItenary() {
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
 	const [loadingMoreItineraries, setLoadingMoreItineraries] = useState(false);
 	const [hasMoreItineraries, setHasMoreItineraries] = useState(false);
-	const [itineraryCursor, setItineraryCursor] = useState<string | null>(null);
+	const [itineraryPage, setItineraryPage] = useState(1);
 	const [isEditing, setIsEditing] = useState(false);
 	const [form, setForm] = useState<FormState>({
 		place: '',
@@ -233,12 +233,11 @@ export default function AdminTravelItenary() {
 		reset?: boolean;
 		forceRefresh?: boolean;
 		filters?: TravelListFilters;
-		cursor?: string | null;
 	}) => {
 		const reset = options?.reset ?? true;
 		const forceRefresh = options?.forceRefresh ?? false;
 		const selectedFilters = options?.filters ?? appliedFilters;
-		const nextCursor = options?.cursor ?? null;
+		const nextPage = reset ? 1 : (itineraryPage + 1);
 
 		try {
 			if (reset) setLoadingItineraries(true);
@@ -248,26 +247,24 @@ export default function AdminTravelItenary() {
 				const cachedItineraries = getAdminCollectionCache<{
 					items: TravelItem[];
 					hasMore: boolean;
-					cursor: string | null;
 				}>(buildTravelListCacheKey(selectedFilters));
 				if (cachedItineraries) {
 					setExistingItineraries(cachedItineraries.items);
 					setHasMoreItineraries(cachedItineraries.hasMore);
-					setItineraryCursor(cachedItineraries.cursor);
+					setItineraryPage(1);
 					return;
 				}
 			}
 
-			const params = new URLSearchParams();
-			params.set('limit', String(TRAVEL_ITINERARY_PAGE_SIZE));
-			if (nextCursor) params.set('cursor', nextCursor);
-			if (selectedFilters.search) params.set('search', selectedFilters.search);
-			if (selectedFilters.country) params.set('country', selectedFilters.country);
-
-			const res = await fetch(`/api/travel?${params.toString()}`);
-			if (!res.ok) throw new Error('Failed to fetch itineraries');
-			const data = await res.json();
-			const results = data.results || data.data?.results || [];
+			const response = await adminAPI.getTravelItineraryList({
+				limit: TRAVEL_ITINERARY_PAGE_SIZE,
+				page: nextPage,
+				search: selectedFilters.search,
+				country: selectedFilters.country,
+				forceRefresh,
+			});
+			const data = response.data?.data ?? response.data ?? {};
+			const results = data.rows || [];
 			const normalizedResults = [...results].sort((a: TravelItem, b: TravelItem) => {
 				return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
 			});
@@ -280,15 +277,14 @@ export default function AdminTravelItenary() {
 				return Array.from(byId.values());
 			});
 
-			const hasMore = Boolean(data.hasMore ?? data.data?.hasMore);
-			const returnedCursor = (data.nextCursor ?? data.data?.nextCursor ?? null) as string | null;
+			const hasMore = Boolean(data.hasMore);
 			setHasMoreItineraries(hasMore);
-			setItineraryCursor(returnedCursor);
+			setItineraryPage(nextPage);
 
 			if (reset) {
 				setAdminCollectionCache(
 					buildTravelListCacheKey(selectedFilters),
-					{ items: normalizedResults, hasMore, cursor: returnedCursor },
+					{ items: normalizedResults, hasMore },
 					TRAVEL_ITINERARY_CACHE_TTL_MS,
 				);
 			}
@@ -369,7 +365,7 @@ export default function AdminTravelItenary() {
 				const nextItineraries = prev.filter(item => item.id !== id);
 				setAdminCollectionCache(
 					buildTravelListCacheKey(appliedFilters),
-					{ items: nextItineraries, hasMore: hasMoreItineraries, cursor: itineraryCursor },
+					{ items: nextItineraries, hasMore: hasMoreItineraries },
 					TRAVEL_ITINERARY_CACHE_TTL_MS,
 				);
 				return nextItineraries;
@@ -428,7 +424,7 @@ export default function AdminTravelItenary() {
 			setExistingItineraries([]);
 			setAdminCollectionCache(
 				buildTravelListCacheKey(appliedFilters),
-				{ items: [], hasMore: false, cursor: null },
+				{ items: [], hasMore: false },
 				TRAVEL_ITINERARY_CACHE_TTL_MS,
 			);
 			setUploadState((prev) => ({
@@ -910,8 +906,8 @@ export default function AdminTravelItenary() {
 			country: countryFilterInput.trim(),
 		};
 		setAppliedFilters(nextFilters);
-		setItineraryCursor(null);
-		void fetchItineraries({ reset: true, forceRefresh: true, filters: nextFilters, cursor: null });
+		setItineraryPage(1);
+		void fetchItineraries({ reset: true, forceRefresh: true, filters: nextFilters });
 	}, [countryFilterInput, fetchItineraries, itinerarySearchInput]);
 
 	const handleResetListFilters = useCallback(() => {
@@ -919,8 +915,8 @@ export default function AdminTravelItenary() {
 		setCountryFilterInput('');
 		const resetFilters: TravelListFilters = { search: '', country: '' };
 		setAppliedFilters(resetFilters);
-		setItineraryCursor(null);
-		void fetchItineraries({ reset: true, forceRefresh: true, filters: resetFilters, cursor: null });
+		setItineraryPage(1);
+		void fetchItineraries({ reset: true, forceRefresh: true, filters: resetFilters });
 	}, [fetchItineraries]);
 
 	const handleLoadMoreItineraries = useCallback(() => {
@@ -929,9 +925,8 @@ export default function AdminTravelItenary() {
 			reset: false,
 			forceRefresh: true,
 			filters: appliedFilters,
-			cursor: itineraryCursor,
 		});
-	}, [appliedFilters, fetchItineraries, hasMoreItineraries, itineraryCursor, loadingMoreItineraries]);
+	}, [appliedFilters, fetchItineraries, hasMoreItineraries, itineraryPage, loadingMoreItineraries]);
 
 	const parseCsvTable = (text: string, delimiter: ',' | ';' | '\t' | '|'): string[][] => {
 		const rows: string[][] = [];

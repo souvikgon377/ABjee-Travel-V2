@@ -154,6 +154,7 @@ const TOURIST_PLACES_CACHE_KEY = 'tourist-places-admin-list';
 const TOURIST_PLACES_CACHE_TTL_MS = 5 * 60 * 1000;
 const TOURIST_PLACES_PAGE_SIZE = 30;
 const TOURIST_PLACES_INCREMENTAL_LIMIT = 200;
+const TOURIST_PLACES_FILTER_SCAN_MAX_PAGES = 20;
 const TOURIST_PLACES_SUMMARY_COLLECTION = 'tourPlaces_summary';
 const TOURIST_PLACES_SUMMARY_DOC = 'metadata';
 
@@ -649,6 +650,7 @@ export function TouristPlacesManager() {
   });
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [scanningFilters, setScanningFilters] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [lastFetchMs, setLastFetchMs] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -664,7 +666,8 @@ export function TouristPlacesManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const lastDocRef = useRef<number | null>(null);
+  const lastPageNum = lastDocRef.current;
 
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -750,6 +753,32 @@ export function TouristPlacesManager() {
       city: raw.city || raw.area || '',
       isActive: raw.isActive ?? true,
       ...raw,
+    };
+  }, []);
+
+  const normalizeTouristPlaceRow = useCallback((row: unknown): TouristPlace | null => {
+    if (!row || typeof row !== 'object') return null;
+
+    const raw = row as Record<string, unknown>;
+    const id = typeof raw.id === 'string' ? raw.id : undefined;
+    if (!id) return null;
+
+    return {
+      id,
+      name: String(raw.name || ''),
+      area: String(raw.area || ''),
+      city: String(raw.city || raw.area || ''),
+      state: String(raw.state || ''),
+      country: String(raw.country || ''),
+      description: String(raw.description || ''),
+      category: String(raw.category || 'Other'),
+      isActive: raw.isActive !== false,
+      googleMapsUrl: String(raw.googleMapsUrl || ''),
+      coverImage: String(raw.coverImage || ''),
+      media: Array.isArray(raw.media) ? (raw.media as MediaItem[]) : [],
+      extraInfo: Array.isArray(raw.extraInfo) ? (raw.extraInfo as InfoSection[]) : [],
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
     };
   }, []);
 
@@ -848,14 +877,24 @@ export function TouristPlacesManager() {
     const selectedFilters = options?.filters ?? appliedFilters;
     const reset = options?.reset ?? false;
     const forceRefresh = options?.forceRefresh ?? false;
+    const hasActiveFilters = Boolean(
+      selectedFilters.search.trim()
+      || selectedFilters.location.trim()
+      || selectedFilters.status !== 'all',
+    );
+    const shouldScanForMinimumResults = hasActiveFilters;
+    const maxPagesToScan = shouldScanForMinimumResults ? TOURIST_PLACES_FILTER_SCAN_MAX_PAGES : 1;
+
     if (reset) setLoading(true);
     else setLoadingMore(true);
+    setScanningFilters(maxPagesToScan > 1);
 
     try {
       const cacheKey = buildFilterCacheKey(selectedFilters);
       if (reset && !forceRefresh) {
         const cached = getAdminCollectionCache<TouristPlacesListCache>(cacheKey);
-        if (cached && cached.places?.length > 0 && !cached.hasMore) {
+        const cachedMeetsMinimum = !hasActiveFilters || cached?.places?.length >= TOURIST_PLACES_PAGE_SIZE || !cached?.hasMore;
+        if (cached && cached.places?.length > 0 && !cached.hasMore && cachedMeetsMinimum) {
           setPlaces(cached.places);
           setHasMore(cached.hasMore);
           setLastFetchMs(cached.lastFetchMs);
@@ -864,36 +903,33 @@ export function TouristPlacesManager() {
         }
       }
 
-      let snap;
-      try {
-        snap = await getDocs(buildPlacesQuery({
-          filters: selectedFilters,
-          cursor: reset ? null : lastDocRef.current,
-        }));
-      } catch {
-        // Fallback path for pagination queries that fail on Firestore indexes.
-        const fallbackConstraints: QueryConstraint[] = [orderBy(documentId())];
-        if (!reset && lastDocRef.current) {
-          fallbackConstraints.push(startAfter(lastDocRef.current));
-        }
-        fallbackConstraints.push(limit(TOURIST_PLACES_PAGE_SIZE));
-        snap = await getDocs(
-          query(
-            collection(firestoreDb, 'touristPlaces'),
-            ...fallbackConstraints,
-          ),
-        );
-      }
+      const nextPage = reset ? 1 : ((lastPageNum || 0) + 1);
+      const response = await adminAPI.getTouristPlaceList({
+        search: selectedFilters.search,
+        location: selectedFilters.location,
+        status: selectedFilters.status,
+        page: nextPage,
+        limit: TOURIST_PLACES_PAGE_SIZE,
+        forceRefresh,
+      });
+      const data = response.data?.data ?? response.data ?? {};
+      const incoming = Array.isArray(data.rows)
+        ? data.rows
+            .map((item: unknown) => normalizeTouristPlaceRow(item))
+            .filter((item): item is TouristPlace => item !== null)
+        : [];
+      const hasMoreFromServer = Boolean(data.hasMore);
 
-      const incoming = snap.docs.map((item) => mapTouristPlaceDoc(item));
       let nextFilteredPlaces: TouristPlace[] = [];
       setPlaces((prev) => {
+        // Don't apply client filters - API already returns filtered results
+        // Client filters should only be used for client-side refinement, not for API-filtered results
         const merged = reset ? incoming : mergePlaces(prev, incoming);
-        nextFilteredPlaces = applyClientFilters(merged, selectedFilters);
+        nextFilteredPlaces = merged;
         return nextFilteredPlaces;
       });
-      lastDocRef.current = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-      setHasMore(snap.docs.length === TOURIST_PLACES_PAGE_SIZE);
+      lastDocRef.current = nextPage;
+      setHasMore(hasMoreFromServer);
 
       const now = Date.now();
       setLastFetchMs(now);
@@ -902,19 +938,23 @@ export function TouristPlacesManager() {
           cacheKey,
           {
             places: nextFilteredPlaces,
-            hasMore: snap.docs.length === TOURIST_PLACES_PAGE_SIZE,
+            hasMore: hasMoreFromServer,
             lastFetchMs: now,
           },
           TOURIST_PLACES_CACHE_TTL_MS,
         );
       }
-    } catch {
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[TouristPlaces] fetchPlaces failed:', error);
+      }
       flash('Failed to load tourist places.', 'error');
     } finally {
+      setScanningFilters(false);
       if (reset) setLoading(false);
       else setLoadingMore(false);
     }
-  }, [appliedFilters, applyClientFilters, buildFilterCacheKey, buildPlacesQuery, mapTouristPlaceDoc, mergePlaces]);
+    }, [appliedFilters, buildFilterCacheKey, mergePlaces, normalizeTouristPlaceRow]);
 
   const handleManualRefresh = useCallback(async () => {
     if (!lastFetchMs) {
@@ -2143,6 +2183,7 @@ export function TouristPlacesManager() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
             Loaded {places.length} places in current view. Reads are scoped to query filters and page size.
+            {scanningFilters && (loading || loadingMore) && ' Scanning additional pages for filtered matches...'}
           </p>
           <Button variant="outline" onClick={handleManualRefresh} disabled={loading}>
             {loading ? 'Refreshing...' : 'Manual Refresh'}

@@ -128,6 +128,21 @@ export const adminAPI = {
   getStats: () => adminApiInstance.get('/admin/stats'),
   getSettings: () => api.get('/admin/settings'),
   updateSettings: (data: any) => api.put('/admin/settings', data),
+  getTouristPlaceList: (params?: {
+    search?: string;
+    location?: string;
+    status?: 'all' | 'active' | 'inactive';
+    page?: number;
+    limit?: number;
+    forceRefresh?: boolean;
+  }) => api.get('/admin/tourist-places/list', { params }),
+  getTravelItineraryList: (params?: {
+    search?: string;
+    country?: string;
+    page?: number;
+    limit?: number;
+    forceRefresh?: boolean;
+  }) => api.get('/admin/travel-itineraries/list', { params }),
   getUsers: (params?: any) => api.get('/admin/users', { params }),
   getUser: (userId: string) => api.get(`/admin/users/${userId}`),
   createUser: (data: any) => api.post('/admin/users', data),
@@ -138,6 +153,7 @@ export const adminAPI = {
   getActivity: (params?: any) => api.get('/admin/activity', { params }),
   getRevenue: (params?: any) => api.get('/admin/revenue', { params }),
   getSystemStatus: () => api.get('/admin/system-status'),
+  getRedisHealth: () => api.get('/admin/redis-health'),
   getActivityOverview: () => api.get('/admin/activity/overview'),
   getQuotaTelemetry: () => api.get('/admin/quota-telemetry'),
   exportSectionChunk: (params: {

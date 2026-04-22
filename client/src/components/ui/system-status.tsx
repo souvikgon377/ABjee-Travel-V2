@@ -29,6 +29,46 @@ export const SystemStatus = memo(({ refreshTrigger = 0 }: SystemStatusProps) => 
     risk: { score: number; level: string; note: string };
     safeguards: { exportPageSize: number; maxExportRowsPerSection: number; adminPollIntervalSeconds: number };
   } | null>(null);
+  const [redisTesting, setRedisTesting] = useState(false);
+  const [redisError, setRedisError] = useState('');
+  const [redisHealth, setRedisHealth] = useState<{
+    env?: {
+      redisUrlSet?: boolean;
+      redisTokenSet?: boolean;
+      source?: string;
+    };
+    ping?: {
+      ok?: boolean;
+      result?: string | null;
+      latencyMs?: number;
+      error?: string;
+    };
+    cacheRoundTrip?: {
+      ok?: boolean;
+      error?: string;
+    };
+  } | null>(null);
+
+  const handleTestRedis = async () => {
+    setRedisTesting(true);
+    setRedisError('');
+
+    try {
+      const response = await adminAPI.getRedisHealth();
+      const payload = response?.data?.data;
+      setRedisHealth(payload || null);
+      if (!payload) {
+        setRedisError('Redis health response was empty.');
+      }
+    } catch (error: any) {
+      setRedisHealth(null);
+      const detail = error?.response?.data?.detail;
+      const message = error?.response?.data?.message;
+      setRedisError(detail || message || 'Redis health check failed.');
+    } finally {
+      setRedisTesting(false);
+    }
+  };
 
   useEffect(() => {
     if (!refreshTrigger) return;
@@ -102,17 +142,56 @@ export const SystemStatus = memo(({ refreshTrigger = 0 }: SystemStatusProps) => 
   if (!refreshTrigger) {
     return (
       <div className="border-border bg-card/40 rounded-xl border p-6">
-        <h3 className="mb-4 text-xl font-semibold">System Status</h3>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="text-xl font-semibold">System Status</h3>
+          <button
+            type="button"
+            onClick={() => void handleTestRedis()}
+            disabled={redisTesting}
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {redisTesting ? 'Testing Redis...' : 'Test Redis'}
+          </button>
+        </div>
         <p className="text-sm text-muted-foreground">
           Click Refresh Dashboard to load system health and quota telemetry.
         </p>
+        {(redisHealth || redisError) && (
+          <div className="mt-3 rounded-lg border border-border/70 bg-background/60 p-3 text-xs">
+            {redisError ? (
+              <p className="text-red-500">Redis: {redisError}</p>
+            ) : (
+              <div className="space-y-1 text-muted-foreground">
+                <p className={redisHealth?.ping?.ok ? 'text-green-500' : 'text-red-500'}>
+                  Ping: {redisHealth?.ping?.ok ? `OK (${redisHealth?.ping?.latencyMs ?? 0}ms)` : redisHealth?.ping?.error || 'Failed'}
+                </p>
+                <p className={redisHealth?.cacheRoundTrip?.ok ? 'text-green-500' : 'text-red-500'}>
+                  Cache round-trip: {redisHealth?.cacheRoundTrip?.ok ? 'OK' : redisHealth?.cacheRoundTrip?.error || 'Failed'}
+                </p>
+                <p>
+                  Env: URL {redisHealth?.env?.redisUrlSet ? 'set' : 'missing'}, token {redisHealth?.env?.redisTokenSet ? 'set' : 'missing'}, source {redisHealth?.env?.source || 'unknown'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="border-border bg-card/40 rounded-xl border p-6">
-      <h3 className="mb-4 text-xl font-semibold">System Status</h3>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="text-xl font-semibold">System Status</h3>
+        <button
+          type="button"
+          onClick={() => void handleTestRedis()}
+          disabled={redisTesting}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {redisTesting ? 'Testing Redis...' : 'Test Redis'}
+        </button>
+      </div>
       <div className="space-y-4">
         {statusItems.map((item, index) => {
           const Icon = item.icon;
@@ -145,6 +224,25 @@ export const SystemStatus = memo(({ refreshTrigger = 0 }: SystemStatusProps) => 
           );
         })}
       </div>
+      {(redisHealth || redisError) && (
+        <div className="mt-4 rounded-lg border border-border/70 bg-background/60 p-3 text-xs">
+          {redisError ? (
+            <p className="text-red-500">Redis: {redisError}</p>
+          ) : (
+            <div className="space-y-1 text-muted-foreground">
+              <p className={redisHealth?.ping?.ok ? 'text-green-500' : 'text-red-500'}>
+                Ping: {redisHealth?.ping?.ok ? `OK (${redisHealth?.ping?.latencyMs ?? 0}ms)` : redisHealth?.ping?.error || 'Failed'}
+              </p>
+              <p className={redisHealth?.cacheRoundTrip?.ok ? 'text-green-500' : 'text-red-500'}>
+                Cache round-trip: {redisHealth?.cacheRoundTrip?.ok ? 'OK' : redisHealth?.cacheRoundTrip?.error || 'Failed'}
+              </p>
+              <p>
+                Env: URL {redisHealth?.env?.redisUrlSet ? 'set' : 'missing'}, token {redisHealth?.env?.redisTokenSet ? 'set' : 'missing'}, source {redisHealth?.env?.source || 'unknown'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
       {quotaTelemetry && (
         <div className="mt-5 rounded-lg border border-border/70 bg-background/60 p-3">
           <p className="text-sm font-semibold">Quota Telemetry</p>

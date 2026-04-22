@@ -136,7 +136,10 @@ export async function POST(req: NextRequest) {
     const cacheKey = `search:${normalizedQuery}:after:${lastDoc || 'start'}`;
     const cached = await getSearchCache<{ results: Array<Record<string, unknown>>; lastDoc: string | null; hasMore: boolean; searchTerm: string }>(cacheKey);
     if (cached) {
-      return ok(cached);
+      return ok({
+        ...cached,
+        cacheStatus: 'hit',
+      });
     }
 
     const cursor = parseCursor(lastDoc);
@@ -216,7 +219,10 @@ export async function POST(req: NextRequest) {
 
     await setSearchCache(cacheKey, responsePayload, CACHE_TTL_SECONDS);
 
-    return ok(responsePayload);
+    return ok({
+      ...responsePayload,
+      cacheStatus: 'miss',
+    });
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('Tourist place search failed:', error);

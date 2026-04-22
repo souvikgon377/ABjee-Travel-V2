@@ -93,6 +93,7 @@ type SearchResponse = {
   lastDoc?: string | null;
   hasMore?: boolean;
   searchTerm?: string;
+  cacheStatus?: 'hit' | 'miss';
 };
 
 const normalizeSearchInput = (value: string) => value.replace(/\+/g, " ").replace(/\s+/g, " ").trim();
@@ -396,6 +397,7 @@ const TourPlaces: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
+  const [searchCacheStatus, setSearchCacheStatus] = useState<'hit' | 'miss' | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<TouristPlace | null>(null);
   const [isWindowExpanded, setIsWindowExpanded] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -473,6 +475,7 @@ const TourPlaces: React.FC = () => {
     setSearchLoading(false);
     setSearchError("");
     setActiveSearchTerm("");
+    setSearchCacheStatus(null);
     lastSearchTermRef.current = "";
   }, []);
 
@@ -484,7 +487,10 @@ const TourPlaces: React.FC = () => {
     const cacheKey = buildClientCacheKey(query, lastDoc);
     const cached = clientSearchCacheRef.current.get(cacheKey);
     if (cached) {
-      return cached;
+      return {
+        ...cached,
+        cacheStatus: "hit",
+      };
     }
 
     const existingRequest = inFlightSearchRef.current.get(cacheKey);
@@ -535,6 +541,7 @@ const TourPlaces: React.FC = () => {
       setSearchLastDoc(null);
       setSearchHasMore(false);
       setSearchError("");
+      setSearchCacheStatus(null);
     } else {
       setSearchLoading(true);
       setSearchError("");
@@ -551,6 +558,7 @@ const TourPlaces: React.FC = () => {
       setActiveSearchTerm(normalizedTerm);
       setSearchLastDoc(payload.lastDoc ?? null);
       setSearchHasMore(Boolean(payload.hasMore));
+      setSearchCacheStatus(payload.cacheStatus ?? null);
       setSearchResults((prev) => (append ? [...prev, ...nextResults] : nextResults));
       setSearchError("");
       lastSearchTermRef.current = normalizedTerm;
@@ -586,6 +594,7 @@ const TourPlaces: React.FC = () => {
       setSearchLastDoc(null);
       setSearchHasMore(false);
       setSearchError("");
+      setSearchCacheStatus(null);
     }
 
     const timer = window.setTimeout(() => {
@@ -968,12 +977,18 @@ const TourPlaces: React.FC = () => {
             ) : (
               <>
                 <div className="text-center">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-md">
-                    <MapPin className="h-4 w-4 text-rose-400" />
-                    {searchResults.length} loaded results for “{searchQuery}”
-                  </span>
+                  <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-md">
+                    <span className="inline-flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-rose-400" />
+                      {searchResults.length} loaded results for “{searchQuery}”
+                    </span>
+                    {searchCacheStatus && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${searchCacheStatus === 'hit' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                        Redis {searchCacheStatus}
+                      </span>
+                    )}
+                  </div>
                 </div>
-
                 {searchError && (
                   <div className="mx-auto w-full max-w-2xl rounded-2xl border border-rose-400/30 bg-rose-500/15 px-4 py-3 text-center text-sm text-rose-100 backdrop-blur-md">
                     {searchError}

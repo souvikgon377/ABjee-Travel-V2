@@ -562,14 +562,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 lastFetchedUidRef.current = user.uid;
                 lastFetchedAtRef.current = Date.now();
               }
-            } catch (error) {
+            } catch (error: any) {
               if ((process.env.NODE_ENV === "development")) {
                 console.error('Error loading user profile:', error);
               }
-              // Fallback: use Firebase data if API fails
-              await createUserProfile(user);
-              lastFetchedUidRef.current = user.uid;
-              lastFetchedAtRef.current = Date.now();
+              // Always fallback to Firebase data if API fails (404, timeout, or other errors)
+              if (isActive) {
+                try {
+                  await createUserProfile(user);
+                } catch (createError) {
+                  if ((process.env.NODE_ENV === "development")) {
+                    console.error('Error creating user profile fallback:', createError);
+                  }
+                }
+                lastFetchedUidRef.current = user.uid;
+                lastFetchedAtRef.current = Date.now();
+              }
             }
           }
         } else {
