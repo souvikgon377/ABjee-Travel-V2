@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest) {
     const docRef = adminDb.collection('touristPlaces').doc(id);
     const docSnap = await docRef.get();
 
-    if (!docSnap.exists()) {
+    if (!docSnap.exists) {
       return fail('Tourist place not found', 404);
     }
 
@@ -84,7 +84,7 @@ export async function DELETE(req: NextRequest) {
     const docRef = adminDb.collection('touristPlaces').doc(id);
     const docSnap = await docRef.get();
 
-    if (!docSnap.exists()) {
+    if (!docSnap.exists) {
       return fail('Tourist place not found', 404);
     }
 

@@ -172,6 +172,7 @@ export const adminAPI = {
     coverImage?: string;
     media?: unknown[];
     extraInfo?: unknown[];
+    isActive?: boolean;
   }) => api.post('/admin/tourist-places/create', data),
   updateTouristPlace: (id: string, data: {
     name: string;
@@ -227,7 +228,7 @@ export const adminAPI = {
   getRoomMembers: (roomId: string) => api.get(`/admin/chatrooms/${roomId}/members`),
   startTourPlaceSearchMigration: () => api.post('/admin/tour-places/migration/start'),
   getTourPlaceSearchMigrationStatus: (jobId: string) => api.get('/admin/tour-places/migration/status', { params: { jobId } }),
+  refreshCache: (scope: string = 'all', rewarm: boolean = true) => api.post('/admin/refresh-cache', { scope, rewarm }),
 };
 
 export default api;
-

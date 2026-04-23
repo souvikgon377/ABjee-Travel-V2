@@ -650,7 +650,6 @@ export function RichTextEditor({
         <div
           id={id}
           ref={editorRef}
-          contentEditable
           contentEditable={!disabled}
           suppressContentEditableWarning
           onInput={() => {

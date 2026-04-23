@@ -27,6 +27,7 @@ import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
 import { auth } from '@/lib/firebase';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface MediaItem {
@@ -96,6 +97,21 @@ interface TouristPlacesFilters {
   search: string;
   location: string;
   status: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
+}
+
+export function formatBytes(bytes: number, decimals = 2) {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+export function stripRichTextTags(html: string) {
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -840,7 +856,7 @@ export function TouristPlacesManager() {
       const incoming = Array.isArray(data.rows)
         ? data.rows
             .map((item: unknown) => normalizeTouristPlaceRow(item))
-            .filter((item): item is TouristPlace => item !== null)
+            .filter((item: TouristPlace | null): item is TouristPlace => item !== null)
         : [];
 
       setPlaces((prev) => (reset ? incoming : mergePlaces(prev, incoming)));
@@ -1546,7 +1562,7 @@ export function TouristPlacesManager() {
         googleMapsUrl: form.googleMapsUrl,
         coverImage,
         media: allMedia,
-        extraInfo: form.extraInfo.map(({ heading, description }) => ({ heading, description })),
+        extraInfo: form.extraInfo.map(({ id, heading, description }) => ({ id, heading, description })),
         ...buildSearchIndexFields({
           name: form.name,
           area: form.area,

@@ -1,100 +1,49 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, AuthError, requireAdmin } from "@/lib/server/auth";
-import { fail, ok } from "@/lib/server/http";
+import { fail, ok, withCacheHeaders } from "@/lib/server/http";
 import { adminDb } from "@/lib/server/firebaseAdminFirestore";
 import { getAdminRtdb } from "@/lib/server/firebaseAdminRtdb";
+import { hybridGet } from "@/lib/server/hybridCache";
+import { triggerBackgroundWarmup } from "@/lib/server/warmup";
+import { checkAdminRateLimit } from "@/lib/server/rateLimiter";
 
 export const runtime = "nodejs";
 
-// Simple in-memory cache for stats
-const statsCache: {
-  data: any;
-  timestamp: number;
-} = {
-  data: null,
-  timestamp: 0,
+// ─── Cache Config ─────────────────────────────────────────────────────────────
+// hybridGet handles: L1 memory (2-min) → L2 Redis (5-min) → fetcher (Firestore)
+// All instances share the Redis key — cold starts no longer re-run all queries.
+const STATS_CACHE_KEY = "admin:stats";
+const STATS_REDIS_TTL = 300;   // 5 minutes
+const STATS_MEMORY_TTL = 120;  // 2 minutes
+const SOURCE_TIMEOUT_MS = 5000;
+
+type StatsData = {
+  totalUsers: number;
+  activeUsers: number;
+  revenue: number;
+  monthlyRevenue: number;
+  pageViews: number;
+  paidTransactions: number;
+  stats: {
+    users: { total: number; active: number; growth: string };
+    revenue: { total: string; monthly: string; growth: string };
+    subscriptions: { total: number; basic: number; pro: number; premium: number };
+  };
+  cachedAt?: number;
 };
-
-let statsRefreshPromise: Promise<void> | null = null;
-
-const CACHE_TTL_MS = 30000; // Cache for 30 seconds
-const SOURCE_TIMEOUT_MS = 3000; // Very aggressive timeout for Vercel serverless (was 5000)
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       reject(new Error(`Query timed out: ${label}`));
     }, SOURCE_TIMEOUT_MS);
-
     promise
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
+      .then((v) => { clearTimeout(timeoutId); resolve(v); })
+      .catch((e) => { clearTimeout(timeoutId); reject(e); });
   });
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const user = await authenticateRequest(req);
-    requireAdmin(user);
-
-    const now = Date.now();
-
-    // Return cached data if fresh (30 second cache)
-    if (statsCache.data && now - statsCache.timestamp < CACHE_TTL_MS) {
-      return ok(statsCache.data);
-    }
-
-    // Serve stale cache immediately and refresh in background to keep UI snappy.
-    if (statsCache.data) {
-      void refreshStats();
-      return ok(statsCache.data);
-    }
-
-    // Cold start: try to fetch fresh stats but timeout after 2 seconds
-    // to avoid blocking the response. Continue refreshing in background.
-    const fetchPromise = refreshStats();
-    const timeoutPromise = new Promise((resolve) => {
-      setTimeout(() => resolve("timeout"), 2000);
-    });
-
-    await Promise.race([fetchPromise, timeoutPromise]);
-    
-    // Return cached data if available (should be populated by now)
-    if (statsCache.data) {
-      return ok(statsCache.data);
-    }
-
-    // If still nothing, return defaults to unblock UI
-    return ok(getDefaultStats());
-  } catch (error: any) {
-    if (error instanceof AuthError) return fail(error.message, error.status);
-    
-    // Even on error, try to return cached or default data
-    if (statsCache.data) return ok(statsCache.data);
-    return ok(getDefaultStats());
-  }
-}
-
-function refreshStats() {
-  if (!statsRefreshPromise) {
-    statsRefreshPromise = fetchStatsInBackground().finally(() => {
-      statsRefreshPromise = null;
-    });
-  }
-
-  return statsRefreshPromise;
-}
-
-/**
- * Get default empty stats
- */
-function getDefaultStats() {
+function getDefaultStats(): StatsData {
   return {
     totalUsers: 0,
     activeUsers: 0,
@@ -110,168 +59,171 @@ function getDefaultStats() {
   };
 }
 
-/**
- * Fetch stats in background - cached for 30 seconds
- * Uses limits and optimized queries to speed up response
- */
-async function fetchStatsInBackground() {
+export async function GET(req: NextRequest) {
   try {
-    const now = Date.now();
-    const fiveMinAgo = now - 5 * 60 * 1000;
-    const thisMonth = new Date();
-    thisMonth.setDate(1);
-    thisMonth.setHours(0, 0, 0, 0);
+    const user = await authenticateRequest(req);
+    requireAdmin(user);
 
-    // Fetch all data in parallel with reduced limits and shorter timeouts
-    // Reduced from 10000 to 1000 for faster queries on Vercel
-    const [usersResult, statusResult, pageViewsResult, paymentsResult, subscriptionsResult] =
-      await Promise.allSettled([
-        withTimeout(adminDb.collection("users").limit(1000).get(), "users"),
-        withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get(), "status"),
-        withTimeout(getAdminRtdb().ref("analytics/pageViews").get(), "pageViews"),
-        withTimeout(adminDb.collection("subscriptionPayments").limit(500).orderBy("verifiedAt", "desc").get(), "subscriptionPayments"),
-        withTimeout(adminDb.collection("subscriptions").limit(500).get(), "subscriptions"),
-      ]);
-
-    const usersSnapshot = usersResult.status === "fulfilled" ? usersResult.value : null;
-    const statusSnapshot = statusResult.status === "fulfilled" ? statusResult.value : null;
-    const pageViewsSnapshot = pageViewsResult.status === "fulfilled" ? pageViewsResult.value : null;
-    const paidPaymentsSnapshot = paymentsResult.status === "fulfilled" ? paymentsResult.value : null;
-    const subscriptionsSnapshot = subscriptionsResult.status === "fulfilled" ? subscriptionsResult.value : null;
-
-    const totalUsers = usersSnapshot?.size || 0;
-
-    const statusData = (statusSnapshot?.val() || {}) as Record<string, any>;
-    const activeUsers = Object.values(statusData).filter((entry) => {
-      const online = entry?.online === true || entry?.isOnline === true;
-      const recentlySeen =
-        typeof entry?.lastSeen === "number" && entry.lastSeen >= fiveMinAgo;
-      return online || recentlySeen;
-    }).length;
-
-    let revenueTotal = 0;
-    let revenueMonthly = 0;
-
-    const paidPaymentDocs =
-      paidPaymentsSnapshot?.docs.filter((doc) => {
-        const payment = doc.data() as Record<string, any>;
-        return String(payment.status) === "paid";
-      }) || [];
-
-    if (paidPaymentDocs.length > 0) {
-      paidPaymentDocs.forEach((doc) => {
-        const payment = doc.data() as Record<string, any>;
-        const amountInPaise =
-          typeof payment.amountInPaise === "number"
-            ? payment.amountInPaise
-            : null;
-        const amount =
-          amountInPaise !== null
-            ? amountInPaise / 100
-            : typeof payment.amount === "number"
-              ? payment.amount
-              : 0;
-
-        revenueTotal += amount;
-
-        const createdAt = payment.verifiedAt
-          ? new Date(payment.verifiedAt)
-          : payment.createdAt?.toDate?.()
-            ? payment.createdAt.toDate()
-            : payment.createdAt
-              ? new Date(payment.createdAt)
-              : null;
-
-        if (createdAt && createdAt >= thisMonth) {
-          revenueMonthly += amount;
-        }
-      });
-    } else {
-      const subscriptions = subscriptionsSnapshot?.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Record<string, any>),
-      })) || [];
-      const activeSubscriptions = subscriptions.filter((subscription) => {
-        if (!subscription.expiresAt) return false;
-        const expiry =
-          subscription.expiresAt?.toDate?.() ||
-          new Date(subscription.expiresAt);
-        return expiry > new Date();
-      });
-
-      const planPrice: Record<string, number> = {
-        basic: 9.99,
-        pro: 19.99,
-        premium: 29.99,
-      };
-      revenueTotal = activeSubscriptions.reduce(
-        (sum, subscription) =>
-          sum + (planPrice[String(subscription.type)] || 0),
-        0
-      );
-
-      revenueMonthly = activeSubscriptions
-        .filter((subscription) => {
-          const createdAt =
-            subscription.createdAt?.toDate?.() || new Date(0);
-          return createdAt >= thisMonth;
-        })
-        .reduce(
-          (sum, subscription) =>
-            sum + (planPrice[String(subscription.type)] || 0),
-          0
-        );
+    // 1. Rate Limiting
+    const limit = await checkAdminRateLimit(user.id);
+    if (!limit.success) {
+      return fail("Too many requests. Please wait.", 429);
     }
 
-    const pageViewsRaw = pageViewsSnapshot?.val();
-    const pageViews =
-      typeof pageViewsRaw === "number" ? pageViewsRaw : Number(pageViewsRaw || 0);
+    // 2. Background Warm-up (non-blocking)
+    void triggerBackgroundWarmup();
 
-    // Update cache with fresh data
-    statsCache.data = {
-      totalUsers,
-      activeUsers,
-      revenue: revenueTotal,
-      monthlyRevenue: revenueMonthly,
-      pageViews,
-      paidTransactions: paidPaymentDocs.length,
-      stats: {
-        users: {
-          total: totalUsers,
-          active: activeUsers,
-          growth:
-            totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(1) : "0",
-        },
-        revenue: {
-          total: revenueTotal.toFixed(2),
-          monthly: revenueMonthly.toFixed(2),
-          growth:
-            revenueTotal > 0
-              ? ((revenueMonthly / revenueTotal) * 100).toFixed(1)
-              : "0",
-        },
-        subscriptions: {
-          total: subscriptionsSnapshot?.size || 0,
-          basic: subscriptionsSnapshot?.docs.filter(
-            (doc) =>
-              String((doc.data() as Record<string, unknown>).type) ===
-              "basic"
-          ).length || 0,
-          pro: subscriptionsSnapshot?.docs.filter(
-            (doc) =>
-              String((doc.data() as Record<string, unknown>).type) === "pro"
-          ).length || 0,
-          premium: subscriptionsSnapshot?.docs.filter(
-            (doc) =>
-              String((doc.data() as Record<string, unknown>).type) ===
-              "premium"
-          ).length || 0,
-        },
-      },
-    };
+    const forceRefresh = req.nextUrl.searchParams.get("forceRefresh") === "true";
 
-    statsCache.timestamp = now;
-  } catch (error) {
-    console.error("Error fetching stats:", error);
+    // hybridGet: L1 memory → L2 Redis → fetchStatsFromFirestore (with in-flight dedup)
+    // On cache hit: zero Firestore reads. On miss: all instances share the same fetch.
+    const data = await hybridGet<StatsData>(
+      STATS_CACHE_KEY,
+      fetchStatsFromFirestore,
+      { redisTtlSeconds: STATS_REDIS_TTL, memoryTtlSeconds: STATS_MEMORY_TTL, forceRefresh },
+    );
+
+    const res = ok(data);
+    return withCacheHeaders(res, 60, 300);
+  } catch (error: unknown) {
+    if (error instanceof AuthError) return fail(error.message, error.status);
+    const message = error instanceof Error ? error.message : "Failed to load stats";
+    console.error("[Admin:Stats] Error:", message);
+    // Return defaults so admin UI is never blocked
+    return ok(getDefaultStats());
   }
+}
+
+// ─── Firestore fetcher ────────────────────────────────────────────────────────
+// Called only on cache miss. In-flight deduplication in hybridGet ensures
+// only one Firestore read occurs even if N requests arrive simultaneously.
+export async function fetchStatsFromFirestore(): Promise<StatsData> {
+  const now = Date.now();
+  const fiveMinAgo = now - 5 * 60 * 1000;
+  const thisMonth = new Date();
+  thisMonth.setDate(1);
+  thisMonth.setHours(0, 0, 0, 0);
+
+  // users: count() = 1 read regardless of collection size (vs limit(1000) = 1000 reads)
+  const [usersCountResult, statusResult, pageViewsResult, paymentsResult, subscriptionsResult] =
+    await Promise.allSettled([
+      withTimeout(adminDb.collection("users").count().get(), "users-count"),
+      withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get(), "status"),
+      withTimeout(getAdminRtdb().ref("analytics/pageViews").get(), "pageViews"),
+      withTimeout(
+        adminDb.collection("subscriptionPayments").orderBy("verifiedAt", "desc").limit(500).get(),
+        "subscriptionPayments",
+      ),
+      withTimeout(adminDb.collection("subscriptions").limit(500).get(), "subscriptions"),
+    ]);
+
+  const totalUsers =
+    usersCountResult.status === "fulfilled"
+      ? (usersCountResult.value.data() as { count: number }).count
+      : 0;
+
+  const statusSnapshot = statusResult.status === "fulfilled" ? statusResult.value : null;
+  const pageViewsSnapshot = pageViewsResult.status === "fulfilled" ? pageViewsResult.value : null;
+  const paidPaymentsSnapshot = paymentsResult.status === "fulfilled" ? paymentsResult.value : null;
+  const subscriptionsSnapshot = subscriptionsResult.status === "fulfilled" ? subscriptionsResult.value : null;
+
+  const statusData = (statusSnapshot?.val() || {}) as Record<string, unknown>;
+  const activeUsers = Object.values(statusData).filter((entry) => {
+    const e = entry as Record<string, unknown> | null;
+    const online = e?.online === true || e?.isOnline === true;
+    const recentlySeen = typeof e?.lastSeen === "number" && (e.lastSeen as number) >= fiveMinAgo;
+    return online || recentlySeen;
+  }).length;
+
+  let revenueTotal = 0;
+  let revenueMonthly = 0;
+
+  const paidPaymentDocs =
+    paidPaymentsSnapshot?.docs.filter((doc) => {
+      const payment = doc.data() as Record<string, unknown>;
+      return String(payment.status) === "paid";
+    }) || [];
+
+  if (paidPaymentDocs.length > 0) {
+    paidPaymentDocs.forEach((doc) => {
+      const payment = doc.data() as Record<string, unknown>;
+      const amountInPaise = typeof payment.amountInPaise === "number" ? payment.amountInPaise : null;
+      const amount =
+        amountInPaise !== null
+          ? amountInPaise / 100
+          : typeof payment.amount === "number"
+            ? payment.amount
+            : 0;
+      revenueTotal += amount;
+      const verifiedAt = payment.verifiedAt;
+      const createdAtTs = payment.createdAt as { toDate?: () => Date } | null;
+      const createdAt = verifiedAt
+        ? new Date(verifiedAt as string)
+        : createdAtTs?.toDate?.()
+          ? createdAtTs.toDate()
+          : createdAtTs
+            ? new Date(createdAtTs as unknown as string)
+            : null;
+      if (createdAt && createdAt >= thisMonth) revenueMonthly += amount;
+    });
+  } else {
+    type SubDoc = { id: string } & Record<string, unknown>;
+    const subscriptions: SubDoc[] = subscriptionsSnapshot?.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Record<string, unknown>),
+    })) ?? [];
+    const planPrice: Record<string, number> = { basic: 9.99, pro: 19.99, premium: 29.99 };
+    const activeSubscriptions = subscriptions.filter((s) => {
+      if (!s.expiresAt) return false;
+      const expiry = (s.expiresAt as { toDate?: () => Date })?.toDate?.() ?? new Date(s.expiresAt as string);
+      return expiry > new Date();
+    });
+    revenueTotal = activeSubscriptions.reduce((sum, s) => sum + (planPrice[String(s.type)] || 0), 0);
+    revenueMonthly = activeSubscriptions
+      .filter((s) => {
+        const ca = (s.createdAt as { toDate?: () => Date })?.toDate?.() ?? new Date(0);
+        return ca >= thisMonth;
+      })
+      .reduce((sum, s) => sum + (planPrice[String(s.type)] || 0), 0);
+  }
+
+  const pageViewsRaw = pageViewsSnapshot?.val();
+  const pageViews = typeof pageViewsRaw === "number" ? pageViewsRaw : Number(pageViewsRaw || 0);
+
+  const data: StatsData = {
+    totalUsers,
+    activeUsers,
+    revenue: revenueTotal,
+    monthlyRevenue: revenueMonthly,
+    pageViews,
+    paidTransactions: paidPaymentDocs.length,
+    stats: {
+      users: {
+        total: totalUsers,
+        active: activeUsers,
+        growth: totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(1) : "0",
+      },
+      revenue: {
+        total: revenueTotal.toFixed(2),
+        monthly: revenueMonthly.toFixed(2),
+        growth: revenueTotal > 0 ? ((revenueMonthly / revenueTotal) * 100).toFixed(1) : "0",
+      },
+      subscriptions: {
+        total: subscriptionsSnapshot?.size || 0,
+        basic: subscriptionsSnapshot?.docs.filter(
+          (doc) => String((doc.data() as Record<string, unknown>).type) === "basic",
+        ).length || 0,
+        pro: subscriptionsSnapshot?.docs.filter(
+          (doc) => String((doc.data() as Record<string, unknown>).type) === "pro",
+        ).length || 0,
+        premium: subscriptionsSnapshot?.docs.filter(
+          (doc) => String((doc.data() as Record<string, unknown>).type) === "premium",
+        ).length || 0,
+      },
+    },
+    cachedAt: Date.now(),
+  };
+
+  console.info("[Admin:Stats] Fetched fresh from Firestore", { totalUsers, activeUsers });
+  return data;
 }

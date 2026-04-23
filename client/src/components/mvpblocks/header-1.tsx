@@ -377,7 +377,7 @@ export default function Header1() {
       }
 
       const items = Array.isArray(json?.data) ? json.data.map(normalizeNotification) : [];
-      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      items.sort((a: NotificationItem, b: NotificationItem) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setNotifications(items);
     } catch {
       setNotificationError('Could not load notifications');

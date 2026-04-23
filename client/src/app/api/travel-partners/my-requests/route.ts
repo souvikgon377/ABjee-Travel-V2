@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
       .where("requester", "==", user.id)
       .get();
 
-    let requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() as Record<string, any> }));
+    let requests: any[] = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     if (status) {
       requests = requests.filter((request) => request.status === status);
     }
@@ -49,3 +49,4 @@ export async function GET(req: NextRequest) {
     return fail("Failed to get your travel partner requests", 500);
   }
 }
+

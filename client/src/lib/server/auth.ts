@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { adminAuth } from "@/lib/server/firebaseAdminAuth";
 import { adminDb } from "@/lib/server/firebaseAdminFirestore";
 import { userService } from "@/services/userService";
+import { hybridGet, hybridInvalidate } from "@/lib/server/hybridCache";
 
 type ElevatedRole = "admin" | "owner";
 
@@ -9,6 +10,52 @@ type RoleCacheEntry = {
   role: ElevatedRole;
   expiresAt: number;
 };
+
+// ─── User Profile Cache ──────────────────────────────────────────────────────
+// L1 : In-process Map (fastest, no network, resets on cold start)
+// L2 : Redis via hybridGet  (shared across ALL Vercel instances, survives cold starts)
+//
+// Previously: memory-only → every cold Vercel instance re-read Firestore for
+// the first request from each user.
+// Now: Redis hit on cold start → zero Firestore reads for known users.
+//
+// Cache keys:
+//   auth:user:{uid}  — full user document  (15 min Redis TTL)
+//   auth:role:{uid}  — elevated role string (15 min Redis TTL)
+type UserProfileCacheEntry = {
+  user: Record<string, unknown>;
+  expiresAt: number;
+};
+
+const AUTH_USER_REDIS_TTL = 15 * 60;       // 15 minutes in Redis
+const AUTH_USER_MEMORY_TTL = 5 * 60;       // 5 minutes in memory (L1)
+const USER_PROFILE_CACHE_TTL_MS = AUTH_USER_MEMORY_TTL * 1000;
+const userProfileCache = new Map<string, UserProfileCacheEntry>();
+
+const getCachedUserProfile = (uid: string): Record<string, unknown> | null => {
+  const entry = userProfileCache.get(uid);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    userProfileCache.delete(uid);
+    return null;
+  }
+  return entry.user;
+};
+
+const setCachedUserProfile = (uid: string, user: Record<string, unknown>): void => {
+  userProfileCache.set(uid, {
+    user,
+    expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+  });
+};
+
+export const invalidateUserProfileCache = async (uid: string): Promise<void> => {
+  userProfileCache.delete(uid);
+  // Also clear from Redis so other instances don't serve stale data
+  await hybridInvalidate(`auth:user:${uid}`);
+  await hybridInvalidate(`auth:role:${uid}`);
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 const ROLE_CACHE_TTL_MS = 15 * 60 * 1000;
 const DATASTORE_TIMEOUT_MS = 2200;
@@ -172,14 +219,44 @@ export const authenticateRequest = async (req: NextRequest) => {
     throw error;
   }
 
-  let user: Record<string, any> | null = null;
   const tokenRole: ElevatedRole | null = decoded.role === "admin" || decoded.role === "owner" ? decoded.role : null;
   const fallbackRole = getFallbackRoleByEmail(decoded.email);
+
+  // ── L1: In-memory cache (fastest) ──────────────────────────────────────────
+  const memHit = getCachedUserProfile(decoded.uid);
+  if (memHit) {
+    if (!memHit.isActive) throw new AuthError("Account is deactivated.", 401);
+    return memHit;
+  }
+
+  // ── L2: Redis cache (cross-instance, survives cold starts) ─────────────────
+  // On cold Vercel instance, the memory cache is empty but Redis has the user.
+  // This avoids a Firestore read for every cold-start request from a known user.
+  try {
+    const redisUser = await hybridGet<Record<string, unknown> | null>(
+      `auth:user:${decoded.uid}`,
+      () => Promise.resolve(null), // fetcher returns null — we handle miss below
+      { redisTtlSeconds: AUTH_USER_REDIS_TTL, memoryTtlSeconds: AUTH_USER_MEMORY_TTL },
+    );
+    if (redisUser) {
+      // Backfill L1 memory cache
+      setCachedUserProfile(decoded.uid, redisUser);
+      if (!redisUser.isActive) throw new AuthError("Account is deactivated.", 401);
+      return redisUser;
+    }
+  } catch (redisErr) {
+    // Redis unavailable — fall through to Firestore
+    console.warn('[Auth] Redis auth cache unavailable, falling back to Firestore');
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  let user: Record<string, any> | null = null;
 
   try {
     user = await withDataStoreTimeout(userService.findByFirebaseUid(decoded.uid), "findByFirebaseUid");
     const elevatedRole =
       tokenRole ||
+      getCachedRole(decoded.uid, decoded.email) ||
       (await withDataStoreTimeout(getAdminRoleByEmail(decoded.email), "getAdminRoleByEmail")) ||
       fallbackRole;
 
@@ -188,7 +265,7 @@ export const authenticateRequest = async (req: NextRequest) => {
     }
 
     if (user?.role === "admin" || user?.role === "owner") {
-      setRoleCache(decoded.uid, decoded.email, user.role);
+      setRoleCache(decoded.uid, decoded.email, user.role as ElevatedRole);
     }
 
     if (!user) {
@@ -228,7 +305,20 @@ export const authenticateRequest = async (req: NextRequest) => {
 
       if (Object.keys(patch).length > 0) {
         user = await withDataStoreTimeout(userService.update(user.id, patch as Record<string, any>), "userService.update");
+        // Invalidate cache on update so next request gets fresh data
+        invalidateUserProfileCache(decoded.uid);
       }
+    }
+
+    // Store in both L1 memory and L2 Redis for subsequent calls
+    if (user) {
+      setCachedUserProfile(decoded.uid, user as Record<string, unknown>);
+      // Fire-and-forget Redis write — don’t block the response
+      void hybridGet<Record<string, unknown>>(
+        `auth:user:${decoded.uid}`,
+        () => Promise.resolve(user as Record<string, unknown>),
+        { redisTtlSeconds: AUTH_USER_REDIS_TTL, memoryTtlSeconds: AUTH_USER_MEMORY_TTL, forceRefresh: true },
+      );
     }
   } catch (error: any) {
     if (!isAdminDataStoreError(error)) {

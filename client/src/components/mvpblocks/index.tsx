@@ -288,10 +288,17 @@ export default function AdminDashboard() {
     setDashboardRefreshVersion((prev) => prev + 1);
 
     try {
+      // 1. Trigger server-side cache refresh & rewarm
+      await adminAPI.refreshCache('all', true);
+
+      // 2. Fetch fresh data for the client
       await Promise.all([fetchStats({ withLoader: true }), fetchHomePageSetting()]);
+      
       const refreshedAt = Date.now();
       setLastUpdatedAt(refreshedAt);
       setCachedLastUpdatedAt(refreshedAt);
+    } catch (error) {
+      console.error('Failed to refresh dashboard cache:', error);
     } finally {
       setIsRefreshing(false);
     }
@@ -372,11 +379,12 @@ export default function AdminDashboard() {
     }));
   }, []);
 
-  const handleFeaturesChange = useCallback((field: keyof (RevenueSettings['features'] | {}), value: string) => {
+  const handleFeaturesChange = useCallback((field: 'proFeatures' | 'premiumFeatures', value: string) => {
     setRevenueForm((prev) => ({
       ...prev,
       features: {
-        ...(prev.features || {}),
+        proFeatures: prev.features?.proFeatures || '',
+        premiumFeatures: prev.features?.premiumFeatures || '',
         [field]: value,
       },
     }));

@@ -229,7 +229,7 @@ export async function GET(req: NextRequest) {
         snapshot.docs.forEach((doc) => {
           if (results.length >= CACHE_CONFIG.MAX_CACHED_SCAN_SIZE) return;
           const place = normalizeTouristPlace(doc);
-          if (matchesFilters(place, filters)) {
+          if (matchesFilters(place, { ...filters, contentFilter })) {
             results.push(place);
           }
         });

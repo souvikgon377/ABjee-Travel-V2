@@ -13,7 +13,7 @@ import {
   reauthenticateWithCredential,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, googleProvider } from '../lib/firebase';
 import { firestoreDb } from '../lib/firebaseFirestore';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -606,13 +606,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [createUserProfile, normalizeUserProfile, refreshToken, fetchUserProfile, isTransientFirebaseNetworkError]);
 
+  // One-time Firestore profile sync on login.
+  // Previously: onSnapshot() → persistent real-time listener counting reads on every doc write.
+  // Now: getDoc() called once when currentUser.uid changes (i.e. on login).
+  // If subscription/role is updated by admin, user sees it on next login.
   useEffect(() => {
     if (!currentUser?.uid) return;
 
+    // Only fetch if we don't already have a fresh profile from the API
+    const isProfileFresh =
+      lastFetchedUidRef.current === currentUser.uid &&
+      Date.now() - lastFetchedAtRef.current < 60_000;
+    if (isProfileFresh) return;
+
     const userDocRef = doc(firestoreDb, 'users', currentUser.uid);
-    const unsubscribe = onSnapshot(
-      userDocRef,
-      (snapshot) => {
+    getDoc(userDocRef)
+      .then((snapshot) => {
         if (!snapshot.exists()) return;
 
         const snapshotProfile = normalizeUserProfile({
@@ -628,19 +637,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ...(prev || {}),
             ...snapshotProfile,
           };
-
           return normalizeUserProfile(merged);
         });
-      },
-      (error) => {
-        if ((process.env.NODE_ENV === "development") && !isTransientFirebaseNetworkError(error)) {
-          console.error('User profile Firestore listener failed:', error);
+      })
+      .catch((error) => {
+        if (process.env.NODE_ENV === 'development' && !isTransientFirebaseNetworkError(error)) {
+          console.warn('[Auth] One-time user profile fetch failed:', error);
         }
-      }
-    );
-
-    return () => unsubscribe();
-  }, [currentUser?.uid, normalizeUserProfile, isTransientFirebaseNetworkError]);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.uid]);
 
   const value: AuthContextType = useMemo(() => ({
     currentUser,

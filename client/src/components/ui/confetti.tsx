@@ -15,7 +15,7 @@ import type {
 } from "canvas-confetti"
 import confetti from "canvas-confetti"
 
-import { Button } from "@/components/ui/button"
+import { Button, type ButtonProps } from "@/components/ui/button"
 
 type Api = {
   fire: (options?: ConfettiOptions) => void
@@ -107,9 +107,10 @@ ConfettiComponent.displayName = "Confetti"
 // Export as Confetti
 export const Confetti = ConfettiComponent
 
-interface ConfettiButtonProps extends React.ComponentProps<"button"> {
+interface ConfettiButtonProps extends Omit<ButtonProps, "onClick"> {
   options?: ConfettiOptions &
     ConfettiGlobalOptions & { canvas?: HTMLCanvasElement }
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void | boolean | Promise<void | boolean>
 }
 
 const ConfettiButtonComponent = ({

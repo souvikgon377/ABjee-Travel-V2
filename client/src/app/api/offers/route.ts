@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const snapshot = await adminDb.collection('offers').get();
     const rows = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }))
+      .map((doc) => ({ id: doc.id, ...doc.data() } as any))
       .filter((offer) => offer.isActive !== false)
       .sort((a, b) => Number(a.priority ?? 999) - Number(b.priority ?? 999));
 
@@ -17,3 +17,4 @@ export async function GET() {
     return fail(message, 500);
   }
 }
+

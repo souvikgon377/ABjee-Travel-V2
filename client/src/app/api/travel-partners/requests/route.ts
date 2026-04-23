@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       .get();
 
     const now = Date.now();
-    let requests = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() as Record<string, any> }));
+    let requests: any[] = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
     requests = requests
       .filter((request) => {

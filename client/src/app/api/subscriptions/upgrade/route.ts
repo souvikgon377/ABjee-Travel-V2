@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { authenticateRequest, AuthError } from '@/lib/server/auth';
+import { authenticateRequest, AuthError, invalidateUserProfileCache } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
 import { subscriptionService } from '@/services/subscriptionService';
 import { userService } from '@/services/userService';
@@ -98,6 +98,11 @@ export async function POST(req: NextRequest) {
       "subscription.startDate": startDate.toISOString(),
       "subscription.endDate": endDate.toISOString(),
     });
+
+    // Invalidate auth cache so the new subscription status is reflected immediately
+    if (user.firebaseUid) {
+      await invalidateUserProfileCache(user.firebaseUid);
+    }
 
     return ok({
       message: "Subscription upgraded successfully",

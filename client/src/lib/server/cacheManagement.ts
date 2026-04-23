@@ -199,7 +199,7 @@ export async function getFromCache<T>(key: string): Promise<T | null> {
         }
       }
     }
-    return data ?? null;
+    return (data as T) ?? null;
   } catch (error) {
     console.warn(`[Cache] Failed to read from cache (${key}):`, error);
     return null;
@@ -276,7 +276,8 @@ export async function cacheScanResults<T extends { id: string }>(
     );
   }
 
-  const success = await setInCache(scanKey, JSON.stringify(trimmed), ttlSeconds);
+  // NOTE: setInCache already calls JSON.stringify internally — do NOT double-serialize here.
+  const success = await setInCache(scanKey, trimmed, ttlSeconds);
   if (success) {
     console.info(`[Cache] SCAN CACHED: ${scanKey} (${trimmed.length} items, TTL: ${ttlSeconds}s)`);
   }

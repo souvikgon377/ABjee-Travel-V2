@@ -601,13 +601,14 @@ const TourPlaces: React.FC = () => {
               if (typeof mediaItem.url !== "string" || typeof mediaItem.publicId !== "string") return null;
               const mediaType = mediaItem.type === "video" ? "video" : "image";
 
-              return {
+              const result: PlaceReview["media"][number] = {
                 url: mediaItem.url,
                 publicId: mediaItem.publicId,
                 type: mediaType,
-                caption: typeof mediaItem.caption === "string" ? mediaItem.caption : undefined,
-                thumbnail: typeof mediaItem.thumbnail === "string" ? mediaItem.thumbnail : undefined,
               };
+              if (typeof mediaItem.caption === "string") result.caption = mediaItem.caption;
+              if (typeof mediaItem.thumbnail === "string") result.thumbnail = mediaItem.thumbnail;
+              return result;
             })
             .filter((item): item is PlaceReview["media"][number] => item !== null)
         : [];
@@ -771,19 +772,25 @@ const TourPlaces: React.FC = () => {
               maxDimension: 1600,
             });
 
-        const uploaded = isVideo
-          ? await uploadVideoToR2(preparedFile)
-          : await uploadImageToR2(preparedFile, { folder: "tourist-places/reviews/images" });
+        let url = "";
+        let publicId = "";
 
-        const mediaItem = {
-          url: uploaded.url,
-          publicId: isVideo ? uploaded.key : uploaded.publicId,
-          type: isVideo ? "video" as const : "image" as const,
-        };
-
-        if (reviewTextValue) {
-          mediaItem.caption = reviewTextValue;
+        if (isVideo) {
+          const uploaded = await uploadVideoToR2(preparedFile);
+          url = uploaded.url;
+          publicId = uploaded.key;
+        } else {
+          const uploaded = await uploadImageToR2(preparedFile, { folder: "tourist-places/reviews/images" });
+          url = uploaded.url;
+          publicId = uploaded.publicId;
         }
+
+        const mediaItem: PlaceReview["media"][number] = {
+          url,
+          publicId,
+          type: isVideo ? "video" : "image",
+          ...(reviewTextValue ? { caption: reviewTextValue } : {})
+        };
 
         reviewMedia.push(mediaItem);
       }

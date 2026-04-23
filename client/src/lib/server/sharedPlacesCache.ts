@@ -5,6 +5,9 @@ const COLLECTION = 'touristPlaces';
 export const SHARED_PLACES_CACHE_KEY = 'places_all_data';
 const SHARED_PLACES_LOCK_KEY = 'places_lock';
 const LOCK_TTL_SECONDS = 10;
+// Cache TTL: 24 hours. Admins trigger manual refresh via refreshSharedPlacesCache().
+// Without this, the key lives until Redis is flushed → cold-start re-reads all 1200 docs.
+const SHARED_PLACES_CACHE_TTL_SECONDS = 86_400;
 
 export type SharedPlacesStatus = 'all' | 'active' | 'inactive';
 export type SharedPlacesContentFilter = 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
@@ -180,11 +183,17 @@ const readPlacesFromRedis = async (): Promise<SharedPlaceRecord[] | null> => {
 const writePlacesToRedis = async (places: SharedPlaceRecord[]) => {
   const redis = requireRedis();
 
-  await redis.set(SHARED_PLACES_CACHE_KEY, JSON.stringify({
-    updatedAt: new Date().toISOString(),
-    count: places.length,
-    places,
-  }));
+  await redis.set(
+    SHARED_PLACES_CACHE_KEY,
+    JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      count: places.length,
+      places,
+    }),
+    // 24-hour TTL — prevents stale cache living forever after a Redis flush.
+    // Admin mutations call refreshSharedPlacesCache() to invalidate immediately.
+    { ex: SHARED_PLACES_CACHE_TTL_SECONDS },
+  );
 };
 
 const isLockActive = async () => {
@@ -196,7 +205,7 @@ const isLockActive = async () => {
 const tryAcquireLock = async () => {
   const redis = requireRedis();
   const result = await redis.set(SHARED_PLACES_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL_SECONDS });
-  return result === 'OK' || result === true;
+  return result === 'OK';
 };
 
 const releaseLock = async () => {

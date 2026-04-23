@@ -122,7 +122,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   }
   
   const isModerator = userRole === 'moderator' || userRole === 'admin';
-  const senderAvatar = resolveAvatarUrl(message.sender as Record<string, unknown>);
+  const senderAvatar = resolveAvatarUrl(message.sender as unknown as Record<string, unknown>);
 
   const handleReaction = (emoji: string) => {
     if (onReaction) {

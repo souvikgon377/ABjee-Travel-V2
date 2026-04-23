@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     }
 
     const lock = await redis.set(lockKey, '1', { nx: true, ex: LOCK_TTL_SECONDS });
-    if (!(lock === 'OK' || lock === true)) {
+    if (lock !== 'OK') {
       console.info('[ReviewsCache] CACHE LOCK ACTIVE', { placeId, key: lockKey });
       return ok({ rows: [], cacheStatus: 'warming', message: 'Cache is warming. Retry shortly.' }, 202);
     }

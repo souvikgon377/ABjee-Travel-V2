@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, AuthError, requireAdmin } from "@/lib/server/auth";
+import { authenticateRequest, AuthError, requireAdmin, invalidateUserProfileCache } from "@/lib/server/auth";
 import { fail, ok } from "@/lib/server/http";
 import { userService } from "@/services/userService";
+import { hybridUpdatePartial } from "@/lib/server/hybridCache";
+import { checkAdminRateLimit } from "@/lib/server/rateLimiter";
 
 export const runtime = "nodejs";
+
+const USERS_CACHE_KEY = "admin:users";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   try {
@@ -24,6 +28,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
   try {
     const currentUser = await authenticateRequest(req);
     requireAdmin(currentUser);
+
+    // 1. Rate Limiting
+    const limitResult = await checkAdminRateLimit(currentUser.id);
+    if (!limitResult.success) return fail("Too many requests. Please wait.", 429);
 
     const { userId } = await params;
     const body = await req.json();
@@ -49,7 +57,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
       updates.email = email;
     }
 
+    // 2. Perform database update
     const user = await userService.update(userId, updates);
+    if (!user) return fail("User not found or update failed", 404);
+    
+    // 3. Auto-invalidate auth cache for this user so changes reflect instantly
+    if (user.firebaseUid) {
+      await invalidateUserProfileCache(user.firebaseUid);
+    }
+
+    // 4. Partial Cache Update for Admin List
+    // Instead of invalidating the whole list (200 docs), we just update this one user in the cache.
+    void hybridUpdatePartial<any[]>(USERS_CACHE_KEY, (current) => {
+      if (!Array.isArray(current)) return current;
+      return current.map(u => u.id === userId ? { ...u, ...updates } : u);
+    });
+
     return ok({ message: "User updated successfully", user });
   } catch (error: any) {
     if (error instanceof AuthError) return fail(error.message, error.status);
@@ -62,12 +85,29 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
     const currentUser = await authenticateRequest(req);
     requireAdmin(currentUser);
 
+    // 1. Rate Limiting
+    const limitResult = await checkAdminRateLimit(currentUser.id);
+    if (!limitResult.success) return fail("Too many requests. Please wait.", 429);
+
     const { userId } = await params;
     if (userId === currentUser.id) {
       return fail("You cannot delete your own account", 400);
     }
 
+    const userToDelete = await userService.findById(userId);
     await userService.delete(userId);
+
+    // 2. Auto-invalidate auth cache for this user
+    if (userToDelete?.firebaseUid) {
+      await invalidateUserProfileCache(userToDelete.firebaseUid);
+    }
+
+    // 3. Partial Cache Update (Removal)
+    void hybridUpdatePartial<any[]>(USERS_CACHE_KEY, (current) => {
+      if (!Array.isArray(current)) return current;
+      return current.filter(u => u.id !== userId);
+    });
+
     return ok({ message: "User deleted successfully" });
   } catch (error: any) {
     if (error instanceof AuthError) return fail(error.message, error.status);

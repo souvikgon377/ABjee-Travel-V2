@@ -16,14 +16,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ req
       return fail("Response message must be between 10 and 500 characters", 400);
     }
 
-    const request = await travelPartnerRequestService.findById(requestId);
+    const request: any = await travelPartnerRequestService.findById(requestId);
     if (!request) return fail("Travel partner request not found", 404);
     if (request.status !== "active") return fail("This request is no longer active", 400);
     if (request.requester === user.id) return fail("You cannot respond to your own request", 400);
     if (travelPartnerRequestService.isExpired(request)) return fail("This request has expired", 400);
 
     try {
-      const updated = await travelPartnerRequestService.addResponse(request.id, user.id, message);
+      const updated: any = await travelPartnerRequestService.addResponse(request.id, user.id, message);
       const responses = updated?.responses || [];
       return ok({
         responseId: responses[responses.length - 1]?.respondedAt || Date.now(),

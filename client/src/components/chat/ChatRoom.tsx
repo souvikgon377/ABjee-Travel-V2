@@ -812,10 +812,10 @@ const ChatRoom = () => {
 
         const indexedUsers = users
           .filter((candidate: any) => candidate.id)
-          .reduce<Record<string, any>>((acc, candidate: any) => {
+          .reduce((acc: Record<string, any>, candidate: any) => {
             acc[candidate.id] = candidate;
             return acc;
-          }, {});
+          }, {} as Record<string, any>);
 
         if (!isCancelled) {
           setCommunityUserIndex((prev) => ({ ...prev, ...indexedUsers }));

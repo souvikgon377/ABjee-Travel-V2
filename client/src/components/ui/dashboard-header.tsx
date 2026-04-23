@@ -534,8 +534,7 @@ export const DashboardHeader = memo(
                 disabled={isRefreshing}
               >
                 <RefreshCw
-                  className="mr-2 h-4 w-4"
-                  style={isRefreshing ? { animationDuration: '0.7s' } : undefined}
+                  className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
                 />
                 Refresh
               </Button>

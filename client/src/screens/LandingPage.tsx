@@ -92,9 +92,9 @@ function LandingPage() {
         if (cancelled) return
 
         const rows = (Array.isArray(payload?.data) ? payload.data : [])
-          .map((offer) => ({ id: String(offer.id || ''), ...(offer as Omit<HomeOffer, 'id'>) }))
-          .filter((offer) => offer.isActive)
-          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+          .map((offer: any) => ({ id: String(offer.id || ''), ...(offer as Omit<HomeOffer, 'id'>) }))
+          .filter((offer: HomeOffer) => offer.isActive)
+          .sort((a: HomeOffer, b: HomeOffer) => (a.priority ?? 999) - (b.priority ?? 999))
         setOffers(rows)
       } catch {
         if (!cancelled) setOffers([])

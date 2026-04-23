@@ -10,7 +10,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ requ
   try {
     const user = await authenticateRequest(req);
     const { requestId } = await params;
-    const request = await travelPartnerRequestService.findById(requestId);
+    const request: any = await travelPartnerRequestService.findById(requestId);
 
     if (!request) return fail("Travel partner request not found", 404);
 
