@@ -5,8 +5,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { MessageCircle, Users, Camera, Map, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { collection, getDocs } from 'firebase/firestore'
-import { firestoreDb } from '@/lib/firebaseFirestore'
 import { publicAsset } from '@/lib/publicAsset'
 
 const Header1 = dynamic(() => import('@/components/mvpblocks/header-1'), {
@@ -86,11 +84,15 @@ function LandingPage() {
 
     const loadOffers = async () => {
       try {
-        const snapshot = await getDocs(collection(firestoreDb, 'offers'))
+        const response = await fetch('/api/offers')
+        const payload = await response.json().catch(() => ({ success: false }))
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.message || 'Failed to fetch offers')
+        }
         if (cancelled) return
 
-        const rows = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...(doc.data() as Omit<HomeOffer, 'id'>) }))
+        const rows = (Array.isArray(payload?.data) ? payload.data : [])
+          .map((offer) => ({ id: String(offer.id || ''), ...(offer as Omit<HomeOffer, 'id'>) }))
           .filter((offer) => offer.isActive)
           .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
         setOffers(rows)

@@ -113,6 +113,23 @@ export const usersAPI = {
   searchUsers: (params?: any) => api.get('/users/search', { params }),
 };
 
+export const placesAPI = {
+  getReviews: (placeId: string) => api.get('/reviews', { params: { placeId } }),
+  createReview: (payload: {
+    placeId: string;
+    text: string;
+    rating: number;
+    media: Array<{
+      url: string;
+      publicId: string;
+      type: 'image' | 'video';
+      caption?: string;
+      thumbnail?: string;
+    }>;
+  }) => api.post('/reviews', payload),
+  deleteReview: (placeId: string, reviewId: string) => api.delete(`/reviews/${reviewId}`, { params: { placeId } }),
+};
+
 // Subscriptions API
 export const subscriptionsAPI = {
   getPlans: () => api.get('/subscriptions/plans'),
@@ -128,14 +145,48 @@ export const adminAPI = {
   getStats: () => adminApiInstance.get('/admin/stats'),
   getSettings: () => api.get('/admin/settings'),
   updateSettings: (data: any) => api.put('/admin/settings', data),
+  getPlaces: (params?: {
+    search?: string;
+    location?: string;
+    filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
+    page?: number;
+    limit?: number;
+  }) => api.get('/places', { params }),
+  updatePlacesCache: () => api.post('/update-cache'),
   getTouristPlaceList: (params?: {
     search?: string;
     location?: string;
-    status?: 'all' | 'active' | 'inactive';
+    filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
     page?: number;
     limit?: number;
     forceRefresh?: boolean;
   }) => api.get('/admin/tourist-places/list', { params }),
+  createTouristPlace: (data: {
+    name: string;
+    area?: string;
+    state: string;
+    country: string;
+    description?: string;
+    category?: string;
+    googleMapsUrl?: string;
+    coverImage?: string;
+    media?: unknown[];
+    extraInfo?: unknown[];
+  }) => api.post('/admin/tourist-places/create', data),
+  updateTouristPlace: (id: string, data: {
+    name: string;
+    area?: string;
+    state: string;
+    country: string;
+    description?: string;
+    category?: string;
+    googleMapsUrl?: string;
+    coverImage?: string;
+    media?: unknown[];
+    extraInfo?: unknown[];
+    isActive?: boolean;
+  }) => api.put('/admin/tourist-places', data, { params: { id } }),
+  deleteTouristPlace: (id: string) => api.delete('/admin/tourist-places', { params: { id } }),
   getTravelItineraryList: (params?: {
     search?: string;
     country?: string;

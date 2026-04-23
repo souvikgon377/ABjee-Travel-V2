@@ -1,7 +1,24 @@
 import { Redis } from '@upstash/redis';
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
+export const resolveRedisRestConfig = () => {
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.UPSTASH_REDIS_REST_ioURL ||
+    process.env.REDIS_REST_URL ||
+    '';
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.UPSTASH_REDIS_REST_ioTOKEN ||
+    process.env.REDIS_REST_TOKEN ||
+    '';
+
+  return {
+    url: url.trim(),
+    token: token.trim(),
+  };
+};
+
+const { url: REDIS_URL, token: REDIS_TOKEN } = resolveRedisRestConfig();
 
 let redis: Redis | null = null;
 
@@ -9,7 +26,7 @@ export const initRedis = (): Redis | null => {
   if (redis) return redis;
 
   if (!REDIS_URL || !REDIS_TOKEN) {
-    console.warn('[Redis] ENV vars missing: UPSTASH_REDIS_REST_URL or REDIS_REST_URL, and UPSTASH_REDIS_REST_TOKEN or REDIS_REST_TOKEN');
+    console.warn('[Redis] ENV vars missing: UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_ioURL/REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN/UPSTASH_REDIS_REST_ioTOKEN/REDIS_REST_TOKEN');
     return null;
   }
 

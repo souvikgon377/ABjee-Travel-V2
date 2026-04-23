@@ -7,11 +7,9 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox } from 'lucide-react';
-import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
-import { firestoreDb } from '@/lib/firebaseFirestore';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 
 interface NavItem {
@@ -442,29 +440,12 @@ export default function Header1() {
       return;
     }
 
-    const notificationsQuery = query(
-      collection(firestoreDb, 'notifications'),
-      where('toUserId', '==', currentUser.uid),
-      limit(50),
-    );
-
-    const unsubscribe = onSnapshot(
-      notificationsQuery,
-      (snapshot) => {
-        const items = snapshot.docs.map((doc) => normalizeNotification({ id: doc.id, ...doc.data() }));
-        items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setNotifications(items);
-        setNotificationError(null);
-        setNotificationsLoaded(true);
-      },
-      () => {
-        // Keep API fetch as fallback if realtime listener fails.
-        void fetchNotifications();
-      }
-    );
+    const intervalId = window.setInterval(() => {
+      void fetchNotifications();
+    }, 20000);
 
     return () => {
-      unsubscribe();
+      window.clearInterval(intervalId);
     };
   }, [currentUser?.uid, fetchNotifications]);
 

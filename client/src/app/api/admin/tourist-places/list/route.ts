@@ -22,7 +22,7 @@ const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 const MAX_SCAN_ROUNDS = 20;
 
-type TouristPlacesStatus = 'all' | 'active' | 'inactive';
+type TouristPlacesContentFilter = 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
 
 const normalizeText = (value: string) => value.trim();
 
@@ -58,9 +58,20 @@ const normalizeTouristPlace = (doc: FirebaseFirestore.QueryDocumentSnapshot) => 
   };
 };
 
-const matchesFilters = (place: ReturnType<typeof normalizeTouristPlace>, filters: { name: string; location: string; status: TouristPlacesStatus }) => {
-  if (filters.status === 'active' && place.isActive === false) return false;
-  if (filters.status === 'inactive' && place.isActive !== false) return false;
+const matchesFilters = (place: ReturnType<typeof normalizeTouristPlace>, filters: { name: string; location: string; contentFilter: TouristPlacesContentFilter }) => {
+  const hasPhotos = (place.media?.length || 0) > 0 || Boolean(place.coverImage);
+  const updatedAtValue = place.updatedAt instanceof Date
+    ? place.updatedAt.getTime()
+    : place.updatedAt && typeof place.updatedAt === 'object' && 'toDate' in place.updatedAt
+      ? (place.updatedAt as { toDate: () => Date }).toDate().getTime()
+      : 0;
+
+  if (filters.contentFilter === 'photos-added' && !hasPhotos) return false;
+  if (filters.contentFilter === 'photos-not-added' && hasPhotos) return false;
+  if (filters.contentFilter === 'recently-updated') {
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    if (!updatedAtValue || updatedAtValue < sevenDaysAgo) return false;
+  }
 
   // Only apply search filter if it's not "all" (normalized empty value)
   if (filters.name && filters.name !== 'all') {
@@ -96,7 +107,7 @@ export async function GET(req: NextRequest) {
     const params = req.nextUrl.searchParams;
     const rawSearch = normalizeText(params.get('search') || '');
     const rawLocation = normalizeText(params.get('location') || '');
-    const rawStatus = (params.get('status') || 'all') as TouristPlacesStatus;
+    const rawContentFilter = (params.get('filter') || 'all') as TouristPlacesContentFilter;
     const page = Math.max(1, Number(params.get('page') || '1'));
     const forceRefresh = params.get('forceRefresh') === 'true';
     const requestedLimit = Number(params.get('limit') || String(DEFAULT_LIMIT));
@@ -108,17 +119,21 @@ export async function GET(req: NextRequest) {
     const filters = validateAndNormalizeFilters({
       name: rawSearch,
       location: rawLocation,
-      status: rawStatus,
+      status: 'all',
     });
+    const contentFilter = rawContentFilter === 'photos-added' || rawContentFilter === 'photos-not-added' || rawContentFilter === 'recently-updated'
+      ? rawContentFilter
+      : 'all';
 
     console.info('[Admin:Places] Request:', {
       page,
       limit,
       forceRefresh,
       filters,
+      contentFilter,
     });
 
-    const hasActiveFilters = Boolean(filters.name !== 'all' || filters.location !== 'all' || filters.status !== 'all');
+    const hasActiveFilters = Boolean(filters.name !== 'all' || filters.location !== 'all' || contentFilter !== 'all');
 
     // =========================================================================
     // STRATEGY 1: Check page cache first (for non-force-refresh requests)
@@ -127,7 +142,7 @@ export async function GET(req: NextRequest) {
       const pageCacheKey = await buildPageCacheKey({
         name: filters.name,
         location: filters.location,
-        status: filters.status,
+        contentFilter,
         page,
       });
 
@@ -149,7 +164,7 @@ export async function GET(req: NextRequest) {
         const scanCacheKey = await buildScanCacheKey({
           name: filters.name,
           location: filters.location,
-          status: filters.status,
+          contentFilter,
         });
 
         const cachedScan = await getCachedScanResults<ReturnType<typeof normalizeTouristPlace>>(
@@ -189,7 +204,7 @@ export async function GET(req: NextRequest) {
     const scanCacheKey = await buildScanCacheKey({
       name: filters.name,
       location: filters.location,
-      status: filters.status,
+      contentFilter,
     });
 
     // Try to execute scan with lock
@@ -258,7 +273,7 @@ export async function GET(req: NextRequest) {
     const pageCacheKey = await buildPageCacheKey({
       name: filters.name,
       location: filters.location,
-      status: filters.status,
+        contentFilter,
       page,
     });
 

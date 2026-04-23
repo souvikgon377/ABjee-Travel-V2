@@ -27,23 +27,13 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-} from "firebase/firestore";
 import type { TouristPlace } from "@/components/ui/tourist-places";
 import { publicAsset } from "@/lib/publicAsset";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
 import { buildAbjeeShareText } from "@/lib/socialShare";
 import { createImagePreview, revokeImagePreview, uploadImageToR2 } from "@/lib/r2Upload";
-import { firestoreDb } from "@/lib/firebaseFirestore";
+import { placesAPI } from "@/lib/api";
 import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -60,7 +50,7 @@ const splitSearchTerms = (value: string) => value.split(" ").filter(Boolean);
 
 const SEARCH_DEBOUNCE_MS = 450;
 const SEARCH_PAGE_SIZE = 4;
-const SEARCH_API_PATH = "/api/tour-places/search";
+const SEARCH_API_PATH = "/api/places";
 
 type ReviewMediaFile = {
   file: File;
@@ -498,16 +488,14 @@ const TourPlaces: React.FC = () => {
       return existingRequest;
     }
 
-    const request = fetch(SEARCH_API_PATH, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        lastDoc,
-        pageSize: SEARCH_PAGE_SIZE,
-      }),
+    const page = Math.max(1, Number(lastDoc || "1"));
+    const requestUrl = new URL(SEARCH_API_PATH, window.location.origin);
+    requestUrl.searchParams.set("search", query);
+    requestUrl.searchParams.set("page", String(page));
+    requestUrl.searchParams.set("limit", String(SEARCH_PAGE_SIZE));
+
+    const request = fetch(requestUrl.toString(), {
+      method: "GET",
     }).then(async (response) => {
       const payload = (await response.json().catch(() => null)) as { success?: boolean; data?: SearchResponse; message?: string } | null;
       if (!response.ok || !payload?.success || !payload.data) {
@@ -580,6 +568,65 @@ const TourPlaces: React.FC = () => {
       }
     }
   }, [requestSearchPage, resetSearchState]);
+
+  const loadPlaceReviews = useCallback(async (placeId: string) => {
+    const response = await placesAPI.getReviews(placeId);
+    const payload = response.data?.data ?? response.data ?? {};
+    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+
+    const reviews = rows.map((reviewDoc: unknown) => {
+      const raw = (reviewDoc && typeof reviewDoc === "object") ? reviewDoc as Record<string, unknown> : {};
+      const data = raw as {
+        id?: unknown;
+        text?: unknown;
+        author?: unknown;
+        userId?: unknown;
+        rating?: unknown;
+        createdAt?: unknown;
+        media?: unknown;
+      };
+
+      const media = Array.isArray(data.media)
+        ? data.media
+            .map((item) => {
+              if (!item || typeof item !== "object") return null;
+              const mediaItem = item as {
+                url?: unknown;
+                publicId?: unknown;
+                type?: unknown;
+                caption?: unknown;
+                thumbnail?: unknown;
+              };
+
+              if (typeof mediaItem.url !== "string" || typeof mediaItem.publicId !== "string") return null;
+              const mediaType = mediaItem.type === "video" ? "video" : "image";
+
+              return {
+                url: mediaItem.url,
+                publicId: mediaItem.publicId,
+                type: mediaType,
+                caption: typeof mediaItem.caption === "string" ? mediaItem.caption : undefined,
+                thumbnail: typeof mediaItem.thumbnail === "string" ? mediaItem.thumbnail : undefined,
+              };
+            })
+            .filter((item): item is PlaceReview["media"][number] => item !== null)
+        : [];
+
+      const rating = Number(data.rating);
+
+      return {
+        id: typeof data.id === "string" ? data.id : crypto.randomUUID(),
+        text: typeof data.text === "string" ? data.text : "",
+        author: typeof data.author === "string" ? data.author : "Traveller",
+        userId: typeof data.userId === "string" ? data.userId : "anonymous",
+        rating: Number.isFinite(rating) ? Math.max(1, Math.min(5, rating)) : 5,
+        createdAt: data.createdAt,
+        media,
+      } satisfies PlaceReview;
+    });
+
+    setPlaceReviews((current) => ({ ...current, [placeId]: reviews }));
+  }, []);
 
   useEffect(() => {
     const normalized = normalizeSearchInput(searchInput);
@@ -741,14 +788,14 @@ const TourPlaces: React.FC = () => {
         reviewMedia.push(mediaItem);
       }
 
-      await addDoc(collection(firestoreDb, "touristPlaces", selectedPlace.id, "reviews"), {
+      await placesAPI.createReview({
+        placeId: selectedPlace.id,
         text: reviewTextValue,
         rating: reviewRating,
-        author: user?.displayName ?? user?.email ?? "Traveller",
-        userId: user?.uid ?? "anonymous",
         media: reviewMedia,
-        createdAt: serverTimestamp(),
       });
+
+      await loadPlaceReviews(selectedPlace.id);
 
       setReviewText("");
       setReviewRating(0);
@@ -768,66 +815,8 @@ const TourPlaces: React.FC = () => {
       return;
     }
 
-    const reviewsQuery = query(
-      collection(firestoreDb, "touristPlaces", selectedPlace.id, "reviews"),
-      orderBy("createdAt", "desc"),
-    );
-
-    const unsubscribe = onSnapshot(reviewsQuery, (snapshot) => {
-      const reviews = snapshot.docs.map((reviewDoc) => {
-        const data = reviewDoc.data() as {
-          text?: unknown;
-          author?: unknown;
-          userId?: unknown;
-          rating?: unknown;
-          createdAt?: unknown;
-          media?: unknown;
-        };
-
-        const media = Array.isArray(data.media)
-          ? data.media
-              .map((item) => {
-                if (!item || typeof item !== "object") return null;
-                const mediaItem = item as {
-                  url?: unknown;
-                  publicId?: unknown;
-                  type?: unknown;
-                  caption?: unknown;
-                  thumbnail?: unknown;
-                };
-
-                if (typeof mediaItem.url !== "string" || typeof mediaItem.publicId !== "string") return null;
-                const mediaType = mediaItem.type === "video" ? "video" : "image";
-
-                return {
-                  url: mediaItem.url,
-                  publicId: mediaItem.publicId,
-                  type: mediaType,
-                  caption: typeof mediaItem.caption === "string" ? mediaItem.caption : undefined,
-                  thumbnail: typeof mediaItem.thumbnail === "string" ? mediaItem.thumbnail : undefined,
-                };
-              })
-              .filter((item): item is PlaceReview["media"][number] => item !== null)
-          : [];
-
-        const rating = Number(data.rating);
-
-        return {
-          id: reviewDoc.id,
-          text: typeof data.text === "string" ? data.text : "",
-          author: typeof data.author === "string" ? data.author : "Traveller",
-          userId: typeof data.userId === "string" ? data.userId : "anonymous",
-          rating: Number.isFinite(rating) ? Math.max(1, Math.min(5, rating)) : 5,
-          createdAt: data.createdAt,
-          media,
-        } satisfies PlaceReview;
-      });
-
-      setPlaceReviews((current) => ({ ...current, [selectedPlace.id]: reviews }));
-    });
-
-    return () => unsubscribe();
-  }, [selectedPlace?.id]);
+    void loadPlaceReviews(selectedPlace.id);
+  }, [loadPlaceReviews, selectedPlace?.id]);
 
   useEffect(() => {
     setReviewRating(0);
@@ -847,13 +836,14 @@ const TourPlaces: React.FC = () => {
     setDeletingReviewId(reviewId);
     setReviewUploadError("");
     try {
-      await deleteDoc(doc(firestoreDb, "touristPlaces", selectedPlace.id, "reviews", reviewId));
+      await placesAPI.deleteReview(selectedPlace.id, reviewId);
+      await loadPlaceReviews(selectedPlace.id);
     } catch (error) {
       setReviewUploadError(error instanceof Error ? error.message : "Failed to delete review.");
     } finally {
       setDeletingReviewId(null);
     }
-  }, [deletingReviewId, selectedPlace?.id, selectedPlaceReviewList, user?.uid]);
+  }, [deletingReviewId, loadPlaceReviews, selectedPlace?.id, selectedPlaceReviewList, user?.uid]);
 
   const handleSeeMore = useCallback(() => {
     if (!activeSearchTerm || !searchHasMore || searchLoading) return;

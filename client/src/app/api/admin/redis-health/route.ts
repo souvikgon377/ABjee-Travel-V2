@@ -1,12 +1,16 @@
 import { NextRequest } from 'next/server';
 import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
+import { resolveRedisRestConfig } from '@/lib/server/redis';
 
 export const runtime = 'nodejs';
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
-const REDIS_SOURCE = process.env.UPSTASH_REDIS_REST_URL ? 'upstash' : process.env.REDIS_REST_URL ? 'redis_rest' : 'none';
+const { url: REDIS_URL, token: REDIS_TOKEN } = resolveRedisRestConfig();
+const REDIS_SOURCE = process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_ioURL
+  ? 'upstash'
+  : process.env.REDIS_REST_URL
+    ? 'redis_rest'
+    : 'none';
 
 const redisRequest = async (command: string, args: Array<string | number>) => {
   if (!REDIS_URL || !REDIS_TOKEN) {

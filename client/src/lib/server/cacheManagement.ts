@@ -26,7 +26,7 @@ export function normalizeInput(value?: string): string {
 /**
  * Log raw vs normalized for debugging cache misses.
  */
-function logNormalization(raw: { name?: string; location?: string; status?: string }, normalized: { name: string; location: string; status: string }) {
+function logNormalization(raw: { name?: string; location?: string; status?: string; contentFilter?: string }, normalized: { name: string; location: string; status: string }) {
   if (process.env.NODE_ENV === 'development') {
     console.debug('[Cache] RAW input:', raw);
     console.debug('[Cache] NORMALIZED:', normalized);
@@ -51,18 +51,20 @@ function detectPossibleTypo(rawValue?: string, normalizedValue?: string): boolea
 
 /**
  * Build a page cache key using the current version.
- * Format: places:v{version}:{name}:{location}:{status}:page:{page}
+ * Format: places:v{version}:{name}:{location}:{filter}:page:{page}
  */
 export async function buildPageCacheKey(params: {
   name?: string;
   location?: string;
   status?: string;
+  contentFilter?: string;
+  filter?: string;
   page?: number;
 }): Promise<string> {
   const version = await getCacheVersion();
   const name = normalizeInput(params.name);
   const location = normalizeInput(params.location);
-  const status = normalizeInput(params.status);
+  const status = normalizeInput(params.contentFilter ?? params.filter ?? params.status);
   const page = params.page || 1;
 
   return `places:v${version}:${name}:${location}:${status}:page:${page}`;
@@ -70,17 +72,19 @@ export async function buildPageCacheKey(params: {
 
 /**
  * Build a scan cache key (not tied to specific page).
- * Format: places:v{version}:{name}:{location}:{status}:scan
+ * Format: places:v{version}:{name}:{location}:{filter}:scan
  */
 export async function buildScanCacheKey(params: {
   name?: string;
   location?: string;
   status?: string;
+  contentFilter?: string;
+  filter?: string;
 }): Promise<string> {
   const version = await getCacheVersion();
   const name = normalizeInput(params.name);
   const location = normalizeInput(params.location);
-  const status = normalizeInput(params.status);
+  const status = normalizeInput(params.contentFilter ?? params.filter ?? params.status);
 
   return `places:v${version}:${name}:${location}:${status}:scan`;
 }

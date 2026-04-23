@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint src --ext .ts,.tsx,.js,.jsx",
     "postinstall": "patch-package",
-    "upload:r2:public": "node scripts/upload-public-to-r2.mjs"
+    "upload:r2:public": "node scripts/upload-public-to-r2.mjs",
+    "prewarm:places": "node scripts/prewarm-places-cache.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.917.0",

@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { resolveRedisRestConfig } from './redis';
 
 const COLLECTION = 'touristPlaces';
-const BATCH_SIZE = 400;
+const BATCH_SIZE = 100;
 const JOB_TTL_SECONDS = 24 * 60 * 60;
 const LOCK_TTL_SECONDS = 2 * 60 * 60;
 const RUNNING_LOCK_KEY = 'tourPlaces:migration:runningJobId';
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
+const { url: REDIS_URL, token: REDIS_TOKEN } = resolveRedisRestConfig();
 const canUseRedis = Boolean(REDIS_URL && REDIS_TOKEN);
 
 type MigrationStatus = 'queued' | 'running' | 'completed' | 'failed';
@@ -48,6 +48,8 @@ const redisRequest = async (command: string, args: Array<string | number>) => {
 
   return response.json() as Promise<{ result?: unknown }>;
 };
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const setJob = async (job: TourPlaceMigrationProgress) => {
   jobs.set(job.jobId, job);
@@ -242,6 +244,8 @@ const runMigration = async (jobId: string) => {
       if (snapshot.size < BATCH_SIZE) {
         break;
       }
+
+      await pause(100);
     }
 
     job.status = 'completed';

@@ -1,12 +1,12 @@
+import { resolveRedisRestConfig } from './redis';
+
 type CacheEntry = {
   value: unknown;
   expiresAt: number;
 };
 
 const memoryCache = new Map<string, CacheEntry>();
-
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_REST_TOKEN;
+const { url: REDIS_URL, token: REDIS_TOKEN } = resolveRedisRestConfig();
 
 const canUseRedis = Boolean(REDIS_URL && REDIS_TOKEN);
 
