@@ -1,13 +1,16 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
-import { getRedis } from '@/lib/server/redis';
+import { hybridGet, hybridInvalidate } from '@/lib/server/hybridCache';
 
 const COLLECTION = 'touristPlaces';
-export const SHARED_PLACES_CACHE_KEY = 'places_all_data';
-const SHARED_PLACES_LOCK_KEY = 'places_lock';
-const LOCK_TTL_SECONDS = 10;
-// Cache TTL: 24 hours. Admins trigger manual refresh via refreshSharedPlacesCache().
-// Without this, the key lives until Redis is flushed → cold-start re-reads all 1200 docs.
-const SHARED_PLACES_CACHE_TTL_SECONDS = 86_400;
+export const SHARED_PLACES_CACHE_KEY = 'places_all';
+const SHARED_PLACES_CACHE_TTL_SECONDS = 86_400; // 24 hours
+
+export class RedisUnavailableError extends Error {
+  constructor(message = 'Redis is unavailable.') {
+    super(message);
+    this.name = 'RedisUnavailableError';
+  }
+}
 
 export type SharedPlacesStatus = 'all' | 'active' | 'inactive';
 export type SharedPlacesContentFilter = 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
@@ -39,13 +42,6 @@ export type SharedPlacesFilters = {
   location: string;
   contentFilter: SharedPlacesContentFilter;
 };
-
-export class RedisUnavailableError extends Error {
-  constructor(message = 'Redis is unavailable.') {
-    super(message);
-    this.name = 'RedisUnavailableError';
-  }
-}
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
 
@@ -98,6 +94,17 @@ export const normalizeSharedPlacesFilters = (filters: Partial<SharedPlacesFilter
   return { search, location, contentFilter };
 };
 
+const toMillis = (value: unknown) => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && value !== null) {
+    const timestampLike = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+    if (typeof timestampLike.toDate === 'function') return timestampLike.toDate().getTime();
+    if (typeof timestampLike.seconds === 'number') return (timestampLike.seconds * 1000) + Math.floor((timestampLike.nanoseconds ?? 0) / 1_000_000);
+  }
+  return 0;
+};
+
 export const matchesSharedPlaceFilters = (place: SharedPlaceRecord, filters: SharedPlacesFilters) => {
   const hasPhotos = (place.media?.length || 0) > 0 || Boolean(place.coverImage);
   const updatedAtValue = toMillis(place.updatedAt);
@@ -126,17 +133,6 @@ export const matchesSharedPlaceFilters = (place: SharedPlaceRecord, filters: Sha
   return true;
 };
 
-const toMillis = (value: unknown) => {
-  if (!value) return 0;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === 'object' && value !== null) {
-    const timestampLike = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
-    if (typeof timestampLike.toDate === 'function') return timestampLike.toDate().getTime();
-    if (typeof timestampLike.seconds === 'number') return (timestampLike.seconds * 1000) + Math.floor((timestampLike.nanoseconds ?? 0) / 1_000_000);
-  }
-  return 0;
-};
-
 const sortPlaces = (places: SharedPlaceRecord[]) => {
   return [...places].sort((left, right) => {
     const leftUpdated = toMillis(left.updatedAt);
@@ -151,145 +147,54 @@ const sortPlaces = (places: SharedPlaceRecord[]) => {
 };
 
 const loadPlacesFromFirestore = async (): Promise<SharedPlaceRecord[]> => {
+  console.info('[PlacesCache] FETCHING FROM FIRESTORE');
   const snapshot = await adminDb.collection(COLLECTION).get();
   return sortPlaces(snapshot.docs.map((doc) => normalizeDoc(doc)));
 };
 
-const requireRedis = () => {
-  const redis = getRedis();
-  if (!redis) {
-    throw new RedisUnavailableError('Redis client is unavailable.');
-  }
-  return redis;
-};
+/**
+ * Migration to hybridCache:
+ * This eliminates the [object Object] serialization bug and redundant locking logic.
+ */
 
-const readPlacesFromRedis = async (): Promise<SharedPlaceRecord[] | null> => {
-  const redis = requireRedis();
-
-  try {
-    const cached = await redis.get<string>(SHARED_PLACES_CACHE_KEY);
-    if (!cached) return null;
-
-    const parsed = JSON.parse(cached) as { places?: SharedPlaceRecord[] } | SharedPlaceRecord[];
-    const places = Array.isArray(parsed) ? parsed : Array.isArray(parsed.places) ? parsed.places : [];
-    return places;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn('[PlacesCache] Failed to read shared cache:', message);
-    return null;
-  }
-};
-
-const writePlacesToRedis = async (places: SharedPlaceRecord[]) => {
-  const redis = requireRedis();
-
-  await redis.set(
+export const getSharedPlacesCache = async (): Promise<{
+  places: SharedPlaceRecord[];
+  cacheStatus: 'hit' | 'miss' | 'warming';
+  source: 'hybrid' | 'firestore';
+}> => {
+  const places = await hybridGet<SharedPlaceRecord[]>(
     SHARED_PLACES_CACHE_KEY,
-    JSON.stringify({
-      updatedAt: new Date().toISOString(),
-      count: places.length,
-      places,
-    }),
-    // 24-hour TTL — prevents stale cache living forever after a Redis flush.
-    // Admin mutations call refreshSharedPlacesCache() to invalidate immediately.
-    { ex: SHARED_PLACES_CACHE_TTL_SECONDS },
+    loadPlacesFromFirestore,
+    { 
+      redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS,
+      memoryTtlSeconds: 300 // 5 minutes L1
+    }
   );
-};
 
-const isLockActive = async () => {
-  const redis = requireRedis();
-  const lock = await redis.get<string>(SHARED_PLACES_LOCK_KEY);
-  return Boolean(lock);
-};
-
-const tryAcquireLock = async () => {
-  const redis = requireRedis();
-  const result = await redis.set(SHARED_PLACES_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL_SECONDS });
-  return result === 'OK';
-};
-
-const releaseLock = async () => {
-  const redis = requireRedis();
-  await redis.del(SHARED_PLACES_LOCK_KEY);
+  return {
+    places,
+    cacheStatus: 'hit', // Simplified status for legacy compatibility
+    source: 'hybrid'
+  };
 };
 
 export const refreshSharedPlacesCache = async () => {
-  requireRedis();
-  const places = await loadPlacesFromFirestore();
-  await writePlacesToRedis(places);
+  await hybridInvalidate(SHARED_PLACES_CACHE_KEY);
+  
+  // Re-fetch to warm it up
+  const places = await hybridGet<SharedPlaceRecord[]>(
+    SHARED_PLACES_CACHE_KEY,
+    loadPlacesFromFirestore,
+    { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
+  );
 
-  console.info('[PlacesCache] CACHE UPDATED', {
-    count: places.length,
-    key: SHARED_PLACES_CACHE_KEY,
-  });
+  console.info('[PlacesCache] CACHE REFRESHED', { count: places.length });
 
   return {
     places,
     cacheStatus: 'miss' as const,
     source: 'firestore' as const,
   };
-};
-
-type SharedPlacesCacheResult = {
-  places: SharedPlaceRecord[];
-  cacheStatus: 'hit' | 'miss' | 'warming';
-  source: 'redis' | 'firestore' | 'none';
-};
-
-export const getSharedPlacesCache = async (): Promise<SharedPlacesCacheResult> => {
-  requireRedis();
-  const cached = await readPlacesFromRedis();
-  if (cached) {
-    console.info('[PlacesCache] CACHE HIT', {
-      count: cached.length,
-      key: SHARED_PLACES_CACHE_KEY,
-    });
-
-    return {
-      places: cached,
-      cacheStatus: 'hit' as const,
-      source: 'redis' as const,
-    };
-  }
-
-  console.info('[PlacesCache] CACHE MISS', {
-    key: SHARED_PLACES_CACHE_KEY,
-  });
-
-  if (await isLockActive()) {
-    console.info('[PlacesCache] CACHE LOCK ACTIVE', {
-      key: SHARED_PLACES_LOCK_KEY,
-    });
-    return {
-      places: [],
-      cacheStatus: 'warming',
-      source: 'none',
-    };
-  }
-
-  const acquired = await tryAcquireLock();
-  if (!acquired) {
-    console.info('[PlacesCache] CACHE LOCK ACTIVE', {
-      key: SHARED_PLACES_LOCK_KEY,
-    });
-    return {
-      places: [],
-      cacheStatus: 'warming',
-      source: 'none',
-    };
-  }
-
-  try {
-    const places = await loadPlacesFromFirestore();
-    await writePlacesToRedis(places);
-    return {
-      places,
-      cacheStatus: 'miss',
-      source: 'firestore',
-    };
-  } finally {
-    await releaseLock();
-  }
 };
 
 export const filterSharedPlaces = (
