@@ -442,7 +442,7 @@ export default function Header1() {
 
     const intervalId = window.setInterval(() => {
       void fetchNotifications();
-    }, 20000);
+    }, 60000);
 
     return () => {
       window.clearInterval(intervalId);

@@ -151,8 +151,14 @@ function memorySet<T>(key: string, value: T, ttlSeconds: number): void {
 async function redisGet<T>(key: string): Promise<CachedWrapper<T> | null> {
   const redis = getRedis();
   if (!redis) return null;
+  
+  // ⚡ Hard timeout for Redis read (500ms)
+  const timeout = new Promise<null>((_, reject) => 
+    setTimeout(() => reject(new Error("REDIS_TIMEOUT")), 500)
+  );
+
   try {
-    const raw = await redis.get<string>(key);
+    const raw = await Promise.race([redis.get<string>(key), timeout]);
     if (!raw) return null;
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (parsed && typeof parsed === 'object' && 'version' in parsed && 'value' in parsed) {
@@ -160,10 +166,14 @@ async function redisGet<T>(key: string): Promise<CachedWrapper<T> | null> {
     }
     return { value: parsed as T, version: "legacy", createdAt: Date.now(), expiresAt: Date.now() + 60000, ttlSeconds: 60 };
   } catch (err) {
+    if (err instanceof Error && err.message === 'REDIS_TIMEOUT') {
+      console.warn(`[HybridCache] Redis timeout for key: ${key}`);
+    }
     localMetrics.errors++;
     return null;
   }
 }
+
 
 async function redisSet<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
   const redis = getRedis();

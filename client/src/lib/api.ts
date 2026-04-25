@@ -164,6 +164,7 @@ export const adminAPI = {
   createTouristPlace: (data: {
     name: string;
     area?: string;
+    city?: string;
     state: string;
     country: string;
     description?: string;
@@ -177,6 +178,7 @@ export const adminAPI = {
   updateTouristPlace: (id: string, data: {
     name: string;
     area?: string;
+    city?: string;
     state: string;
     country: string;
     description?: string;
@@ -229,6 +231,7 @@ export const adminAPI = {
   startTourPlaceSearchMigration: () => api.post('/admin/tour-places/migration/start'),
   getTourPlaceSearchMigrationStatus: (jobId: string) => api.get('/admin/tour-places/migration/status', { params: { jobId } }),
   refreshCache: (scope: string = 'all', rewarm: boolean = true) => api.post('/admin/refresh-cache', { scope, rewarm }),
+  getSearchHealth: () => api.get('/admin/search-health'),
 };
 
 export default api;

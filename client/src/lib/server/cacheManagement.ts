@@ -130,6 +130,12 @@ export async function invalidateCacheVersion(): Promise<number> {
   try {
     const newVersion = await redis.incr(VERSION_KEY);
     console.info(`[Cache] Version incremented to ${newVersion} - invalidating all old cache keys`);
+    
+    // Background cleanup of old versions
+    import('./cacheCleanup').then(m => m.purgeOldCacheVersions(newVersion)).catch(e => {
+      console.error('[Cache] Cleanup trigger failed:', e);
+    });
+
     return newVersion;
   } catch (error) {
     console.error(`[Cache] Failed to increment version:`, error);

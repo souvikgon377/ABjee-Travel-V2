@@ -10,7 +10,9 @@
     "lint": "eslint src --ext .ts,.tsx,.js,.jsx",
     "postinstall": "patch-package",
     "upload:r2:public": "node scripts/upload-public-to-r2.mjs",
-    "prewarm:places": "node scripts/prewarm-places-cache.mjs"
+    "prewarm:places": "node scripts/prewarm-places-cache.mjs",
+    "backfill:tourist-places:search-fields": "node scripts/backfill-tourist-places-search-fields.mjs",
+    "backfill:users:search-fields": "node scripts/backfill-users-search-fields.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.917.0",

@@ -80,8 +80,8 @@ interface MigrationProgress {
 	error?: string;
 }
 
-const CSV_TEMPLATE_TEXT = `Place of Travel,Country of Travel,Introduction,Travel Itinerary,Average Budget,Top Places to Visit,Top Restaurants,Top Hotels and Resorts
-Goa,India,"A coastal escape with beaches, old churches, and vibrant nightlife.","Day 1: Arrival and beach relaxation; Day 2: North Goa beaches and nightlife; Day 3: South Goa and heritage churches","$300-600 per person","Baga Beach; Fort Aguada; Basilica of Bom Jesus","Thalassa; Fisherman's Wharf","Taj Exotica; W Goa"`;
+const CSV_TEMPLATE_TEXT = `Place,Country,Introduction,Itinerary,Budget,Duration,TopPlaces,Restaurants,Hotels,Images
+Goa,India,"A coastal escape with beaches, old churches, and vibrant nightlife.","Day 1: Arrival and beach relaxation|Day 2: North Goa beaches and nightlife|Day 3: South Goa and heritage churches","$300-600 per person","3 Days","Baga Beach|Fort Aguada|Basilica of Bom Jesus","Thalassa|Fisherman's Wharf","Taj Exotica|W Goa",""`;
 const TRAVEL_ITINERARY_CACHE_KEY = 'travel-itinerary-admin-list';
 const TRAVEL_ITINERARY_CACHE_TTL_MS = 5 * 60 * 1000;
 const TRAVEL_ITINERARY_PAGE_SIZE = 30;
@@ -919,7 +919,7 @@ export default function AdminTravelItenary() {
 		};
 		setAppliedFilters(nextFilters);
 		setItineraryPage(1);
-		void fetchItineraries({ reset: true, forceRefresh: true, filters: nextFilters });
+		void fetchItineraries({ reset: true, forceRefresh: false, filters: nextFilters });
 	}, [countryFilterInput, fetchItineraries, itinerarySearchInput]);
 
 	const handleResetListFilters = useCallback(() => {
@@ -928,14 +928,14 @@ export default function AdminTravelItenary() {
 		const resetFilters: TravelListFilters = { search: '', country: '' };
 		setAppliedFilters(resetFilters);
 		setItineraryPage(1);
-		void fetchItineraries({ reset: true, forceRefresh: true, filters: resetFilters });
+		void fetchItineraries({ reset: true, forceRefresh: false, filters: resetFilters });
 	}, [fetchItineraries]);
 
 	const handleLoadMoreItineraries = useCallback(() => {
 		if (!hasMoreItineraries || loadingMoreItineraries) return;
 		void fetchItineraries({
 			reset: false,
-			forceRefresh: true,
+			forceRefresh: false,
 			filters: appliedFilters,
 		});
 	}, [appliedFilters, fetchItineraries, hasMoreItineraries, itineraryPage, loadingMoreItineraries]);
@@ -1001,29 +1001,13 @@ export default function AdminTravelItenary() {
 			.replace(/[^a-z0-9]+/g, '');
 
 	const CSV_HEADER_ALIASES: Record<string, string> = {
-		placeoftravel: 'place',
-		placeof: 'place',
 		place: 'place',
-		countryoftravel: 'country',
-		countryof: 'country',
 		country: 'country',
-		travelitinerary: 'itinerary',
-		travelitin: 'itinerary',
 		itinerary: 'itinerary',
-		averagebudget: 'budget',
-		averageb: 'budget',
-		avgbudget: 'budget',
-		avgb: 'budget',
-		estimatedbudget: 'budget',
 		budget: 'budget',
-		topplacestovisit: 'places',
 		topplaces: 'places',
 		places: 'places',
-		toprestaurants: 'restaurants',
 		restaurants: 'restaurants',
-		tophotelsandresorts: 'hotels',
-		tophotels: 'hotels',
-		hotelsandresorts: 'hotels',
 		hotels: 'hotels',
 		duration: 'durationtext',
 		durationtext: 'durationtext',

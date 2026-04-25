@@ -4,45 +4,65 @@ const COLLECTION = "users";
 
 type AnyObj = Record<string, any>;
 
-const createUserData = (data: AnyObj): AnyObj => ({
-  firebaseUid: data.firebaseUid || null,
-  email: data.email || "",
-  emailVerified: data.emailVerified || false,
-  displayName: data.displayName || "",
-  firstName: data.firstName || "",
-  lastName: data.lastName || "",
-  username: data.username || null,
-  address: data.address || "",
-  city: data.city || "",
-  zipCode: data.zipCode || "",
-  avatar: data.avatar || null,
-  bio: data.bio || "",
-  phone: data.phone || null,
-  profileImage: data.profileImage || null,
-  profilePicture: data.profilePicture || null,
-  photoURL: data.photoURL || null,
-  role: data.role || "user",
-  travelInterests: data.travelInterests || [],
-  preferredDestinations: data.preferredDestinations || [],
-  subscription: {
-    type: data.subscription?.type || "free",
-    interval: data.subscription?.interval || "monthly",
-    startDate: data.subscription?.startDate || null,
-    endDate: data.subscription?.endDate || null,
-    isActive: data.subscription?.isActive || false,
-  },
-  isOnline: data.isOnline || false,
-  lastSeen: data.lastSeen || FieldValue.serverTimestamp(),
-  joinedChatRooms: data.joinedChatRooms || [],
-  isVerified: data.isVerified || false,
-  isActive: data.isActive !== undefined ? data.isActive : true,
-  preferences: {
-    notifications: data.preferences?.notifications !== undefined ? data.preferences.notifications : true,
-    theme: data.preferences?.theme || "light",
-  },
-  createdAt: data.createdAt || FieldValue.serverTimestamp(),
-  updatedAt: FieldValue.serverTimestamp(),
+const normalizeSearchField = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9@._\-\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const buildUserSearchFields = (data: AnyObj): AnyObj => ({
+  displayName_lower: normalizeSearchField(data.displayName),
+  username_lower: normalizeSearchField(data.username),
+  email_lower: normalizeSearchField(data.email),
 });
+
+const createUserData = (data: AnyObj): AnyObj => {
+  const payload = {
+    firebaseUid: data.firebaseUid || null,
+    email: data.email || "",
+    emailVerified: data.emailVerified || false,
+    displayName: data.displayName || "",
+    firstName: data.firstName || "",
+    lastName: data.lastName || "",
+    username: data.username || null,
+    address: data.address || "",
+    city: data.city || "",
+    zipCode: data.zipCode || "",
+    avatar: data.avatar || null,
+    bio: data.bio || "",
+    phone: data.phone || null,
+    profileImage: data.profileImage || null,
+    profilePicture: data.profilePicture || null,
+    photoURL: data.photoURL || null,
+    role: data.role || "user",
+    travelInterests: data.travelInterests || [],
+    preferredDestinations: data.preferredDestinations || [],
+    subscription: {
+      type: data.subscription?.type || "free",
+      interval: data.subscription?.interval || "monthly",
+      startDate: data.subscription?.startDate || null,
+      endDate: data.subscription?.endDate || null,
+      isActive: data.subscription?.isActive || false,
+    },
+    isOnline: data.isOnline || false,
+    lastSeen: data.lastSeen || FieldValue.serverTimestamp(),
+    joinedChatRooms: data.joinedChatRooms || [],
+    isVerified: data.isVerified || false,
+    isActive: data.isActive !== undefined ? data.isActive : true,
+    preferences: {
+      notifications: data.preferences?.notifications !== undefined ? data.preferences.notifications : true,
+      theme: data.preferences?.theme || "light",
+    },
+    createdAt: data.createdAt || FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  return {
+    ...payload,
+    ...buildUserSearchFields(payload),
+  };
+};
 
 class UserService {
   private collection = adminDb.collection(COLLECTION);
@@ -75,8 +95,14 @@ class UserService {
   }
 
   async update(userId: string, updateData: AnyObj) {
+    const searchPatch: AnyObj = {};
+    if ("displayName" in updateData) searchPatch.displayName_lower = normalizeSearchField(updateData.displayName);
+    if ("username" in updateData) searchPatch.username_lower = normalizeSearchField(updateData.username);
+    if ("email" in updateData) searchPatch.email_lower = normalizeSearchField(updateData.email);
+
     await this.collection.doc(userId).update({
       ...updateData,
+      ...searchPatch,
       updatedAt: FieldValue.serverTimestamp(),
     });
     return this.findById(userId);

@@ -2,9 +2,17 @@ import { NextRequest } from 'next/server';
 import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
-import { invalidateCacheVersion } from '@/lib/server/cacheVersioned';
+import { invalidateCacheVersion } from '@/lib/server/cacheManagement';
+import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
 
 export const runtime = 'nodejs';
+
+const normalizeSearchField = (value: unknown) =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,9 +42,40 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    const searchFields = {
+      name_lower: normalizeSearchField(touristPlace.name),
+      location_search: normalizeSearchField([
+        touristPlace.country,
+        touristPlace.state,
+        touristPlace.city,
+        touristPlace.area,
+      ].filter(Boolean).join(' ')),
+      location_lower: normalizeSearchField([
+        touristPlace.area,
+        touristPlace.city,
+        touristPlace.state,
+        touristPlace.country,
+      ].filter(Boolean).join(' ')),
+    };
 
-    const docRef = await adminDb.collection('touristPlaces').add(touristPlace);
+    const docRef = await adminDb.collection('touristPlaces').add({
+      ...touristPlace,
+      ...searchFields,
+    });
     
+    // Update Redis dataset cache
+    await updateSharedPlaceInCache({
+      id: docRef.id,
+      ...touristPlace,
+      ...searchFields,
+      Name: touristPlace.name,
+      Area: touristPlace.area,
+      State: touristPlace.state,
+      Country: touristPlace.country,
+      Category: touristPlace.category,
+      Description: touristPlace.description
+    }, 'create');
+
     // Invalidate cache after create
     await invalidateCacheVersion();
 
@@ -44,6 +83,7 @@ export async function POST(req: NextRequest) {
       {
         id: docRef.id,
         ...touristPlace,
+        ...searchFields,
       },
       201,
     );

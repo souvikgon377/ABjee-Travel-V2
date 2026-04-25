@@ -32,6 +32,13 @@ export async function PUT(req: NextRequest) {
       return fail('Travel itinerary not found', 404);
     }
 
+    const normalize = (v: any) =>
+      String(v ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
     const updateData = {
       place: String(place).trim(),
       country: String(country).trim(),
@@ -45,6 +52,12 @@ export async function PUT(req: NextRequest) {
       videos: Array.isArray(videos) ? videos : [],
       map: map || null,
       routePoints: Array.isArray(routePoints) ? routePoints : [],
+      
+      // Search fields
+      name_lower: normalize(place),
+      location_search: normalize([country, place, ...(Array.isArray(places) ? places : [])].join(" ")),
+      location_lower: normalize([place, ...(Array.isArray(places) ? places : []), country].join(" ")),
+
       updatedAt: new Date(),
     };
 

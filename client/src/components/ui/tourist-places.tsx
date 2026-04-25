@@ -26,7 +26,6 @@ import { Label } from '@/components/ui/label';
 import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
-import { auth } from '@/lib/firebase';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -140,10 +139,11 @@ const EMPTY_FORM: Omit<TouristPlace, 'id' | 'createdAt' | 'updatedAt'> = {
   extraInfo: [],
 };
 
-const TOURIST_CSV_TEMPLATE_TEXT = `Name,Area,State,Country,Category,Description,Google Maps URL,Extra Info
-Mysore Palace,Karnataka Heritage Zone,Karnataka,India,Historical / Heritage,"A grand palace known for Indo-Saracenic architecture and evening illumination.","https://maps.google.com/?q=Mysore+Palace","Best Time::Oct to Mar|Highlights::Palace illumination, museum galleries"`;
+const TOURIST_CSV_TEMPLATE_TEXT = `Name,Area,City,State,Country,Category,Description,Google Maps URL,Extra Info
+Mysore Palace,Karnataka Heritage Zone,Mysore,Karnataka,India,Historical,"A grand palace known for Indo-Saracenic architecture and evening illumination.","https://maps.google.com/?q=Mysore+Palace","Best Time::Oct to Mar|Highlights::Palace illumination|Highlights::Museum galleries"`;
 const TOURIST_PLACES_CACHE_KEY = 'tourist-places-admin-list';
 const TOURIST_PLACES_PAGE_SIZE = 30;
+const TOURIST_PLACES_SEARCH_DEBOUNCE_MS = 450;
 const TOURIST_PLACES_SUMMARY_COLLECTION = 'tourPlaces_summary';
 const TOURIST_PLACES_SUMMARY_DOC = 'metadata';
 
@@ -269,7 +269,7 @@ const HEADER_ALIASES: Record<string, string> = {
   title: 'name',
   place: 'name',
   area: 'area',
-  city: 'area',
+  city: 'city',
   location: 'area',
   state: 'state',
   province: 'state',
@@ -291,20 +291,31 @@ function normalizeHeaderToField(value: string): string {
   return HEADER_ALIASES[normalized] || normalized;
 }
 
-function toSearchText(value: string): string {
-  return value
+function normalize(v: any) {
+  return String(v ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function buildSearchIndexFields(place: { name: string; area?: string; state?: string; country?: string }) {
+function buildSearchIndexFields(place: { name: string; area?: string; city?: string; state?: string; country?: string }) {
+  const data = {
+    name: place.name,
+    area: place.area || '',
+    city: place.city || '',
+    state: place.state || '',
+    country: place.country || '',
+  };
+
   return {
-    searchName: toSearchText(place.name),
-    searchArea: toSearchText(place.area || ''),
-    searchState: toSearchText(place.state || ''),
-    searchCountry: toSearchText(place.country || ''),
+    name_lower: normalize(data.name),
+    location_search: normalize(
+      [data.country, data.state, data.city, data.area].filter(Boolean).join(' ')
+    ),
+    location_lower: normalize(
+      [data.city, data.area, data.state, data.country].filter(Boolean).join(' ')
+    ),
   };
 }
 
@@ -669,6 +680,9 @@ export function TouristPlacesManager() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const lastDocRef = useRef<number | null>(null);
   const lastPageNum = lastDocRef.current;
+  const appliedFiltersRef = useRef(appliedFilters);
+  const lastAppliedFilterKeyRef = useRef('');
+  const inFlightListRequestsRef = useRef(new Map<string, Promise<unknown>>());
 
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -813,7 +827,7 @@ export function TouristPlacesManager() {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const response = await adminAPI.getPlaces({ page: 1, limit: 1 });
+      const response = await adminAPI.getTouristPlaceList({ page: 1, limit: TOURIST_PLACES_PAGE_SIZE });
       const data = response.data?.data ?? response.data ?? {};
       const totalCount = Number(data.totalCount || 0);
       setSummary((current) => ({
@@ -837,15 +851,37 @@ export function TouristPlacesManager() {
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchPlaces = useCallback(async (options?: { reset?: boolean; forceRefresh?: boolean; filters?: TouristPlacesFilters }) => {
-    const selectedFilters = options?.filters ?? appliedFilters;
+    const selectedFilters = options?.filters ?? appliedFiltersRef.current;
     const reset = options?.reset ?? false;
     if (reset) setLoading(true);
     else setLoadingMore(true);
     setScanningFilters(false);
 
     try {
-      const nextPage = reset ? 1 : ((lastPageNum || 0) + 1);
-      const response = await adminAPI.getPlaces({
+      const nextPage = reset ? 1 : ((lastDocRef.current || 0) + 1);
+      const requestKey = [
+        buildFilterCacheKey(selectedFilters),
+        `page:${nextPage}`,
+        `limit:${TOURIST_PLACES_PAGE_SIZE}`,
+      ].join(':');
+      let request = inFlightListRequestsRef.current.get(requestKey);
+
+      if (!request) {
+        request = adminAPI.getTouristPlaceList({
+          search: selectedFilters.search,
+          location: selectedFilters.location,
+          filter: selectedFilters.status,
+          page: nextPage,
+          limit: TOURIST_PLACES_PAGE_SIZE,
+        }).finally(() => {
+          inFlightListRequestsRef.current.delete(requestKey);
+        });
+        inFlightListRequestsRef.current.set(requestKey, request);
+      }
+
+      const response = await request as Awaited<ReturnType<typeof adminAPI.getTouristPlaceList>>;
+      console.info('[TouristPlaces] API_CALL', {
+        requestKey,
         search: selectedFilters.search,
         location: selectedFilters.location,
         filter: selectedFilters.status,
@@ -878,7 +914,11 @@ export function TouristPlacesManager() {
       if (reset) setLoading(false);
       else setLoadingMore(false);
     }
-    }, [appliedFilters, mergePlaces, normalizeTouristPlaceRow]);
+    }, [buildFilterCacheKey, mergePlaces, normalizeTouristPlaceRow]);
+
+  useEffect(() => {
+    appliedFiltersRef.current = appliedFilters;
+  }, [appliedFilters]);
 
   const handleUpdateCache = useCallback(async () => {
     setLoading(true);
@@ -894,16 +934,40 @@ export function TouristPlacesManager() {
   }, [appliedFilters, fetchPlaces, fetchSummary]);
 
   useEffect(() => {
+    const initialFilters = {
+      search: '',
+      location: '',
+      status: 'all' as const,
+    };
+    lastAppliedFilterKeyRef.current = buildFilterCacheKey(initialFilters);
     void fetchPlaces({
       reset: true,
-      filters: {
-        search: '',
-        location: '',
-        status: 'all',
-      },
+      filters: initialFilters,
     });
     void fetchSummary();
-  }, [fetchSummary]);
+  }, [buildFilterCacheKey, fetchPlaces, fetchSummary]);
+
+  useEffect(() => {
+    const nextFilters: TouristPlacesFilters = {
+      search: searchInput.trim(),
+      location: cityInput.trim(),
+      status: statusInput,
+    };
+    const nextKey = buildFilterCacheKey(nextFilters);
+
+    if (nextKey === lastAppliedFilterKeyRef.current) return;
+    if (nextFilters.search.length > 0 && nextFilters.search.length < 2) return;
+    if (nextFilters.location.length > 0 && nextFilters.location.length < 2) return;
+
+    const timer = window.setTimeout(() => {
+      lastAppliedFilterKeyRef.current = nextKey;
+      setAppliedFilters(nextFilters);
+      lastDocRef.current = null;
+      void fetchPlaces({ reset: true, filters: nextFilters });
+    }, TOURIST_PLACES_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [buildFilterCacheKey, cityInput, fetchPlaces, searchInput, statusInput]);
 
   const flash = (msg: string, type: 'success' | 'error') => {
     if (type === 'success') { setSuccess(msg); setTimeout(() => setSuccess(''), 1200); }
@@ -1734,16 +1798,17 @@ export function TouristPlacesManager() {
         const { rowNumber, data } = rows[i];
 
         const name = normalizeImportedText(data.name || '');
-        const state = normalizeImportedText(data.state || '');
+        const city = normalizeImportedText(data.city || '');
         const area = normalizeImportedText(data.area || '');
-        const country = normalizeImportedText(data.country || 'India') || 'India';
+        const state = normalizeImportedText(data.state || '');
+        const country = normalizeImportedText(data.country || '');
         const description = normalizeImportedText(data.description || '');
         const category = normalizeImportedText(data.category || 'Other');
         const googleMapsUrl = (data.googleMapsUrl || '').trim();
         const extraInfo = parseExtraInfo(data.extraInfo || '');
 
-        if (!name || !state) {
-          errors.push(`Row ${rowNumber}: name and state are required.`);
+        if (!name || !country) {
+          errors.push(`Row ${rowNumber}: Name and Country are required.`);
           setImportProgress(Math.round(((i + 1) / rows.length) * 100));
           continue;
         }
@@ -1753,23 +1818,25 @@ export function TouristPlacesManager() {
 
         try {
           await adminAPI.createTouristPlace({
-          name,
-          area,
-          state,
-          country,
-          description,
-          category: safeCategory,
-          isActive: true,
-          googleMapsUrl,
-          coverImage: '',
-          media: [],
-          extraInfo,
-          ...buildSearchIndexFields({
             name,
             area,
+            city,
             state,
             country,
-          }),
+            description,
+            category: safeCategory,
+            isActive: true,
+            googleMapsUrl,
+            coverImage: '',
+            media: [],
+            extraInfo,
+            ...buildSearchIndexFields({
+              name,
+              area,
+              city,
+              state,
+              country,
+            }),
           });
 
           importedRows += 1;
@@ -1902,6 +1969,7 @@ export function TouristPlacesManager() {
       location: cityInput.trim(),
       status: statusInput,
     };
+    lastAppliedFilterKeyRef.current = buildFilterCacheKey(nextFilters);
     setAppliedFilters(nextFilters);
     lastDocRef.current = null;
     void fetchPlaces({ reset: true, filters: nextFilters });
@@ -1916,6 +1984,7 @@ export function TouristPlacesManager() {
       location: '',
       status: 'all',
     };
+    lastAppliedFilterKeyRef.current = buildFilterCacheKey(resetFilters);
     setAppliedFilters(resetFilters);
     lastDocRef.current = null;
     void fetchPlaces({ reset: true, filters: resetFilters });
@@ -2936,5 +3005,3 @@ export function TouristPlacesManager() {
     </div>
   );
 }
-
-

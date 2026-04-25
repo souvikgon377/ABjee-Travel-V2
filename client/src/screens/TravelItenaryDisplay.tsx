@@ -1478,6 +1478,7 @@ export default function TravelItenaryDisplay() {
 	const [_generatedItinerary, setGeneratedItinerary] = useState<TravelData | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [generationError, setGenerationError] = useState<string | null>(null);
+	const [visibleCount, setVisibleCount] = useState(4);
 	const heroRef = useRef<HTMLElement | null>(null);
 	const generatorRef = useRef<HTMLElement | null>(null);
 	const resultsRef = useRef<HTMLElement | null>(null);
@@ -1680,6 +1681,7 @@ export default function TravelItenaryDisplay() {
 		}
 
 		setSearch(prev => ({ ...prev, results: filtered, hasSearched: Boolean(q) }));
+		setVisibleCount(4);
 	}, [allResults, search.query, filterDestination, filterDuration]);
 
 	const triggerSearchAndScroll = useCallback(() => {
@@ -1864,7 +1866,7 @@ export default function TravelItenaryDisplay() {
 							<Badge className="text-sm px-3 py-1.5 bg-emerald-600 hover:bg-emerald-600 text-white rounded-full">Traveler Picks</Badge>
 						</div>
 						<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-							{search.results.map((result, idx) => (
+							{search.results.slice(0, visibleCount).map((result, idx) => (
 								<motion.div key={result.id} className="group" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.08 }} whileHover={{ y: -4 }} onClick={() => setSelectedResult(result)}>
 									<Card className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border border-border cursor-pointer">
 										<div className="relative overflow-hidden h-48 bg-muted">
@@ -1901,6 +1903,17 @@ export default function TravelItenaryDisplay() {
 								</motion.div>
 							))}
 						</div>
+
+						{search.results.length > visibleCount && (
+							<div className="flex justify-center pt-8">
+								<Button 
+									onClick={() => setVisibleCount(prev => prev + 4)}
+									className="rounded-2xl px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-foreground font-bold hover:bg-white/20 transition-all shadow-xl"
+								>
+									See More Itineraries
+								</Button>
+							</div>
+						)}
 					</motion.div>
 				)}
 			</main>

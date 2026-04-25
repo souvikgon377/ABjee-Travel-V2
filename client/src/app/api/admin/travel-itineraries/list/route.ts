@@ -20,7 +20,8 @@ export const runtime = 'nodejs';
 const COLLECTION = 'travel-destinations';
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
-const MAX_SCAN_ROUNDS = 20;
+const MAX_SCAN_ROUNDS = 4;
+const SCAN_BATCH_SIZE = 50;
 
 const normalizeText = (value: string) => value.trim();
 
@@ -144,91 +145,77 @@ export async function GET(req: NextRequest) {
     }
 
     // =========================================================================
-    // STRATEGY 3: Cache miss - run scan with lock to prevent stampede
+    // STRATEGY 3: Cache miss - run prefix queries
     // =========================================================================
-    console.info(`[Admin:Itineraries] CACHE MISS - scanning Firestore`, filters);
+    console.info(`[Admin:Itineraries] CACHE MISS - running Firestore queries`, filters);
 
+    const runPrefixQuery = async (field: string, search: string) => {
+      const snap = await adminDb
+        .collection(COLLECTION)
+        .orderBy(field)
+        .orderBy(FieldPath.documentId())
+        .startAt(search)
+        .endAt(search + '\uf8ff')
+        .limit(limit)
+        .get();
+      
+      return snap.docs.map(normalizeTravelItem);
+    };
+
+    let collected: ReturnType<typeof normalizeTravelItem>[] = [];
+
+    if (filters.name !== 'all') {
+      const search = filters.name.toLowerCase().trim();
+      const preferLocation = !search.includes(' ');
+
+      if (preferLocation) {
+        // Try country/global first
+        collected = await runPrefixQuery('location_search', search);
+        if (collected.length === 0) {
+          // Try local fallback
+          collected = await runPrefixQuery('location_lower', search);
+        }
+      } else {
+        // Multi-word: try name first
+        collected = await runPrefixQuery('name_lower', search);
+        if (collected.length === 0) {
+          collected = await runPrefixQuery('location_search', search);
+        }
+      }
+    } else if (filters.location !== 'all') {
+      // Just country filter
+      collected = await runPrefixQuery('location_search', filters.location.toLowerCase().trim());
+    } else {
+      // No search/filter: list by creation date (newest first)
+      const snap = await adminDb
+        .collection(COLLECTION)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+      collected = snap.docs.map(normalizeTravelItem);
+    }
+
+    console.info(`[Admin:Itineraries] Query completed`, {
+      resultsCount: collected.length,
+      strategy: filters.name !== 'all' ? 'prefix' : 'list',
+    });
+
+    // Cache the scan result (even if it's just a prefix query result)
     const scanCacheKey = await buildScanCacheKey({
       name: filters.name,
       location: filters.location,
       status: 'all',
     });
-
-    // Try to execute scan with lock
-    const collected = await executeScanWithLock(scanCacheKey, async () => {
-      const results: ReturnType<typeof normalizeTravelItem>[] = [];
-      let scanCursor: FirebaseFirestore.DocumentSnapshot | null = null;
-      let round = 0;
-
-      while (results.length < CACHE_CONFIG.MAX_CACHED_SCAN_SIZE && round < MAX_SCAN_ROUNDS) {
-        let queryRef = adminDb
-          .collection(COLLECTION)
-          .orderBy(FieldPath.documentId())
-          .limit(Math.max(limit * 2, 50));
-
-        if (scanCursor) {
-          queryRef = queryRef.startAfter(scanCursor);
-        }
-
-        const snapshot = await queryRef.get();
-        if (snapshot.empty) break;
-
-        snapshot.docs.forEach((doc) => {
-          if (results.length >= CACHE_CONFIG.MAX_CACHED_SCAN_SIZE) return;
-          const item = normalizeTravelItem(doc);
-
-          // Match against normalized filters
-          const matchesSearch = filters.name === 'all'
-            ? true
-            : [item.place, item.country, item.itinerary, item.introduction]
-                .join(' ')
-                .toLowerCase()
-                .includes(filters.name);
-          const matchesCountry = filters.location === 'all'
-            ? true
-            : item.country.toLowerCase().includes(filters.location);
-
-          if (matchesSearch && matchesCountry) {
-            results.push(item);
-          }
-        });
-
-        scanCursor = snapshot.docs[snapshot.docs.length - 1] || null;
-        round += 1;
-      }
-
-      console.info(`[Admin:Itineraries] Scan completed`, {
-        resultsCount: results.length,
-        rounds: round,
-        maxCached: CACHE_CONFIG.MAX_CACHED_SCAN_SIZE,
-      });
-
-      return results;
-    });
-
-    // If scan lock was held, return fallback (no stale cache)
-    if (collected === null) {
-      console.warn(`[Admin:Itineraries] Scan lock held, returning empty result`);
-      return ok({
-        rows: [],
-        hasMore: false,
-        nextCursor: null,
-        cacheStatus: 'miss',
-        scanCacheHit: false,
-      });
-    }
-
-    // Cache the full scan result
     await cacheScanResults(scanCacheKey, collected, CACHE_CONFIG.SCAN_CACHE_TTL);
 
-    // Paginate the collected results
+    // Paginate (though prefix query already limits, we slice for consistency with cache logic)
     const startIdx = (page - 1) * limit;
     const endIdx = startIdx + limit;
     const rows = collected.slice(startIdx, endIdx);
-    const pageHasMore = endIdx < collected.length;
+    const pageHasMore = endIdx < collected.length || (collected.length === limit && filters.name === 'all'); // Simplification for 'all'
     const nextCursor = pageHasMore ? String(page + 1) : null;
 
-    // Also cache this specific page for next time
+    // Cache this specific page
     const pageCacheKey = await buildPageCacheKey({
       name: filters.name,
       location: filters.location,

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
-export const ok = (data: unknown, status = 200) =>
-  NextResponse.json({ success: true, data }, { status });
+export const ok = (data: unknown, options: number | { status?: number; headers?: Record<string, string> } = 200) => {
+  const status = typeof options === 'number' ? options : options.status ?? 200;
+  const headers = typeof options === 'number' ? {} : options.headers ?? {};
+  return NextResponse.json({ success: true, data }, { status, headers });
+};
 
 export const fail = (message: string, status = 400, extra?: Record<string, unknown>) =>
   NextResponse.json({ success: false, message, ...(extra || {}) }, { status });

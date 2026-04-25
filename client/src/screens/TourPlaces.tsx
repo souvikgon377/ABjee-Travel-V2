@@ -49,7 +49,7 @@ const normalizeSearchText = (value?: string) =>
 const splitSearchTerms = (value: string) => value.split(" ").filter(Boolean);
 
 const SEARCH_DEBOUNCE_MS = 450;
-const SEARCH_PAGE_SIZE = 4;
+const SEARCH_PAGE_SIZE = 12;
 const SEARCH_API_PATH = "/api/places";
 
 type ReviewMediaFile = {
@@ -84,6 +84,7 @@ type SearchResponse = {
   hasMore?: boolean;
   searchTerm?: string;
   cacheStatus?: 'hit' | 'miss';
+  reset?: boolean;
 };
 
 const normalizeSearchInput = (value: string) => value.replace(/\+/g, " ").replace(/\s+/g, " ").trim();
@@ -377,6 +378,9 @@ const TourPlaces: React.FC = () => {
   const searchRequestIdRef = useRef(0);
   const clientSearchCacheRef = useRef(new Map<string, SearchResponse>());
   const inFlightSearchRef = useRef(new Map<string, Promise<SearchResponse>>());
+  const prefetchQueueRef = useRef<Map<string, SearchResponse>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const seeMoreRef = useRef<HTMLButtonElement | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
@@ -387,6 +391,7 @@ const TourPlaces: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
+  const [actualSearchQuery, setActualSearchQuery] = useState("");
   const [searchCacheStatus, setSearchCacheStatus] = useState<'hit' | 'miss' | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<TouristPlace | null>(null);
   const [isWindowExpanded, setIsWindowExpanded] = useState(false);
@@ -473,7 +478,7 @@ const TourPlaces: React.FC = () => {
     return `search:${query.toLowerCase()}:after:${lastDoc || "start"}`;
   }, []);
 
-  const requestSearchPage = useCallback(async (query: string, lastDoc: string | null): Promise<SearchResponse> => {
+  const requestSearchPage = useCallback(async (query: string, lastDoc: string | null, options?: { signal?: AbortSignal }): Promise<SearchResponse> => {
     const cacheKey = buildClientCacheKey(query, lastDoc);
     const cached = clientSearchCacheRef.current.get(cacheKey);
     if (cached) {
@@ -488,18 +493,24 @@ const TourPlaces: React.FC = () => {
       return existingRequest;
     }
 
-    const page = Math.max(1, Number(lastDoc || "1"));
     const requestUrl = new URL(SEARCH_API_PATH, window.location.origin);
     requestUrl.searchParams.set("search", query);
-    requestUrl.searchParams.set("page", String(page));
     requestUrl.searchParams.set("limit", String(SEARCH_PAGE_SIZE));
+    if (lastDoc) {
+      requestUrl.searchParams.set("cursor", lastDoc);
+    }
 
     const request = fetch(requestUrl.toString(), {
       method: "GET",
+      signal: options?.signal,
     }).then(async (response) => {
-      const payload = (await response.json().catch(() => null)) as { success?: boolean; data?: SearchResponse; message?: string } | null;
+      const payload = (await response.json().catch(() => null)) as { success?: boolean; data?: SearchResponse; message?: string; reset?: boolean } | null;
       if (!response.ok || !payload?.success || !payload.data) {
-        throw new Error(payload?.message || `Search failed with status ${response.status}`);
+        const error = new Error(payload?.message || `Search failed with status ${response.status}`) as Error & { reset?: boolean };
+        if (payload?.reset) {
+          error.reset = true;
+        }
+        throw error;
       }
 
       clientSearchCacheRef.current.set(cacheKey, payload.data);
@@ -511,6 +522,33 @@ const TourPlaces: React.FC = () => {
     inFlightSearchRef.current.set(cacheKey, request);
     return request;
   }, [buildClientCacheKey]);
+
+  const triggerPrefetch = useCallback((term: string, lastDoc: string) => {
+    const nextKey = `${term}:${lastDoc}`;
+    if (prefetchQueueRef.current.has(nextKey)) return;
+
+    console.info("[Client/Places] Triggering prefetch for bottom-of-page", { nextKey });
+    requestSearchPage(term, lastDoc).then((nextPayload) => {
+      prefetchQueueRef.current.set(nextKey, nextPayload);
+    }).catch(() => null);
+  }, [requestSearchPage]);
+
+  // Observer for prefetch
+  useEffect(() => {
+    if (!searchHasMore || !searchLastDoc || !activeSearchTerm) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        triggerPrefetch(activeSearchTerm, searchLastDoc);
+      }
+    }, { rootMargin: '400px' }); // Trigger when 400px from button
+
+    if (seeMoreRef.current) {
+      observer.observe(seeMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [searchHasMore, searchLastDoc, activeSearchTerm, triggerPrefetch]);
 
   const fetchSearchResults = useCallback(async (term: string, options?: { append?: boolean; lastDoc?: string | null }) => {
     const normalizedTerm = normalizeSearchInput(term);
@@ -536,7 +574,24 @@ const TourPlaces: React.FC = () => {
     }
 
     try {
-      const payload = await requestSearchPage(normalizedTerm, lastDoc);
+      // Check prefetch cache first
+      const cacheKey = `${normalizedTerm}:${lastDoc || "root"}`;
+      const prefetched = prefetchQueueRef.current.get(cacheKey);
+
+      let payload: SearchResponse;
+      if (prefetched) {
+        console.info("[Client/Places] Using prefetched result", { cacheKey });
+        payload = prefetched;
+        prefetchQueueRef.current.delete(cacheKey);
+      } else {
+        // Handle request abortion
+        if (!append) {
+          abortControllerRef.current?.abort();
+          abortControllerRef.current = new AbortController();
+        }
+        payload = await requestSearchPage(normalizedTerm, lastDoc, { signal: abortControllerRef.current?.signal });
+      }
+
       const nextResults = Array.isArray(payload.results) ? payload.results : [];
 
       if (requestId !== searchRequestIdRef.current) {
@@ -547,15 +602,26 @@ const TourPlaces: React.FC = () => {
       setSearchLastDoc(payload.lastDoc ?? null);
       setSearchHasMore(Boolean(payload.hasMore));
       setSearchCacheStatus(payload.cacheStatus ?? null);
-      setSearchResults((prev) => (append ? [...prev, ...nextResults] : nextResults));
+      setSearchResults((prev) => {
+        if (!append) return nextResults;
+        const existingIds = new Set(prev.map((p) => p.id));
+        const filteredNext = nextResults.filter((p) => p.id && !existingIds.has(p.id));
+        return [...prev, ...filteredNext];
+      });
       setSearchError("");
       lastSearchTermRef.current = normalizedTerm;
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
       if (requestId !== searchRequestIdRef.current) {
         return;
       }
 
       const message = error instanceof Error ? error.message : "Failed to search tourist places.";
+      if ((error as { reset?: boolean }).reset) {
+        resetSearchState();
+        setSearchError(message);
+        return;
+      }
       setSearchError(message);
       if (!append) {
         setSearchResults([]);
@@ -629,15 +695,19 @@ const TourPlaces: React.FC = () => {
     setPlaceReviews((current) => ({ ...current, [placeId]: reviews }));
   }, []);
 
-  useEffect(() => {
-    const normalized = normalizeSearchInput(searchInput);
+  const handleSearchTrigger = useCallback((term: string) => {
+    const normalized = normalizeSearchInput(term);
+    if (normalized.length < 3) return;
+    setActualSearchQuery(normalized);
+  }, []);
 
-    if (normalized.length < 3) {
+  useEffect(() => {
+    if (!actualSearchQuery) {
       resetSearchState();
       return;
     }
 
-    if (normalized !== lastSearchTermRef.current) {
+    if (actualSearchQuery !== lastSearchTermRef.current) {
       setSearchResults([]);
       setSearchLastDoc(null);
       setSearchHasMore(false);
@@ -645,15 +715,11 @@ const TourPlaces: React.FC = () => {
       setSearchCacheStatus(null);
     }
 
-    const timer = window.setTimeout(() => {
-      void fetchSearchResults(normalized, { append: false, lastDoc: null });
-    }, SEARCH_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(timer);
-  }, [fetchSearchResults, resetSearchState, searchInput]);
+    void fetchSearchResults(actualSearchQuery, { append: false, lastDoc: null });
+  }, [fetchSearchResults, resetSearchState, actualSearchQuery]);
 
   const searchQuery = normalizeSearchInput(searchInput);
-  const showSuggestions = searchQuery.length < 3;
+  const showSuggestions = !actualSearchQuery || searchQuery !== actualSearchQuery;
   const suggestionPlaces = ["Tirupati", "Manali", "Goa", "Kerala", "Shimla", "Ladakh"];
 
   const selectedPlaceImages = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "image") ?? [], [selectedPlace?.media]);
@@ -861,7 +927,7 @@ const TourPlaces: React.FC = () => {
     () =>
       searchResults.map((place, idx) => (
         <PlaceCard
-          key={place.id ?? idx}
+          key={`${place.id}-${idx}`}
           place={place}
           idx={idx}
           onSelect={() => setSelectedPlace(place)}
@@ -910,16 +976,29 @@ const TourPlaces: React.FC = () => {
                   placeholder="Search by place, area, state, or country"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  className="w-full rounded-full bg-white/95 py-3.5 pl-12 pr-10 text-sm text-gray-900 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-gray-400 focus:outline-none sm:py-4 sm:pl-14 sm:pr-12 sm:text-base"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSearchTrigger(searchInput);
+                    }
+                  }}
+                  className="w-full rounded-full bg-white/95 py-3.5 pl-12 pr-28 text-sm text-gray-900 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-gray-400 focus:outline-none sm:py-4 sm:pl-14 sm:pr-32 sm:text-base"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleSearchTrigger(searchInput)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full bg-rose-500 px-4 py-2 text-xs font-bold text-white shadow-lg transition hover:bg-rose-600 sm:px-6 sm:py-2.5 sm:text-sm"
+                >
+                  Search
+                </button>
                 {searchInput && (
                   <button
                     type="button"
                     onClick={() => {
                       setSearchInput("");
+                      setActualSearchQuery("");
                       setSelectedPlace(null);
                     }}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-rose-100 hover:text-rose-500"
+                    className="absolute right-24 top-1/2 -translate-y-1/2 rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-rose-100 hover:text-rose-500 sm:right-28"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -962,6 +1041,7 @@ const TourPlaces: React.FC = () => {
                       type="button"
                       onClick={() => {
                         setSearchInput(placeName);
+                        handleSearchTrigger(placeName);
                         closeSelectedPlace();
                       }}
                       className="rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-md transition hover:bg-white/18"
@@ -1009,6 +1089,7 @@ const TourPlaces: React.FC = () => {
                 {searchHasMore && searchResults.length > 0 && (
                   <div className="flex justify-center pb-6 pt-2">
                     <button
+                      ref={seeMoreRef}
                       type="button"
                       onClick={handleSeeMore}
                       disabled={searchLoading}

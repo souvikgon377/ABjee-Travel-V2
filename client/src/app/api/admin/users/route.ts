@@ -14,6 +14,13 @@ const USERS_REDIS_TTL = 180;  // 3 minutes
 const USERS_MEMORY_TTL = 60;  // 1 minute
 const USERS_FETCH_LIMIT = 200;
 
+const normalizeSearchField = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9@._\-\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 export async function GET(req: NextRequest) {
   try {
     const currentUser = await authenticateRequest(req);
@@ -112,14 +119,22 @@ export async function POST(req: NextRequest) {
       lastSeen: new Date(),
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(String(displayName))}`,
     };
+    const searchFields = {
+      displayName_lower: normalizeSearchField(userData.displayName),
+      username_lower: "",
+      email_lower: normalizeSearchField(userData.email),
+    };
 
-    await ref.set(userData);
+    await ref.set({
+      ...userData,
+      ...searchFields,
+    });
 
     // Invalidate cache so next GET sees the new user (both L1 and L2)
     await hybridInvalidate(USERS_CACHE_KEY);
 
     return ok(
-      { message: "User created successfully", user: { id: ref.id, ...userData, phoneNumber: userData.phone } },
+      { message: "User created successfully", user: { id: ref.id, ...userData, ...searchFields, phoneNumber: userData.phone } },
       201,
     );
   } catch (error: unknown) {

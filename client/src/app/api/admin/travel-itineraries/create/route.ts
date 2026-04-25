@@ -18,6 +18,13 @@ export async function POST(req: NextRequest) {
       return fail('Missing required fields: place, country, budget', 400);
     }
 
+    const normalize = (v: any) =>
+      String(v ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
     const travelItinerary = {
       place: String(place).trim(),
       country: String(country).trim(),
@@ -31,6 +38,12 @@ export async function POST(req: NextRequest) {
       videos: Array.isArray(videos) ? videos : [],
       map: map || null,
       routePoints: Array.isArray(routePoints) ? routePoints : [],
+      
+      // Search fields
+      name_lower: normalize(place),
+      location_search: normalize([country, place, ...(Array.isArray(places) ? places : [])].join(" ")),
+      location_lower: normalize([place, ...(Array.isArray(places) ? places : []), country].join(" ")),
+
       createdAt: new Date(),
       updatedAt: new Date(),
     };

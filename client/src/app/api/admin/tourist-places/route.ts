@@ -3,8 +3,16 @@ import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth'
 import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { invalidateCacheVersion } from '@/lib/server/cacheManagement';
+import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
 
 export const runtime = 'nodejs';
+
+const normalizeSearchField = (value: unknown) =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export async function PUT(req: NextRequest) {
   try {
@@ -47,16 +55,48 @@ export async function PUT(req: NextRequest) {
       isActive: isActive !== false,
       updatedAt: new Date(),
     };
+    const searchFields = {
+      name_lower: normalizeSearchField(updateData.name),
+      location_search: normalizeSearchField([
+        updateData.country,
+        updateData.state,
+        updateData.city,
+        updateData.area,
+      ].filter(Boolean).join(' ')),
+      location_lower: normalizeSearchField([
+        updateData.area,
+        updateData.city,
+        updateData.state,
+        updateData.country,
+      ].filter(Boolean).join(' ')),
+    };
 
-    await docRef.update(updateData);
+    await docRef.update({
+      ...updateData,
+      ...searchFields,
+    });
     
-    // Invalidate cache after update
+    // Update Redis dataset cache
+    await updateSharedPlaceInCache({
+      id,
+      ...updateData,
+      ...searchFields,
+      Name: updateData.name,
+      Area: updateData.area,
+      State: updateData.state,
+      Country: updateData.country,
+      Category: updateData.category,
+      Description: updateData.description
+    }, 'update');
+
+    // Invalidate cache version for page caches
     await invalidateCacheVersion();
 
     return ok({
       id,
       ...docSnap.data(),
       ...updateData,
+      ...searchFields,
     });
   } catch (error: unknown) {
     if (error instanceof AuthError) {
@@ -90,7 +130,10 @@ export async function DELETE(req: NextRequest) {
 
     await docRef.delete();
     
-    // Invalidate cache after delete
+    // Update Redis dataset cache (remove)
+    await updateSharedPlaceInCache({ id }, 'delete');
+
+    // Invalidate cache version for page caches
     await invalidateCacheVersion();
 
     return ok({ deleted: true, id });

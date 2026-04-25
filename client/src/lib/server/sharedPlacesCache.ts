@@ -1,19 +1,71 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
-import { hybridGet, hybridInvalidate } from '@/lib/server/hybridCache';
+import { hybridGet, hybridInvalidate, hybridSet } from '@/lib/server/hybridCache';
+import { getRedis } from '@/lib/server/redis';
+import { fullIndexPlaces, updatePlaceIndex, deletePlaceIndex } from './touristSearchUtils';
+import fs from 'fs';
+import path from 'path';
+
+// ─── Namespace & Keys ────────────────────────────────────────────────────────
+const NS = "prod:tour";
+const K = {
+  ALL: `${NS}:places:all`,
+  VERSION: `${NS}:places:version`,
+  REFRESH_LOCK: `${NS}:lock:refresh`,
+  REFRESH_META: `${NS}:refresh:meta`,
+  REFRESH_COUNT: `${NS}:refresh:count`,
+  RETRY_LOCK: `${NS}:lock:retry`,
+  LAST_SUCCESS: `${NS}:last:success`,
+  LAST_ERROR: `${NS}:last:error`,
+  LAST_DURATION: `${NS}:last:duration`,
+};
 
 const COLLECTION = 'touristPlaces';
-export const SHARED_PLACES_CACHE_KEY = 'places_all';
 const SHARED_PLACES_CACHE_TTL_SECONDS = 86_400; // 24 hours
+const BACKUP_FILE_PATH = path.join(process.cwd(), 'places_backup.json');
+const BACKUP_TMP_PATH = path.join(process.cwd(), 'places_backup.tmp');
+const REFRESH_TRIGGER_COOLDOWN_MS = 30_000;
 
 export class RedisUnavailableError extends Error {
-  constructor(message = 'Redis is unavailable.') {
+  constructor(message: string = 'Redis is unavailable') {
     super(message);
     this.name = 'RedisUnavailableError';
   }
 }
 
-export type SharedPlacesStatus = 'all' | 'active' | 'inactive';
-export type SharedPlacesContentFilter = 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
+// ─── Cold Start UX (In-Memory Snapshot & Meta) ────────────────────────────────
+let inMemorySnapshot: any[] = [];
+let snapshotMeta = { updatedAt: 0, version: 0 };
+let isRefreshing = false;
+let lastRefreshTriggerAt = 0;
+
+const shouldRunFullReindex = (force: boolean, reason: string) => {
+  if (force) return true;
+  // Rebuild indexes only for explicit repair/recovery paths.
+  return reason === 'eviction_detected' || reason === 'drift_detected';
+};
+
+const triggerRefreshIfNeeded = (reason: string, force: boolean = false) => {
+  const now = Date.now();
+  if (!force && now - lastRefreshTriggerAt < REFRESH_TRIGGER_COOLDOWN_MS) {
+    return;
+  }
+  lastRefreshTriggerAt = now;
+  void refreshCacheInBackground(force, reason);
+};
+
+export function getInMemorySnapshot() {
+  return inMemorySnapshot;
+}
+
+export function getSnapshotUpdatedAt() {
+  return snapshotMeta.updatedAt;
+}
+
+export function getSnapshotVersion() {
+  return snapshotMeta.version;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type SharedPlaceRecord = {
   id: string;
@@ -35,12 +87,21 @@ export type SharedPlaceRecord = {
   searchCountry: string;
   createdAt: unknown;
   updatedAt: unknown;
+  Name: string;
+  Area: string;
+  City: string;
+  State: string;
+  Country: string;
+  Description: string;
+  Category: string;
+  name_lower?: string;
+  location_lower?: string;
 };
 
 export type SharedPlacesFilters = {
   search: string;
   location: string;
-  contentFilter: SharedPlacesContentFilter;
+  contentFilter: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
 };
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
@@ -53,13 +114,20 @@ const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): SharedPlace
 
   return {
     id: doc.id,
-    name: normalizeText(data.name || 'Unnamed Place'),
+    Name: normalizeText(data.Name || data.name || 'Unnamed Place'),
+    Area: area,
+    City: normalizeText(data.city || area),
+    State: state,
+    Country: country,
+    Description: normalizeText(data.Description || data.description),
+    Category: normalizeText(data.Category || data.category || 'Other'),
+    name: normalizeText(data.name || data.Name || 'Unnamed Place'),
     area,
     city: normalizeText(data.city || area),
     state,
     country,
-    description: normalizeText(data.description),
-    category: normalizeText(data.category || 'Other'),
+    description: normalizeText(data.description || data.Description),
+    category: normalizeText(data.category || data.Category || 'Other'),
     isActive: data.isActive !== false,
     googleMapsUrl: normalizeText(data.googleMapsUrl),
     coverImage: normalizeText(data.coverImage),
@@ -69,150 +137,316 @@ const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): SharedPlace
     searchArea: normalizeText(data.searchArea),
     searchState: normalizeText(data.searchState),
     searchCountry: normalizeText(data.searchCountry),
+    name_lower: data.name_lower as string | undefined,
+    location_lower: data.location_lower as string | undefined,
     createdAt: data.createdAt ?? null,
     updatedAt: data.updatedAt ?? null,
   };
-};
-
-const normalizeSearchText = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-export const normalizeSharedPlacesFilters = (filters: Partial<SharedPlacesFilters>): SharedPlacesFilters => {
-  const search = normalizeSearchText(String(filters.search ?? ''));
-  const location = normalizeSearchText(String(filters.location ?? ''));
-  const contentFilter =
-    filters.contentFilter === 'photos-added' ||
-    filters.contentFilter === 'photos-not-added' ||
-    filters.contentFilter === 'recently-updated'
-      ? filters.contentFilter
-      : 'all';
-
-  return { search, location, contentFilter };
 };
 
 const toMillis = (value: unknown) => {
   if (!value) return 0;
   if (value instanceof Date) return value.getTime();
   if (typeof value === 'object' && value !== null) {
-    const timestampLike = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
-    if (typeof timestampLike.toDate === 'function') return timestampLike.toDate().getTime();
-    if (typeof timestampLike.seconds === 'number') return (timestampLike.seconds * 1000) + Math.floor((timestampLike.nanoseconds ?? 0) / 1_000_000);
+    const ts = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+    if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+    if (typeof ts.seconds === 'number') return (ts.seconds * 1000) + Math.floor((ts.nanoseconds ?? 0) / 1_000_000);
   }
   return 0;
 };
 
-export const matchesSharedPlaceFilters = (place: SharedPlaceRecord, filters: SharedPlacesFilters) => {
-  const hasPhotos = (place.media?.length || 0) > 0 || Boolean(place.coverImage);
-  const updatedAtValue = toMillis(place.updatedAt);
+function safeLoadBackup() {
+  try {
+    if (!fs.existsSync(BACKUP_FILE_PATH)) return null;
+    const raw = fs.readFileSync(BACKUP_FILE_PATH, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) {
+      return parsed;
+    }
+    return null;
+  } catch (_e) {
+    console.error("[PlacesCache] Backup corrupted, ignoring");
+    return null;
+  }
+}
 
-  if (filters.contentFilter === 'photos-added' && !hasPhotos) return false;
-  if (filters.contentFilter === 'photos-not-added' && hasPhotos) return false;
-  if (filters.contentFilter === 'recently-updated') {
-    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    if (!updatedAtValue || updatedAtValue < sevenDaysAgo) return false;
+// ─── Implementation ───────────────────────────────────────────────────────────
+
+async function loadPlacesWithRetry(retries = 3): Promise<SharedPlaceRecord[]> {
+  const redis = getRedis();
+  if (redis && retries < 3) {
+    const retryLock = await redis.set(K.RETRY_LOCK, '1', { nx: true, ex: 10 });
+    if (!retryLock) throw new Error("RETRY_STORM_PROTECTION");
+  }
+  try {
+    const snapshot = await adminDb.collection(COLLECTION).get();
+    return snapshot.docs.map(normalizeDoc).sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+  } catch (error) {
+    if (retries === 0) throw error;
+    await new Promise(r => setTimeout(r, 2000));
+    return loadPlacesWithRetry(retries - 1);
+  } finally {
+    if (redis) await redis.del(K.RETRY_LOCK);
+  }
+}
+
+/**
+ * ⚡ Ultra-Hardened Background Refresh
+ */
+export const refreshCacheInBackground = async (force = false, reason: string = "background_sync") => {
+  const startTime = Date.now();
+  const redis = getRedis();
+  if (!redis) return [];
+
+  // 1. Single Assignment Guard (Instance-local)
+  if (isRefreshing) {
+    console.info("[PlacesCache] Refresh already in progress (Local)");
+    return [];
   }
 
-  if (filters.search) {
-    const haystack = [place.name, place.searchName].filter(Boolean).join(' ').toLowerCase();
-    const tokens = filters.search.split(' ').filter(Boolean);
-    const phraseMatch = haystack.includes(filters.search);
-    const tokenMatch = tokens.length > 0 && tokens.every((token) => haystack.includes(token));
-
-    if (!phraseMatch && !tokenMatch) return false;
+  // 2. Mutual Exclusion Lock (Global)
+  const lock = await redis.set(K.REFRESH_LOCK, '1', { nx: true, ex: 30 });
+  if (!lock) {
+    if (await redis.get(K.REFRESH_LOCK)) {
+      return []; // Global lock active
+    }
+    // Fallback if set failed for other reasons
+    return [];
   }
 
-  if (filters.location) {
-    const locationHaystack = [place.area, place.city, place.state, place.country].filter(Boolean).join(' ').toLowerCase();
-    if (!locationHaystack.includes(filters.location)) return false;
+  isRefreshing = true;
+
+  // 2. Cooldown check
+  if (!force) {
+    const meta = await redis.get<string>(K.REFRESH_META);
+    if (meta) {
+      try {
+        const { lastRun } = JSON.parse(meta);
+        if (Date.now() - lastRun < 30000) {
+          await redis.del(K.REFRESH_LOCK);
+          return [];
+        }
+      } catch (_e) {
+        // Ignore JSON parse errors
+      }
+    }
   }
 
-  return true;
-};
+  console.info(`[PlacesCache] REFRESH START (Force: ${force})`);
+  try {
+    const places = await loadPlacesWithRetry();
+    const duration = Date.now() - startTime;
+    const version = (await redis.get(K.VERSION)) || "1";
 
-const sortPlaces = (places: SharedPlaceRecord[]) => {
-  return [...places].sort((left, right) => {
-    const leftUpdated = toMillis(left.updatedAt);
-    const rightUpdated = toMillis(right.updatedAt);
+    // Update Redis
+    await hybridSet(K.ALL, places, { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS });
+    
+    // Update In-Memory Snapshot & Meta
+    inMemorySnapshot = places.slice(0, 200).map(p => ({
+      id: p.id,
+      name: p.name,
+      area: p.area,
+      city: p.city,
+      coverImage: p.coverImage,
+      category: p.category
+    }));
+    snapshotMeta.updatedAt = Date.now();
 
-    if (leftUpdated !== rightUpdated) {
-      return rightUpdated - leftUpdated;
+    // ⚡ Atomic Disk Write (Tmp -> Rename)
+    const backupData = JSON.stringify({ version, updatedAt: Date.now(), data: places });
+    await fs.promises.writeFile(BACKUP_TMP_PATH, backupData, 'utf-8');
+    await fs.promises.rename(BACKUP_TMP_PATH, BACKUP_FILE_PATH);
+
+    // Update Health & Metrics
+    await redis.set(K.REFRESH_META, JSON.stringify({ lastRun: Date.now() }));
+    await redis.set(K.LAST_SUCCESS, Date.now());
+    await redis.set(K.LAST_DURATION, duration);
+    await redis.del(K.LAST_ERROR);
+    
+    // Memory monitoring (best effort - might not be supported on all clients like Upstash)
+    if (typeof (redis as any).info === 'function') {
+      try {
+        const info = await (redis as any).info("memory");
+        if (info && typeof info === 'string') {
+          const used = info.split("\n").find((l: string) => l.startsWith("used_memory_human"))?.split(":")[1]?.trim();
+          console.log(`[PlacesCache] Redis memory usage: ${used || "unknown"}`);
+        }
+      } catch (_err) {
+        // Silently skip if INFO is not permitted or fails
+      }
     }
 
-    return left.name.localeCompare(right.name);
-  });
-};
-
-const loadPlacesFromFirestore = async (): Promise<SharedPlaceRecord[]> => {
-  console.info('[PlacesCache] FETCHING FROM FIRESTORE');
-  const snapshot = await adminDb.collection(COLLECTION).get();
-  return sortPlaces(snapshot.docs.map((doc) => normalizeDoc(doc)));
+    if (shouldRunFullReindex(force, reason)) {
+      void fullIndexPlaces(reason);
+    }
+    
+    console.info('[PlacesCache] REFRESH SUCCESS', { count: places.length, duration: `${duration}ms` });
+    return places;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg !== "RETRY_STORM_PROTECTION") {
+      console.error('[PlacesCache] REFRESH FAILED:', msg);
+      await redis.set(K.LAST_ERROR, msg);
+    }
+    return [];
+  } finally {
+    isRefreshing = false;
+    await redis.del(K.REFRESH_LOCK);
+  }
 };
 
 /**
- * Migration to hybridCache:
- * This eliminates the [object Object] serialization bug and redundant locking logic.
+ * ⚡ Ultra-Resilient Getter
  */
-
 export const getSharedPlacesCache = async (): Promise<{
   places: SharedPlaceRecord[];
-  cacheStatus: 'hit' | 'miss' | 'warming';
-  source: 'hybrid' | 'firestore';
+  cacheStatus: 'hit' | 'miss' | 'warming' | 'snapshot';
+  source: 'hybrid' | 'fallback' | 'snapshot' | 'backup';
 }> => {
-  const places = await hybridGet<SharedPlaceRecord[]>(
-    SHARED_PLACES_CACHE_KEY,
-    loadPlacesFromFirestore,
-    { 
-      redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS,
-      memoryTtlSeconds: 300 // 5 minutes L1
+  const redis = getRedis();
+  
+  try {
+    // 1. Proactive Eviction Check
+    if (redis && !(await redis.exists(K.ALL))) {
+      console.warn('[PlacesCache] Cache evicted → Rebuilding');
+      triggerRefreshIfNeeded('eviction_detected');
     }
-  );
 
-  return {
-    places,
-    cacheStatus: 'hit', // Simplified status for legacy compatibility
-    source: 'hybrid'
-  };
+    const places = await hybridGet<SharedPlaceRecord[]>(
+      K.ALL,
+      async () => {
+        // Avoid turning every cold miss into an immediate full-collection Firestore read.
+        // Refresh is now driven by eviction detection and explicit admin/manual triggers.
+        return []; 
+      },
+      { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
+    );
+
+    // 2. Snapshot Age Check
+    if (snapshotMeta.updatedAt > 0 && (Date.now() - snapshotMeta.updatedAt > 3600000)) {
+      console.warn(`[PlacesCache] Memory snapshot is stale (>1h). Last update: ${new Date(snapshotMeta.updatedAt).toLocaleTimeString()}`);
+    }
+
+    // 3. Snapshot Fallback
+    if ((!places || places.length === 0) && inMemorySnapshot.length > 0) {
+      return { places: inMemorySnapshot as SharedPlaceRecord[], cacheStatus: 'snapshot', source: 'snapshot' };
+    }
+
+    // 4. Safe Disk Backup Load (Corruption Guard)
+    const backup = safeLoadBackup();
+    if ((!places || places.length === 0) && backup) {
+      if (Date.now() - backup.updatedAt > 86400000) {
+        console.warn(`[PlacesCache] Disk backup is stale (>24h).`);
+      }
+      console.info('[PlacesCache] Recovered via Atomic Disk Backup');
+      
+      // Warm Memory Snapshot
+      inMemorySnapshot = backup.data.slice(0, 200).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        area: p.area,
+        city: p.city,
+        coverImage: p.coverImage
+      }));
+      snapshotMeta.updatedAt = backup.updatedAt;
+
+      // Warm Redis
+      if (redis) void redis.set(K.ALL, JSON.stringify({ 
+        value: backup.data, version: "v2", createdAt: Date.now(), expiresAt: Date.now() + 86400000, ttlSeconds: 86400 
+      }));
+
+      return { places: backup.data, cacheStatus: 'snapshot', source: 'backup' };
+    }
+
+    return { 
+      places: places || [], 
+      cacheStatus: (places?.length > 0) ? 'hit' : 'warming', 
+      source: 'hybrid' 
+    };
+  } catch (_error) {
+    return { places: inMemorySnapshot as SharedPlaceRecord[], cacheStatus: 'snapshot', source: 'snapshot' };
+  }
 };
 
+/**
+ * ⚡ Background Heartbeat (Protected)
+ */
+if (typeof window === 'undefined' && process.env.ENABLE_PLACES_CACHE_HEARTBEAT === 'true') {
+  setInterval(async () => {
+    const redis = getRedis();
+    if (redis && (await redis.get(K.REFRESH_LOCK))) return;
+    void refreshCacheInBackground();
+  }, 300000); 
+}
+
 export const refreshSharedPlacesCache = async () => {
-  await hybridInvalidate(SHARED_PLACES_CACHE_KEY);
-  
-  // Re-fetch to warm it up
-  const places = await hybridGet<SharedPlaceRecord[]>(
-    SHARED_PLACES_CACHE_KEY,
-    loadPlacesFromFirestore,
-    { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
-  );
-
-  console.info('[PlacesCache] CACHE REFRESHED', { count: places.length });
-
+  await hybridInvalidate(K.ALL);
+  const places = await refreshCacheInBackground(true);
   return {
     places,
-    cacheStatus: 'miss' as const,
+    cacheStatus: places.length > 0 ? 'miss' as const : 'warming' as const,
     source: 'firestore' as const,
   };
 };
 
-export const filterSharedPlaces = (
-  places: SharedPlaceRecord[],
-  filters: SharedPlacesFilters,
-) => {
-  return places.filter((place) => matchesSharedPlaceFilters(place, filters));
+export const updateSharedPlaceInCache = async (data: any, type: 'create' | 'update' | 'delete' = 'update') => {
+  try {
+    const redis = getRedis();
+    if (redis) await redis.del(K.REFRESH_META);
+    await hybridInvalidate(K.ALL);
+    
+    if (type === 'delete') await deletePlaceIndex(data.id);
+    else await updatePlaceIndex(data);
+  } catch (error) {
+    console.error(`[PlacesCache] Admin update failed:`, error);
+  }
+};
+
+export const normalizeSharedPlacesFilters = (filters: Partial<SharedPlacesFilters>): SharedPlacesFilters => {
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return {
+    search: norm(String(filters.search ?? '')),
+    location: norm(String(filters.location ?? '')),
+    contentFilter: filters.contentFilter || 'all'
+  };
 };
 
 export const paginateSharedPlaces = <T>(places: T[], page: number, limit: number) => {
-  const safePage = Math.max(1, Number.isFinite(page) ? Math.floor(page) : 1);
-  const safeLimit = Math.max(1, Number.isFinite(limit) ? Math.floor(limit) : 20);
-  const start = (safePage - 1) * safeLimit;
-  const end = start + safeLimit;
-
+  const p = Math.max(1, page);
+  const l = Math.max(1, limit);
+  const start = (p - 1) * l;
+  const end = start + l;
   return {
     rows: places.slice(start, end),
     hasMore: end < places.length,
-    nextPage: end < places.length ? safePage + 1 : null,
+    nextPage: end < places.length ? p + 1 : null,
+    total: places.length,
   };
 };
+
+export const matchesSharedPlaceFilters = (place: SharedPlaceRecord, filters: SharedPlacesFilters): boolean => {
+  if (filters.contentFilter === 'photos-added') {
+    return Array.isArray(place.media) && place.media.length > 0;
+  }
+  if (filters.contentFilter === 'photos-not-added') {
+    return !Array.isArray(place.media) || place.media.length === 0;
+  }
+  if (filters.contentFilter === 'recently-updated') {
+    const lastUpdate = toMillis(place.updatedAt);
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return lastUpdate > sevenDaysAgo;
+  }
+  return true;
+};
+
+export const filterSharedPlaces = (places: SharedPlaceRecord[], filters: SharedPlacesFilters): SharedPlaceRecord[] => {
+  return places.filter(p => matchesSharedPlaceFilters(p, filters));
+};
+
+// ─── Graceful Shutdown ────────────────────────────────────────────────────────
+if (typeof process !== 'undefined') {
+  process.on("SIGTERM", async () => {
+    console.log("[PlacesCache] Received SIGTERM, shutting down safely...");
+    // Future: Close redis connection if using a persistent client
+  });
+}

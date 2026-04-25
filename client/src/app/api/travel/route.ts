@@ -9,6 +9,10 @@ interface TravelDestinationDoc {
   [key: string]: unknown;
 }
 
+const DEFAULT_PUBLIC_LIMIT = 20;
+const MAX_PUBLIC_LIMIT = 20;
+const SLOW_QUERY_MS = 200;
+
 const toStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -89,10 +93,10 @@ export async function GET(req: NextRequest) {
     const searchQuery = (searchParams.get('search') || '').trim().toLowerCase();
     const countryFilter = (searchParams.get('country') || '').trim().toLowerCase();
     const cursor = (searchParams.get('cursor') || '').trim();
-    const requestedLimit = Number(searchParams.get('limit') || '30');
+    const requestedLimit = Number(searchParams.get('limit') || String(DEFAULT_PUBLIC_LIMIT));
     const pageLimit = Number.isFinite(requestedLimit)
-      ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
-      : 30;
+      ? Math.max(1, Math.min(MAX_PUBLIC_LIMIT, Math.floor(requestedLimit)))
+      : DEFAULT_PUBLIC_LIMIT;
 
     if (!db) {
       return fail('Database not initialized', 500);
@@ -101,6 +105,7 @@ export async function GET(req: NextRequest) {
     const hasFilters = Boolean(searchQuery || countryFilter);
 
     if (!hasFilters) {
+      const startedAt = Date.now();
       let pageQuery = db
         .collection('travel-destinations')
         .orderBy(FieldPath.documentId())
@@ -111,6 +116,10 @@ export async function GET(req: NextRequest) {
       }
 
       const snapshot = await pageQuery.get();
+      const durationMs = Date.now() - startedAt;
+      if (durationMs > SLOW_QUERY_MS) {
+        console.warn('[TravelAPI] SLOW_QUERY', { route: '/api/travel', durationMs, docsRead: snapshot.size });
+      }
       const results = snapshot.docs.map((doc) => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
       const hasMore = snapshot.size === pageLimit;
       const nextCursor = hasMore ? snapshot.docs[snapshot.docs.length - 1]?.id || null : null;
@@ -131,6 +140,8 @@ export async function GET(req: NextRequest) {
     let scanCursor = cursor;
     let hasMore = true;
     const collected: ReturnType<typeof normalizeTravelDoc>[] = [];
+    const startedAt = Date.now();
+    let docsRead = 0;
 
     while (collected.length < pageLimit && round < maxScanRounds && hasMore) {
       let scanQuery = db
@@ -143,6 +154,7 @@ export async function GET(req: NextRequest) {
       }
 
       const snapshot = await scanQuery.get();
+      docsRead += snapshot.size;
       if (snapshot.empty) {
         hasMore = false;
         break;
@@ -162,6 +174,10 @@ export async function GET(req: NextRequest) {
 
     const results = collected.slice(0, pageLimit);
     const nextCursor = hasMore ? scanCursor || null : null;
+    const durationMs = Date.now() - startedAt;
+    if (durationMs > SLOW_QUERY_MS) {
+      console.warn('[TravelAPI] SLOW_QUERY', { route: '/api/travel', durationMs, docsRead });
+    }
 
     return ok({ results, hasMore, nextCursor }, 200);
   } catch (error: any) {
@@ -188,12 +204,23 @@ export async function POST(req: NextRequest) {
     const normalizedIntroduction = typeof introduction === 'string' ? introduction.trim() : '';
     const normalizedOverview = typeof overview === 'string' ? overview.trim() : '';
 
+    const normalize = (v: any) =>
+      String(v ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const topPlaces = toStringArray(places);
+    const placeVal = String(place || '').trim();
+    const countryVal = String(country || '').trim();
+
     const travelData = {
-      place: place.trim(),
-      country: country.trim(),
+      place: placeVal,
+      country: countryVal,
       introduction: normalizedIntroduction || normalizedOverview,
       itinerary: (itinerary || '').trim(),
-      places: toStringArray(places),
+      places: topPlaces,
       restaurants: toStringArray(restaurants),
       hotels: toStringArray(hotels),
       budget: budget.trim(),
@@ -208,6 +235,12 @@ export async function POST(req: NextRequest) {
       routeFlow: typeof routeFlow === 'string' ? routeFlow.trim() : '',
       routePoints: toRoutePoints(routePoints),
       generatedBy: generatedBy === 'gemini' ? 'gemini' : 'system',
+      
+      // Search fields
+      name_lower: normalize(placeVal),
+      location_search: normalize([countryVal, placeVal, ...topPlaces].join(" ")),
+      location_lower: normalize([placeVal, ...topPlaces, countryVal].join(" ")),
+
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -238,28 +271,40 @@ export async function DELETE(req: NextRequest) {
       return fail('Missing required query parameter: all=true', 400);
     }
 
-    const snapshot = await db.collection('travel-destinations').get();
-    if (snapshot.empty) {
-      return ok({ deletedCount: 0, message: 'No itineraries found to delete.' }, 200);
-    }
-
-    const docs = snapshot.docs;
     const batchSize = 400;
     let deletedCount = 0;
+    let cursor: string | null = null;
 
-    for (let i = 0; i < docs.length; i += batchSize) {
+    while (true) {
+      let query = db
+        .collection('travel-destinations')
+        .orderBy(FieldPath.documentId())
+        .limit(batchSize);
+
+      if (cursor) {
+        query = query.startAfter(cursor);
+      }
+
+      const snapshot = await query.get();
+      if (snapshot.empty) break;
+
       const batch = db.batch();
-      const chunk = docs.slice(i, i + batchSize);
 
-      chunk.forEach((doc) => {
+      snapshot.docs.forEach((doc) => {
         batch.delete(doc.ref);
       });
 
       await batch.commit();
-      deletedCount += chunk.length;
+      deletedCount += snapshot.size;
+
+      cursor = snapshot.docs[snapshot.docs.length - 1]?.id || cursor;
+      if (snapshot.size < batchSize) break;
     }
 
-    return ok({ deletedCount, message: 'All itineraries deleted successfully.' }, 200);
+    return ok({
+      deletedCount,
+      message: deletedCount === 0 ? 'No itineraries found to delete.' : 'All itineraries deleted successfully.',
+    }, 200);
   } catch (error: any) {
     console.error('DELETE /api/travel error:', error);
     return fail(error.message || 'Failed to delete itineraries', 500);
