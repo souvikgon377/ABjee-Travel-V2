@@ -156,6 +156,7 @@ export async function GET(req: NextRequest) {
         .orderBy(FieldPath.documentId())
         .startAt(search)
         .endAt(search + '\uf8ff')
+        .offset((page - 1) * limit)
         .limit(limit)
         .get();
       
@@ -190,6 +191,7 @@ export async function GET(req: NextRequest) {
       const snap = await adminDb
         .collection(COLLECTION)
         .orderBy('createdAt', 'desc')
+        .offset((page - 1) * limit)
         .limit(limit)
         .get();
       collected = snap.docs.map(normalizeTravelItem);
@@ -211,8 +213,12 @@ export async function GET(req: NextRequest) {
     // Paginate (though prefix query already limits, we slice for consistency with cache logic)
     const startIdx = (page - 1) * limit;
     const endIdx = startIdx + limit;
-    const rows = collected.slice(startIdx, endIdx);
-    const pageHasMore = endIdx < collected.length || (collected.length === limit && filters.name === 'all'); // Simplification for 'all'
+    
+    // If we fetched directly from Firestore with limit/offset, 'collected' already contains the target page items.
+    // However, the prefix queries above fetch only 'limit' items starting at offset.
+    // So 'collected' is actually our target page.
+    const rows = collected; 
+    const pageHasMore = collected.length === limit;
     const nextCursor = pageHasMore ? String(page + 1) : null;
 
     // Cache this specific page

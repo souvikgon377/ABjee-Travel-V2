@@ -7,7 +7,7 @@ import crypto from 'crypto';
 const CACHE_TTL = 600; // 10 minutes for reusable admin searches
 const EMPTY_CACHE_TTL = 300; // 5 minutes for negative caching
 const SNAPSHOT_FRESHNESS_LIMIT = 3600_000; // 1 hour
-const SEARCH_LIMIT = 500; // Increased from 200 for better admin visibility
+const SEARCH_LIMIT = 5000; // Increased from 500 to support larger datasets (e.g. 1268+ records reported by user)
 const REINDEX_CHUNK = 200; // Pipeline chunk size
 const MAX_DATASET_SIZE = 200_000; // Defensive cap
 
@@ -247,6 +247,7 @@ export async function adminSearch({
 }): Promise<SearchResult> {
   const t0 = Date.now();
   const redis = getRedis();
+  console.info('[AdminSearch] Invoked', { search, location, filter, page, limit, SEARCH_LIMIT });
 
   // 1. FALLBACK (Redis Offline)
   if (!redis) {

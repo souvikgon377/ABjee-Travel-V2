@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader, RefreshCw } from 'lucide-react';
+import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader, RefreshCw, MapPin, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -191,6 +191,8 @@ export default function AdminTravelItenary() {
 	const [migrationNotice, setMigrationNotice] = useState<string | null>(null);
 	const [isCompressingImages, setIsCompressingImages] = useState(false);
 	const [isEditorOpen, setIsEditorOpen] = useState(false);
+	const [totalItineraries, setTotalItineraries] = useState<number | null>(null);
+	const [statsLastUpdated, setStatsLastUpdated] = useState<string | null>(null);
 	const validPinCount = form.routePoints.filter((point) => point.name.trim() && !getRoutePointErrorMessage(point)).length;
 	const filteredItineraries = existingItineraries;
 
@@ -314,6 +316,20 @@ export default function AdminTravelItenary() {
 				country: '',
 			},
 		});
+
+		const fetchStats = async () => {
+			try {
+				const response = await fetch('/api/travel/stats');
+				const data = await response.json();
+				if (data.success) {
+					setTotalItineraries(data.data.total);
+					setStatsLastUpdated(data.data.updatedAt);
+				}
+			} catch (error) {
+				console.error('Failed to fetch travel stats:', error);
+			}
+		};
+		void fetchStats();
 	}, []);
 
 	// Load itinerary for editing
@@ -1590,9 +1606,25 @@ export default function AdminTravelItenary() {
 					<h1 className="text-4xl font-bold bg-linear-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent mb-2">
 						Travel Itinerary Details
 					</h1>
-					<p className="text-slate-600 dark:text-slate-400">
-						Manage and upload travel destination data
-					</p>
+					<div className="flex flex-wrap items-center gap-4 mb-3">
+						<p className="text-slate-600 dark:text-slate-400">
+							Manage and upload travel destination data
+						</p>
+						<div className="flex items-center gap-3">
+							{totalItineraries !== null && (
+								<div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-sm font-semibold shadow-xs">
+									<MapPin className="w-3.5 h-3.5" />
+									<span>{totalItineraries} places</span>
+								</div>
+							)}
+							{statsLastUpdated && (
+								<div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-sm shadow-xs">
+									<Clock className="w-3.5 h-3.5" />
+									<span>Updated {new Date(statsLastUpdated).toLocaleString()}</span>
+								</div>
+							)}
+						</div>
+					</div>
 				</motion.div>
 
 				{/* Database Itineraries Section */}

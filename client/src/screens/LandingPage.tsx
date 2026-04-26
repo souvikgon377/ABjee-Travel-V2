@@ -67,6 +67,7 @@ function LandingPage() {
   const [showCommunityPopup, setShowCommunityPopup] = useState(false)
   const [showFeaturesOverlay, setShowFeaturesOverlay] = useState(false)
   const [offers, setOffers] = useState<HomeOffer[]>([])
+  const [itineraryCount, setItineraryCount] = useState<number>(0)
 
   useEffect(() => {
     const dismissed = window.sessionStorage.getItem('abjee-community-popup-dismissed')
@@ -108,6 +109,21 @@ function LandingPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/travel/stats')
+        const data = await response.json()
+        if (data.success && typeof data.data?.total === 'number') {
+          setItineraryCount(data.data.total)
+        }
+      } catch (error) {
+        console.error('Failed to fetch travel stats:', error)
+      }
+    }
+    void fetchStats()
+  }, [])
+
   const closeCommunityPopup = () => {
     window.sessionStorage.setItem('abjee-community-popup-dismissed', '1')
     setShowCommunityPopup(false)
@@ -117,7 +133,7 @@ function LandingPage() {
   return (
     <main className="overflow-x-clip pt-16 md:pt-20">
       <Header1 />
-      <GradientTypewriter/>
+      <GradientTypewriter count={itineraryCount} />
       <section className="w-full" aria-label="Featured travel video">
         <video
           src={publicAsset('/video1.mp4')}

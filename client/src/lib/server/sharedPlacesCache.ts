@@ -242,7 +242,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
     await hybridSet(K.ALL, places, { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS });
     
     // Update In-Memory Snapshot & Meta
-    inMemorySnapshot = places.slice(0, 200).map(p => ({
+    inMemorySnapshot = places.slice(0, 2000).map(p => ({
       id: p.id,
       name: p.name,
       area: p.area,
@@ -341,7 +341,7 @@ export const getSharedPlacesCache = async (): Promise<{
       console.info('[PlacesCache] Recovered via Atomic Disk Backup');
       
       // Warm Memory Snapshot
-      inMemorySnapshot = backup.data.slice(0, 200).map((p: any) => ({
+      inMemorySnapshot = backup.data.slice(0, 2000).map((p: any) => ({
         id: p.id,
         name: p.name,
         area: p.area,
