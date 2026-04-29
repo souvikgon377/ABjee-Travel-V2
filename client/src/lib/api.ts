@@ -89,8 +89,7 @@ adminApiInstance.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-  register: (userData: any) => api.post('/auth/register', userData),
-  login: (credentials: any) => api.post('/auth/login', credentials),
+  // Auth methods handled via Firebase Client SDK in AuthContext.tsx
   logout: () => api.post('/auth/logout'),
   getProfile: () => api.get('/auth/me'),
   refreshToken: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
