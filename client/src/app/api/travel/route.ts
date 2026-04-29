@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
       if (durationMs > SLOW_QUERY_MS) {
         console.warn('[TravelAPI] SLOW_QUERY', { route: '/api/travel', durationMs, docsRead: snapshot.size });
       }
-      const results = snapshot.docs.map((doc) => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
+      const results = snapshot.docs.map((doc: any) => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
       const hasMore = snapshot.size === pageLimit;
       const nextCursor = hasMore ? snapshot.docs[snapshot.docs.length - 1]?.id || null : null;
       return ok({ results, hasMore, nextCursor }, 200);
@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
         break;
       }
 
-      snapshot.docs.forEach((doc) => {
+      snapshot.docs.forEach((doc: any) => {
         const normalized = normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>);
         if (matchesFilters(normalized)) {
           collected.push(normalized);

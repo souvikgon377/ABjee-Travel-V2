@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
 import { getSharedPlacesCache, paginateSharedPlaces } from '@/lib/server/sharedPlacesCache';
-import { normalize, searchPlaces, performFuzzySearch } from '@/lib/server/touristSearchUtils';
+import { normalize, adminSearch } from '@/lib/server/touristSearchUtils';
 
 export const runtime = 'nodejs';
 
@@ -17,49 +17,31 @@ export async function POST(req: NextRequest) {
     
     const pageParam = Number(body.page);
     const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
-
-    let results: any[] = [];
-    let totalCount = 0;
-    let hasMore = false;
-    let searchMethod: 'index' | 'fuzzy' | 'all' = 'index';
+    const limit = 12;
 
     if (!search || normalizedSearch === "all") {
       const dataset = await getSharedPlacesCache();
-      const pageSize = 12;
-      const paginated = paginateSharedPlaces(dataset.places, page, pageSize);
-      results = paginated.rows;
-      totalCount = paginated.total;
-      hasMore = paginated.hasMore;
-      searchMethod = 'all';
-    } else {
-      // 1. SMART SEARCH (Ultra-low latency ID-based flow)
-      const searchResult = await searchPlaces(search, page);
-      
-      if (searchResult.data.length === 0) {
-        console.log("INDEX MISS: Falling back to fuzzy search");
-        const dataset = await getSharedPlacesCache();
-        const fuzzyResults = performFuzzySearch(dataset.places, search);
-        const pageSize = 12;
-        const paginated = paginateSharedPlaces(fuzzyResults, page, pageSize);
-        results = paginated.rows;
-        totalCount = paginated.total;
-        hasMore = paginated.hasMore;
-        searchMethod = 'fuzzy';
-      } else {
-        results = searchResult.data;
-        totalCount = searchResult.total;
-        hasMore = searchResult.hasMore;
-        searchMethod = 'index';
-      }
+      const paginated = paginateSharedPlaces(dataset.places, page, limit);
+      return ok({
+        results: paginated.rows,
+        hasMore: paginated.hasMore,
+        totalCount: paginated.total,
+        searchTerm: search,
+        page,
+        searchMethod: 'all'
+      });
     }
 
+    // Use unifying resilient adminSearch engine directly
+    const searchResult = await adminSearch({ search, location: '', filter: 'all', page, limit });
+
     return ok({
-      results,
-      hasMore,
-      totalCount,
+      results: searchResult.data,
+      hasMore: searchResult.hasMore,
+      totalCount: searchResult.total,
       searchTerm: search,
       page,
-      searchMethod
+      searchMethod: searchResult.cacheStatus === 'hit' ? 'snapshot' : searchResult.source
     });
   } catch (error) {
     console.error('Tourist place search failed:', error);

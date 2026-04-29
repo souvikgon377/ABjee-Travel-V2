@@ -602,6 +602,7 @@ const TourPlaces: React.FC = () => {
       setSearchLastDoc(payload.lastDoc ?? null);
       setSearchHasMore(Boolean(payload.hasMore));
       setSearchCacheStatus(payload.cacheStatus ?? null);
+      console.log("CLIENT RESULTS:", nextResults.length);
       setSearchResults((prev) => {
         if (!append) return nextResults;
         const existingIds = new Set(prev.map((p) => p.id));

@@ -1,610 +1,585 @@
 import { getRedis } from '@/lib/server/redis';
-import crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
- * ─── CONFIGURATION & TYPES ───────────────────────────────────────────────────
+ * INCREMENTAL INDEXING ENGINE + FAILOVER ARCHITECTURE
  */
-const CACHE_TTL = 600; // 10 minutes for reusable admin searches
-const EMPTY_CACHE_TTL = 300; // 5 minutes for negative caching
-const SNAPSHOT_FRESHNESS_LIMIT = 3600_000; // 1 hour
-const SEARCH_LIMIT = 5000; // Increased from 500 to support larger datasets (e.g. 1268+ records reported by user)
-const REINDEX_CHUNK = 200; // Pipeline chunk size
-const MAX_DATASET_SIZE = 200_000; // Defensive cap
+const STOP = new Set(['the','in','of','and','to','for','a','an']);
 
 export type SearchResult = {
   data: any[];
   total: number;
   page: number;
   hasMore: boolean;
-  source: 'redis' | 'snapshot' | 'short-circuit';
+  source: 'redis-incremental' | 'redis' | 'snapshot' | 'short-circuit';
   cacheStatus: 'hit' | 'miss' | 'error';
   latencyMs: number;
 };
 
-/**
- * ─── INDEXING ENGINE (Double-Buffer) ────────────────────────────────────────
- */
+// ==========================================
+// 1. GLOBAL STATE & FAILOVER QUEUES
+// ==========================================
+const QUEUE_FILE = path.join(process.cwd(), '.search_queue.json');
+const SNAPSHOT_FILE = path.join(process.cwd(), '.search_snapshot.json');
 
-/**
- * Full Re-indexing logic with owner-safe locking, backoff, and atomic swap.
- */
-export async function fullIndexPlaces(reason: string = "manual") {
-  const tStart = Date.now();
-  const redis = getRedis();
-  if (!redis) return;
+let REDIS_BLOCKED_UNTIL = 0;
+let SNAPSHOT: any[] = [];
+let SNAPSHOT_UPDATED_AT = 0;
 
-  // 1. REBUILD COOLDOWN + BACKOFF
-  const redisTime = await redis.time().catch(() => [Math.floor(Date.now() / 1000), 0]);
-  const nowMs = redisTime[0] * 1000;
+// Disk-backed Queue System
+async function loadQueue(): Promise<any[]> {
+  try { return JSON.parse(await fs.promises.readFile(QUEUE_FILE, 'utf-8')); } catch { return []; }
+}
+let writingQueue = Promise.resolve();
 
-  const lastRebuild = await redis.get<string>("rebuild:last_ts").catch(() => null);
-  const failCount = await redis.get<number>("rebuild:fail_count").catch(() => 0) || 0;
-  const backoffDelay = Math.min(60000, failCount * 10000);
+async function saveQueue(q: any[]) {
+  writingQueue = writingQueue.then(async () => {
+    try { 
+      if (q.length > 5000) q = q.slice(-5000); // 5000 item queue limit
+      const tmpFile = `${QUEUE_FILE}.tmp`;
+      await fs.promises.writeFile(tmpFile, JSON.stringify(q)); 
+      await fs.promises.rename(tmpFile, QUEUE_FILE);
+    } catch {}
+  }).catch(() => {});
+  return writingQueue;
+}
 
-  if (lastRebuild && nowMs - Number(lastRebuild) < (30000 + backoffDelay)) {
-    console.info(`[SearchEngine] Rebuild backoff active (${30 + backoffDelay / 1000}s), skipping.`);
-    return;
-  }
+let queueReadWriteMutex = Promise.resolve();
 
-  // 2. GLOBAL LOCK (Owner-safe UUID)
-  const lockOwner = crypto.randomUUID();
-  const locked = await redis.set("lock:full_reindex", lockOwner, { nx: true, ex: 60 });
-  if (!locked) {
-    console.info("[SearchEngine] Rebuild already in progress globally.");
-    return;
-  }
+async function pushQueue(job: any) {
+  queueReadWriteMutex = queueReadWriteMutex.then(async () => {
+    const q = await loadQueue();
+    const idValue = job.type === "upsert" ? job.place.id : job.id;
+    const deduplicated = q.filter((j: any) => (j.type === "upsert" ? j.place.id : j.id) !== idValue);
+    deduplicated.push(job);
+    await saveQueue(deduplicated);
+  }).catch(() => {});
+  return queueReadWriteMutex;
+}
+async function getQueueSize() {
+  return (await loadQueue()).length;
+}
 
-  // Set cooldown start
-  const jitter = Math.floor(Math.random() * 5000);
-  await redis.set("rebuild:last_ts", String(nowMs), { px: 30000 + jitter }).catch(() => null);
-  await redis.set("rebuild:last_reason", reason, { ex: 3600 }).catch(() => null);
-
-  console.info(`[SearchEngine] STARTING FULL INDEX (Reason: ${reason})...`);
-  const TMP = "tmp:";
-  const r = redis!;
-
-  try {
-    const { getSharedPlacesCache } = await import('./sharedPlacesCache');
-    const dataset = await getSharedPlacesCache();
-    const places = dataset.places;
-
-    if (!places || places.length === 0) {
-      console.warn("[SearchEngine] Aborting: No places found in source.");
-      return;
-    }
-
-    if (places.length > MAX_DATASET_SIZE) {
-      console.error(`[SearchEngine] Aborting: Dataset too large (${places.length})`);
-      return;
-    }
-
-    // PHASE 1: Double-Buffer Build
-    const tmpTokens = new Set<string>();
-    const tmpPrefixes = new Set<string>();
-    await r.expire(`${TMP}_registry`, 600).catch(() => null);
-
-    for (let i = 0; i < places.length; i += REINDEX_CHUNK) {
-      const chunk = places.slice(i, i + REINDEX_CHUNK);
-      const pipeline = r.pipeline();
-      for (const place of chunk) {
-        const id = place.id;
-        pipeline.set(`place:${id}`, place, { ex: 86400 });
-        pipeline.sadd(`${TMP}idx:all_ids`, id);
-        pipeline.sadd(`${TMP}_registry`, `${TMP}idx:all_ids`);
-
-        const tokens = [...new Set(tokenize(buildSearchable(place)))];
-        for (const token of tokens) {
-          tmpTokens.add(token);
-          const tKey = `${TMP}idx:token:${token}`;
-          pipeline.sadd(tKey, id);
-          pipeline.sadd(`${TMP}idx:all_tokens`, token);
-          pipeline.sadd(`${TMP}_registry`, tKey);
-          for (let l = 1; l <= Math.min(token.length, 5); l++) {
-            const pref = token.slice(0, l);
-            tmpPrefixes.add(pref);
-            const pKey = `${TMP}idx:prefix:${pref}`;
-            pipeline.sadd(pKey, id);
-            pipeline.sadd(`${TMP}_registry`, pKey);
-          }
-        }
-
-        // Special Prioritization Indices (Production Logic)
-        const nameLower = place.name_lower || normalize(place.name || place.Name);
-        const locLower = place.location_lower || normalize([
-          place.area || place.Area,
-          place.city || place.City,
-          place.state || place.State,
-          place.country || place.Country,
-        ].filter(Boolean).join(' '));
-
-        if (nameLower) {
-          for (let l = 1; l <= Math.min(nameLower.length, 12); l++) {
-            const pref = nameLower.slice(0, l);
-            const pKey = `${TMP}idx:prefix:name_lower:${pref}`;
-            pipeline.sadd(pKey, id);
-            pipeline.sadd(`${TMP}_registry`, pKey);
-          }
-        }
-
-        if (locLower) {
-          for (let l = 1; l <= Math.min(locLower.length, 12); l++) {
-            const pref = locLower.slice(0, l);
-            const pKey = `${TMP}idx:prefix:location_lower:${pref}`;
-            pipeline.sadd(pKey, id);
-            pipeline.sadd(`${TMP}_registry`, pKey);
-          }
-        }
-      }
-      pipeline.sadd(`${TMP}_registry`, `${TMP}idx:all_tokens`);
-      await pipeline.exec();
-    }
-
-    // PHASE 2: Dataset Sanity Check
-    const tmpCount = await r.scard(`${TMP}idx:all_ids`).catch(() => 0);
-    const lastSize = await r.get<number>("idx:last_size").catch(() => 0) || 0;
-    const minRequired = Math.max(10, Math.floor(lastSize * 0.1));
-
-    if (tmpCount < minRequired) {
-      console.error(`[SearchEngine] SUSPICIOUS DATA: ${tmpCount} records (last: ${lastSize}). Aborting.`);
-      await r.incr("rebuild:fail_count").catch(() => null);
-      await r.expire("rebuild:fail_count", 600).catch(() => null);
-      return;
-    }
-
-    // PHASE 3: Atomic Swap
-    const oldTokens = await r.smembers("idx:all_tokens");
-    for (let i = 0; i < oldTokens.length; i += REINDEX_CHUNK) {
-      const chunk = oldTokens.slice(i, i + REINDEX_CHUNK);
-      const delPipeline = r.pipeline();
-      chunk.forEach(t => delPipeline.unlink(`idx:token:${t}`));
-      await delPipeline.exec();
-    }
-    await r.unlink("idx:all_tokens", "idx:all_ids", "idx:seen_queries").catch(() => r.del("idx:all_tokens", "idx:all_ids", "idx:seen_queries"));
-
-    // Safe RENAMENX loop
-    async function safeSwap(from: string, to: string) {
-      try {
-        const exists = await r.exists(from).catch(() => 0);
-        if (!exists) return;
-        
-        const ok = await (r as any).renamenx(from, to).catch(() => 0);
-        if (!ok) {
-          // Destination already exists, force swap
-          await r.unlink(to).catch(() => r.del(to)).catch(() => null);
-          await r.rename(from, to).catch((err: any) => {
-            if (err?.message?.includes("no such key")) return;
-            throw err;
-          });
-        }
-      } catch (err) {
-        console.warn(`[SearchEngine] Swap warning for ${from}:`, err);
-      }
-    }
-
-    // Parallelize individual key swaps in chunks for performance
-    const tokenSwapList = [...tmpTokens].map(t => ({ from: `${TMP}idx:token:${t}`, to: `idx:token:${t}` }));
-    const prefixSwapList = [...tmpPrefixes].map(p => ({ from: `${TMP}idx:prefix:${p}`, to: `idx:prefix:${p}` }));
-    const allIndividualSwaps = [...tokenSwapList, ...prefixSwapList];
-
-    for (let i = 0; i < allIndividualSwaps.length; i += REINDEX_CHUNK) {
-      const chunk = allIndividualSwaps.slice(i, i + REINDEX_CHUNK);
-      await Promise.all(chunk.map(s => safeSwap(s.from, s.to)));
-    }
-    
-    // Master keys last
-    await safeSwap(`${TMP}idx:all_ids`, "idx:all_ids");
-    await safeSwap(`${TMP}idx:all_tokens`, "idx:all_tokens");
-
-    // PHASE 4: Finalize
-    await r.set("idx:last_size", tmpCount);
-    await r.set("rebuild:last_success_ts", String(nowMs));
-    await r.del("rebuild:fail_count").catch(() => null);
-    await r.incr("places:version");
-    await r.set("idx:meta:full_indexed", "true");
-
-    // Audit History
-    await r.lpush("rebuild:history", JSON.stringify({ reason, ts: nowMs })).catch(() => null);
-    await r.ltrim("rebuild:history", 0, 49).catch(() => null);
-
-    // Frequent Rebuild Guard
-    const recent = await r.incr("rebuild:recent_count").catch(() => 0);
-    if (recent === 1) await r.expire("rebuild:recent_count", 300);
-    if (recent > 3) console.warn("[SearchEngine] High rebuild frequency alert!");
-
-    const duration = Date.now() - tStart;
-    console.info(`[SearchEngine] SUCCESS: ${tmpCount} places indexed in ${duration}ms (v${await r.get("places:version")})`);
-  } catch (err) {
-    console.error("[SearchEngine] FATAL REINDEX ERROR:", err);
-  } finally {
-    // Registry-based Cleanup
+export async function isRedisBlocked() {
+  if (Date.now() < REDIS_BLOCKED_UNTIL) return true;
+  
+  if (REDIS_BLOCKED_UNTIL > 0) {
+    // Block time expired. Send a test ping to see if recovered
     try {
-      const reg = await r.smembers(`${TMP}_registry`).catch(() => []);
-      if (reg.length) {
-        const cleanP = r.pipeline();
-        reg.forEach(k => cleanP.unlink(k));
-        await cleanP.exec();
-        await r.unlink(`${TMP}_registry`);
-      }
-    } catch (_e) {
-      // Best effort cleanup
+      const redis = getRedis();
+      if (!redis) throw new Error();
+      await redis.ping();
+      REDIS_BLOCKED_UNTIL = 0;
+      console.log("✅ Redis recovered successfully.");
+      return false;
+    } catch {
+      // Still failing, block for another minute
+      REDIS_BLOCKED_UNTIL = Date.now() + 60 * 1000;
+      return true;
     }
-    const cur = await r.get("lock:full_reindex").catch(() => null);
-    if (cur === lockOwner) await r.del("lock:full_reindex").catch(() => null);
-  }
-}
-
-/**
- * ─── SEARCH ENGINE ──────────────────────────────────────────────────────────
- */
-
-export async function adminSearch({
-  search = "",
-  location = "",
-  filter = "all",
-  page = 1,
-  limit = 30,
-  ip = "unknown"
-}): Promise<SearchResult> {
-  const t0 = Date.now();
-  const redis = getRedis();
-  console.info('[AdminSearch] Invoked', { search, location, filter, page, limit, SEARCH_LIMIT });
-
-  // 1. FALLBACK (Redis Offline)
-  if (!redis) {
-    const { getInMemorySnapshot, getSnapshotUpdatedAt } = await import('./sharedPlacesCache');
-    const snap = getInMemorySnapshot();
-    const lastUpdate = getSnapshotUpdatedAt();
-    if (Date.now() - lastUpdate > SNAPSHOT_FRESHNESS_LIMIT) console.warn("[AdminSearch] Stale snapshot fallback");
-    const sorted = [...snap].sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    return { data: sorted.slice(0, Math.min(limit, 50)), total: snap.length, page, hasMore: snap.length > limit, source: 'snapshot', cacheStatus: 'error', latencyMs: Date.now() - t0 };
-  }
-
-  // 2. RATE LIMIT (20 req / 10s)
-  const rateKey = `rate:admin:search:${ip}`;
-  const rateCount = await redis.incr(rateKey).catch(() => 0);
-  if (rateCount === 1) await redis.expire(rateKey, 10);
-  if (rateCount > 20) throw new Error("RATE_LIMIT_EXCEEDED");
-
-  // 3. CACHE LOOKUP
-  const version = await redis.get<number>("places:version").catch(() => 0);
-  const cacheKey = `search:v${version}:${hashKey(`${search}:${location}:${filter}:${page}:${limit}`)}`;
-  const cached = await redis.get<string>(cacheKey).catch(() => null);
-  if (cached) {
-    const ids = cached.split(",").filter(Boolean);
-    const start = (page - 1) * limit;
-    const pageIds = ids.slice(start, start + limit);
-    const data = await fetchPlacesChunked(pageIds);
-    console.info('[AdminSearch] CACHE HIT', {
-      key: cacheKey,
-      search,
-      location,
-      filter,
-      page,
-      limit,
-      docsReturned: data.length,
-    });
-    return { data, total: ids.length, page, hasMore: start + limit < ids.length, source: 'redis', cacheStatus: 'hit', latencyMs: Date.now() - t0 };
-  }
-
-  console.info('[AdminSearch] CACHE MISS', {
-    key: cacheKey,
-    search,
-    location,
-    filter,
-    page,
-    limit,
-  });
-
-  // 4. CORE SEARCH LOGIC (Prioritized Production Flow)
-  let ids: string[] = [];
-  let queryName = 'redis-index';
-
-  if (search) {
-    const isSingleWord = !search.includes(" ");
-    const normalizedSearch = normalize(search);
-
-    const queryLocation = async () => {
-      const results = await redis.smembers(`idx:prefix:location_lower:${normalizedSearch}`).catch(() => []);
-      return results;
-    };
-
-    const queryNamePrefix = async () => {
-      const results = await redis.smembers(`idx:prefix:name_lower:${normalizedSearch}`).catch(() => []);
-      return results;
-    };
-
-    const queryTokens = async () => {
-      const tokens = tokenize(search);
-      if (tokens.length === 0) return [];
-      const tokenKeys = [...new Set(tokens)].map(t => `idx:token:${t}`);
-      return await (redis as any).sinter(...tokenKeys).catch(() => []);
-    };
-
-    if (isSingleWord) {
-      // Single word → location first
-      ids = await queryLocation();
-      queryName = 'prefix:location_lower';
-
-      if (ids.length === 0) {
-        ids = await queryNamePrefix();
-        queryName = 'fallback:name_lower';
-      }
-    } else {
-      // Multi-word → name first
-      ids = await queryNamePrefix();
-      queryName = 'prefix:name_lower';
-
-      if (ids.length === 0) {
-        ids = await queryLocation();
-        queryName = 'fallback:location_lower';
-      }
-    }
-
-    // Final fallback to token intersection if specialized prefix search failed
-    if (ids.length === 0) {
-      ids = await queryTokens();
-      queryName = 'fallback:tokens';
-    }
-
-    // Prefix fallback for single word if still nothing
-    if (ids.length === 0 && isSingleWord && normalizedSearch.length >= 2) {
-      ids = await redis.smembers(`idx:prefix:${normalizedSearch}`).catch(() => []);
-      queryName = 'fallback:generic-prefix';
-    }
-  } else if (location) {
-    const normalizedLocation = normalize(location);
-    ids = await redis.smembers(`idx:prefix:location_lower:${normalizedLocation}`).catch(() => []);
-    queryName = 'prefix:location_lower';
-
-    if (ids.length === 0) {
-      const tokens = tokenize(location);
-      if (tokens.length > 0) {
-        const tokenKeys = [...new Set(tokens)].map(t => `idx:token:${t}`);
-        ids = await (redis as any).sinter(...tokenKeys).catch(() => []);
-        queryName = 'tokens:location';
-      }
-    }
-  } else {
-    ids = await redis.smembers("idx:all_ids").catch(() => []);
-    queryName = 'all:ids';
-  }
-
-  // 5. DATA FETCH & FILTER
-  const rawData = await fetchPlacesChunked(ids.slice(0, SEARCH_LIMIT));
-  let filtered = rawData.filter(p => {
-    if (location) {
-      const loc = normalizeAdminStr(location);
-      const inCity = (p.city || "").toLowerCase().includes(loc);
-      const inArea = (p.area || "").toLowerCase().includes(loc);
-      const inState = (p.state || "").toLowerCase().includes(loc);
-      const inCountry = (p.country || "").toLowerCase().includes(loc);
-      
-      if (!(inCity || inArea || inState || inCountry)) return false;
-    }
-    const hasPhotos = (p.media?.length > 0) || !!p.coverImage;
-    if (filter === "photos-added" && !hasPhotos) return false;
-    if (filter === "photos-not-added" && hasPhotos) return false;
-    return true;
-  });
-
-  // 6. RANKING
-  filtered.sort((a, b) => {
-    const s = search.toLowerCase();
-    const aName = a.name.toLowerCase();
-    const bName = b.name.toLowerCase();
-    if (aName === s && bName !== s) return -1;
-    if (bName === s && aName !== s) return 1;
-    if (aName.startsWith(s) && !bName.startsWith(s)) return -1;
-    if (!aName.startsWith(s) && bName.startsWith(s)) return 1;
-    return (b.updatedAt || 0) - (a.updatedAt || 0);
-  });
-
-  // 7. PAGINATION & CACHE
-  const start = (page - 1) * limit;
-  const pageItems = filtered.slice(start, start + limit);
-  const resultIds = filtered.map(f => f.id).join(",");
-
-  if (resultIds.length < 100_000) {
-    const jitter = Math.floor(Math.random() * (filtered.length === 0 ? 10 : 30));
-    const ttl = filtered.length === 0 ? EMPTY_CACHE_TTL : CACHE_TTL;
-    await redis.set(cacheKey, resultIds, { ex: ttl + jitter }).catch(() => null);
-  }
-
-  // 8. ANALYTICS (Zero-query tracking)
-  const tokens = tokenize(search);
-  if (filtered.length === 0 && tokens.length > 0) {
-    const pattern = tokens.sort().join("_");
-    await redis.zincrby("admin:zero_query_patterns", 1, pattern).catch(() => null);
-    await redis.expire("admin:zero_query_patterns", 86400).catch(() => null);
-  }
-
-  console.info('[AdminSearch] QUERY RESULT', {
-    queryName,
-    search,
-    isSingleWord: !search.includes(" "),
-    docsReturned: pageItems.length,
-    total: filtered.length,
-    latencyMs: Date.now() - t0,
-  });
-
-  return {
-    data: pageItems,
-    total: filtered.length,
-    page,
-    hasMore: start + limit < filtered.length,
-    source: 'redis',
-    cacheStatus: 'miss',
-    latencyMs: Date.now() - t0
-  };
-}
-
-/**
- * ─── HELPERS ────────────────────────────────────────────────────────────────
- */
-
-export function normalize(s: string) {
-  return s.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function tokenize(s: string) {
-  return normalize(s).split(/\s+/).filter(t => t.length >= 1);
-}
-
-function buildSearchable(p: any) {
-  return `${p.name} ${p.area} ${p.city} ${p.state} ${p.country} ${p.category}`.toLowerCase();
-}
-
-function normalizeAdminStr(s: string) {
-  return s.trim().toLowerCase();
-}
-
-function hashKey(input: string) {
-  return crypto.createHash("md5").update(input).digest("hex");
-}
-
-async function fetchPlacesChunked(ids: string[]) {
-  const redis = getRedis();
-  if (!redis || !ids.length) return [];
-  const results: any[] = [];
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100);
-    const p = redis.pipeline();
-    chunk.forEach(id => p.get(`place:${id}`));
-    const res = await p.exec() as any[];
-    results.push(...res.map(r => (r && typeof r === 'object' && 'result' in r) ? r.result : r).filter(Boolean));
-  }
-  return results;
-}
-
-/**
- * ─── INDIVIDUAL UPDATES ──────────────────────────────────────────────────────
- */
-
-/**
- * Updates or creates an index for a single place.
- */
-export async function updatePlaceIndex(place: any) {
-  const redis = getRedis();
-  if (!redis) return;
-
-  const id = place.id;
-  const p = redis.pipeline();
-
-  p.set(`place:${id}`, place);
-  p.sadd("idx:all_ids", id);
-
-  const tokens = [...new Set(tokenize(buildSearchable(place)))];
-  for (const token of tokens) {
-    p.sadd(`idx:token:${token}`, id);
-    p.sadd("idx:all_tokens", token);
-    for (let l = 1; l <= Math.min(token.length, 5); l++) {
-      p.sadd(`idx:prefix:${token.slice(0, l)}`, id);
-    }
-  }
-
-  // Specialized Prefix Indexing
-  const nameLower = place.name_lower || normalize(place.name || place.Name);
-  const locLower = place.location_lower || normalize([
-    place.country || place.Country,
-    place.state || place.State,
-    place.city || place.City,
-    place.area || place.Area
-  ].filter(Boolean).join(' '));
-
-  if (nameLower) {
-    for (let l = 1; l <= Math.min(nameLower.length, 12); l++) {
-      p.sadd(`idx:prefix:name_lower:${nameLower.slice(0, l)}`, id);
-    }
-  }
-  if (locLower) {
-    for (let l = 1; l <= Math.min(locLower.length, 12); l++) {
-      p.sadd(`idx:prefix:location_lower:${locLower.slice(0, l)}`, id);
-    }
-  }
-
-  await p.exec();
-  await redis.incr("places:version").catch(() => null);
-}
-
-/**
- * Removes a place from the index.
- */
-export async function deletePlaceIndex(id: string) {
-  const redis = getRedis();
-  if (!redis) return;
-
-  const p = redis.pipeline();
-  p.del(`place:${id}`);
-  p.srem("idx:all_ids", id);
-
-  // Note: For performance, we don't clean tokens on single delete.
-  // Full re-index will clean them up.
-  await p.exec();
-  await redis.incr("places:version").catch(() => null);
-}
-
-/**
- * ─── LEGACY EXPORTS (FOR BACKWARD COMPATIBILITY) ───────────────────────────
- */
-
-/**
- * Legacy positional wrapper for adminSearch used by public API.
- */
-export async function searchPlaces(search: string = "", page: number = 1, location: string = "") {
-  return adminSearch({
-    search,
-    location,
-    page,
-    limit: 24, // Default match for public API
-  });
-}
-
-/**
- * Simple client-side fuzzy search for fallback.
- */
-export function performFuzzySearch(places: any[], query: string) {
-  if (!query) return places;
-  return places
-    .map((place) => ({ place, score: getScore(place, query) }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map((item) => item.place);
-}
-
-export function fuzzyMatch(value: string, query: string) {
-  const normalizedValue = normalize(value);
-  const normalizedQuery = normalize(query);
-  if (!normalizedQuery) return true;
-  if (normalizedValue.includes(normalizedQuery)) return true;
-
-  let queryIndex = 0;
-  for (const char of normalizedValue) {
-    if (char === normalizedQuery[queryIndex]) queryIndex += 1;
-    if (queryIndex === normalizedQuery.length) return true;
   }
   return false;
 }
 
-export function getScore(place: any, query: string) {
-  const q = normalize(query);
-  if (!q) return 1;
+export async function safeRedis<T>(fn: () => Promise<T>): Promise<T> {
+  if (await isRedisBlocked()) throw new Error("REDIS_BLOCKED");
 
-  const name = normalize(place.name || place.Name || '');
-  const location = normalize([
-    place.area || place.Area,
-    place.city,
-    place.state || place.State,
-    place.country || place.Country,
-  ].filter(Boolean).join(' '));
-  const category = normalize(place.category || place.Category || '');
-  const description = normalize(place.description || place.Description || '');
-  const searchable = normalize([name, location, category, description].filter(Boolean).join(' '));
-
-  if (name === q) return 100;
-  if (name.startsWith(q)) return 80;
-  if (name.includes(q)) return 60;
-  if (location.includes(q)) return 45;
-  if (category.includes(q)) return 35;
-  if (description.includes(q)) return 20;
-  return fuzzyMatch(searchable, q) ? 10 : 0;
+  try {
+    return await fn();
+  } catch (e: any) {
+    const msg = String(e?.message || "");
+    if (msg.includes("max requests limit") || msg.includes("rate limit") || msg.includes("Timeout")) {
+      REDIS_BLOCKED_UNTIL = Date.now() + 5 * 60 * 1000;
+      console.error("🚨 Redis quota hit. Blocking for 5 mins");
+    }
+    throw e;
+  }
 }
+
+// Disk-backed Snapshot System
+export async function getSnapshot() {
+  if (SNAPSHOT.length === 0) {
+    try {
+      SNAPSHOT = JSON.parse(await fs.promises.readFile(SNAPSHOT_FILE, 'utf-8'));
+      const stat = await fs.promises.stat(SNAPSHOT_FILE);
+      SNAPSHOT_UPDATED_AT = stat.mtimeMs;
+      console.log(`✅ Loaded ${SNAPSHOT.length} items from disk snapshot.`);
+    } catch {}
+  }
+  return SNAPSHOT;
+}
+
+let writingSnapshot = Promise.resolve();
+
+export async function setSnapshot(data: any[]) {
+  SNAPSHOT = data;
+  SNAPSHOT_UPDATED_AT = Date.now();
+  writingSnapshot = writingSnapshot.then(async () => {
+    try { 
+      const tmpFile = `${SNAPSHOT_FILE}.tmp`;
+      await fs.promises.writeFile(tmpFile, JSON.stringify(data)); 
+      await fs.promises.rename(tmpFile, SNAPSHOT_FILE);
+    } catch {}
+  }).catch(() => {});
+  return writingSnapshot;
+}
+
+export async function logSystemStatus() {
+   const snapshotAge = Date.now() - SNAPSHOT_UPDATED_AT;
+   if (SNAPSHOT_UPDATED_AT > 0 && snapshotAge > 60 * 60 * 1000) {
+      console.warn("⚠️ Snapshot is dangerously old (> 1 hour). Redis may be down extensively.");
+   }
+   console.log({
+     redisBlocked: await isRedisBlocked(),
+     queueSize: await getQueueSize(),
+     snapshotAge
+   });
+}
+
+// ==========================================
+// 2. TEXT PROCESSING UTILS
+// ==========================================
+export function normalize(str: string = '') {
+  return String(str).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function tokenize(text: string): string[] {
+  // Allow 2-character tokens (like "UP", "Go") and preserve everything else
+  return normalize(text).split(' ').filter(t => t.length >= 2 && !STOP.has(t));
+}
+
+export function buildSearchable(p: any): string {
+  return [
+    p.name || p.Name,
+    p.city || p.City,
+    p.area || p.Area,
+    p.state || p.State,
+    p.country || p.Country,
+    p.category || p.Category
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+const geoMap: Record<string, string> = {
+  kalighat: 'kolkata', parkstreet: 'kolkata', newtown: 'kolkata', saltlake: 'kolkata', dumdum: 'kolkata',
+  calangute: 'goa', baga: 'goa', anjuna: 'goa', northgoa: 'goa', southgoa: 'goa'
+};
+
+export function expandTokens(tokens: string[]) {
+  const out: string[] = [];
+  for (const t of tokens) {
+    out.push(t);
+    if (geoMap[t]) out.push(geoMap[t]);
+  }
+  return Array.from(new Set(out)).slice(0, 15);
+}
+
+const tokenKey = (id: string) => `place_tokens:${id}`;
+
+// ==========================================
+// 3. CORE REDIS OPERATIONS (Raw)
+// ==========================================
+async function upsertPlaceIndexRaw(place: any) {
+  const redis = getRedis();
+  if (!redis) throw new Error("Redis missing");
+  const id = place.id;
+  if (!id) return;
+  
+  const old = await redis.get(tokenKey(id));
+  if (old) {
+    try {
+      const oldTokens = typeof old === 'string' ? JSON.parse(old) : old;
+      const p = redis.pipeline();
+      if (Array.isArray(oldTokens)) {
+        for (const t of oldTokens) p.srem(`idx:test:token:${t}`, id);
+      }
+      await p.exec();
+    } catch(e) {}
+  }
+
+  let tokens = expandTokens(tokenize(buildSearchable(place)));
+  const p = redis.pipeline();
+  const minimal = {
+    id: String(id),
+    name: place.name || place.Name,
+    area: place.area || place.Area,
+    city: place.city || place.City,
+    state: place.state || place.State,
+    country: place.country || place.Country,
+    coverImage: place.coverImage || place.image,
+    category: place.category || place.Category,
+    mediaCount: Array.isArray(place.media) ? place.media.length : 0,
+    updatedAt: place.updatedAt || Date.now()
+  };
+
+  p.set(`place:${id}`, JSON.stringify(minimal));
+  p.set(tokenKey(id), JSON.stringify(tokens));
+  p.sadd('idx:test:all_ids', id);
+
+  for (const t of tokens) {
+    p.sadd(`idx:test:token:${t}`, id);
+    p.zadd('idx:test:autocomplete', { score: 0, member: t });
+  }
+
+  await p.exec();
+  await redis.incr('places:version').catch(() => null);
+}
+
+async function deletePlaceIndexRaw(id: string) {
+  const redis = getRedis();
+  if (!redis) throw new Error("Redis missing");
+  const old = await redis.get(tokenKey(id));
+  const p = redis.pipeline();
+  if (old) {
+    try {
+      const tokens = typeof old === 'string' ? JSON.parse(old) : old;
+      if (Array.isArray(tokens)) {
+        for (const t of tokens) p.srem(`idx:test:token:${t}`, id);
+      }
+    } catch(e) {}
+  }
+  p.srem('idx:test:all_ids', id);
+  p.del(`place:${id}`);
+  p.del(tokenKey(id));
+  await p.exec();
+  await redis.incr('places:version').catch(() => null);
+}
+
+// ==========================================
+// 4. QUEUE WRAPPERS (Safe Mode)
+// ==========================================
+export async function safeUpsert(place: any) {
+  try {
+    await safeRedis(() => upsertPlaceIndexRaw(place));
+  } catch {
+    console.log("📦 Queueing update to disk");
+    await pushQueue({ type: "upsert", place });
+  }
+}
+
+export async function safeDelete(id: string) {
+  try {
+    await safeRedis(() => deletePlaceIndexRaw(id));
+  } catch {
+    console.log("📦 Queueing delete to disk");
+    await pushQueue({ type: "delete", id });
+  }
+}
+
+// Maintain backward compatibility aliases
+export const upsertPlaceIndex = safeUpsert; 
+export const deletePlaceIndex = safeDelete;
+export const updatePlaceIndex = safeUpsert;
+
+// ==========================================
+// 5. SEARCH & FALLBACK
+// ==========================================
+function toMillis(value: any) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && value !== null) {
+    if (typeof value.toDate === 'function') return value.toDate().getTime();
+    if (typeof value.seconds === 'number') return (value.seconds * 1000);
+  }
+  return Number(value || 0);
+}
+
+function matchesFilter(place: any, filter: string) {
+  if (filter === 'all') return true;
+  
+  const hasPhotos = Boolean(place.coverImage) || (Number(place.mediaCount || 0) > 0);
+  
+  if (filter === 'photos-added') return hasPhotos;
+  if (filter === 'photos-not-added') return !hasPhotos;
+  
+  if (filter === 'recently-updated') {
+    const lastUpdate = toMillis(place.updatedAt);
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return lastUpdate > sevenDaysAgo;
+  }
+  
+  return true;
+}
+
+async function fallbackSearch(query: string, location: string, limit: number, page: number, filter: string = 'all'): Promise<SearchResult> {
+  const tStart = Date.now();
+  const qStr = `${query} ${location}`.trim();
+  const q = normalize(qStr);
+
+  const snapshotData = await getSnapshot();
+
+  const results = snapshotData
+    .map(place => {
+      let score = 0;
+      const text = buildSearchable(place).toLowerCase();
+      const placeName = (place.name || place.Name || '').toLowerCase();
+
+      if (q) {
+        if (placeName === q) score += 100;
+        else if (placeName.startsWith(q)) score += 80;
+        else if (text.includes(q)) score += 50;
+
+        if (place.city?.toLowerCase().includes(q)) score += 40;
+        if (place.state?.toLowerCase().includes(q)) score += 30;
+      } else {
+        score = 1; // Basic score if no search query but filter might be present
+      }
+
+      return { place, score };
+    })
+    .filter(x => x.score > 0 && matchesFilter(x.place, filter))
+    .sort((a, b) => b.score - a.score)
+    .map(x => x.place);
+
+  const paginated = results.slice((page - 1) * limit, page * limit);
+
+  return {
+    data: paginated,
+    total: results.length,
+    page,
+    hasMore: (page * limit) < results.length,
+    source: 'snapshot',
+    cacheStatus: 'miss',
+    latencyMs: Date.now() - tStart
+  };
+}
+
+export async function adminSearch({ 
+  search = '', 
+  location = '', 
+  filter = 'all', 
+  page = 1, 
+  limit = 30,
+  ip = ''
+}: { 
+  search?: string; 
+  location?: string; 
+  filter?: string; 
+  page?: number; 
+  limit?: number;
+  ip?: string;
+}): Promise<SearchResult> {
+  const tStart = Date.now();
+  const snapshotData = await getSnapshot();
+
+  if (!search && !location && snapshotData.length > 0) {
+     const filtered = snapshotData.filter(p => matchesFilter(p, filter));
+     return {
+         data: filtered.slice((page - 1) * limit, page * limit),
+         total: filtered.length, page,
+         hasMore: (page * limit) < filtered.length,
+         source: 'snapshot', cacheStatus: 'hit',
+         latencyMs: Date.now() - tStart
+     };
+  }
+
+  try {
+    return await safeRedis(async () => {
+      const redis = getRedis();
+      if (!redis) throw new Error("Redis missing");
+      
+      let ids: string[] = [];
+      const tokens = Array.from(new Set([...tokenize(search), ...tokenize(location)]));
+      
+      if (tokens.length > 0) {
+        if (tokens.length === 1) {
+           const t = tokens[0];
+           let matches = await redis.smembers(`idx:test:token:${t}`);
+           if (matches.length === 0 && t.length >= 3) {
+              const suggestions = await (redis as any).zrangebylex('idx:test:autocomplete', `[${t}`, `[${t}\xff`, { limit: { offset: 0, count: 10 } });
+              if (suggestions?.length > 0) {
+                 const p = redis.pipeline();
+                 suggestions.forEach((s: any) => p.smembers(`idx:test:token:${s}`));
+                 const rs = await p.exec();
+                 const union = new Set<string>();
+                 rs?.forEach((r: any) => {
+                    let arr = Array.isArray(r) && r[1] !== undefined ? r[1] : r[0] || r;
+                    if (Array.isArray(arr)) arr.forEach((i: string) => union.add(i));
+                 });
+                 matches = Array.from(union);
+              }
+           }
+           ids = matches;
+        } else {
+           try {
+               const keys = tokens.map(t => `idx:test:token:${t}`);
+               ids = await redis.sinter(...(keys as [string, ...string[]]));
+           } catch(e) {
+               const best = new Set<string>();
+               for (const t of tokens) {
+                  const m = await redis.smembers(`idx:test:token:${t}`);
+                  m.forEach((id: string) => best.add(id));
+               }
+               ids = Array.from(best); 
+           }
+        }
+      } else {
+        // No search/location query → fetch all IDs
+        ids = await redis.smembers('idx:test:all_ids');
+        // Sort IDs or handle sorting if needed. For now, just return latest.
+        // Usually, we'd want to sort by updatedAt, but sets are unordered.
+      }
+
+      const pLoad = redis.pipeline();
+      ids.forEach(id => pLoad.get(`place:${id}`));
+      const docsRaw = await pLoad.exec() || [];
+      const allData = docsRaw.map(d => {
+          let val = Array.isArray(d) ? (d[1] !== undefined ? d[1] : d[0]) : d;
+          if (typeof val === 'string') {
+            try { return JSON.parse(val); } catch { return null; }
+          }
+          return val;
+      }).filter(Boolean);
+
+      const filtered = allData.filter(p => matchesFilter(p, filter));
+      const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+      return {
+         data: paginated, total: filtered.length, page,
+         hasMore: (page * limit) < filtered.length,
+         source: 'redis-incremental', cacheStatus: 'miss',
+         latencyMs: Date.now() - tStart
+      };
+    });
+  } catch (err) {
+    console.warn("⚠️ Redis failed/blocked → using snapshot fallback");
+    return await fallbackSearch(search, location, limit, page, filter);
+  }
+}
+
+// ==========================================
+// 6. BACKGROUND WORKERS 
+// ==========================================
+async function refreshSnapshot() {
+  try {
+    const data = await safeRedis(async () => {
+      const redis = getRedis();
+      if (!redis) throw new Error("Missing redis");
+      const ids = await redis.smembers("idx:test:all_ids");
+      if (!ids.length) return [];
+      
+      const pLoad = redis.pipeline();
+      ids.forEach((id) => pLoad.get(`place:${id}`));
+      const results = await pLoad.exec() || [];
+      return results.map(d => Array.isArray(d) && d[1] ? d[1] : (Array.isArray(d) ? d[0] : d));
+    });
+
+    const parsed = data.filter(x => typeof x === 'string').map(x => JSON.parse(x as string)).filter(Boolean);
+    if (parsed.length > 0) {
+       await setSnapshot(parsed);
+       console.log("✅ Snapshot refreshed:", parsed.length);
+    }
+  } catch {
+    console.warn("⚠️ Snapshot refresh failed");
+  }
+}
+
+let retryDelay = 10000;
+
+async function replayQueue() {
+  if (await isRedisBlocked() || (await getQueueSize()) === 0) return;
+
+  const currentQueue = await loadQueue();
+  console.log("🔁 Replaying queue from disk:", currentQueue.length);
+
+  let successCount = 0;
+  let failed = false;
+
+  while (currentQueue.length > 0) {
+    const job = currentQueue[0];
+    try {
+      if (job.type === "upsert") await upsertPlaceIndexRaw(job.place);
+      else await deletePlaceIndexRaw(job.id);
+      
+      currentQueue.shift();
+      await saveQueue(currentQueue);
+      successCount++;
+    } catch {
+      console.log("⚠️ Replay failed → backing off");
+      failed = true;
+      break;
+    }
+  }
+
+  if (failed) {
+    retryDelay = Math.min(retryDelay * 2, 300000); // max 5 min backoff
+  } else if (successCount > 0) {
+    retryDelay = 10000; // reset
+  }
+}
+
+// Start Background Jobs Server-Side Safety Check
+if (!(global as any).__SEARCH_WORKERS_STARTED__) {
+   (global as any).__SEARCH_WORKERS_STARTED__ = true;
+   setInterval(refreshSnapshot, 5 * 60 * 1000);
+   
+   const runReplayLoop = () => {
+     replayQueue().finally(() => setTimeout(runReplayLoop, retryDelay));
+   };
+   runReplayLoop();
+
+   setTimeout(refreshSnapshot, 2000);
+   
+   setInterval(logSystemStatus, 60000); // Log health every minute
+}
+
+export async function fullIndexPlaces(places: any[], reason: string = "manual") {
+  if (!places || places.length === 0) return;
+  
+  console.info(`[SearchIndex] FULL REINDEX START: ${places.length} places (Reason: ${reason})`);
+  const tStart = Date.now();
+  
+  try {
+    const redis = getRedis();
+    if (!redis) throw new Error("Redis missing");
+
+    // Clear old token indices to avoid drift (optional but safer for full reindex)
+    // For now, we'll just upsert everything which is safer for incremental.
+    
+    const BATCH = 100;
+    for (let i = 0; i < places.length; i += BATCH) {
+      const batch = places.slice(i, i + BATCH);
+      const p = redis.pipeline();
+      
+      for (const place of batch) {
+        const id = place.id;
+        if (!id) continue;
+        
+        const tokens = expandTokens(tokenize(buildSearchable(place)));
+        const minimal = {
+          id: String(id),
+          name: place.name || place.Name,
+          area: place.area || place.Area,
+          city: place.city || place.City,
+          state: place.state || place.State,
+          country: place.country || place.Country,
+          coverImage: place.coverImage || place.image,
+          category: place.category || place.Category,
+          mediaCount: Array.isArray(place.media) ? place.media.length : 0,
+          updatedAt: place.updatedAt || Date.now()
+        };
+
+        p.set(`place:${id}`, JSON.stringify(minimal));
+        p.set(tokenKey(id), JSON.stringify(tokens));
+        p.sadd('idx:test:all_ids', id);
+
+        for (const t of tokens) {
+          p.sadd(`idx:test:token:${t}`, id);
+          p.zadd('idx:test:autocomplete', { score: 0, member: t });
+        }
+      }
+      
+      await p.exec();
+      console.log(`[SearchIndex] Indexed ${Math.min(i + BATCH, places.length)}/${places.length}...`);
+    }
+    
+    console.info(`[SearchIndex] FULL REINDEX SUCCESS: ${places.length} places in ${Date.now() - tStart}ms`);
+    await setSnapshot(places); // Also update the local snapshot
+  } catch (err) {
+    console.error("[SearchIndex] FULL REINDEX FAILED:", err);
+  }
+}
+export async function buildOfflineTokenIndex() { }

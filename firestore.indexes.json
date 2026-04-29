@@ -4,120 +4,46 @@
       "collectionGroup": "travelPartnerRequests",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isPublic",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "isPublic", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },
     {
       "collectionGroup": "travelPartnerRequests",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "requester",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "requester", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },
     {
       "collectionGroup": "travelPartnerRequests",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isPublic",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "travelPartnerRequests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "requester",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "travelPartnerRequests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "requester",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
+        { "fieldPath": "requester", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
     },
     {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "isActive",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "displayName_lower",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "displayName_lower", "order": "ASCENDING" }
       ]
     },
     {
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "isActive",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "email_lower",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "email_lower", "order": "ASCENDING" }
       ]
     }
-  ],
-  "fieldOverrides": []
+  ]
 }

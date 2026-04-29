@@ -23,7 +23,7 @@ const loadReviewsFromFirestore = async (placeId: string) => {
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snapshot.docs.map((reviewDoc) => ({
+  return snapshot.docs.map((reviewDoc: any) => ({
     id: reviewDoc.id,
     ...(reviewDoc.data() as Record<string, unknown>),
   }));

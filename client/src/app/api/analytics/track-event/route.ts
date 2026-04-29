@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       getAdminRtdb()
         .ref('analytics/pageViews')
         .set(newData)
-        .catch((err) => console.error('Error updating pageviews:', err));
+        .catch((err: any) => console.error('Error updating pageviews:', err));
     } else if (eventType === 'userSession') {
       // Track user session (fire and forget to respond quickly)
       if (userId) {
@@ -99,13 +99,13 @@ export async function POST(req: NextRequest) {
             lastSeen: timestamp,
             sessionStart: timestamp,
           })
-          .catch((err) => console.error('Error setting status:', err));
+          .catch((err: any) => console.error('Error setting status:', err));
 
         // Also update Firestore asynchronously
         const userDocRef = adminDb.collection('users').doc(userId);
         userDocRef
           .get()
-          .then((userSnap) => {
+          .then((userSnap: any) => {
             if (!userSnap.data()) {
               return userDocRef.set({
                 uid: userId,
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
               });
             }
           })
-          .catch((err) => console.error('Error updating Firestore:', err));
+          .catch((err: any) => console.error('Error updating Firestore:', err));
       }
     } else if (eventType === 'userLogout') {
       // Track user logout (fire and forget)
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
             lastSeen: timestamp,
             sessionEnd: timestamp,
           })
-          .catch((err) => console.error('Error updating status:', err));
+          .catch((err: any) => console.error('Error updating status:', err));
 
         const userDocRef = adminDb.collection('users').doc(userId);
         userDocRef
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
             lastSeen: new Date(timestamp),
             isActive: false,
           })
-          .catch((err) => console.error('Error updating Firestore:', err));
+          .catch((err: any) => console.error('Error updating Firestore:', err));
       }
     } else if (eventType === 'userActivity') {
       // Update user activity (fire and forget)
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
             lastSeen: timestamp,
             lastActivity: timestamp,
           })
-          .catch((err) => console.error('Error updating activity:', err));
+          .catch((err: any) => console.error('Error updating activity:', err));
 
         const userDocRef = adminDb.collection('users').doc(userId);
         userDocRef

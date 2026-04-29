@@ -180,7 +180,7 @@ async function loadPlacesWithRetry(retries = 3): Promise<SharedPlaceRecord[]> {
   }
   try {
     const snapshot = await adminDb.collection(COLLECTION).get();
-    return snapshot.docs.map(normalizeDoc).sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+    return snapshot.docs.map(normalizeDoc).sort((a: SharedPlaceRecord, b: SharedPlaceRecord) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
   } catch (error) {
     if (retries === 0) throw error;
     await new Promise(r => setTimeout(r, 2000));
@@ -277,7 +277,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
     }
 
     if (shouldRunFullReindex(force, reason)) {
-      void fullIndexPlaces(reason);
+      void fullIndexPlaces(places, reason);
     }
     
     console.info('[PlacesCache] REFRESH SUCCESS', { count: places.length, duration: `${duration}ms` });
@@ -425,11 +425,12 @@ export const paginateSharedPlaces = <T>(places: T[], page: number, limit: number
 };
 
 export const matchesSharedPlaceFilters = (place: SharedPlaceRecord, filters: SharedPlacesFilters): boolean => {
+  const hasPhotos = Boolean(place.coverImage) || (Array.isArray(place.media) && place.media.length > 0);
   if (filters.contentFilter === 'photos-added') {
-    return Array.isArray(place.media) && place.media.length > 0;
+    return hasPhotos;
   }
   if (filters.contentFilter === 'photos-not-added') {
-    return !Array.isArray(place.media) || place.media.length === 0;
+    return !hasPhotos;
   }
   if (filters.contentFilter === 'recently-updated') {
     const lastUpdate = toMillis(place.updatedAt);

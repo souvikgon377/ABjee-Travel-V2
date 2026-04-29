@@ -139,7 +139,7 @@ class NotificationService {
     for (const toUserId of uniqueRecipients) {
       const docId = this.getPrivateRoomMessageDocId(toUserId, roomId);
       const ref = this.collection.doc(docId);
-      await adminDb.runTransaction(async (transaction) => {
+      await adminDb.runTransaction(async (transaction: any) => {
         const existing = await transaction.get(ref);
         const existingData = existing.exists ? (existing.data() as AnyObj) : null;
         const existingDetails =
@@ -283,7 +283,7 @@ class NotificationService {
       // Fallback if composite index is not available yet.
       const snapshot = await this.collection.where("toUserId", "==", userId).get();
       const notifications = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .map((doc: any) => ({ id: doc.id, ...doc.data() }))
         .sort((a: AnyObj, b: AnyObj) => {
           const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
           const bTs = b.createdAt?.toDate?.()?.getTime?.() ?? new Date(b.createdAt || 0).getTime();
@@ -313,7 +313,7 @@ class NotificationService {
         .get();
 
       return snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .map((doc: any) => ({ id: doc.id, ...doc.data() }))
         .sort((a: AnyObj, b: AnyObj) => {
           const aTs = a.createdAt?.toDate?.()?.getTime?.() ?? new Date(a.createdAt || 0).getTime();
           const bTs = b.createdAt?.toDate?.()?.getTime?.() ?? new Date(b.createdAt || 0).getTime();

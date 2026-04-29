@@ -81,12 +81,12 @@ export async function fetchDashboardFromFirestore(): Promise<DashboardData> {
 
   // Build stats
   const totalUsers = statsSnap.status === 'fulfilled' && statsSnap.value
-    ? (statsSnap.value.data() as { count: number }).count
+    ? ((statsSnap.value as any).data() as { count: number }).count
     : 0;
 
   // Build recent users
   const recentUsers = usersSnap.status === 'fulfilled' && usersSnap.value
-    ? usersSnap.value.docs.map((doc) => {
+    ? (usersSnap.value as any).docs.map((doc: any) => {
         const d = doc.data() as Record<string, unknown>;
         return {
           id: doc.id,
@@ -104,10 +104,10 @@ export async function fetchDashboardFromFirestore(): Promise<DashboardData> {
   const now = new Date();
   const subscriptionsSummary = {
     total: subDocs.length,
-    basic: subDocs.filter((d) => String((d.data() as Record<string, unknown>).type) === 'basic').length,
-    pro: subDocs.filter((d) => String((d.data() as Record<string, unknown>).type) === 'pro').length,
-    premium: subDocs.filter((d) => String((d.data() as Record<string, unknown>).type) === 'premium').length,
-    active: subDocs.filter((d) => {
+    basic: subDocs.filter((d: any) => String((d.data() as Record<string, unknown>).type) === 'basic').length,
+    pro: subDocs.filter((d: any) => String((d.data() as Record<string, unknown>).type) === 'pro').length,
+    premium: subDocs.filter((d: any) => String((d.data() as Record<string, unknown>).type) === 'premium').length,
+    active: subDocs.filter((d: any) => {
       const exp = (d.data() as Record<string, unknown>).expiresAt;
       if (!exp) return false;
       const expDate = (exp as { toDate?: () => Date })?.toDate?.() ?? new Date(exp as string);

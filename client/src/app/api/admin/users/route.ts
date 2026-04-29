@@ -150,7 +150,7 @@ export async function fetchUsersFromFirestore(): Promise<Record<string, unknown>
     .orderBy("createdAt", "desc")
     .limit(USERS_FETCH_LIMIT)
     .get();
-  return snapshot.docs.map((doc) => {
+  return snapshot.docs.map((doc: any) => {
     const data = doc.data() as Record<string, unknown>;
     return {
       id: doc.id,

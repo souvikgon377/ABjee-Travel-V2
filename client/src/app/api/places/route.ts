@@ -1,10 +1,10 @@
 import { createHmac, createHash, timingSafeEqual } from 'crypto';
 import { NextRequest } from 'next/server';
-import { FieldPath } from 'firebase-admin/firestore';
+import type { firestore } from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { fail, ok } from '@/lib/server/http';
 import { getRedis } from '@/lib/server/redis';
-import { adminSearch } from '@/lib/server/touristSearchUtils';
 import { getCacheVersion } from '@/lib/server/cacheManagement';
 
 export const runtime = 'nodejs';
@@ -165,7 +165,7 @@ const toMillis = (value: unknown) => {
   return 0;
 };
 
-const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): PlaceRow => {
+const normalizeDoc = (doc: firestore.QueryDocumentSnapshot): PlaceRow => {
   const data = doc.data() as Record<string, unknown>;
   const area = String(data.area || data.Area || data.region || data.city || '').trim();
   const state = String(data.state || data.State || data.province || '').trim();
@@ -290,10 +290,10 @@ async function queryFirestore(params: {
   }
 
   const runPrefixQuery = async (field: 'name_lower' | 'location_lower' | 'location_search', value: string) => {
-    let queryRef: FirebaseFirestore.Query = adminDb
+    let queryRef: firestore.Query = adminDb
       .collection(COLLECTION)
       .orderBy(field)
-      .orderBy(FieldPath.documentId())
+      .orderBy(admin.firestore.FieldPath.documentId())
       .startAt(value)
       .endAt(`${value}\uf8ff`);
 
@@ -308,8 +308,8 @@ async function queryFirestore(params: {
   };
 
   const runDefaultQuery = async () => {
-    let queryRef: FirebaseFirestore.Query = adminDb.collection(COLLECTION);
-    queryRef = queryRef.orderBy('name_lower').orderBy(FieldPath.documentId());
+    let queryRef: firestore.Query = adminDb.collection(COLLECTION);
+    queryRef = queryRef.orderBy('name_lower').orderBy(admin.firestore.FieldPath.documentId());
 
     if (cursorToken) {
       queryRef = queryRef.startAfter(cursorToken.lastValue, cursorToken.docId);
@@ -323,7 +323,7 @@ async function queryFirestore(params: {
 
   let queryName = 'all:bounded';
   let cursorField = 'name_lower';
-  let snapshot: FirebaseFirestore.QuerySnapshot;
+  let snapshot: firestore.QuerySnapshot;
 
   // --- REDIS-BACKED SEARCH (Consistent with Admin) ---
   const redis = getRedis();
@@ -332,26 +332,27 @@ async function queryFirestore(params: {
     const normalized = params.search.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
     const tokens = normalized.split(/\s+/).filter(t => t.length >= 1);
     
-    // Try prefix search first
-    redisIds = await redis.smembers(`idx:prefix:${normalized}`).catch(e => {
-      console.error('[API/Places] Redis prefix error:', e);
-      return [];
-    });
-    if (redisIds.length === 0) {
-      // Try location_lower prefix
-      redisIds = await redis.smembers(`idx:prefix:location_lower:${normalized}`).catch(e => {
-        console.error('[API/Places] Redis location_lower error:', e);
-        return [];
-      });
-    }
-    
-    if (redisIds.length === 0 && tokens.length > 0) {
-      // Try token intersection (very powerful for multi-word or partial location searches)
-      const tokenKeys = tokens.map(t => `idx:token:${t}`);
+    // 1. Try token intersection first (most powerful and matches Admin panel behavior)
+    if (tokens.length > 0) {
+      const tokenKeys = tokens.map(t => `idx:test:token:${t}`);
       redisIds = await (redis as any).sinter(...tokenKeys).catch((e: any) => {
         console.error('[API/Places] Redis sinter error:', e);
         return [];
       });
+    }
+
+    // 2. If no token matches, fallback to prefix search for partial typing
+    if (redisIds.length === 0) {
+      redisIds = await redis.smembers(`idx:test:prefix:${normalized}`).catch(e => {
+        console.error('[API/Places] Redis prefix error:', e);
+        return [];
+      });
+      if (redisIds.length === 0) {
+        redisIds = await redis.smembers(`idx:test:prefix:location_lower:${normalized}`).catch(e => {
+          console.error('[API/Places] Redis location_lower error:', e);
+          return [];
+        });
+      }
     }
 
     // CRITICAL: Redis sets are unordered. We must sort them for stable pagination.
@@ -365,6 +366,7 @@ async function queryFirestore(params: {
 
   if (redisIds.length > 0) {
     console.info('[API/Places] Redis ID Discovery', { count: redisIds.length, query: params.search });
+    console.log("IDS COUNT:", redisIds.length);
     
     let startIndex = 0;
     if (cursorToken?.docId) {
@@ -377,19 +379,20 @@ async function queryFirestore(params: {
     console.info('[API/Places] Redis Chunking', { startIndex, chunkSize: chunk.length, totalMatching: redisIds.length });
     
     if (chunk.length > 0) {
-      const queryRef = adminDb.collection(COLLECTION).where(FieldPath.documentId(), 'in', chunk);
+      const queryRef = adminDb.collection(COLLECTION).where(admin.firestore.FieldPath.documentId(), 'in', chunk);
       const snap = await queryRef.get();
       queryName = 'redis:tokens';
       docsRead += snap.size;
 
-      snap.docs.forEach(d => {
+      snap.docs.forEach((d: firestore.QueryDocumentSnapshot) => {
         docSnapshots.set(d.id, d);
       });
       
-      const orderedDocs = chunk.map(id => docSnapshots.get(id)).filter(Boolean);
+      const orderedDocs = chunk.map((id: string) => docSnapshots.get(id)).filter(Boolean) as firestore.QueryDocumentSnapshot[];
       console.info('[API/Places] Firestore Fetch Result', { requested: chunk.length, fetched: snap.size, ordered: orderedDocs.length });
       
-      rows = orderedDocs.map(normalizeDoc).filter(p => p.isActive !== false);
+      rows = orderedDocs.map(normalizeDoc).filter((p: PlaceRow) => p.isActive !== false);
+      console.log("FETCHED RESULTS:", rows.length);
       const possibleHasMore = startIndex + chunk.length < redisIds.length;
       (params as any).overrideHasMore = rows.length > params.limit || possibleHasMore;
       console.info('[API/Places] Redis Logic Result', { rows: rows.length, overrideHasMore: (params as any).overrideHasMore });
@@ -397,7 +400,7 @@ async function queryFirestore(params: {
   } else if (params.search && params.search.length >= MIN_SEARCH_LENGTH) {
     // --- FIRESTORE FALLBACK ---
     const preferLocation = looksLikeLocationSearch(params.search);
-    let snapshot: FirebaseFirestore.QuerySnapshot;
+    let snapshot: firestore.QuerySnapshot;
     if (preferLocation) {
       const locationSnap = await runPrefixQuery('location_search', params.search);
       if (!locationSnap.empty) {
@@ -435,26 +438,26 @@ async function queryFirestore(params: {
         }
       }
     }
-    snapshot.docs.forEach(d => docSnapshots.set(d.id, d));
-    rows = snapshot.docs.map(normalizeDoc).filter((place) => place.isActive !== false);
+    snapshot.docs.forEach((d: firestore.QueryDocumentSnapshot) => docSnapshots.set(d.id, d));
+    rows = snapshot.docs.map(normalizeDoc).filter((place: PlaceRow) => place.isActive !== false);
   } else if (params.location && params.location.length >= MIN_SEARCH_LENGTH) {
     const snapshot = await runPrefixQuery('location_lower', params.location);
     queryName = 'prefix:location_lower';
     cursorField = 'location_lower';
-    snapshot.docs.forEach(d => docSnapshots.set(d.id, d));
-    rows = snapshot.docs.map(normalizeDoc).filter((place) => place.isActive !== false);
+    snapshot.docs.forEach((d: firestore.QueryDocumentSnapshot) => docSnapshots.set(d.id, d));
+    rows = snapshot.docs.map(normalizeDoc).filter((place: PlaceRow) => place.isActive !== false);
   } else {
     const snapshot = await runDefaultQuery();
     queryName = params.filter === 'recently-updated' ? 'recently-updated' : 'all:bounded';
     cursorField = 'name_lower';
-    snapshot.docs.forEach(d => docSnapshots.set(d.id, d));
+    snapshot.docs.forEach((d: firestore.QueryDocumentSnapshot) => docSnapshots.set(d.id, d));
     rows = snapshot.docs.map(normalizeDoc).filter((place) => place.isActive !== false);
   }
 
   if (params.location && params.search) {
     rows = rows.filter((place) => {
-      const locationText = normalize([place.city, place.area, place.state, place.country].filter(Boolean).join(' '));
-      return locationText.includes(params.location);
+      const searchableText = normalize([place.name, place.city, place.area, place.state, place.country].filter(Boolean).join(' '));
+      return searchableText.includes(params.location);
     });
   }
 

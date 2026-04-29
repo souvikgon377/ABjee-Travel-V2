@@ -23,8 +23,8 @@ export async function GET(req: Request) {
       .get();
 
     const rows = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() } as any))
-      .filter((offer) => offer.isActive !== false);
+      .map((doc: any) => ({ id: doc.id, ...doc.data() } as any))
+      .filter((offer: any) => offer.isActive !== false);
 
     console.info('[Offers] BOUNDED_QUERY', {
       limit,

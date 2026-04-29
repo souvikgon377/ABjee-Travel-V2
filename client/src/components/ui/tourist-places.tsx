@@ -761,7 +761,7 @@ export function TouristPlacesManager() {
     if (!normalized) return true;
 
     const tokens = normalized.split(/\s+/).filter(Boolean);
-    const haystack = [place.name]
+    const haystack = [place.name, place.city, place.area, place.state, place.country]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
@@ -771,6 +771,7 @@ export function TouristPlacesManager() {
   }, []);
 
   const applyClientFilters = useCallback((items: TouristPlace[], filters: TouristPlacesFilters) => {
+    console.log({ resultsBeforeFilter: items.length, query: filters.search });
     return items.filter((place) => (
       matchesContentFilter(place, filters.status)
       && matchesLocationFilter(place, filters.location)
@@ -947,27 +948,6 @@ export function TouristPlacesManager() {
     void fetchSummary();
   }, [buildFilterCacheKey, fetchPlaces, fetchSummary]);
 
-  useEffect(() => {
-    const nextFilters: TouristPlacesFilters = {
-      search: searchInput.trim(),
-      location: cityInput.trim(),
-      status: statusInput,
-    };
-    const nextKey = buildFilterCacheKey(nextFilters);
-
-    if (nextKey === lastAppliedFilterKeyRef.current) return;
-    if (nextFilters.search.length > 0 && nextFilters.search.length < 2) return;
-    if (nextFilters.location.length > 0 && nextFilters.location.length < 2) return;
-
-    const timer = window.setTimeout(() => {
-      lastAppliedFilterKeyRef.current = nextKey;
-      setAppliedFilters(nextFilters);
-      lastDocRef.current = null;
-      void fetchPlaces({ reset: true, filters: nextFilters });
-    }, TOURIST_PLACES_SEARCH_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(timer);
-  }, [buildFilterCacheKey, cityInput, fetchPlaces, searchInput, statusInput]);
 
   const flash = (msg: string, type: 'success' | 'error') => {
     if (type === 'success') { setSuccess(msg); setTimeout(() => setSuccess(''), 1200); }

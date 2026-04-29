@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     switch (section) {
       case "users": {
         const { snap, hasMore, nextCursor } = await fetchCollectionPage("users", cursor, limit);
-        const rows = snap.docs.map((doc) => {
+        const rows = snap.docs.map((doc: any) => {
           const u = doc.data() as Record<string, any>;
           return {
             id: doc.id,
@@ -119,10 +119,10 @@ export async function GET(req: NextRequest) {
               createdAt: s.createdAt?.toDate?.()?.toISOString?.() || s.createdAt || "",
             };
           })
-          .filter((row) => (userIdFilter === "all" ? true : String(row.authorId || "") === userIdFilter))
-          .filter((row) => (areaFilter === "all" ? true : normalizeText(row.area) === areaFilter))
-          .filter((row) => (stateFilter === "all" ? true : normalizeText(row.state) === stateFilter))
-          .filter((row) => (countryFilter === "all" ? true : normalizeText(row.country) === countryFilter));
+          .filter((row: any) => (userIdFilter === "all" ? true : String(row.authorId || "") === userIdFilter))
+          .filter((row: any) => (areaFilter === "all" ? true : normalizeText(row.area) === areaFilter))
+          .filter((row: any) => (stateFilter === "all" ? true : normalizeText(row.state) === stateFilter))
+          .filter((row: any) => (countryFilter === "all" ? true : normalizeText(row.country) === countryFilter));
         return ok({ rows, nextCursor, hasMore, capped: true });
       }
 
@@ -175,14 +175,14 @@ export async function GET(req: NextRequest) {
               updatedAt: t.updatedAt?.toDate?.()?.toISOString?.() || t.updatedAt || "",
             };
           })
-          .filter((row) => (placeFilter === "all" ? true : normalizeText(row.place) === placeFilter))
-          .filter((row) => (countryFilter === "all" ? true : normalizeText(row.country) === countryFilter));
+          .filter((row: any) => (placeFilter === "all" ? true : normalizeText(row.place) === placeFilter))
+          .filter((row: any) => (countryFilter === "all" ? true : normalizeText(row.country) === countryFilter));
         return ok({ rows, nextCursor, hasMore, capped: true });
       }
 
       case "subscriptions": {
         const { snap, hasMore, nextCursor } = await fetchCollectionPage("subscriptions", cursor, limit);
-        const rows = snap.docs.map((doc) => {
+        const rows = snap.docs.map((doc: any) => {
           const s = doc.data() as Record<string, any>;
           const paymentMethod = (s.paymentMethod || {}) as Record<string, unknown>;
           return {
@@ -235,7 +235,7 @@ export async function GET(req: NextRequest) {
         ]);
 
         const rows = [
-          ...reviewsSnap.docs.map((doc) => {
+          ...reviewsSnap.docs.map((doc: any) => {
             const r = doc.data() as Record<string, any>;
             const placeId = doc.ref.parent.parent?.id || "";
             return {
@@ -252,7 +252,7 @@ export async function GET(req: NextRequest) {
               _ts: toMillis(r.createdAt),
             };
           }),
-          ...commentsSnap.docs.map((doc) => {
+          ...commentsSnap.docs.map((doc: any) => {
             const c = doc.data() as Record<string, any>;
             const placeId = doc.ref.parent.parent?.id || "";
             return {
@@ -311,7 +311,7 @@ export async function GET(req: NextRequest) {
 
         const rows: Record<string, unknown>[] = [];
 
-        usersSnap.docs.forEach((doc) => {
+        usersSnap.docs.forEach((doc: any) => {
           const u = doc.data() as Record<string, any>;
           const ts = toMillis(u.createdAt);
           if (!ts) return;

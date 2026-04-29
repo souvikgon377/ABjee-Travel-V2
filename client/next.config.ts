@@ -1,9 +1,9 @@
-import type { NextConfig } from "next";
+// No explicit NextConfig import to avoid incompatible upstream type exports
 
 const cdnUrl = (process.env.NEXT_PUBLIC_CDN_URL || "").trim().replace(/\/+$/, "");
 const useCdnPrefix = process.env.NODE_ENV === "production" && Boolean(cdnUrl);
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
         : false,
   },
   typescript: { ignoreBuildErrors: true },
-  assetPrefix: useCdnPrefix ? cdnUrl : undefined,
+  assetPrefix: useCdnPrefix ? cdnUrl : "",
   crossOrigin: useCdnPrefix ? "anonymous" : undefined,
   turbopack: {},
   experimental: {

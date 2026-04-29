@@ -44,7 +44,7 @@ const isTransientDataError = (error: unknown) => {
 
 export async function GET() {
   try {
-    const snapshot = await withTimeout(adminDb.collection('admin_settings').doc('system').get(), 'public settings');
+    const snapshot = await withTimeout(adminDb.collection('admin_settings').doc('system').get(), 'public settings') as any;
     const raw = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
 
     const settings = {

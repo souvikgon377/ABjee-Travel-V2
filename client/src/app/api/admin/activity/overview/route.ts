@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       getAdminRtdb().ref("status").limitToFirst(500).get(),
     ]);
 
-    const profiles = usersSnap.docs.map((doc) => {
+    const profiles = usersSnap.docs.map((doc: any) => {
       const data = doc.data() as Record<string, any>;
       return {
         id: doc.id,
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       _ts: number;
     }> = [];
 
-    usersSnap.docs.forEach((doc) => {
+    usersSnap.docs.forEach((doc: any) => {
       const data = doc.data() as Record<string, any>;
       const ts = toMillis(data.createdAt);
       if (!ts) return;

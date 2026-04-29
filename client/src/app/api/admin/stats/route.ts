@@ -119,7 +119,7 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
 
   const totalUsers =
     usersCountResult.status === "fulfilled"
-      ? (usersCountResult.value.data() as { count: number }).count
+      ? ((usersCountResult.value as any).data() as { count: number }).count
       : 0;
 
   const statusSnapshot = statusResult.status === "fulfilled" ? statusResult.value : null;
@@ -127,7 +127,7 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   const paidPaymentsSnapshot = paymentsResult.status === "fulfilled" ? paymentsResult.value : null;
   const subscriptionsSnapshot = subscriptionsResult.status === "fulfilled" ? subscriptionsResult.value : null;
 
-  const statusData = (statusSnapshot?.val() || {}) as Record<string, unknown>;
+  const statusData = ((statusSnapshot as any)?.val() || {}) as Record<string, unknown>;
   const activeUsers = Object.values(statusData).filter((entry) => {
     const e = entry as Record<string, unknown> | null;
     const online = e?.online === true || e?.isOnline === true;
@@ -139,13 +139,13 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   let revenueMonthly = 0;
 
   const paidPaymentDocs =
-    paidPaymentsSnapshot?.docs.filter((doc) => {
+    (paidPaymentsSnapshot as any)?.docs.filter((doc: any) => {
       const payment = doc.data() as Record<string, unknown>;
       return String(payment.status) === "paid";
     }) || [];
 
   if (paidPaymentDocs.length > 0) {
-    paidPaymentDocs.forEach((doc) => {
+    paidPaymentDocs.forEach((doc: any) => {
       const payment = doc.data() as Record<string, unknown>;
       const amountInPaise = typeof payment.amountInPaise === "number" ? payment.amountInPaise : null;
       const amount =
@@ -168,7 +168,7 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
     });
   } else {
     type SubDoc = { id: string } & Record<string, unknown>;
-    const subscriptions: SubDoc[] = subscriptionsSnapshot?.docs.map((doc) => ({
+    const subscriptions: SubDoc[] = (subscriptionsSnapshot as any)?.docs.map((doc: any) => ({
       id: doc.id,
       ...(doc.data() as Record<string, unknown>),
     })) ?? [];
@@ -187,7 +187,7 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
       .reduce((sum, s) => sum + (planPrice[String(s.type)] || 0), 0);
   }
 
-  const pageViewsRaw = pageViewsSnapshot?.val();
+  const pageViewsRaw = (pageViewsSnapshot as any)?.val();
   const pageViews = typeof pageViewsRaw === "number" ? pageViewsRaw : Number(pageViewsRaw || 0);
 
   const data: StatsData = {
@@ -209,15 +209,15 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
         growth: revenueTotal > 0 ? ((revenueMonthly / revenueTotal) * 100).toFixed(1) : "0",
       },
       subscriptions: {
-        total: subscriptionsSnapshot?.size || 0,
-        basic: subscriptionsSnapshot?.docs.filter(
-          (doc) => String((doc.data() as Record<string, unknown>).type) === "basic",
+        total: (subscriptionsSnapshot as any)?.size || 0,
+        basic: (subscriptionsSnapshot as any)?.docs.filter(
+          (doc: any) => String((doc.data() as Record<string, unknown>).type) === "basic",
         ).length || 0,
-        pro: subscriptionsSnapshot?.docs.filter(
-          (doc) => String((doc.data() as Record<string, unknown>).type) === "pro",
+        pro: (subscriptionsSnapshot as any)?.docs.filter(
+          (doc: any) => String((doc.data() as Record<string, unknown>).type) === "pro",
         ).length || 0,
-        premium: subscriptionsSnapshot?.docs.filter(
-          (doc) => String((doc.data() as Record<string, unknown>).type) === "premium",
+        premium: (subscriptionsSnapshot as any)?.docs.filter(
+          (doc: any) => String((doc.data() as Record<string, unknown>).type) === "premium",
         ).length || 0,
       },
     },
