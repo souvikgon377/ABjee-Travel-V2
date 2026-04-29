@@ -248,7 +248,10 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
       area: p.area,
       city: p.city,
       coverImage: p.coverImage,
-      category: p.category
+      category: p.category,
+      description: p.description,
+      media: p.media || [],
+      extraInfo: p.extraInfo || []
     }));
     snapshotMeta.updatedAt = Date.now();
 
@@ -346,7 +349,10 @@ export const getSharedPlacesCache = async (): Promise<{
         name: p.name,
         area: p.area,
         city: p.city,
-        coverImage: p.coverImage
+        coverImage: p.coverImage,
+        description: p.description,
+        media: p.media || [],
+        extraInfo: p.extraInfo || []
       }));
       snapshotMeta.updatedAt = backup.updatedAt;
 

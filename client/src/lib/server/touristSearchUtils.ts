@@ -1,7 +1,23 @@
 import { getRedis } from '@/lib/server/redis';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
+import { promisify } from 'util';
 
+const gzip = promisify(zlib.gzip);
+const gunzip = promisify(zlib.gunzip);
+
+async function compress(data: any): Promise<string> {
+  const buf = Buffer.from(JSON.stringify(data));
+  const compressed = await gzip(buf);
+  return compressed.toString('base64');
+}
+
+async function decompress(base64: string): Promise<any> {
+  const buf = Buffer.from(base64, 'base64');
+  const decompressed = await gunzip(buf);
+  return JSON.parse(decompressed.toString());
+}
 /**
  * INCREMENTAL INDEXING ENGINE + FAILOVER ARCHITECTURE
  */
@@ -26,6 +42,10 @@ const SNAPSHOT_FILE = path.join(process.cwd(), '.search_snapshot.json');
 let REDIS_BLOCKED_UNTIL = 0;
 let SNAPSHOT: any[] = [];
 let SNAPSHOT_UPDATED_AT = 0;
+let IS_READY = false;
+
+const SHARD_SIZE = 500;
+let rebuildTimeout: NodeJS.Timeout | null = null;
 
 // Disk-backed Queue System
 async function loadQueue(): Promise<any[]> {
@@ -177,75 +197,104 @@ export function expandTokens(tokens: string[]) {
   return Array.from(new Set(out)).slice(0, 15);
 }
 
-const tokenKey = (id: string) => `place_tokens:${id}`;
+function buildMinimal(p: any) {
+  return {
+    id: String(p.id),
+    name: p.name || p.Name,
+    city: p.city || p.City || p.area || p.Area,
+    state: p.state || p.State,
+    country: p.country || p.Country,
+    category: p.category || p.Category,
+    coverImage: p.coverImage || p.image,
+    mediaCount: Array.isArray(p.media) ? p.media.length : (p.mediaCount || 0),
+    media: p.media || [],
+    extraInfo: p.extraInfo || [],
+    description: p.description || p.Description,
+    updatedAt: p.updatedAt || Date.now()
+  };
+}
 
 // ==========================================
-// 3. CORE REDIS OPERATIONS (Raw)
+// 3. CORE REDIS OPERATIONS (Hardened)
 // ==========================================
+
+/**
+ * ⚡ Atomic & Sharded Index Persistence
+ */
+async function saveIndexToRedis() {
+  const redis = getRedis();
+  if (!redis) return;
+
+  const tStart = Date.now();
+  try {
+    // 1. Create Shards
+    const shardCount = Math.ceil(SNAPSHOT.length / SHARD_SIZE);
+    const multi = redis.multi();
+
+    for (let i = 0; i < shardCount; i++) {
+      const shardData = SNAPSHOT.slice(i * SHARD_SIZE, (i + 1) * SHARD_SIZE);
+      const compressed = await compress(shardData);
+      multi.set(`places:min:shard:${i}`, compressed);
+    }
+
+    // 2. Update Meta Data & Version Atomically
+    const newVersion = String(Date.now());
+    multi.set('places:min:shards', String(shardCount));
+    multi.set('places:version', newVersion);
+    
+    await multi.exec();
+
+    (global as any).__LAST_SNAPSHOT_VERSION__ = newVersion;
+    console.info(`[SearchHardening] Index persisted. Shards: ${shardCount}, Latency: ${Date.now() - tStart}ms`);
+  } catch (err) {
+    console.error("[SearchHardening] Failed to persist index:", err);
+  }
+}
+
+/**
+ * ⚡ Debounced Index Rebuild
+ */
+function scheduleIndexRebuild() {
+  if (rebuildTimeout) return;
+  
+  console.log("⏱️ Index rebuild scheduled (5s debounce)...");
+  rebuildTimeout = setTimeout(async () => {
+    await saveIndexToRedis();
+    rebuildTimeout = null;
+  }, 5000);
+}
+
 async function upsertPlaceIndexRaw(place: any) {
   const redis = getRedis();
   if (!redis) throw new Error("Redis missing");
   const id = place.id;
   if (!id) return;
   
-  const old = await redis.get(tokenKey(id));
-  if (old) {
-    try {
-      const oldTokens = typeof old === 'string' ? JSON.parse(old) : old;
-      const p = redis.pipeline();
-      if (Array.isArray(oldTokens)) {
-        for (const t of oldTokens) p.srem(`idx:test:token:${t}`, id);
-      }
-      await p.exec();
-    } catch(e) {}
-  }
+  // 1. Update Full Object Immediately (Source of Truth)
+  await redis.set(`places:full:${id}`, JSON.stringify(place));
 
-  let tokens = expandTokens(tokenize(buildSearchable(place)));
-  const p = redis.pipeline();
-  const minimal = {
-    id: String(id),
-    name: place.name || place.Name,
-    area: place.area || place.Area,
-    city: place.city || place.City,
-    state: place.state || place.State,
-    country: place.country || place.Country,
-    coverImage: place.coverImage || place.image,
-    category: place.category || place.Category,
-    mediaCount: Array.isArray(place.media) ? place.media.length : 0,
-    updatedAt: place.updatedAt || Date.now()
-  };
+  // 2. Update In-Memory Snapshot
+  const minimal = buildMinimal(place);
+  const index = SNAPSHOT.findIndex(p => p.id === id);
+  if (index >= 0) SNAPSHOT[index] = minimal;
+  else SNAPSHOT.push(minimal);
 
-  p.set(`place:${id}`, JSON.stringify(minimal));
-  p.set(tokenKey(id), JSON.stringify(tokens));
-  p.sadd('idx:test:all_ids', id);
-
-  for (const t of tokens) {
-    p.sadd(`idx:test:token:${t}`, id);
-    p.zadd('idx:test:autocomplete', { score: 0, member: t });
-  }
-
-  await p.exec();
-  await redis.incr('places:version').catch(() => null);
+  // 3. Schedule Background Rebuild
+  scheduleIndexRebuild();
 }
 
 async function deletePlaceIndexRaw(id: string) {
   const redis = getRedis();
   if (!redis) throw new Error("Redis missing");
-  const old = await redis.get(tokenKey(id));
-  const p = redis.pipeline();
-  if (old) {
-    try {
-      const tokens = typeof old === 'string' ? JSON.parse(old) : old;
-      if (Array.isArray(tokens)) {
-        for (const t of tokens) p.srem(`idx:test:token:${t}`, id);
-      }
-    } catch(e) {}
-  }
-  p.srem('idx:test:all_ids', id);
-  p.del(`place:${id}`);
-  p.del(tokenKey(id));
-  await p.exec();
-  await redis.incr('places:version').catch(() => null);
+  
+  // 1. Remove Full Object
+  await redis.del(`places:full:${id}`);
+
+  // 2. Update Local Memory Snapshot
+  SNAPSHOT = SNAPSHOT.filter(p => p.id !== id);
+
+  // 3. Schedule Background Rebuild
+  scheduleIndexRebuild();
 }
 
 // ==========================================
@@ -363,117 +412,104 @@ export async function adminSearch({
   ip?: string;
 }): Promise<SearchResult> {
   const tStart = Date.now();
-  const snapshotData = await getSnapshot();
-
-  if (!search && !location && snapshotData.length > 0) {
-     const filtered = snapshotData.filter(p => matchesFilter(p, filter));
-     return {
-         data: filtered.slice((page - 1) * limit, page * limit),
-         total: filtered.length, page,
-         hasMore: (page * limit) < filtered.length,
-         source: 'snapshot', cacheStatus: 'hit',
-         latencyMs: Date.now() - tStart
-     };
+  if (!IS_READY && SNAPSHOT.length === 0) {
+    throw new Error("SEARCH_SYSTEM_WARMING_UP");
   }
 
+  const snapshotData = await getSnapshot();
+
+  let filtered = snapshotData.filter(p => matchesFilter(p, filter));
+
+  if (search || location) {
+    const sTokens = tokenize(search);
+    const lTokens = tokenize(location);
+    
+    filtered = filtered.filter(p => {
+      const text = buildSearchable(p);
+      const matchesSearch = sTokens.length === 0 || sTokens.every(t => text.includes(t));
+      const matchesLocation = lTokens.length === 0 || lTokens.every(t => text.includes(t));
+      return matchesSearch && matchesLocation;
+    });
+  }
+
+  // Sort by updatedAt descending
+  filtered.sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+
+  const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+  return {
+    data: paginated,
+    total: filtered.length,
+    page,
+    hasMore: (page * limit) < filtered.length,
+    source: 'snapshot',
+    cacheStatus: 'hit',
+    latencyMs: Date.now() - tStart
+  };
+}
+
+export async function getPlaceFull(id: string) {
   try {
     return await safeRedis(async () => {
       const redis = getRedis();
       if (!redis) throw new Error("Redis missing");
-      
-      let ids: string[] = [];
-      const tokens = Array.from(new Set([...tokenize(search), ...tokenize(location)]));
-      
-      if (tokens.length > 0) {
-        if (tokens.length === 1) {
-           const t = tokens[0];
-           let matches = await redis.smembers(`idx:test:token:${t}`);
-           if (matches.length === 0 && t.length >= 3) {
-              const suggestions = await (redis as any).zrangebylex('idx:test:autocomplete', `[${t}`, `[${t}\xff`, { limit: { offset: 0, count: 10 } });
-              if (suggestions?.length > 0) {
-                 const p = redis.pipeline();
-                 suggestions.forEach((s: any) => p.smembers(`idx:test:token:${s}`));
-                 const rs = await p.exec();
-                 const union = new Set<string>();
-                 rs?.forEach((r: any) => {
-                    let arr = Array.isArray(r) && r[1] !== undefined ? r[1] : r[0] || r;
-                    if (Array.isArray(arr)) arr.forEach((i: string) => union.add(i));
-                 });
-                 matches = Array.from(union);
-              }
-           }
-           ids = matches;
-        } else {
-           try {
-               const keys = tokens.map(t => `idx:test:token:${t}`);
-               ids = await redis.sinter(...(keys as [string, ...string[]]));
-           } catch(e) {
-               const best = new Set<string>();
-               for (const t of tokens) {
-                  const m = await redis.smembers(`idx:test:token:${t}`);
-                  m.forEach((id: string) => best.add(id));
-               }
-               ids = Array.from(best); 
-           }
-        }
-      } else {
-        // No search/location query → fetch all IDs
-        ids = await redis.smembers('idx:test:all_ids');
-        // Sort IDs or handle sorting if needed. For now, just return latest.
-        // Usually, we'd want to sort by updatedAt, but sets are unordered.
-      }
-
-      const pLoad = redis.pipeline();
-      ids.forEach(id => pLoad.get(`place:${id}`));
-      const docsRaw = await pLoad.exec() || [];
-      const allData = docsRaw.map(d => {
-          let val = Array.isArray(d) ? (d[1] !== undefined ? d[1] : d[0]) : d;
-          if (typeof val === 'string') {
-            try { return JSON.parse(val); } catch { return null; }
-          }
-          return val;
-      }).filter(Boolean);
-
-      const filtered = allData.filter(p => matchesFilter(p, filter));
-      const paginated = filtered.slice((page - 1) * limit, page * limit);
-
-      return {
-         data: paginated, total: filtered.length, page,
-         hasMore: (page * limit) < filtered.length,
-         source: 'redis-incremental', cacheStatus: 'miss',
-         latencyMs: Date.now() - tStart
-      };
+      const data = await redis.get(`places:full:${id}`);
+      return data ? JSON.parse(data as string) : null;
     });
-  } catch (err) {
-    console.warn("⚠️ Redis failed/blocked → using snapshot fallback");
-    return await fallbackSearch(search, location, limit, page, filter);
+  } catch {
+    return null;
   }
 }
 
 // ==========================================
 // 6. BACKGROUND WORKERS 
 // ==========================================
-async function refreshSnapshot() {
+async function refreshSnapshot(force = false) {
   try {
-    const data = await safeRedis(async () => {
-      const redis = getRedis();
-      if (!redis) throw new Error("Missing redis");
-      const ids = await redis.smembers("idx:test:all_ids");
-      if (!ids.length) return [];
-      
-      const pLoad = redis.pipeline();
-      ids.forEach((id) => pLoad.get(`place:${id}`));
-      const results = await pLoad.exec() || [];
-      return results.map(d => Array.isArray(d) && d[1] ? d[1] : (Array.isArray(d) ? d[0] : d));
-    });
+    const redis = getRedis();
+    if (!redis) return;
 
-    const parsed = data.filter(x => typeof x === 'string').map(x => JSON.parse(x as string)).filter(Boolean);
-    if (parsed.length > 0) {
-       await setSnapshot(parsed);
-       console.log("✅ Snapshot refreshed:", parsed.length);
+    // 1. Check Version & Shard Meta
+    const [currentVersion, shardCountStr] = await Promise.all([
+      redis.get<string>('places:version'),
+      redis.get<string>('places:min:shards')
+    ]);
+
+    const lastVersion = (global as any).__LAST_SNAPSHOT_VERSION__ || '0';
+    if (!force && currentVersion === lastVersion && SNAPSHOT.length > 0) {
+       IS_READY = true;
+       return;
     }
-  } catch {
-    console.warn("⚠️ Snapshot refresh failed");
+
+    const shardCount = parseInt(shardCountStr || '0', 10);
+    if (shardCount === 0) {
+      console.warn("[SearchSync] No shards found in Redis.");
+      return;
+    }
+
+    console.log(`[SearchSync] Syncing ${shardCount} shards (Version: ${currentVersion})...`);
+
+    // 2. Fetch All Shards in Parallel (MGET)
+    const shardKeys = Array.from({ length: shardCount }, (_, i) => `places:min:shard:${i}`);
+    const compressedShards = await redis.mget(...shardKeys);
+
+    // 3. Decompress & Merge
+    let mergedData: any[] = [];
+    for (const compressed of compressedShards) {
+      if (compressed) {
+        const data = await decompress(compressed as string);
+        mergedData = mergedData.concat(data);
+      }
+    }
+
+    if (mergedData.length > 0) {
+      await setSnapshot(mergedData);
+      (global as any).__LAST_SNAPSHOT_VERSION__ = currentVersion;
+      IS_READY = true;
+      console.info(`[SearchSync] Successfully synced ${mergedData.length} places in ${shardCount} shards.`);
+    }
+  } catch (err) {
+    console.warn("[SearchSync] Background sync failed:", err);
   }
 }
 
@@ -514,16 +550,17 @@ async function replayQueue() {
 // Start Background Jobs Server-Side Safety Check
 if (!(global as any).__SEARCH_WORKERS_STARTED__) {
    (global as any).__SEARCH_WORKERS_STARTED__ = true;
-   setInterval(refreshSnapshot, 5 * 60 * 1000);
+    setInterval(refreshSnapshot, 30 * 60 * 1000); // Check every 30 mins instead of 5
    
    const runReplayLoop = () => {
      replayQueue().finally(() => setTimeout(runReplayLoop, retryDelay));
    };
    runReplayLoop();
 
-   setTimeout(refreshSnapshot, 2000);
-   
-   setInterval(logSystemStatus, 60000); // Log health every minute
+    // Cold Start Initialization
+    void refreshSnapshot(true);
+    
+    setInterval(logSystemStatus, 60000); 
 }
 
 export async function fullIndexPlaces(places: any[], reason: string = "manual") {
@@ -536,9 +573,8 @@ export async function fullIndexPlaces(places: any[], reason: string = "manual") 
     const redis = getRedis();
     if (!redis) throw new Error("Redis missing");
 
-    // Clear old token indices to avoid drift (optional but safer for full reindex)
-    // For now, we'll just upsert everything which is safer for incremental.
-    
+    const minBatch = places.map(buildMinimal);
+
     const BATCH = 100;
     for (let i = 0; i < places.length; i += BATCH) {
       const batch = places.slice(i, i + BATCH);
@@ -547,37 +583,33 @@ export async function fullIndexPlaces(places: any[], reason: string = "manual") 
       for (const place of batch) {
         const id = place.id;
         if (!id) continue;
-        
-        const tokens = expandTokens(tokenize(buildSearchable(place)));
-        const minimal = {
-          id: String(id),
-          name: place.name || place.Name,
-          area: place.area || place.Area,
-          city: place.city || place.City,
-          state: place.state || place.State,
-          country: place.country || place.Country,
-          coverImage: place.coverImage || place.image,
-          category: place.category || place.Category,
-          mediaCount: Array.isArray(place.media) ? place.media.length : 0,
-          updatedAt: place.updatedAt || Date.now()
-        };
-
-        p.set(`place:${id}`, JSON.stringify(minimal));
-        p.set(tokenKey(id), JSON.stringify(tokens));
-        p.sadd('idx:test:all_ids', id);
-
-        for (const t of tokens) {
-          p.sadd(`idx:test:token:${t}`, id);
-          p.zadd('idx:test:autocomplete', { score: 0, member: t });
-        }
+        p.set(`places:full:${id}`, JSON.stringify(place));
       }
       
       await p.exec();
-      console.log(`[SearchIndex] Indexed ${Math.min(i + BATCH, places.length)}/${places.length}...`);
+      console.log(`[SearchIndex] Indexed Full Objects ${Math.min(i + BATCH, places.length)}/${places.length}...`);
     }
+
+    // Atomic Update of Sharded Index and Version
+    const shardCount = Math.ceil(minBatch.length / SHARD_SIZE);
+    const multi = redis.multi();
+    for (let i = 0; i < shardCount; i++) {
+      const shardData = minBatch.slice(i * SHARD_SIZE, (i + 1) * SHARD_SIZE);
+      const compressed = await compress(shardData);
+      multi.set(`places:min:shard:${i}`, compressed);
+    }
+
+    const newVersion = String(Date.now());
+    multi.set('places:min:shards', String(shardCount));
+    multi.set('places:version', newVersion);
     
-    console.info(`[SearchIndex] FULL REINDEX SUCCESS: ${places.length} places in ${Date.now() - tStart}ms`);
-    await setSnapshot(places); // Also update the local snapshot
+    await multi.exec();
+    
+    await setSnapshot(minBatch);
+    (global as any).__LAST_SNAPSHOT_VERSION__ = newVersion;
+    IS_READY = true;
+
+    console.info(`[SearchIndex] FULL REINDEX SUCCESS: ${places.length} places (${shardCount} shards) in ${Date.now() - tStart}ms`);
   } catch (err) {
     console.error("[SearchIndex] FULL REINDEX FAILED:", err);
   }
