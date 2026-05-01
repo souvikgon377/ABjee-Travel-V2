@@ -45,6 +45,7 @@ let SNAPSHOT_UPDATED_AT = 0;
 let IS_READY = false;
 
 const SHARD_SIZE = 500;
+const EXPECTED_MIN_RECORDS = 1500;
 let rebuildTimeout: NodeJS.Timeout | null = null;
 
 // Disk-backed Queue System
@@ -198,18 +199,25 @@ export function expandTokens(tokens: string[]) {
 }
 
 function buildMinimal(p: any) {
+  const id = p.id || p.Id || p._id || (p.name && p.area ? `tp_${normalize(p.name + p.area)}` : null);
+  
+  if (!id) {
+    console.warn("[SearchUtils] Skipping minimal build: No ID found", p.name);
+    return null;
+  }
+
   return {
-    id: String(p.id),
-    name: p.name || p.Name,
-    city: p.city || p.City || p.area || p.Area,
-    state: p.state || p.State,
-    country: p.country || p.Country,
-    category: p.category || p.Category,
-    coverImage: p.coverImage || p.image,
+    id: String(id),
+    name: p.name || p.Name || 'Unnamed',
+    city: p.city || p.City || p.area || p.Area || 'Unknown',
+    state: p.state || p.State || 'Unknown',
+    country: p.country || p.Country || 'India',
+    category: p.category || p.Category || 'Other',
+    coverImage: p.coverImage || p.image || '',
     mediaCount: Array.isArray(p.media) ? p.media.length : (p.mediaCount || 0),
     media: p.media || [],
     extraInfo: p.extraInfo || [],
-    description: p.description || p.Description,
+    description: p.description || p.Description || '',
     updatedAt: p.updatedAt || Date.now()
   };
 }
@@ -227,21 +235,21 @@ async function saveIndexToRedis() {
 
   const tStart = Date.now();
   try {
-    // 1. Create Shards
+    // 1. Create Shards (Sent individually to stay under 1MB REST limit per request)
     const shardCount = Math.ceil(SNAPSHOT.length / SHARD_SIZE);
-    const multi = redis.multi();
-
+    
     for (let i = 0; i < shardCount; i++) {
       const shardData = SNAPSHOT.slice(i * SHARD_SIZE, (i + 1) * SHARD_SIZE);
       const compressed = await compress(shardData);
-      multi.set(`places:min:shard:${i}`, compressed);
+      // Small individual sets are safer than one giant multi() on Upstash REST
+      await redis.set(`places:min:shard:${i}`, compressed);
     }
 
-    // 2. Update Meta Data & Version Atomically
+    // 2. Update Meta Data & Version Atomically (Small enough for multi)
     const newVersion = String(Date.now());
+    const multi = redis.multi();
     multi.set('places:min:shards', String(shardCount));
     multi.set('places:version', newVersion);
-    
     await multi.exec();
 
     (global as any).__LAST_SNAPSHOT_VERSION__ = newVersion;
@@ -268,13 +276,13 @@ async function upsertPlaceIndexRaw(place: any) {
   const redis = getRedis();
   if (!redis) throw new Error("Redis missing");
   const id = place.id;
-  if (!id) return;
+  if (!id) {
+    console.error("[SearchUtils] CRITICAL: Cannot upsert place without ID", place);
+    return;
+  }
   
-  // 1. Update Full Object Immediately (Source of Truth)
-  await redis.set(`places:full:${id}`, JSON.stringify(place));
-
-  // 2. Update In-Memory Snapshot
   const minimal = buildMinimal(place);
+  if (!minimal) return;
   const index = SNAPSHOT.findIndex(p => p.id === id);
   if (index >= 0) SNAPSHOT[index] = minimal;
   else SNAPSHOT.push(minimal);
@@ -360,6 +368,12 @@ async function fallbackSearch(query: string, location: string, limit: number, pa
 
   const snapshotData = await getSnapshot();
 
+  // Guardrail: Trigger fallback if dataset is suspiciously small
+  if (snapshotData.length < EXPECTED_MIN_RECORDS) {
+    console.warn(`[SearchGuard] Dataset truncated (${snapshotData.length} < ${EXPECTED_MIN_RECORDS}). Using Firestore fallback.`);
+    throw new Error("SEARCH_INDEX_TRUNCATED");
+  }
+
   const results = snapshotData
     .map(place => {
       let score = 0;
@@ -381,10 +395,12 @@ async function fallbackSearch(query: string, location: string, limit: number, pa
     })
     .filter(x => x.score > 0 && matchesFilter(x.place, filter))
     .sort((a, b) => b.score - a.score)
-    .map(x => x.place);
+    .map(x => x.place)
+    .filter(p => p && p.id && p.id !== "undefined");
 
   const paginated = results.slice((page - 1) * limit, page * limit);
 
+  const latency = performance.now() - tStart;
   return {
     data: paginated,
     total: results.length,
@@ -392,7 +408,7 @@ async function fallbackSearch(query: string, location: string, limit: number, pa
     hasMore: (page * limit) < results.length,
     source: 'snapshot',
     cacheStatus: 'miss',
-    latencyMs: Date.now() - tStart
+    latencyMs: latency
   };
 }
 
@@ -416,7 +432,14 @@ export async function adminSearch({
     throw new Error("SEARCH_SYSTEM_WARMING_UP");
   }
 
+  const isMemoryHit = SNAPSHOT.length > 0;
   const snapshotData = await getSnapshot();
+
+  // Guardrail: Prevent serving partial data in admin
+  if (snapshotData.length < EXPECTED_MIN_RECORDS) {
+    console.warn(`[SearchGuard] Admin Index Integrity Failure: ${snapshotData.length} records found.`);
+    throw new Error("SEARCH_SYSTEM_TRUNCATED");
+  }
 
   let filtered = snapshotData.filter(p => matchesFilter(p, filter));
 
@@ -435,16 +458,20 @@ export async function adminSearch({
   // Sort by updatedAt descending
   filtered.sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
 
-  const paginated = filtered.slice((page - 1) * limit, page * limit);
+  const sanitized = filtered.filter(p => p && p.id && p.id !== "undefined");
+  const paginated = sanitized.slice((page - 1) * limit, page * limit);
+
+  const latency = performance.now() - tStart;
+  if (latency > 50) console.warn(`[SearchPerf] Slow admin search: ${latency.toFixed(2)}ms (Source: ${isMemoryHit ? 'memory' : 'snapshot'})`);
 
   return {
     data: paginated,
     total: filtered.length,
     page,
     hasMore: (page * limit) < filtered.length,
-    source: 'snapshot',
+    source: isMemoryHit ? 'redis-incremental' : 'snapshot', // Use 'redis-incremental' as a proxy for memory/hot in this schema
     cacheStatus: 'hit',
-    latencyMs: Date.now() - tStart
+    latencyMs: latency
   };
 }
 
@@ -493,21 +520,29 @@ async function refreshSnapshot(force = false) {
     const shardKeys = Array.from({ length: shardCount }, (_, i) => `places:min:shard:${i}`);
     const compressedShards = await redis.mget(...shardKeys);
 
-    // 3. Decompress & Merge
-    let mergedData: any[] = [];
-    for (const compressed of compressedShards) {
-      if (compressed) {
-        const data = await decompress(compressed as string);
-        mergedData = mergedData.concat(data);
-      }
+    // 3. Strict Shard Validation: If any shard is missing, the entire index is corrupted
+    if (compressedShards.some(s => s === null)) {
+      console.error(`[SearchSync] Integrity failure: Missing shards in version ${currentVersion}`);
+      return;
     }
 
-    if (mergedData.length > 0) {
-      await setSnapshot(mergedData);
-      (global as any).__LAST_SNAPSHOT_VERSION__ = currentVersion;
-      IS_READY = true;
-      console.info(`[SearchSync] Successfully synced ${mergedData.length} places in ${shardCount} shards.`);
+    // 4. Decompress & Merge
+    let mergedData: any[] = [];
+    for (const compressed of compressedShards) {
+      const data = await decompress(compressed as string);
+      mergedData = mergedData.concat(data);
     }
+
+    // 5. Final Dataset Validation
+    if (mergedData.length < EXPECTED_MIN_RECORDS) {
+      console.error(`[SearchSync] Dataset too small (${mergedData.length}). Rejecting index.`);
+      return;
+    }
+
+    await setSnapshot(mergedData);
+    (global as any).__LAST_SNAPSHOT_VERSION__ = currentVersion;
+    IS_READY = true;
+    console.info(`[SearchSync] Successfully synced ${mergedData.length} places in ${shardCount} shards.`);
   } catch (err) {
     console.warn("[SearchSync] Background sync failed:", err);
   }
@@ -573,7 +608,7 @@ export async function fullIndexPlaces(places: any[], reason: string = "manual") 
     const redis = getRedis();
     if (!redis) throw new Error("Redis missing");
 
-    const minBatch = places.map(buildMinimal);
+    const minBatch = places.map(buildMinimal).filter((p): p is any => p !== null && !!(p.id && p.id !== "undefined"));
 
     const BATCH = 100;
     for (let i = 0; i < places.length; i += BATCH) {
@@ -590,19 +625,19 @@ export async function fullIndexPlaces(places: any[], reason: string = "manual") 
       console.log(`[SearchIndex] Indexed Full Objects ${Math.min(i + BATCH, places.length)}/${places.length}...`);
     }
 
-    // Atomic Update of Sharded Index and Version
+    // Update Sharded Index (Individually to stay under REST limits)
     const shardCount = Math.ceil(minBatch.length / SHARD_SIZE);
-    const multi = redis.multi();
     for (let i = 0; i < shardCount; i++) {
       const shardData = minBatch.slice(i * SHARD_SIZE, (i + 1) * SHARD_SIZE);
       const compressed = await compress(shardData);
-      multi.set(`places:min:shard:${i}`, compressed);
+      await redis.set(`places:min:shard:${i}`, compressed);
     }
 
+    // Atomic Update of Meta Data
     const newVersion = String(Date.now());
+    const multi = redis.multi();
     multi.set('places:min:shards', String(shardCount));
     multi.set('places:version', newVersion);
-    
     await multi.exec();
     
     await setSnapshot(minBatch);

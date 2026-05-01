@@ -106,14 +106,28 @@ export type SharedPlacesFilters = {
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
 
+/**
+ * ⚡ Generates a stable, globally unique ID based on place metadata
+ * Used as a fallback if Firestore doc.id is missing or for deduplication.
+ */
+const generateStableId = (data: Record<string, any>) => {
+  const name = normalizeText(data.name || data.Name || 'unnamed');
+  const area = normalizeText(data.area || data.Area || 'no-area');
+  const state = normalizeText(data.state || data.State || 'no-state');
+  const slug = `${name}-${area}-${state}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  return `tp_${slug}`;
+};
+
 const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): SharedPlaceRecord => {
   const data = doc.data() as Record<string, unknown>;
   const area = normalizeText(data.area || data.region || data.city);
   const state = normalizeText(data.state || data.province);
   const country = normalizeText(data.country || 'India');
 
+  const id = doc.id || data.id || generateStableId(data);
+
   return {
-    id: doc.id,
+    id: String(id),
     Name: normalizeText(data.Name || data.name || 'Unnamed Place'),
     Area: area,
     City: normalizeText(data.city || area),
@@ -242,7 +256,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
     await hybridSet(K.ALL, places, { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS });
     
     // Update In-Memory Snapshot & Meta
-    inMemorySnapshot = places.slice(0, 2000).map(p => ({
+    inMemorySnapshot = places.slice(0, 50000).map(p => ({
       id: p.id,
       name: p.name,
       area: p.area,
@@ -318,8 +332,10 @@ export const getSharedPlacesCache = async (): Promise<{
     const places = await hybridGet<SharedPlaceRecord[]>(
       K.ALL,
       async () => {
-        // Avoid turning every cold miss into an immediate full-collection Firestore read.
-        // Refresh is now driven by eviction detection and explicit admin/manual triggers.
+        // Fallback to in-memory snapshot if Redis K.ALL is empty or expired
+        if (inMemorySnapshot.length > 0) {
+          return inMemorySnapshot as SharedPlaceRecord[];
+        }
         return []; 
       },
       { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
@@ -344,7 +360,7 @@ export const getSharedPlacesCache = async (): Promise<{
       console.info('[PlacesCache] Recovered via Atomic Disk Backup');
       
       // Warm Memory Snapshot
-      inMemorySnapshot = backup.data.slice(0, 2000).map((p: any) => ({
+      inMemorySnapshot = backup.data.slice(0, 50000).map((p: any) => ({
         id: p.id,
         name: p.name,
         area: p.area,

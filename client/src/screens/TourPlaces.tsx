@@ -604,10 +604,20 @@ const TourPlaces: React.FC = () => {
       setSearchCacheStatus(payload.cacheStatus ?? null);
       console.log("CLIENT RESULTS:", nextResults.length);
       setSearchResults((prev) => {
-        if (!append) return nextResults;
-        const existingIds = new Set(prev.map((p) => p.id));
+        const existingIds = new Set(append ? prev.map((p) => p.id) : []);
         const filteredNext = nextResults.filter((p) => p.id && !existingIds.has(p.id));
-        return [...prev, ...filteredNext];
+        
+        // Final sanity check for duplicates within filteredNext itself
+        const finalResults = [];
+        const seenIds = new Set(existingIds);
+        for (const p of filteredNext) {
+          if (p.id && !seenIds.has(p.id)) {
+            finalResults.push(p);
+            seenIds.add(p.id);
+          }
+        }
+
+        return append ? [...prev, ...finalResults] : finalResults;
       });
       setSearchError("");
       lastSearchTermRef.current = normalizedTerm;
@@ -655,29 +665,29 @@ const TourPlaces: React.FC = () => {
 
       const media = Array.isArray(data.media)
         ? data.media
-            .map((item) => {
-              if (!item || typeof item !== "object") return null;
-              const mediaItem = item as {
-                url?: unknown;
-                publicId?: unknown;
-                type?: unknown;
-                caption?: unknown;
-                thumbnail?: unknown;
-              };
+          .map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const mediaItem = item as {
+              url?: unknown;
+              publicId?: unknown;
+              type?: unknown;
+              caption?: unknown;
+              thumbnail?: unknown;
+            };
 
-              if (typeof mediaItem.url !== "string" || typeof mediaItem.publicId !== "string") return null;
-              const mediaType = mediaItem.type === "video" ? "video" : "image";
+            if (typeof mediaItem.url !== "string" || typeof mediaItem.publicId !== "string") return null;
+            const mediaType = mediaItem.type === "video" ? "video" : "image";
 
-              const result: PlaceReview["media"][number] = {
-                url: mediaItem.url,
-                publicId: mediaItem.publicId,
-                type: mediaType,
-              };
-              if (typeof mediaItem.caption === "string") result.caption = mediaItem.caption;
-              if (typeof mediaItem.thumbnail === "string") result.thumbnail = mediaItem.thumbnail;
-              return result;
-            })
-            .filter((item): item is PlaceReview["media"][number] => item !== null)
+            const result: PlaceReview["media"][number] = {
+              url: mediaItem.url,
+              publicId: mediaItem.publicId,
+              type: mediaType,
+            };
+            if (typeof mediaItem.caption === "string") result.caption = mediaItem.caption;
+            if (typeof mediaItem.thumbnail === "string") result.thumbnail = mediaItem.thumbnail;
+            return result;
+          })
+          .filter((item): item is PlaceReview["media"][number] => item !== null)
         : [];
 
       const rating = Number(data.rating);
@@ -826,18 +836,18 @@ const TourPlaces: React.FC = () => {
         const isVideo = file.type.startsWith("video/");
         const preparedFile = isVideo
           ? await compressVideoFile(file, {
-              maxSizeBytes: 15 * 1024 * 1024,
-              maxWidth: 1280,
-              maxHeight: 720,
-              frameRate: 24,
-              minVideoBitsPerSecond: 450_000,
-              maxVideoBitsPerSecond: 1_600_000,
-              audioBitsPerSecond: 96_000,
-            })
+            maxSizeBytes: 15 * 1024 * 1024,
+            maxWidth: 1280,
+            maxHeight: 720,
+            frameRate: 24,
+            minVideoBitsPerSecond: 450_000,
+            maxVideoBitsPerSecond: 1_600_000,
+            audioBitsPerSecond: 96_000,
+          })
           : await compressImageFile(file, {
-              maxSizeBytes: 1024 * 1024,
-              maxDimension: 1600,
-            });
+            maxSizeBytes: 1024 * 1024,
+            maxDimension: 1600,
+          });
 
         let url = "";
         let publicId = "";
@@ -926,15 +936,23 @@ const TourPlaces: React.FC = () => {
 
   const placeCards = useMemo(
     () =>
-      searchResults.map((place, idx) => (
-        <PlaceCard
-          key={`${place.id}-${idx}`}
-          place={place}
-          idx={idx}
-          onSelect={() => setSelectedPlace(place)}
-          disableVideoAutoplay={mobilePerformanceMode || isMobile}
-        />
-      )),
+      searchResults
+        .filter((place) => {
+          if (!place.id || place.id === "undefined") {
+            console.error("[TourPlaces] Skipping place with missing/invalid ID:", place);
+            return false;
+          }
+          return true;
+        })
+        .map((place, index) => (
+          <PlaceCard
+            key={place.id || `place-${index}`}
+            place={place}
+            idx={index}
+            onSelect={() => setSelectedPlace(place)}
+            disableVideoAutoplay={mobilePerformanceMode || isMobile}
+          />
+        )),
     [isMobile, mobilePerformanceMode, searchResults],
   );
 
@@ -1080,11 +1098,11 @@ const TourPlaces: React.FC = () => {
                     <p className="mt-2 text-sm text-white/60">Try a different place, area, state, or country.</p>
                   </div>
                 ) : (
-                <motion.div className="w-full" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-                  <div className="grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                    {placeCards}
-                  </div>
-                </motion.div>
+                  <motion.div className="w-full" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                    <div className="grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                      {placeCards}
+                    </div>
+                  </motion.div>
                 )}
 
                 {searchHasMore && searchResults.length > 0 && (
@@ -1296,9 +1314,9 @@ const TourPlaces: React.FC = () => {
                                 {review.text && <p className="mt-1 text-sm text-gray-600">{review.text}</p>}
                                 {review.media.length > 0 && (
                                   <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                    {review.media.map((mediaItem, index) => (
+                                    {review.media.map((mediaItem, mediaIndex) => (
                                       <a
-                                        key={`${review.id}-${index}`}
+                                        key={mediaItem.publicId || mediaItem.url || `media-${mediaIndex}`}
                                         href={mediaItem.url}
                                         target="_blank"
                                         rel="noreferrer"
@@ -1443,7 +1461,7 @@ const TourPlaces: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                           {selectedPlaceImages.map((img, index) => (
-                            <div key={`${img.url}-${index}`} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md">
+                            <div key={img.publicId || img.url || `img-${index}`} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md">
                               <div className="relative aspect-square overflow-hidden">
                                 <img src={img.url} alt={img.caption ?? `${selectedPlace.name} photo ${index + 1}`} className="h-full w-full object-cover" />
                                 {img.caption && <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 text-[9px] truncate text-white">{img.caption}</div>}
@@ -1470,7 +1488,7 @@ const TourPlaces: React.FC = () => {
                                         <p className="text-[10px] text-gray-400 text-center py-1">No comments yet</p>
                                       )}
                                       {(photoComments[`image_${index}`] ?? []).map((comment, commentIndex) => (
-                                        <div key={commentIndex} className="rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-2 text-xs text-gray-700">
+                                        <div key={`${comment.author}-${commentIndex}`} className="rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-2 text-xs text-gray-700">
                                           <span className="font-semibold text-gray-600">{comment.author}:</span> {comment.text}
                                         </div>
                                       ))}
@@ -1498,7 +1516,7 @@ const TourPlaces: React.FC = () => {
                             </div>
                           ))}
                           {selectedPlaceVideos.map((vid, index) => (
-                            <div key={`${vid.url}-${index}`} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md">
+                            <div key={vid.publicId || vid.url || `vid-${index}`} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md">
                               <div className="relative aspect-video bg-black">
                                 <video src={vid.url} poster={vid.thumbnail} controls playsInline preload="metadata" className="h-full w-full object-cover" />
                                 {vid.caption && <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 text-[9px] truncate text-white">{vid.caption}</div>}
@@ -1525,7 +1543,7 @@ const TourPlaces: React.FC = () => {
                                         <p className="text-[10px] text-gray-400 text-center py-1">No comments yet</p>
                                       )}
                                       {(photoComments[`video_${index}`] ?? []).map((comment, commentIndex) => (
-                                        <div key={commentIndex} className="rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-2 text-xs text-gray-700">
+                                        <div key={`${comment.author}-${commentIndex}`} className="rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-2 text-xs text-gray-700">
                                           <span className="font-semibold text-gray-600">{comment.author}:</span> {comment.text}
                                         </div>
                                       ))}

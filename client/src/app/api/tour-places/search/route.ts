@@ -22,8 +22,12 @@ export async function POST(req: NextRequest) {
     if (!search || normalizedSearch === "all") {
       const dataset = await getSharedPlacesCache();
       const paginated = paginateSharedPlaces(dataset.places, page, limit);
+      
+      // Sanitize results to ensure every record has a valid ID
+      const results = paginated.rows.filter((p: any) => p && p.id && String(p.id) !== "undefined");
+
       return ok({
-        results: paginated.rows,
+        results,
         hasMore: paginated.hasMore,
         totalCount: paginated.total,
         searchTerm: search,
@@ -35,8 +39,11 @@ export async function POST(req: NextRequest) {
     // Use unifying resilient adminSearch engine directly
     const searchResult = await adminSearch({ search, location: '', filter: 'all', page, limit });
 
+    // Sanitize results to ensure every record has a valid ID
+    const results = searchResult.data.filter((p: any) => p && p.id && String(p.id) !== "undefined");
+
     return ok({
-      results: searchResult.data,
+      results,
       hasMore: searchResult.hasMore,
       totalCount: searchResult.total,
       searchTerm: search,

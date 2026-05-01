@@ -159,7 +159,7 @@ export const adminAPI = {
     page?: number;
     limit?: number;
     forceRefresh?: boolean;
-  }) => api.get('/admin/tourist-places/list', { params }),
+  }) => adminApiInstance.get('/admin/tourist-places/list', { params }),
   createTouristPlace: (data: {
     name: string;
     area?: string;
@@ -195,16 +195,16 @@ export const adminAPI = {
     page?: number;
     limit?: number;
     forceRefresh?: boolean;
-  }) => api.get('/admin/travel-itineraries/list', { params }),
-  getUsers: (params?: any) => api.get('/admin/users', { params }),
+  }) => adminApiInstance.get('/admin/travel-itineraries/list', { params }),
+  getUsers: (params?: any) => adminApiInstance.get('/admin/users', { params }),
   getUser: (userId: string) => api.get(`/admin/users/${userId}`),
   createUser: (data: any) => api.post('/admin/users', data),
   updateUser: (userId: string, data: any) => api.put(`/admin/users/${userId}`, data),
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
   getUserActivity: (userId: string) => api.get(`/admin/users/${userId}/activity`),
-  getSubscriptions: (params?: any) => api.get('/admin/subscriptions', { params }),
-  getActivity: (params?: any) => api.get('/admin/activity', { params }),
-  getRevenue: (params?: any) => api.get('/admin/revenue', { params }),
+  getSubscriptions: (params?: any) => adminApiInstance.get('/admin/subscriptions', { params }),
+  getActivity: (params?: any) => adminApiInstance.get('/admin/activity', { params }),
+  getRevenue: (params?: any) => adminApiInstance.get('/admin/revenue', { params }),
   getSystemStatus: () => api.get('/admin/system-status'),
   getRedisHealth: () => api.get('/admin/redis-health'),
   getActivityOverview: () => api.get('/admin/activity/overview'),
@@ -229,7 +229,7 @@ export const adminAPI = {
   getRoomMembers: (roomId: string) => api.get(`/admin/chatrooms/${roomId}/members`),
   startTourPlaceSearchMigration: () => api.post('/admin/tour-places/migration/start'),
   getTourPlaceSearchMigrationStatus: (jobId: string) => api.get('/admin/tour-places/migration/status', { params: { jobId } }),
-  refreshCache: (scope: string = 'all', rewarm: boolean = true) => api.post('/admin/refresh-cache', { scope, rewarm }),
+  refreshCache: (scope: string = 'all', rewarm: boolean = true) => adminApiInstance.post('/admin/refresh-cache', { scope, rewarm }),
   getSearchHealth: () => api.get('/admin/search-health'),
 };
 

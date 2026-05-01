@@ -35,38 +35,16 @@ export async function GET() {
     }
 
     const tStart = Date.now();
-    const [exists, size, version, indexed, lastReason, lastSuccess, locked, history] = await Promise.all([
-      redis.exists('idx:all_tokens'),
-      redis.scard('idx:all_ids').catch(() => 0),
-      redis.get<number>('places:version').catch(() => 0),
-      redis.get<string>('idx:meta:full_indexed').catch(() => 'false'),
+    const [version, shardCountStr, lastReason, lastSuccess, locked, history] = await Promise.all([
+      redis.get<string>('places:version').catch(() => '0'),
+      redis.get<string>('places:min:shards').catch(() => '0'),
       redis.get<string>('rebuild:last_reason').catch(() => 'unknown'),
       redis.get<string>('rebuild:last_success_ts').catch(() => null),
       redis.exists('lock:full_reindex').catch(() => 0),
       redis.lrange('rebuild:history', 0, 9).catch(() => []),
     ]);
     const latency = Date.now() - tStart;
-
-    // Self-healing spot check
-    let drift = false;
-    if (size > 0) {
-      const sample = await redis.srandmember('idx:all_ids').catch(() => null);
-      if (sample && !(await redis.exists(`place:${sample}`))) {
-        drift = true;
-        await triggerSafeRebuild(redis, 'drift_detected');
-      }
-    }
-
-    // Eviction detection
-    if (exists === 0 && indexed === 'true') await triggerSafeRebuild(redis, 'eviction_detected');
-
-    // Missing content alerts
-    const hotZero = await (redis as any).zrange('admin:zero_query_patterns', 5, '+inf', { byScore: true, withScores: true }).catch(() => []);
-    if (hotZero.length > 0) {
-      for (let i = 0; i < hotZero.length; i += 2) {
-        console.warn(`[SearchHealth] HOT missing content: "${hotZero[i]}" (hits: ${hotZero[i+1]})`);
-      }
-    }
+    const shardCount = parseInt(shardCountStr || '0', 10);
 
     // Confidence scoring
     const { getInMemorySnapshot, getSnapshotVersion } = await import('@/lib/server/sharedPlacesCache');
@@ -74,13 +52,13 @@ export async function GET() {
     const snapVersion = getSnapshotVersion();
     const versionDrift = (version && snapVersion) ? Math.abs(Number(version) - Number(snapVersion)) : 0;
     
-    const healthy = exists === 1 && size > 0 && !drift && indexed === 'true';
+    const healthy = shardCount > 0 && version !== '0';
 
     return ok({
-      status: healthy ? 'ok' : drift ? 'healing' : 'degraded',
+      status: healthy ? 'ok' : 'degraded',
       confidence: (healthy && locked === 0 && versionDrift <= 1) ? 'high' : 'degraded',
       mode: 'redis',
-      size,
+      shardCount,
       rebuilding: locked === 1,
       lastRebuildReason: lastReason,
       lastSuccessTs: lastSuccess,
@@ -88,7 +66,9 @@ export async function GET() {
       version,
       versionDrift,
       snapshotSize,
-      history: history.map((h: string) => JSON.parse(h)),
+      history: history.map((h: string) => {
+        try { return JSON.parse(h); } catch { return h; }
+      }),
       timestamp: Date.now()
     });
   } catch (err: any) {

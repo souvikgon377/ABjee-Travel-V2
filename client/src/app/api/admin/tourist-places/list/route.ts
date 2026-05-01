@@ -60,7 +60,7 @@ async function fallbackFirestoreSearch(params: {
     const snap = await adminDb
       .collection(collectionName)
       .orderBy('updatedAt', 'desc')
-      .limit(2000) // Broad fetch for reliability during quota fallback
+      .limit(50000) // Broad fetch for reliability during quota fallback
       .get();
 
     let places = snap.docs.map((doc: any) => ({

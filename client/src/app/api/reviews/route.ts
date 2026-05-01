@@ -40,11 +40,16 @@ export async function GET(req: NextRequest) {
     const cacheKey = getReviewsCacheKey(placeId);
     const lockKey = getReviewsLockKey(placeId);
 
-    const cached = await redis.get<string>(cacheKey);
+    const cached = await redis.get(cacheKey);
     if (cached) {
-      console.info('[ReviewsCache] CACHE HIT', { placeId, key: cacheKey });
-      const rows = JSON.parse(cached) as unknown[];
-      return ok({ rows, cacheStatus: 'hit' });
+      console.info('[ReviewsCache] CACHE HIT', { placeId, key: cacheKey, type: typeof cached });
+      try {
+        const rows = typeof cached === 'string' ? JSON.parse(cached) : cached;
+        return ok({ rows, cacheStatus: 'hit' });
+      } catch (parseError) {
+        console.error('[ReviewsCache] Parse error for key:', cacheKey, 'Value:', cached);
+        // Fall through to miss if corrupted
+      }
     }
 
     console.info('[ReviewsCache] CACHE MISS', { placeId, key: cacheKey });
@@ -68,8 +73,13 @@ export async function GET(req: NextRequest) {
       await redis.del(lockKey);
     }
   } catch (error) {
+    console.error('[ReviewsAPI] GET Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch reviews.';
-    return fail(message, 503);
+    const isRedisError = message.includes('Redis');
+    return fail(message, isRedisError ? 503 : 500, { 
+      error: error instanceof Error ? error.name : 'UnknownError',
+      stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined 
+    });
   }
 }
 
