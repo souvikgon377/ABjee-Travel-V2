@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         touristPlace.state,
         touristPlace.country,
       ].filter(Boolean).join(' ')),
+      description_lower: normalizeSearchField(touristPlace.description),
     };
 
     const docRef = await adminDb.collection('touristPlaces').add({

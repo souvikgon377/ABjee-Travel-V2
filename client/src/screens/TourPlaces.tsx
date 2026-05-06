@@ -119,6 +119,7 @@ const PlaceCard: React.FC<{
   const hasVideo = videos.length > 0;
 
   const [imgIdx, setImgIdx] = useState(0);
+  const [imageFailed, setImageFailed] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
   const dragRef = useRef(false);
@@ -227,13 +228,13 @@ const PlaceCard: React.FC<{
               {isPaused ? <Play className="h-3.5 w-3.5 ml-0.5" /> : <PauseCircle className="h-4 w-4" />}
             </motion.button>
           </>
-        ) : images.length > 0 ? (
+        ) : (images.length > 0 || place.coverImage) ? (
           <>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.img
-                key={imgIdx}
-                src={images[imgIdx].url}
-                alt={images[imgIdx].caption ?? place.name}
+                key={images.length > 0 ? `${imgIdx}-${images[imgIdx].url}` : `cover-${place.coverImage}`}
+                src={images.length > 0 ? images[imgIdx].url : place.coverImage}
+                alt={(images.length > 0 ? images[imgIdx].caption : place.name) ?? place.name}
                 className="absolute inset-0 h-full w-full select-none object-cover"
                 initial={{ opacity: 0, x: 55 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -257,6 +258,7 @@ const PlaceCard: React.FC<{
                 onClick={(event) => {
                   if (dragRef.current) event.stopPropagation();
                 }}
+                onError={() => setImageFailed(true)}
                 draggable={false}
               />
             </AnimatePresence>
@@ -285,6 +287,10 @@ const PlaceCard: React.FC<{
               </>
             )}
           </>
+        ) : imageFailed ? (
+          <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-rose-600 to-pink-700">
+            <Compass className="h-14 w-14 text-white/40" />
+          </div>
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-rose-600 to-pink-700">
             <Compass className="h-14 w-14 text-white/40" />
@@ -386,7 +392,7 @@ const TourPlaces: React.FC = () => {
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
   const [searchResults, setSearchResults] = useState<TouristPlace[]>([]);
-  const [searchLastDoc, setSearchLastDoc] = useState<string | null>(null);
+  const [searchPage, setSearchPage] = useState<number>(1);
   const [searchHasMore, setSearchHasMore] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
@@ -406,7 +412,12 @@ const TourPlaces: React.FC = () => {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewUploadError, setReviewUploadError] = useState("");
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const [hasHydrated, setHasHydrated] = useState(false);
   const reviewMediaInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -427,10 +438,16 @@ const TourPlaces: React.FC = () => {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const rawPlace = params.get("place");
+    const rawPlace = params.get("place") || params.get("search");
     if (!rawPlace) return;
 
-    setSearchInput(normalizeSearchInput(rawPlace));
+    const normalized = normalizeSearchInput(rawPlace);
+    setSearchInput(normalized);
+    
+    // Trigger the search immediately if search term is valid
+    if (normalized.length >= 3) {
+      setActualSearchQuery(normalized);
+    }
   }, []);
 
   useEffect(() => {
@@ -465,7 +482,7 @@ const TourPlaces: React.FC = () => {
 
   const resetSearchState = useCallback(() => {
     setSearchResults([]);
-    setSearchLastDoc(null);
+    setSearchPage(1);
     setSearchHasMore(false);
     setSearchLoading(false);
     setSearchError("");
@@ -474,12 +491,12 @@ const TourPlaces: React.FC = () => {
     lastSearchTermRef.current = "";
   }, []);
 
-  const buildClientCacheKey = useCallback((query: string, lastDoc: string | null) => {
-    return `search:${query.toLowerCase()}:after:${lastDoc || "start"}`;
+  const buildClientCacheKey = useCallback((query: string, page: number) => {
+    return `search:${query.toLowerCase()}:p:${page}`;
   }, []);
 
-  const requestSearchPage = useCallback(async (query: string, lastDoc: string | null, options?: { signal?: AbortSignal }): Promise<SearchResponse> => {
-    const cacheKey = buildClientCacheKey(query, lastDoc);
+  const requestSearchPage = useCallback(async (query: string, page: number, options?: { signal?: AbortSignal }): Promise<SearchResponse> => {
+    const cacheKey = buildClientCacheKey(query, page);
     const cached = clientSearchCacheRef.current.get(cacheKey);
     if (cached) {
       return {
@@ -496,9 +513,7 @@ const TourPlaces: React.FC = () => {
     const requestUrl = new URL(SEARCH_API_PATH, window.location.origin);
     requestUrl.searchParams.set("search", query);
     requestUrl.searchParams.set("limit", String(SEARCH_PAGE_SIZE));
-    if (lastDoc) {
-      requestUrl.searchParams.set("cursor", lastDoc);
-    }
+    requestUrl.searchParams.set("page", String(page));
 
     const request = fetch(requestUrl.toString(), {
       method: "GET",
@@ -523,23 +538,23 @@ const TourPlaces: React.FC = () => {
     return request;
   }, [buildClientCacheKey]);
 
-  const triggerPrefetch = useCallback((term: string, lastDoc: string) => {
-    const nextKey = `${term}:${lastDoc}`;
+  const triggerPrefetch = useCallback((term: string, page: number) => {
+    const nextKey = `${term}:p${page}`;
     if (prefetchQueueRef.current.has(nextKey)) return;
 
     console.info("[Client/Places] Triggering prefetch for bottom-of-page", { nextKey });
-    requestSearchPage(term, lastDoc).then((nextPayload) => {
+    requestSearchPage(term, page).then((nextPayload) => {
       prefetchQueueRef.current.set(nextKey, nextPayload);
     }).catch(() => null);
   }, [requestSearchPage]);
 
   // Observer for prefetch
   useEffect(() => {
-    if (!searchHasMore || !searchLastDoc || !activeSearchTerm) return;
+    if (!searchHasMore || !activeSearchTerm) return;
 
     const observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
-        triggerPrefetch(activeSearchTerm, searchLastDoc);
+        triggerPrefetch(activeSearchTerm, searchPage + 1);
       }
     }, { rootMargin: '400px' }); // Trigger when 400px from button
 
@@ -548,7 +563,7 @@ const TourPlaces: React.FC = () => {
     }
 
     return () => observer.disconnect();
-  }, [searchHasMore, searchLastDoc, activeSearchTerm, triggerPrefetch]);
+  }, [searchHasMore, searchPage, activeSearchTerm, triggerPrefetch]);
 
   const fetchSearchResults = useCallback(async (term: string, options?: { append?: boolean; lastDoc?: string | null }) => {
     const normalizedTerm = normalizeSearchInput(term);
@@ -559,12 +574,12 @@ const TourPlaces: React.FC = () => {
 
     const requestId = ++searchRequestIdRef.current;
     const append = options?.append ?? false;
-    const lastDoc = options?.lastDoc ?? null;
+    const page = append ? (searchPage + 1) : 1;
 
     if (!append) {
       setSearchLoading(true);
       setSearchResults([]);
-      setSearchLastDoc(null);
+      setSearchPage(1);
       setSearchHasMore(false);
       setSearchError("");
       setSearchCacheStatus(null);
@@ -575,7 +590,7 @@ const TourPlaces: React.FC = () => {
 
     try {
       // Check prefetch cache first
-      const cacheKey = `${normalizedTerm}:${lastDoc || "root"}`;
+      const cacheKey = `${normalizedTerm}:p${page}`;
       const prefetched = prefetchQueueRef.current.get(cacheKey);
 
       let payload: SearchResponse;
@@ -589,7 +604,7 @@ const TourPlaces: React.FC = () => {
           abortControllerRef.current?.abort();
           abortControllerRef.current = new AbortController();
         }
-        payload = await requestSearchPage(normalizedTerm, lastDoc, { signal: abortControllerRef.current?.signal });
+        payload = await requestSearchPage(normalizedTerm, page, { signal: abortControllerRef.current?.signal });
       }
 
       const nextResults = Array.isArray(payload.results) ? payload.results : [];
@@ -599,8 +614,8 @@ const TourPlaces: React.FC = () => {
       }
 
       setActiveSearchTerm(normalizedTerm);
-      setSearchLastDoc(payload.lastDoc ?? null);
-      setSearchHasMore(Boolean(payload.hasMore));
+      setSearchPage(payload.pagination?.page ?? page);
+      setSearchHasMore(Boolean(payload.hasMore ?? payload.pagination?.hasNext));
       setSearchCacheStatus(payload.cacheStatus ?? null);
       console.log("CLIENT RESULTS:", nextResults.length);
       setSearchResults((prev) => {
@@ -636,7 +651,7 @@ const TourPlaces: React.FC = () => {
       setSearchError(message);
       if (!append) {
         setSearchResults([]);
-        setSearchLastDoc(null);
+        setSearchPage(1);
         setSearchHasMore(false);
       }
     } finally {
@@ -720,13 +735,13 @@ const TourPlaces: React.FC = () => {
 
     if (actualSearchQuery !== lastSearchTermRef.current) {
       setSearchResults([]);
-      setSearchLastDoc(null);
+      setSearchPage(1);
       setSearchHasMore(false);
       setSearchError("");
       setSearchCacheStatus(null);
     }
 
-    void fetchSearchResults(actualSearchQuery, { append: false, lastDoc: null });
+    void fetchSearchResults(actualSearchQuery, { append: false });
   }, [fetchSearchResults, resetSearchState, actualSearchQuery]);
 
   const searchQuery = normalizeSearchInput(searchInput);
@@ -931,8 +946,8 @@ const TourPlaces: React.FC = () => {
 
   const handleSeeMore = useCallback(() => {
     if (!activeSearchTerm || !searchHasMore || searchLoading) return;
-    void fetchSearchResults(activeSearchTerm, { append: true, lastDoc: searchLastDoc });
-  }, [activeSearchTerm, fetchSearchResults, searchHasMore, searchLastDoc, searchLoading]);
+    void fetchSearchResults(activeSearchTerm, { append: true });
+  }, [activeSearchTerm, fetchSearchResults, searchHasMore, searchLoading]);
 
   const placeCards = useMemo(
     () =>
@@ -965,16 +980,18 @@ const TourPlaces: React.FC = () => {
       className="relative min-h-screen overflow-x-hidden bg-black/80"
     >
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <video
-          autoPlay={isVideoPlaying && !mobilePerformanceMode}
-          loop
-          muted
-          playsInline
-          preload={mobilePerformanceMode ? "none" : "metadata"}
-          className="absolute inset-0 h-full w-full object-cover"
-        >
-          <source src={STATIC_VIDEO_V1} type="video/mp4" />
-        </video>
+        {hasHydrated && (
+          <video
+            autoPlay={isVideoPlaying && !mobilePerformanceMode}
+            loop
+            muted
+            playsInline
+            preload={mobilePerformanceMode ? "none" : "metadata"}
+            className="absolute inset-0 h-full w-full object-cover"
+          >
+            <source src={STATIC_VIDEO_V1} type="video/mp4" />
+          </video>
+        )}
         <div className="absolute inset-0 bg-linear-to-b from-black/60 via-black/20 to-black/70" />
         <div className="absolute inset-0 bg-linear-to-r from-black/30 via-transparent to-black/30" />
       </div>
@@ -1412,10 +1429,10 @@ const TourPlaces: React.FC = () => {
                           />
                         )}
 
-                        {selectedPlace.extraInfo.length > 0 && (
+                        {Array.isArray(selectedPlace.extraInfo) && selectedPlace.extraInfo.length > 0 && (
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            {selectedPlace.extraInfo.map((info) => (
-                              <div key={info.id} className="rounded-2xl border border-border bg-muted/40 p-4">
+                            {selectedPlace.extraInfo.map((info, idx) => (
+                              <div key={info.id || `${info.heading}-${idx}`} className="rounded-2xl border border-border bg-muted/40 p-4">
                                 <div className="mb-1 flex items-center gap-2 text-sm font-bold text-foreground">
                                   <FileText className="h-4 w-4 text-rose-500" />
                                   {info.heading}

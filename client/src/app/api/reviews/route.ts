@@ -1,90 +1,80 @@
 import { NextRequest } from 'next/server';
-import { adminDb } from '@/lib/server/firebaseAdminFirestore';
-import { getRedis } from '@/lib/server/redis';
+import { getRedis, safeRedisCall } from '@/lib/server/redis';
 import { authenticateRequest } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
-
-const LOCK_TTL_SECONDS = 10;
+import { FirestoreService } from '@/modules/database/FirestoreService';
+import { RateLimitService } from '@/modules/auth/RateLimitService';
+import { MetricsService } from '@/modules/analytics/MetricsService';
+import { awardReviewRebate } from '@/lib/server/rebateWallet';
 
 const getReviewsCacheKey = (placeId: string) => `reviews_${placeId}`;
-const getReviewsLockKey = (placeId: string) => `reviews_lock_${placeId}`;
-
-const requireRedis = () => {
-  const redis = getRedis();
-  if (!redis) throw new Error('Redis is unavailable.');
-  return redis;
-};
-
-const loadReviewsFromFirestore = async (placeId: string) => {
-  const snapshot = await adminDb
-    .collection('touristPlaces')
-    .doc(placeId)
-    .collection('reviews')
-    .orderBy('createdAt', 'desc')
-    .get();
-
-  return snapshot.docs.map((reviewDoc: any) => ({
-    id: reviewDoc.id,
-    ...(reviewDoc.data() as Record<string, unknown>),
-  }));
-};
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rate = await RateLimitService.check(ip, 60, 60); 
+    if (!rate.allowed) return fail('Rate limit exceeded', 429);
+
     const placeId = (req.nextUrl.searchParams.get('placeId') || '').trim();
+    const lastId = req.nextUrl.searchParams.get('lastId') || undefined;
+    const limit = Math.min(Number(req.nextUrl.searchParams.get('limit')) || 10, 50);
+
     if (!placeId) {
       return fail('placeId is required.', 400);
     }
 
-    const redis = requireRedis();
-    const cacheKey = getReviewsCacheKey(placeId);
-    const lockKey = getReviewsLockKey(placeId);
-
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      console.info('[ReviewsCache] CACHE HIT', { placeId, key: cacheKey, type: typeof cached });
-      try {
-        const rows = typeof cached === 'string' ? JSON.parse(cached) : cached;
-        return ok({ rows, cacheStatus: 'hit' });
-      } catch (parseError) {
-        console.error('[ReviewsCache] Parse error for key:', cacheKey, 'Value:', cached);
-        // Fall through to miss if corrupted
+    // Attempt to get from cache if no pagination is used (L1 cache)
+    if (!lastId) {
+      const cached = await safeRedisCall(
+        (redis) => redis.get(getReviewsCacheKey(placeId)),
+        null,
+        'getReviews'
+      );
+      if (cached) {
+        try {
+          const rows = typeof cached === 'string' ? JSON.parse(cached) : cached;
+          await MetricsService.increment('redis_hit_count');
+          return ok({ rows, cacheStatus: 'hit', hasMore: rows.length >= limit });
+        } catch (e) {}
       }
+      await MetricsService.increment('redis_miss_count');
     }
 
-    console.info('[ReviewsCache] CACHE MISS', { placeId, key: cacheKey });
-    const lockActive = await redis.get<string>(lockKey);
-    if (lockActive) {
-      console.info('[ReviewsCache] CACHE LOCK ACTIVE', { placeId, key: lockKey });
-      return ok({ rows: [], cacheStatus: 'warming', message: 'Cache is warming. Retry shortly.' }, 202);
+    const result = await FirestoreService.queryPaginated(
+      `touristPlaces/${placeId}/reviews`,
+      { limit, lastDocId: lastId, orderByField: 'createdAt', orderDirection: 'desc' }
+    );
+
+    await MetricsService.increment('firestore_reads_count', result.data.length);
+
+    // Cache the first page only
+    if (!lastId) {
+      await safeRedisCall(
+        (redis) => redis.set(getReviewsCacheKey(placeId), JSON.stringify(result.data), { ex: 300 }),
+        null,
+        'setReviews'
+      );
     }
 
-    const lock = await redis.set(lockKey, '1', { nx: true, ex: LOCK_TTL_SECONDS });
-    if (lock !== 'OK') {
-      console.info('[ReviewsCache] CACHE LOCK ACTIVE', { placeId, key: lockKey });
-      return ok({ rows: [], cacheStatus: 'warming', message: 'Cache is warming. Retry shortly.' }, 202);
-    }
-
-    try {
-      const rows = await loadReviewsFromFirestore(placeId);
-      await redis.set(cacheKey, JSON.stringify(rows));
-      return ok({ rows, cacheStatus: 'miss' });
-    } finally {
-      await redis.del(lockKey);
-    }
+    return ok({ 
+      rows: result.data, 
+      hasMore: result.hasMore, 
+      lastId: result.lastId,
+      cacheStatus: 'miss' 
+    });
   } catch (error) {
     console.error('[ReviewsAPI] GET Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch reviews.';
-    const isRedisError = message.includes('Redis');
-    return fail(message, isRedisError ? 503 : 500, { 
-      error: error instanceof Error ? error.name : 'UnknownError',
-      stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined 
-    });
+    return fail(message, 500);
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rate = await RateLimitService.check(ip, 5, 60); // 5 reviews per min
+    if (!rate.allowed) return fail('Too many reviews. Please wait.', 429);
+
     const user = await authenticateRequest(req);
     const body = (await req.json().catch(() => ({}))) as {
       placeId?: string;
@@ -112,17 +102,27 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     };
 
-    const created = await adminDb
-      .collection('touristPlaces')
-      .doc(placeId)
-      .collection('reviews')
-      .add(payload);
+    const created = await awardReviewRebate({
+      userId: String(user.firebaseUid || user.id),
+      placeId,
+      reviewData: payload,
+    });
 
-    const redis = requireRedis();
-    await redis.del(getReviewsCacheKey(placeId));
+    await safeRedisCall(
+      (redis) => redis.del(getReviewsCacheKey(placeId)),
+      null,
+      'delReviewsCache'
+    );
 
-    return ok({ id: created.id });
+    await MetricsService.increment('admin_write_success');
+
+    return ok({
+      id: created.reviewId,
+      rebate: created.rebate,
+      wallet: created.wallet,
+    });
   } catch (error) {
+    await MetricsService.increment('admin_write_fail');
     const message = error instanceof Error ? error.message : 'Failed to create review.';
     return fail(message, 500);
   }

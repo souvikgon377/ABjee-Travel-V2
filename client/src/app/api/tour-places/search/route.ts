@@ -1,57 +1,45 @@
 import { NextRequest } from 'next/server';
+import { SearchService } from '@/modules/search/SearchService';
+import { RateLimitService } from '@/modules/auth/RateLimitService';
 import { ok, fail } from '@/lib/server/http';
-import { getSharedPlacesCache, paginateSharedPlaces } from '@/lib/server/sharedPlacesCache';
-import { normalize, adminSearch } from '@/lib/server/touristSearchUtils';
+import { TypesenseBreaker } from '@/modules/search/typesenseBreaker';
+import { QueueService } from '@/modules/queue/QueueService';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
+  const tStart = Date.now();
+  const { searchParams } = new URL(req.url);
+  const query = searchParams.get('q') || '';
+  const page = parseInt(searchParams.get('page') || '1', 10);
+
+  // 1. Rate Limiting (30 requests/min per IP)
+  const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
+  const rateLimit = await RateLimitService.check(`search:${ip}`, 30, 60);
+  if (!rateLimit.allowed) {
+    return fail('Rate limit exceeded. Please try again in a minute.', 429);
+  }
+
   try {
-    const body = (await req.json().catch(() => ({}))) as {
-      query?: unknown;
-      page?: unknown;
-    };
+    // 2. Search Flow (Cache -> Typesense -> Firestore Fallback)
+    // Note: Caching is handled inside SearchService.searchPlaces
+    const result = await SearchService.searchPlaces(query, page);
 
-    const search = typeof body.query === 'string' ? body.query : '';
-    const normalizedSearch = normalize(search) || "all";
-    
-    const pageParam = Number(body.page);
-    const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
-    const limit = 12;
+    const totalLatency = Date.now() - tStart;
 
-    if (!search || normalizedSearch === "all") {
-      const dataset = await getSharedPlacesCache();
-      const paginated = paginateSharedPlaces(dataset.places, page, limit);
-      
-      // Sanitize results to ensure every record has a valid ID
-      const results = paginated.rows.filter((p: any) => p && p.id && String(p.id) !== "undefined");
-
-      return ok({
-        results,
-        hasMore: paginated.hasMore,
-        totalCount: paginated.total,
-        searchTerm: search,
-        page,
-        searchMethod: 'all'
-      });
-    }
-
-    // Use unifying resilient adminSearch engine directly
-    const searchResult = await adminSearch({ search, location: '', filter: 'all', page, limit });
-
-    // Sanitize results to ensure every record has a valid ID
-    const results = searchResult.data.filter((p: any) => p && p.id && String(p.id) !== "undefined");
-
+    // 3. Return response with metrics
     return ok({
-      results,
-      hasMore: searchResult.hasMore,
-      totalCount: searchResult.total,
-      searchTerm: search,
-      page,
-      searchMethod: searchResult.cacheStatus === 'hit' ? 'snapshot' : searchResult.source
+      ...result,
+      metrics: {
+        totalLatencyMs: totalLatency,
+        engineLatencyMs: result.latencyMs,
+        source: result.source,
+        firestoreReads: result.source === 'firestore' ? result.results.length : 0,
+      },
     });
-  } catch (error) {
-    console.error('Tourist place search failed:', error);
-    return fail('Failed to search tourist places', 500);
+
+  } catch (error: any) {
+    console.error('[SearchAPI] Fatal Error:', error);
+    return fail('Search service encountered a fatal error.', 500);
   }
 }

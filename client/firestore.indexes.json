@@ -1,0 +1,45 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "city_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "state_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "coverImage", "order": "ASCENDING" },
+        { "fieldPath": "name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "updatedAt", "order": "DESCENDING" },
+        { "fieldPath": "name_lower", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

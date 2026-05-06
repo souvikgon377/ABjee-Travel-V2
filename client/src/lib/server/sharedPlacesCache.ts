@@ -254,7 +254,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
 
     // Update Redis
     await hybridSet(K.ALL, places, { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS });
-    
+
     // Update In-Memory Snapshot & Meta
     inMemorySnapshot = places.slice(0, 50000).map(p => ({
       id: p.id,
@@ -279,7 +279,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
     await redis.set(K.LAST_SUCCESS, Date.now());
     await redis.set(K.LAST_DURATION, duration);
     await redis.del(K.LAST_ERROR);
-    
+
     // Memory monitoring (best effort - might not be supported on all clients like Upstash)
     if (typeof (redis as any).info === 'function') {
       try {
@@ -296,7 +296,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
     if (shouldRunFullReindex(force, reason)) {
       void fullIndexPlaces(places, reason);
     }
-    
+
     console.info('[PlacesCache] REFRESH SUCCESS', { count: places.length, duration: `${duration}ms` });
     return places;
   } catch (error) {
@@ -321,7 +321,7 @@ export const getSharedPlacesCache = async (): Promise<{
   source: 'hybrid' | 'fallback' | 'snapshot' | 'backup';
 }> => {
   const redis = getRedis();
-  
+
   try {
     // 1. Proactive Eviction Check
     if (redis && !(await redis.exists(K.ALL))) {
@@ -336,15 +336,12 @@ export const getSharedPlacesCache = async (): Promise<{
         if (inMemorySnapshot.length > 0) {
           return inMemorySnapshot as SharedPlaceRecord[];
         }
-        return []; 
+        return [];
       },
       { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
     );
 
-    // 2. Snapshot Age Check
-    if (snapshotMeta.updatedAt > 0 && (Date.now() - snapshotMeta.updatedAt > 3600000)) {
-      console.warn(`[PlacesCache] Memory snapshot is stale (>1h). Last update: ${new Date(snapshotMeta.updatedAt).toLocaleTimeString()}`);
-    }
+    // Snapshot Age Check disabled in favor of SearchService
 
     // 3. Snapshot Fallback
     if ((!places || places.length === 0) && inMemorySnapshot.length > 0) {
@@ -354,11 +351,9 @@ export const getSharedPlacesCache = async (): Promise<{
     // 4. Safe Disk Backup Load (Corruption Guard)
     const backup = safeLoadBackup();
     if ((!places || places.length === 0) && backup) {
-      if (Date.now() - backup.updatedAt > 86400000) {
-        console.warn(`[PlacesCache] Disk backup is stale (>24h).`);
-      }
+      // Disk backup check
       console.info('[PlacesCache] Recovered via Atomic Disk Backup');
-      
+
       // Warm Memory Snapshot
       inMemorySnapshot = backup.data.slice(0, 50000).map((p: any) => ({
         id: p.id,
@@ -373,17 +368,17 @@ export const getSharedPlacesCache = async (): Promise<{
       snapshotMeta.updatedAt = backup.updatedAt;
 
       // Warm Redis
-      if (redis) void redis.set(K.ALL, JSON.stringify({ 
-        value: backup.data, version: "v2", createdAt: Date.now(), expiresAt: Date.now() + 86400000, ttlSeconds: 86400 
+      if (redis) void redis.set(K.ALL, JSON.stringify({
+        value: backup.data, version: "v2", createdAt: Date.now(), expiresAt: Date.now() + 86400000, ttlSeconds: 86400
       }));
 
       return { places: backup.data, cacheStatus: 'snapshot', source: 'backup' };
     }
 
-    return { 
-      places: places || [], 
-      cacheStatus: (places?.length > 0) ? 'hit' : 'warming', 
-      source: 'hybrid' 
+    return {
+      places: places || [],
+      cacheStatus: (places?.length > 0) ? 'hit' : 'warming',
+      source: 'hybrid'
     };
   } catch (_error) {
     return { places: inMemorySnapshot as SharedPlaceRecord[], cacheStatus: 'snapshot', source: 'snapshot' };
@@ -398,7 +393,7 @@ if (typeof window === 'undefined' && process.env.ENABLE_PLACES_CACHE_HEARTBEAT =
     const redis = getRedis();
     if (redis && (await redis.get(K.REFRESH_LOCK))) return;
     void refreshCacheInBackground();
-  }, 300000); 
+  }, 300000);
 }
 
 export const refreshSharedPlacesCache = async () => {
@@ -416,7 +411,7 @@ export const updateSharedPlaceInCache = async (data: any, type: 'create' | 'upda
     const redis = getRedis();
     if (redis) await redis.del(K.REFRESH_META);
     await hybridInvalidate(K.ALL);
-    
+
     if (type === 'delete') await deletePlaceIndex(data.id);
     else await updatePlaceIndex(data);
   } catch (error) {

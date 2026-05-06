@@ -129,6 +129,11 @@ export const placesAPI = {
   deleteReview: (placeId: string, reviewId: string) => api.delete(`/reviews/${reviewId}`, { params: { placeId } }),
 };
 
+export const walletAPI = {
+  redeem: (amount: number) => api.post('/wallet/redeem', { amount }),
+  getHistory: (params?: { limit?: number }) => api.get('/wallet/history', { params }),
+};
+
 // Subscriptions API
 export const subscriptionsAPI = {
   getPlans: () => api.get('/subscriptions/plans'),

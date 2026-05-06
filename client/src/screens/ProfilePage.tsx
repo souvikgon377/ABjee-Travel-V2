@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Crown, Eye, EyeOff, Loader2, Upload, UserCircle2 } from 'lucide-react';
+import { Crown, Eye, EyeOff, Loader2, Upload, UserCircle2, Wallet } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/mvpblocks/header-1';
-import { usersAPI } from '../lib/api';
+import { usersAPI, walletAPI } from '../lib/api';
 import { uploadImageToR2 } from '../lib/r2Upload';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { getSubscriptionInfo, hasPaidAccess } from '../lib/subscriptionPolicy';
@@ -38,6 +38,20 @@ type SavedProfileDetails = {
   bio: string;
   travelInterests: string;
   preferredDestinations: string;
+};
+
+type WalletHistoryRow = {
+  id: string;
+  type: string;
+  points: number;
+  rupees: number;
+  monthKey: string;
+  placeId?: string | null;
+  reviewId?: string | null;
+  requestedAmount?: number | null;
+  textPoints?: number | null;
+  mediaPoints?: number | null;
+  createdAt: string | null;
 };
 
 const emptyForm: ProfileFormData = {
@@ -100,10 +114,16 @@ export default function ProfilePage() {
   );
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [walletRedeeming, setWalletRedeeming] = useState(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [walletMessage, setWalletMessage] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [walletRedeemAmount, setWalletRedeemAmount] = useState('');
+  const [walletHistory, setWalletHistory] = useState<WalletHistoryRow[]>([]);
+  const [walletHistoryLoading, setWalletHistoryLoading] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -196,6 +216,39 @@ export default function ProfilePage() {
     return subscriptionInfo.isActive && hasPaidAccess(subscriptionInfo) ? 'Active' : 'Inactive';
   }, [subscriptionInfo]);
 
+  const walletSummary = useMemo(() => {
+    const wallet = (subscriptionSourceProfile as any)?.wallet || (userProfile as any)?.wallet || {};
+    const monthly = wallet.monthly || {};
+    const availablePoints = Number(wallet.availablePoints || 0);
+    const lifetimeEarnedPoints = Number(wallet.lifetimeEarnedPoints || 0);
+    const lifetimeRedeemedPoints = Number(wallet.lifetimeRedeemedPoints || 0);
+    const monthlyRedeemedRupees = Number(monthly.redeemedRupees || 0);
+    const monthlyCapRupees = Number(monthly.monthlyCapRupees || 30);
+
+    return {
+      availablePoints,
+      lifetimeEarnedPoints,
+      lifetimeRedeemedPoints,
+      monthlyRedeemedRupees,
+      monthlyCapRupees,
+      monthlyRemaining: Math.max(0, monthlyCapRupees - monthlyRedeemedRupees),
+      monthKey: typeof monthly.monthKey === 'string' ? monthly.monthKey : '',
+    };
+  }, [subscriptionSourceProfile, userProfile]);
+
+  const walletHistoryGroups = useMemo(() => {
+    const groups = new Map<string, WalletHistoryRow[]>();
+
+    walletHistory.forEach((entry) => {
+      const key = entry.monthKey || (entry.createdAt ? entry.createdAt.slice(0, 7) : 'Unknown');
+      const bucket = groups.get(key) || [];
+      bucket.push(entry);
+      groups.set(key, bucket);
+    });
+
+    return Array.from(groups.entries()).map(([monthKey, rows]) => ({ monthKey, rows }));
+  }, [walletHistory]);
+
   useEffect(() => {
     if (!loading && !currentUser) {
       router.replace('/auth?redirect=%2Fprofile');
@@ -243,6 +296,7 @@ export default function ProfilePage() {
         hydrateForm(fetchedUser);
         setSavedProfileDetails(mapSavedDetails(fetchedUser));
         setSubscriptionSourceProfile(fetchedUser);
+        void loadWalletHistory();
       } catch {
         const fallbackUser = {
           firstName: derivedNamesFromGoogle.firstName,
@@ -255,6 +309,7 @@ export default function ProfilePage() {
         hydrateForm(fallbackUser);
         setSavedProfileDetails(mapSavedDetails(fallbackUser));
         setSubscriptionSourceProfile(fallbackUser);
+        void loadWalletHistory();
         setError('Unable to load your profile right now. Please refresh and try again.');
       } finally {
         setPageLoading(false);
@@ -275,6 +330,48 @@ export default function ProfilePage() {
   const handleInputChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const loadWalletHistory = async () => {
+    try {
+      setWalletHistoryLoading(true);
+      const response = await walletAPI.getHistory({ limit: 20 });
+      const payload = response?.data?.data || {};
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      setWalletHistory(rows);
+    } catch {
+      setWalletHistory([]);
+    } finally {
+      setWalletHistoryLoading(false);
+    }
+  };
+
+  const handleWalletRedeem = async () => {
+    setWalletMessage(null);
+    setWalletError(null);
+
+    const amount = Math.floor(Number(walletRedeemAmount));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setWalletError('Enter a valid redemption amount.');
+      return;
+    }
+
+    try {
+      setWalletRedeeming(true);
+      const response = await walletAPI.redeem(amount);
+      const payload = response?.data?.data || {};
+      const refreshed = await usersAPI.getProfile();
+      const refreshedUser = refreshed?.data?.data?.user || {};
+      setSavedProfileDetails(mapSavedDetails(refreshedUser));
+      setSubscriptionSourceProfile(refreshedUser);
+      setWalletRedeemAmount('');
+      setWalletMessage(`Redeemed Rs ${Number(payload.redeemedAmount || amount)} successfully.`);
+      void loadWalletHistory();
+    } catch (redeemError: any) {
+      setWalletError(redeemError?.response?.data?.message || redeemError?.message || 'Failed to redeem wallet balance.');
+    } finally {
+      setWalletRedeeming(false);
+    }
   };
 
   const handleProfileImageChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -484,6 +581,103 @@ export default function ProfilePage() {
                   <p className="font-medium text-foreground">{subscriptionValidityLabel}</p>
                 </div>
               </div>
+            </div>
+
+            <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  Rebate Wallet
+                </h2>
+                <Wallet className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+              </div>
+              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <div>
+                  <p className="text-muted-foreground">Available Balance</p>
+                  <p className="font-medium text-foreground">Rs {walletSummary.availablePoints}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">This Month Redeemed</p>
+                  <p className="font-medium text-foreground">Rs {walletSummary.monthlyRedeemedRupees} / {walletSummary.monthlyCapRupees}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Redeemable This Month</p>
+                  <p className="font-medium text-foreground">Rs {Math.min(walletSummary.availablePoints, walletSummary.monthlyRemaining)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Lifetime Earned</p>
+                  <p className="font-medium text-foreground">Rs {walletSummary.lifetimeEarnedPoints}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                <Input
+                  type="number"
+                  min="1"
+                  max={Math.min(walletSummary.availablePoints, walletSummary.monthlyRemaining) || 1}
+                  value={walletRedeemAmount}
+                  onChange={(event) => setWalletRedeemAmount(event.target.value)}
+                  placeholder="Enter amount to redeem"
+                />
+                <Button
+                  type="button"
+                  onClick={handleWalletRedeem}
+                  disabled={walletRedeeming || walletSummary.availablePoints <= 0 || walletSummary.monthlyRemaining <= 0}
+                >
+                  {walletRedeeming ? 'Redeeming...' : 'Redeem'}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                1 Rb point = Rs 1. Monthly redemption is capped at Rs 30. Unredeemed points stay in your wallet.
+              </p>
+              {(walletMessage || walletError) && (
+                <p className={`mt-3 text-sm ${walletMessage ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {walletMessage || walletError}
+                </p>
+              )}
+            </div>
+
+            <div className="mb-6 rounded-lg border bg-muted/40 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Wallet History</h2>
+                <span className="text-xs text-muted-foreground">Month by month</span>
+              </div>
+              {walletHistoryLoading ? (
+                <p className="text-sm text-muted-foreground">Loading wallet history...</p>
+              ) : walletHistoryGroups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No rebate activity yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {walletHistoryGroups.map((group) => (
+                    <div key={group.monthKey} className="rounded-lg border bg-background p-3">
+                      <p className="mb-2 text-sm font-semibold text-foreground">{group.monthKey}</p>
+                      <div className="space-y-2">
+                        {group.rows.map((entry) => (
+                          <div key={entry.id} className="flex items-start justify-between gap-3 rounded-md bg-muted/60 px-3 py-2 text-sm">
+                            <div>
+                              <p className="font-medium text-foreground">
+                                {entry.type === 'review_rebate' ? 'Review rebate' : entry.type === 'wallet_redemption' ? 'Wallet redemption' : 'Wallet activity'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {entry.type === 'review_rebate'
+                                  ? `Text ${entry.textPoints || 0} + Media ${entry.mediaPoints || 0}`
+                                  : `Redeemed Rs ${entry.points}`}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-semibold ${entry.type === 'wallet_redemption' ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                {entry.type === 'wallet_redemption' ? `-Rs ${entry.rupees}` : `+Rs ${entry.rupees}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-IN') : 'Recently'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="mb-6 rounded-lg border bg-muted/40 p-4">

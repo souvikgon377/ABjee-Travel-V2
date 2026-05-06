@@ -1,4 +1,5 @@
 import { getRedis } from '@/lib/server/redis';
+import { SearchService } from '@/modules/search/SearchService';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
@@ -21,7 +22,7 @@ async function decompress(base64: string): Promise<any> {
 /**
  * INCREMENTAL INDEXING ENGINE + FAILOVER ARCHITECTURE
  */
-const STOP = new Set(['the','in','of','and','to','for','a','an']);
+const STOP = new Set(['the', 'in', 'of', 'and', 'to', 'for', 'a', 'an']);
 
 export type SearchResult = {
   data: any[];
@@ -56,13 +57,13 @@ let writingQueue = Promise.resolve();
 
 async function saveQueue(q: any[]) {
   writingQueue = writingQueue.then(async () => {
-    try { 
+    try {
       if (q.length > 5000) q = q.slice(-5000); // 5000 item queue limit
       const tmpFile = `${QUEUE_FILE}.tmp`;
-      await fs.promises.writeFile(tmpFile, JSON.stringify(q)); 
+      await fs.promises.writeFile(tmpFile, JSON.stringify(q));
       await fs.promises.rename(tmpFile, QUEUE_FILE);
-    } catch {}
-  }).catch(() => {});
+    } catch { }
+  }).catch(() => { });
   return writingQueue;
 }
 
@@ -75,7 +76,7 @@ async function pushQueue(job: any) {
     const deduplicated = q.filter((j: any) => (j.type === "upsert" ? j.place.id : j.id) !== idValue);
     deduplicated.push(job);
     await saveQueue(deduplicated);
-  }).catch(() => {});
+  }).catch(() => { });
   return queueReadWriteMutex;
 }
 async function getQueueSize() {
@@ -84,7 +85,7 @@ async function getQueueSize() {
 
 export async function isRedisBlocked() {
   if (Date.now() < REDIS_BLOCKED_UNTIL) return true;
-  
+
   if (REDIS_BLOCKED_UNTIL > 0) {
     // Block time expired. Send a test ping to see if recovered
     try {
@@ -126,7 +127,7 @@ export async function getSnapshot() {
       const stat = await fs.promises.stat(SNAPSHOT_FILE);
       SNAPSHOT_UPDATED_AT = stat.mtimeMs;
       console.log(`✅ Loaded ${SNAPSHOT.length} items from disk snapshot.`);
-    } catch {}
+    } catch { }
   }
   return SNAPSHOT;
 }
@@ -137,26 +138,16 @@ export async function setSnapshot(data: any[]) {
   SNAPSHOT = data;
   SNAPSHOT_UPDATED_AT = Date.now();
   writingSnapshot = writingSnapshot.then(async () => {
-    try { 
+    try {
       const tmpFile = `${SNAPSHOT_FILE}.tmp`;
-      await fs.promises.writeFile(tmpFile, JSON.stringify(data)); 
+      await fs.promises.writeFile(tmpFile, JSON.stringify(data));
       await fs.promises.rename(tmpFile, SNAPSHOT_FILE);
-    } catch {}
-  }).catch(() => {});
+    } catch { }
+  }).catch(() => { });
   return writingSnapshot;
 }
 
-export async function logSystemStatus() {
-   const snapshotAge = Date.now() - SNAPSHOT_UPDATED_AT;
-   if (SNAPSHOT_UPDATED_AT > 0 && snapshotAge > 60 * 60 * 1000) {
-      console.warn("⚠️ Snapshot is dangerously old (> 1 hour). Redis may be down extensively.");
-   }
-   console.log({
-     redisBlocked: await isRedisBlocked(),
-     queueSize: await getQueueSize(),
-     snapshotAge
-   });
-}
+// Snapshot logic decommissioned in favor of SearchService
 
 // ==========================================
 // 2. TEXT PROCESSING UTILS
@@ -200,7 +191,7 @@ export function expandTokens(tokens: string[]) {
 
 function buildMinimal(p: any) {
   const id = p.id || p.Id || p._id || (p.name && p.area ? `tp_${normalize(p.name + p.area)}` : null);
-  
+
   if (!id) {
     console.warn("[SearchUtils] Skipping minimal build: No ID found", p.name);
     return null;
@@ -237,7 +228,7 @@ async function saveIndexToRedis() {
   try {
     // 1. Create Shards (Sent individually to stay under 1MB REST limit per request)
     const shardCount = Math.ceil(SNAPSHOT.length / SHARD_SIZE);
-    
+
     for (let i = 0; i < shardCount; i++) {
       const shardData = SNAPSHOT.slice(i * SHARD_SIZE, (i + 1) * SHARD_SIZE);
       const compressed = await compress(shardData);
@@ -264,7 +255,7 @@ async function saveIndexToRedis() {
  */
 function scheduleIndexRebuild() {
   if (rebuildTimeout) return;
-  
+
   console.log("⏱️ Index rebuild scheduled (5s debounce)...");
   rebuildTimeout = setTimeout(async () => {
     await saveIndexToRedis();
@@ -280,7 +271,7 @@ async function upsertPlaceIndexRaw(place: any) {
     console.error("[SearchUtils] CRITICAL: Cannot upsert place without ID", place);
     return;
   }
-  
+
   const minimal = buildMinimal(place);
   if (!minimal) return;
   const index = SNAPSHOT.findIndex(p => p.id === id);
@@ -294,7 +285,7 @@ async function upsertPlaceIndexRaw(place: any) {
 async function deletePlaceIndexRaw(id: string) {
   const redis = getRedis();
   if (!redis) throw new Error("Redis missing");
-  
+
   // 1. Remove Full Object
   await redis.del(`places:full:${id}`);
 
@@ -327,7 +318,7 @@ export async function safeDelete(id: string) {
 }
 
 // Maintain backward compatibility aliases
-export const upsertPlaceIndex = safeUpsert; 
+export const upsertPlaceIndex = safeUpsert;
 export const deletePlaceIndex = safeDelete;
 export const updatePlaceIndex = safeUpsert;
 
@@ -346,18 +337,18 @@ function toMillis(value: any) {
 
 function matchesFilter(place: any, filter: string) {
   if (filter === 'all') return true;
-  
+
   const hasPhotos = Boolean(place.coverImage) || (Number(place.mediaCount || 0) > 0);
-  
+
   if (filter === 'photos-added') return hasPhotos;
   if (filter === 'photos-not-added') return !hasPhotos;
-  
+
   if (filter === 'recently-updated') {
     const lastUpdate = toMillis(place.updatedAt);
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     return lastUpdate > sevenDaysAgo;
   }
-  
+
   return true;
 }
 
@@ -412,64 +403,38 @@ async function fallbackSearch(query: string, location: string, limit: number, pa
   };
 }
 
-export async function adminSearch({ 
-  search = '', 
-  location = '', 
-  filter = 'all', 
-  page = 1, 
+export async function adminSearch({
+  search = '',
+  location = '',
+  filter = 'all',
+  page = 1,
   limit = 30,
-  ip = ''
-}: { 
-  search?: string; 
-  location?: string; 
-  filter?: string; 
-  page?: number; 
+}: {
+  search?: string;
+  location?: string;
+  filter?: string;
+  page?: number;
   limit?: number;
-  ip?: string;
 }): Promise<SearchResult> {
   const tStart = Date.now();
-  if (!IS_READY && SNAPSHOT.length === 0) {
-    throw new Error("SEARCH_SYSTEM_WARMING_UP");
-  }
 
-  const isMemoryHit = SNAPSHOT.length > 0;
-  const snapshotData = await getSnapshot();
+  const result = await SearchService.search({
+    query: search,
+    location,
+    category: filter === 'all' ? undefined : filter,
+    limit,
+    lastDocId: undefined, // Cursor pagination can be added later if UI supports it
+    isActive: undefined // Admin sees both active and inactive
+  });
 
-  // Guardrail: Prevent serving partial data in admin
-  if (snapshotData.length < EXPECTED_MIN_RECORDS) {
-    console.warn(`[SearchGuard] Admin Index Integrity Failure: ${snapshotData.length} records found.`);
-    throw new Error("SEARCH_SYSTEM_TRUNCATED");
-  }
-
-  let filtered = snapshotData.filter(p => matchesFilter(p, filter));
-
-  if (search || location) {
-    const sTokens = tokenize(search);
-    const lTokens = tokenize(location);
-    
-    filtered = filtered.filter(p => {
-      const text = buildSearchable(p);
-      const matchesSearch = sTokens.length === 0 || sTokens.every(t => text.includes(t));
-      const matchesLocation = lTokens.length === 0 || lTokens.every(t => text.includes(t));
-      return matchesSearch && matchesLocation;
-    });
-  }
-
-  // Sort by updatedAt descending
-  filtered.sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
-
-  const sanitized = filtered.filter(p => p && p.id && p.id !== "undefined");
-  const paginated = sanitized.slice((page - 1) * limit, page * limit);
-
-  const latency = performance.now() - tStart;
-  if (latency > 50) console.warn(`[SearchPerf] Slow admin search: ${latency.toFixed(2)}ms (Source: ${isMemoryHit ? 'memory' : 'snapshot'})`);
+  const latency = Date.now() - tStart;
 
   return {
-    data: paginated,
-    total: filtered.length,
+    data: result.results,
+    total: result.totalCount, // Note: total count is -1 in basic search, can be fetched if needed
     page,
-    hasMore: (page * limit) < filtered.length,
-    source: isMemoryHit ? 'redis-incremental' : 'snapshot', // Use 'redis-incremental' as a proxy for memory/hot in this schema
+    hasMore: result.hasMore,
+    source: 'redis-incremental', // Keep source for UI compatibility
     cacheStatus: 'hit',
     latencyMs: latency
   };
@@ -504,8 +469,8 @@ async function refreshSnapshot(force = false) {
 
     const lastVersion = (global as any).__LAST_SNAPSHOT_VERSION__ || '0';
     if (!force && currentVersion === lastVersion && SNAPSHOT.length > 0) {
-       IS_READY = true;
-       return;
+      IS_READY = true;
+      return;
     }
 
     const shardCount = parseInt(shardCountStr || '0', 10);
@@ -564,7 +529,7 @@ async function replayQueue() {
     try {
       if (job.type === "upsert") await upsertPlaceIndexRaw(job.place);
       else await deletePlaceIndexRaw(job.id);
-      
+
       currentQueue.shift();
       await saveQueue(currentQueue);
       successCount++;
@@ -582,28 +547,20 @@ async function replayQueue() {
   }
 }
 
-// Start Background Jobs Server-Side Safety Check
+// Legacy Background Workers Disabled
+// We have migrated to SearchService which uses direct Firestore prefix search.
+// Background snapshotting is no longer required.
 if (!(global as any).__SEARCH_WORKERS_STARTED__) {
-   (global as any).__SEARCH_WORKERS_STARTED__ = true;
-    setInterval(refreshSnapshot, 30 * 60 * 1000); // Check every 30 mins instead of 5
-   
-   const runReplayLoop = () => {
-     replayQueue().finally(() => setTimeout(runReplayLoop, retryDelay));
-   };
-   runReplayLoop();
-
-    // Cold Start Initialization
-    void refreshSnapshot(true);
-    
-    setInterval(logSystemStatus, 60000); 
+  (global as any).__SEARCH_WORKERS_STARTED__ = true;
+  console.log("🚀 Legacy Search Workers disabled. Using New Production Architecture.");
 }
 
 export async function fullIndexPlaces(places: any[], reason: string = "manual") {
   if (!places || places.length === 0) return;
-  
+
   console.info(`[SearchIndex] FULL REINDEX START: ${places.length} places (Reason: ${reason})`);
   const tStart = Date.now();
-  
+
   try {
     const redis = getRedis();
     if (!redis) throw new Error("Redis missing");
@@ -614,13 +571,13 @@ export async function fullIndexPlaces(places: any[], reason: string = "manual") 
     for (let i = 0; i < places.length; i += BATCH) {
       const batch = places.slice(i, i + BATCH);
       const p = redis.pipeline();
-      
+
       for (const place of batch) {
         const id = place.id;
         if (!id) continue;
         p.set(`places:full:${id}`, JSON.stringify(place));
       }
-      
+
       await p.exec();
       console.log(`[SearchIndex] Indexed Full Objects ${Math.min(i + BATCH, places.length)}/${places.length}...`);
     }
@@ -639,7 +596,7 @@ export async function fullIndexPlaces(places: any[], reason: string = "manual") 
     multi.set('places:min:shards', String(shardCount));
     multi.set('places:version', newVersion);
     await multi.exec();
-    
+
     await setSnapshot(minBatch);
     (global as any).__LAST_SNAPSHOT_VERSION__ = newVersion;
     IS_READY = true;

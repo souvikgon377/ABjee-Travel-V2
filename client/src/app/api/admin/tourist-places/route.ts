@@ -3,7 +3,9 @@ import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth'
 import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { invalidateCacheVersion } from '@/lib/server/cacheManagement';
-import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
+import { SyncService } from '@/modules/search/SyncService';
+import { CacheService } from '@/modules/cache/CacheService';
+import { MetricsService } from '@/modules/analytics/MetricsService';
 
 export const runtime = 'nodejs';
 
@@ -27,7 +29,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, area, state, country, description, category, googleMapsUrl, coverImage, media, extraInfo, isActive } = body;
+    const { name, area, state, country, description, category, googleMapsUrl, coverImage, media, extraInfo, isActive, popularity } = body;
 
     if (!name || !state || !country) {
       return fail('Missing required fields: name, state, country', 400);
@@ -40,7 +42,7 @@ export async function PUT(req: NextRequest) {
       return fail('Tourist place not found', 404);
     }
 
-    const updateData = {
+    const updateData: any = {
       name: String(name).trim(),
       area: String(area || '').trim(),
       city: String(area || '').trim(),
@@ -53,8 +55,10 @@ export async function PUT(req: NextRequest) {
       media: Array.isArray(media) ? media : [],
       extraInfo: Array.isArray(extraInfo) ? extraInfo : [],
       isActive: isActive !== false,
+      popularity: Number(popularity || 0),
       updatedAt: new Date(),
     };
+    
     const searchFields = {
       name_lower: normalizeSearchField(updateData.name),
       location_search: normalizeSearchField([
@@ -69,6 +73,7 @@ export async function PUT(req: NextRequest) {
         updateData.state,
         updateData.country,
       ].filter(Boolean).join(' ')),
+      description_lower: normalizeSearchField(updateData.description),
     };
 
     await docRef.update({
@@ -76,21 +81,26 @@ export async function PUT(req: NextRequest) {
       ...searchFields,
     });
     
-    // Update Redis dataset cache
-    await updateSharedPlaceInCache({
+    // 1. Real-time Search Sync (via Queue)
+    await SyncService.syncOnUpdate({
       id,
-      ...updateData,
-      ...searchFields,
-      Name: updateData.name,
-      Area: updateData.area,
-      State: updateData.state,
-      Country: updateData.country,
-      Category: updateData.category,
-      Description: updateData.description
-    }, 'update');
+      name: updateData.name,
+      city: updateData.city,
+      state: updateData.state,
+      country: updateData.country,
+      popularity: updateData.popularity,
+      updatedAt: updateData.updatedAt,
+      category: updateData.category,
+      coverImage: updateData.coverImage
+    });
 
-    // Invalidate cache version for page caches
+    // 2. Cache Invalidation
+    await CacheService.invalidatePattern('search:'); // Invalidate all search caches
+    await CacheService.invalidate(`place:${id}`);
+
+    // 3. Invalidate cache version for page caches
     await invalidateCacheVersion();
+    await MetricsService.increment('admin_write_success');
 
     return ok({
       id,
@@ -99,6 +109,7 @@ export async function PUT(req: NextRequest) {
       ...searchFields,
     });
   } catch (error: unknown) {
+    await MetricsService.increment('admin_write_fail');
     if (error instanceof AuthError) {
       return fail(error.message, error.status);
     }
@@ -130,14 +141,20 @@ export async function DELETE(req: NextRequest) {
 
     await docRef.delete();
     
-    // Update Redis dataset cache (remove)
-    await updateSharedPlaceInCache({ id }, 'delete');
+    // 1. Real-time Search Sync (Delete)
+    await SyncService.syncOnDelete(id);
 
-    // Invalidate cache version for page caches
+    // 2. Cache Invalidation
+    await CacheService.invalidatePattern('search:');
+    await CacheService.invalidate(`place:${id}`);
+
+    // 3. Invalidate cache version for page caches
     await invalidateCacheVersion();
+    await MetricsService.increment('admin_write_success');
 
     return ok({ deleted: true, id });
   } catch (error: unknown) {
+    await MetricsService.increment('admin_write_fail');
     if (error instanceof AuthError) {
       return fail(error.message, error.status);
     }

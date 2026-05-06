@@ -1,4 +1,5 @@
 import { FieldValue, adminDb } from "@/lib/server/firebaseAdminFirestore";
+import { createDefaultWalletState } from "@/lib/server/rebateWallet";
 
 const COLLECTION = "users";
 
@@ -54,6 +55,7 @@ const createUserData = (data: AnyObj): AnyObj => {
       notifications: data.preferences?.notifications !== undefined ? data.preferences.notifications : true,
       theme: data.preferences?.theme || "light",
     },
+    wallet: data.wallet || createDefaultWalletState(),
     createdAt: data.createdAt || FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
