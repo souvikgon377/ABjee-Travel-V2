@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import { redirect } from 'next/navigation';
 import LandingPage from "@/screens/LandingPage";
 import { publicAsset } from "@/lib/publicAsset";
-import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
 
@@ -42,22 +40,6 @@ export const revalidate = 0;
 export const runtime = 'nodejs';
 
 export default async function RootPage() {
-  try {
-    const snapshot = await adminDb.collection('admin_settings').doc('system').get();
-    const settings = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
-    const homePageEnabled = settings.homePageEnabled !== false;
-
-    if (homePageEnabled === false) {
-      redirect('/community');
-    }
-  } catch (error) {
-    // Re-throw Next.js redirect errors - check for digest which is how Next.js marks redirects
-    if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
-      throw error;
-    }
-    redirect('/community');
-  }
-
   const webSiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
