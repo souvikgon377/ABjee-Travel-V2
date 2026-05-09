@@ -36,8 +36,12 @@ import { createImagePreview, revokeImagePreview, uploadImageToR2 } from "@/lib/r
 import { placesAPI } from "@/lib/api";
 import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSubscriptionInfo, hasPaidAccess } from "@/lib/subscriptionPolicy";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
+const MAX_PHOTOS_PER_REVIEW = 2;
+const MAX_VIDEOS_PER_REVIEW = 1;
+const MAX_VIDEO_SIZE_MB = 5;
 
 const normalizeSearchText = (value?: string) =>
   (value ?? "")
@@ -377,7 +381,7 @@ PlaceCard.displayName = "PlaceCard";
 
 const TourPlaces: React.FC = () => {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const isMobile = useIsMobile();
   const handledPlaceParamRef = useRef<string | null>(null);
   const lastSearchTermRef = useRef<string>("");
@@ -812,7 +816,7 @@ const TourPlaces: React.FC = () => {
     setPhotoCommentInputs((prev) => ({ ...prev, [key]: "" }));
   };
 
-  const handleReviewMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleReviewMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const pickedFiles = Array.from(event.target.files ?? []);
     if (pickedFiles.length === 0) return;
 
@@ -821,6 +825,50 @@ const TourPlaces: React.FC = () => {
       setReviewUploadError("Select image or video files for your review.");
       event.target.value = "";
       return;
+    }
+
+    // Separate photos and videos
+    const photos = validFiles.filter((file) => file.type.startsWith("image/"));
+    const videos = validFiles.filter((file) => file.type.startsWith("video/"));
+
+    // Check subscription status for videos
+    const subscriptionInfo = getSubscriptionInfo(userProfile);
+    const isPaidUser = hasPaidAccess(subscriptionInfo);
+
+    let errorMessage = "";
+
+    // Validate photo limit (max 2 for all users)
+    if (photos.length > MAX_PHOTOS_PER_REVIEW) {
+      errorMessage = `Maximum ${MAX_PHOTOS_PER_REVIEW} photos allowed per review.`;
+      event.target.value = "";
+      setReviewUploadError(errorMessage);
+      return;
+    }
+
+    // Validate videos
+    if (videos.length > 0) {
+      if (!isPaidUser) {
+        errorMessage = "Videos are only available for premium members. Please upgrade your subscription.";
+        event.target.value = "";
+        setReviewUploadError(errorMessage);
+        return;
+      }
+
+      if (videos.length > MAX_VIDEOS_PER_REVIEW) {
+        errorMessage = `Maximum ${MAX_VIDEOS_PER_REVIEW} video allowed per review.`;
+        event.target.value = "";
+        setReviewUploadError(errorMessage);
+        return;
+      }
+
+      // Validate video size (max 5 MB)
+      const videoSizeInMB = videos[0].size / (1024 * 1024);
+      if (videoSizeInMB > MAX_VIDEO_SIZE_MB) {
+        errorMessage = `Video size must be less than ${MAX_VIDEO_SIZE_MB}MB. Your file is ${videoSizeInMB.toFixed(2)}MB.`;
+        event.target.value = "";
+        setReviewUploadError(errorMessage);
+        return;
+      }
     }
 
     setReviewMediaFiles((current) => {
@@ -851,7 +899,7 @@ const TourPlaces: React.FC = () => {
         const isVideo = file.type.startsWith("video/");
         const preparedFile = isVideo
           ? await compressVideoFile(file, {
-            maxSizeBytes: 15 * 1024 * 1024,
+            maxSizeBytes: 5 * 1024 * 1024,
             maxWidth: 1280,
             maxHeight: 720,
             frameRate: 24,

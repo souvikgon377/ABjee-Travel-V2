@@ -50,7 +50,12 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get('x-razorpay-signature') || '';
 
+    // Log webhook receipt (for debugging)
+    console.log('[Razorpay Webhook] Event received at', new Date().toISOString());
+    console.log('[Razorpay Webhook] Signature header present:', !!signature);
+
     if (!signature) {
+      console.error('[Razorpay Webhook] ERROR: Missing signature header');
       return fail('Missing Razorpay signature header', 400);
     }
 
@@ -58,29 +63,47 @@ export async function POST(req: NextRequest) {
     const expectedSignature = createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
 
     if (expectedSignature !== signature) {
+      console.error('[Razorpay Webhook] ERROR: Signature mismatch');
+      console.error('[Razorpay Webhook] Expected:', expectedSignature.substring(0, 16) + '...');
+      console.error('[Razorpay Webhook] Got:', signature.substring(0, 16) + '...');
       return fail('Invalid webhook signature', 400);
     }
 
     const payload = JSON.parse(rawBody || '{}') as Record<string, any>;
     const eventName = String(payload?.event || '').trim();
 
+    // Log parsed payload details
+    console.log('[Razorpay Webhook] Event name:', eventName);
+    console.log('[Razorpay Webhook] Payload ID:', payload?.id);
+    console.log('[Razorpay Webhook] Full payload:', JSON.stringify(payload, null, 2));
+
     if (!eventName) {
+      console.error('[Razorpay Webhook] ERROR: Missing event name in payload');
       return fail('Missing event name', 400);
     }
 
     if (!isHandledEvent(eventName)) {
+      console.log('[Razorpay Webhook] Ignored event type:', eventName);
       return ok({ message: `Event ignored: ${eventName}` });
     }
 
     const orderId = extractOrderId(payload);
     if (!orderId) {
+      console.error('[Razorpay Webhook] ERROR: Could not extract order ID from payload');
+      console.error('[Razorpay Webhook] Checked paths:');
+      console.error('  - payload.payload.payment.entity.order_id:', payload?.payload?.payment?.entity?.order_id);
+      console.error('  - payload.payload.order.entity.id:', payload?.payload?.order?.entity?.id);
       return fail('Missing Razorpay order id in webhook payload', 400);
     }
+
+    console.log('[Razorpay Webhook] Order ID extracted:', orderId);
 
     const paymentDocRef = adminDb.collection('subscriptionPayments').doc(orderId);
     const paymentDoc = await paymentDocRef.get();
 
     if (!paymentDoc.exists) {
+      console.error('[Razorpay Webhook] ERROR: Order not found in subscriptionPayments');
+      console.error('[Razorpay Webhook] Looking for order ID:', orderId);
       return fail('Order record not found', 404);
     }
 
@@ -89,24 +112,46 @@ export async function POST(req: NextRequest) {
     const planType = String(paymentData.planType || '').trim();
     const interval = String(paymentData.interval || '').trim();
 
+    console.log('[Razorpay Webhook] Order details:', {
+      orderId,
+      userId,
+      planType,
+      interval,
+      currentStatus: paymentData.status,
+      amount: paymentData.amount,
+    });
+
     if (!userId) {
+      console.error('[Razorpay Webhook] ERROR: Order missing user ID');
       return fail('Order missing user id', 400);
     }
 
     if (!isValidPaidPlan(planType) || !isValidInterval(interval)) {
+      console.error('[Razorpay Webhook] ERROR: Invalid plan details');
+      console.error('[Razorpay Webhook] Plan type:', planType, 'Valid:', isValidPaidPlan(planType));
+      console.error('[Razorpay Webhook] Interval:', interval, 'Valid:', isValidInterval(interval));
       return fail('Order has invalid plan details', 400);
     }
 
     const paymentStatus = extractPaymentStatus(payload);
     const paymentId = extractPaymentId(payload);
 
+    console.log('[Razorpay Webhook] Payment details extracted:', {
+      paymentId,
+      paymentStatus,
+      method: payload?.payload?.payment?.entity?.method,
+      email: payload?.payload?.payment?.entity?.email,
+    });
+
     if (paymentStatus !== 'captured' && paymentStatus !== 'authorized') {
+      console.log('[Razorpay Webhook] Payment not captured/authorized. Status:', paymentStatus);
       await paymentDocRef.update({
         status: paymentStatus || 'failed',
         razorpayPaymentId: paymentId || null,
         razorpayWebhookEvent: eventName,
         updatedAt: new Date().toISOString(),
       });
+      console.log('[Razorpay Webhook] Updated payment status to:', paymentStatus || 'failed');
       return ok({ message: `Payment status ${paymentStatus || 'unknown'} recorded` });
     }
 
@@ -121,10 +166,19 @@ export async function POST(req: NextRequest) {
     const discountAmount = Number(paymentData.discountAmount || 0);
     const finalAmount = Number(paymentData.amount || selectedPrice.amount);
 
+    console.log('[Razorpay Webhook] Pricing details:', {
+      selectedPrice,
+      appliedPromoCode,
+      discountPercent,
+      discountAmount,
+      finalAmount,
+    });
+
     const startDate = new Date();
     const endDate = getIntervalEndDate(interval, startDate);
 
     let subscription = await subscriptionService.findByUserId(userId);
+    console.log('[Razorpay Webhook] Existing subscription found:', !!subscription);
 
     const plan = {
       type: planType,
@@ -151,7 +205,14 @@ export async function POST(req: NextRequest) {
       source: 'webhook',
     };
 
+    console.log('[Razorpay Webhook] Creating billing entry:', {
+      invoiceId: billingEntry.invoiceId,
+      amount: billingEntry.amount,
+      currency: billingEntry.currency,
+    });
+
     if (!subscription) {
+      console.log('[Razorpay Webhook] Creating new subscription for user:', userId);
       subscription = await subscriptionService.create({
         user: userId,
         plan,
@@ -168,10 +229,14 @@ export async function POST(req: NextRequest) {
         promoCode: appliedPromoCode,
         billingHistory: [billingEntry],
       });
+      console.log('[Razorpay Webhook] New subscription created:', subscription?.id);
     } else {
+      console.log('[Razorpay Webhook] Updating existing subscription:', subscription.id);
       const hasThisPaymentInHistory = Array.isArray(subscription.billingHistory)
         ? subscription.billingHistory.some((entry: Record<string, any>) => entry?.razorpayOrderId === orderId)
         : false;
+
+      console.log('[Razorpay Webhook] Payment already in history:', hasThisPaymentInHistory);
 
       subscription = await subscriptionService.update(subscription.id, {
         plan,
@@ -192,8 +257,10 @@ export async function POST(req: NextRequest) {
           ? subscription.billingHistory || []
           : [...(subscription.billingHistory || []), billingEntry],
       });
+      console.log('[Razorpay Webhook] Subscription updated:', subscription?.id);
     }
 
+    console.log('[Razorpay Webhook] Updating user profile for:', userId);
     await userService.update(userId, {
       'subscription.type': planType,
       'subscription.isActive': true,
@@ -202,6 +269,7 @@ export async function POST(req: NextRequest) {
       'subscription.endDate': endDate.toISOString(),
     });
 
+    console.log('[Razorpay Webhook] Finalizing payment record:', orderId);
     await paymentDocRef.update({
       status: 'paid',
       razorpayPaymentId: paymentId || null,
@@ -211,8 +279,21 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     });
 
+    console.log('[Razorpay Webhook] SUCCESS: Webhook processed completely');
+    console.log('[Razorpay Webhook] Summary:', {
+      orderId,
+      paymentId,
+      userId,
+      subscriptionId: subscription?.id,
+      planType,
+      amount: finalAmount,
+      status: 'paid',
+    });
+
     return ok({ message: 'Webhook processed successfully', subscriptionId: subscription?.id || null });
   } catch (error: any) {
+    console.error('[Razorpay Webhook] FATAL ERROR:', error?.message);
+    console.error('[Razorpay Webhook] Stack:', error?.stack);
     return fail(error?.message || 'Failed to process Razorpay webhook', 500);
   }
 }

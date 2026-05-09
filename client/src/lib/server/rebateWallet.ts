@@ -138,7 +138,7 @@ export const awardReviewRebate = async (input: {
 
     const userData = userSnap.data() as AnyObject;
     const wallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
-    const rebate = calculateReviewRebate({
+    const ABJee = calculateReviewRebate({
       subscription: userData.subscription as AnyObject | undefined,
       text: input.reviewData.text,
       mediaCount: Array.isArray(input.reviewData.media) ? input.reviewData.media.length : 0,
@@ -146,17 +146,17 @@ export const awardReviewRebate = async (input: {
 
     transaction.set(reviewRef, {
       ...input.reviewData,
-      rebate,
+      ABJee,
       walletReward: {
-        points: rebate.totalPoints,
-        valueInRupees: rebate.totalPoints * REBATE_POINT_VALUE_IN_RUPEES,
+        points: ABJee.totalPoints,
+        valueInRupees: ABJee.totalPoints * REBATE_POINT_VALUE_IN_RUPEES,
         awardedAt: FieldValue.serverTimestamp(),
       },
     });
 
     const updatedWallet: WalletState = {
-      availablePoints: wallet.availablePoints + rebate.totalPoints,
-      lifetimeEarnedPoints: wallet.lifetimeEarnedPoints + rebate.totalPoints,
+      availablePoints: wallet.availablePoints + ABJee.totalPoints,
+      lifetimeEarnedPoints: wallet.lifetimeEarnedPoints + ABJee.totalPoints,
       lifetimeRedeemedPoints: wallet.lifetimeRedeemedPoints,
       lifetimeRedeemedRupees: wallet.lifetimeRedeemedRupees,
       monthly: wallet.monthly,
@@ -165,15 +165,15 @@ export const awardReviewRebate = async (input: {
 
     transaction.set(userRef, { wallet: updatedWallet, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
-    if (rebate.totalPoints > 0) {
+    if (ABJee.totalPoints > 0) {
       transaction.set(walletTransactionRef, {
         type: "review_rebate",
         placeId: input.placeId,
         reviewId: reviewRef.id,
-        points: rebate.totalPoints,
-        rupees: rebate.totalPoints * REBATE_POINT_VALUE_IN_RUPEES,
-        textPoints: rebate.textPoints,
-        mediaPoints: rebate.mediaPoints,
+        points: ABJee.totalPoints,
+        rupees: ABJee.totalPoints * REBATE_POINT_VALUE_IN_RUPEES,
+        textPoints: ABJee.textPoints,
+        mediaPoints: ABJee.mediaPoints,
         monthKey: wallet.monthly.monthKey,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -181,7 +181,7 @@ export const awardReviewRebate = async (input: {
 
     return {
       reviewId: reviewRef.id,
-      rebate,
+      ABJee,
       wallet: updatedWallet,
     };
   });
@@ -206,7 +206,7 @@ export const redeemWalletBalance = async (input: { userId: string; amount: numbe
     const redeemable = Math.min(requestedAmount, currentWallet.availablePoints, monthlyRemaining);
 
     if (redeemable <= 0) {
-      throw new Error("No rebate balance is available for redemption this month.");
+      throw new Error("No ABJee balance is available for redemption this month.");
     }
 
     const updatedWallet: WalletState = {

@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 const STATS_CACHE_KEY = "admin:stats";
 const STATS_REDIS_TTL = 300;   // 5 minutes
 const STATS_MEMORY_TTL = 120;  // 2 minutes
-const SOURCE_TIMEOUT_MS = 5000;
+const SOURCE_TIMEOUT_MS = 10000; // 10 seconds per Firestore/RTDB query
 
 type StatsData = {
   totalUsers: number;
@@ -111,7 +111,7 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
       withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get(), "status"),
       withTimeout(getAdminRtdb().ref("analytics/pageViews").get(), "pageViews"),
       withTimeout(
-        adminDb.collection("subscriptionPayments").orderBy("verifiedAt", "desc").limit(500).get(),
+        adminDb.collection("subscriptionPayments").limit(500).get(),
         "subscriptionPayments",
       ),
       withTimeout(adminDb.collection("subscriptions").limit(500).get(), "subscriptions"),
@@ -139,10 +139,10 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   let revenueMonthly = 0;
 
   const paidPaymentDocs =
-    (paidPaymentsSnapshot as any)?.docs.filter((doc: any) => {
+    ((paidPaymentsSnapshot as any)?.docs || []).filter((doc: any) => {
       const payment = doc.data() as Record<string, unknown>;
       return String(payment.status) === "paid";
-    }) || [];
+    });
 
   if (paidPaymentDocs.length > 0) {
     paidPaymentDocs.forEach((doc: any) => {
@@ -155,16 +155,15 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
             ? payment.amount
             : 0;
       revenueTotal += amount;
-      const verifiedAt = payment.verifiedAt;
-      const createdAtTs = payment.createdAt as { toDate?: () => Date } | null;
-      const createdAt = verifiedAt
-        ? new Date(verifiedAt as string)
-        : createdAtTs?.toDate?.()
-          ? createdAtTs.toDate()
-          : createdAtTs
-            ? new Date(createdAtTs as unknown as string)
-            : null;
-      if (createdAt && createdAt >= thisMonth) revenueMonthly += amount;
+      
+      // Get payment date from updatedAt field
+      const updatedAtStr = payment.updatedAt as string | undefined;
+      const createdAtStr = payment.createdAt as string | undefined;
+      const updatedDate = updatedAtStr ? new Date(updatedAtStr) : null;
+      const createdDate = createdAtStr ? new Date(createdAtStr) : null;
+      const paymentDate = updatedDate || createdDate;
+      
+      if (paymentDate && paymentDate >= thisMonth) revenueMonthly += amount;
     });
   } else {
     type SubDoc = { id: string } & Record<string, unknown>;

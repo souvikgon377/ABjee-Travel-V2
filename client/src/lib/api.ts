@@ -15,7 +15,7 @@ const api = axios.create({
 // Admin API instance with longer timeout for heavy queries
 const adminApiInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,
-  timeout: 60000, // 60 seconds for admin/stats which does multiple Firebase queries
+  timeout: 120000, // 120 seconds for admin endpoints with heavy Firestore queries
   headers: {
     'Content-Type': 'application/json',
   },

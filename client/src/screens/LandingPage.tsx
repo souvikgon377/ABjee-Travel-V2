@@ -17,6 +17,7 @@ const GradientTypewriter = dynamic(() => import('@/components/mvpblocks/gradient
 })
 const CardCarousel = dynamic(() => import('@/components/ui/card-carousel'), { ssr: false })
 const FeatureBlock3 = dynamic(() => import('@/components/mvpblocks/feature').then((mod) => mod.FeatureBlock3), { ssr: false })
+const ExploreInterests = dynamic(() => import('@/components/ui/explore-interests'), { ssr: false })
 const Faq3 = dynamic(() => import('@/components/mvpblocks/faq-3'), { ssr: false })
 const Footer4Col = dynamic(() => import('@/components/mvpblocks/footer-4col'), { ssr: false })
 const OfferSpotlightPopup = dynamic(() => import('@/components/ui/offer-spotlight-popup'), { ssr: false })
@@ -325,6 +326,7 @@ function LandingPage() {
         showNavigation={true}
       />
       <FeatureBlock3/>
+      <ExploreInterests />
       <Faq3/>
       <Footer4Col/>
 

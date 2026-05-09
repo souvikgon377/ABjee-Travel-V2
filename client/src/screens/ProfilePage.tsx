@@ -586,7 +586,7 @@ export default function ProfilePage() {
             <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                  Rebate Wallet
+                  ABJee Wallet
                 </h2>
                 <Wallet className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
               </div>
@@ -644,7 +644,7 @@ export default function ProfilePage() {
               {walletHistoryLoading ? (
                 <p className="text-sm text-muted-foreground">Loading wallet history...</p>
               ) : walletHistoryGroups.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No rebate activity yet.</p>
+                <p className="text-sm text-muted-foreground">No ABJee activity yet.</p>
               ) : (
                 <div className="space-y-4">
                   {walletHistoryGroups.map((group) => (
@@ -655,7 +655,7 @@ export default function ProfilePage() {
                           <div key={entry.id} className="flex items-start justify-between gap-3 rounded-md bg-muted/60 px-3 py-2 text-sm">
                             <div>
                               <p className="font-medium text-foreground">
-                                {entry.type === 'review_rebate' ? 'Review rebate' : entry.type === 'wallet_redemption' ? 'Wallet redemption' : 'Wallet activity'}
+                                {entry.type === 'review_rebate' ? 'Review ABJee' : entry.type === 'wallet_redemption' ? 'Wallet redemption' : 'Wallet activity'}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {entry.type === 'review_rebate'

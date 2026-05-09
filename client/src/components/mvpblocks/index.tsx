@@ -115,6 +115,7 @@ const TripStoriesAdminPanel = lazy(() => import('@/components/ui/trip-stories-ad
 const AdminTravelItenary = lazy(() => import('@/components/ui/travel-itenary'));
 const OffersManager = lazy(() => import('@/components/ui/offers-manager').then((module) => ({ default: module.OffersManager })));
 const BookingsOverview = lazy(() => import('@/components/ui/bookings-overview').then((module) => ({ default: module.BookingsOverview })));
+const ExploreInterests = lazy(() => import('@/components/ui/explore-interests'));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -281,6 +282,11 @@ export default function AdminDashboard() {
       window.removeEventListener('blur', updatePageActive);
     };
   }, []);
+
+  // Initial fetch on component mount
+  useEffect(() => {
+    void Promise.all([fetchStats(), fetchHomePageSetting()]);
+  }, [fetchStats, fetchHomePageSetting]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -462,6 +468,7 @@ export default function AdminDashboard() {
           { title: 'Offers', desc: 'Homepage campaigns and promotions', view: 'offers', icon: TicketPercent, tone: 'from-rose-500 to-orange-500' },
           { title: 'Trip Stories', desc: 'Review and curate user stories', view: 'trip-stories', icon: BookOpen, tone: 'from-fuchsia-500 to-pink-500' },
           { title: 'Tourist Places', desc: 'Manage destination directory', view: 'tourist-places', icon: MapPin, tone: 'from-emerald-500 to-teal-500' },
+          { title: 'Explore Maps', desc: 'View destination maps and locations', view: 'maps', icon: MapPin, tone: 'from-cyan-500 to-sky-500' },
           { title: 'Travel Itinerary', desc: 'Control itinerary content', view: 'travel-itinerary', icon: FileText, tone: 'from-sky-500 to-blue-500' },
           { title: 'Reviews & Comments', desc: 'Moderate platform feedback', view: 'place-feedback', icon: MessageSquare, tone: 'from-amber-500 to-orange-500' },
           { title: 'Analytics', desc: 'Growth, usage, and trends', view: 'analytics', icon: BarChart3, tone: 'from-purple-500 to-violet-500' },
@@ -924,6 +931,13 @@ export default function AdminDashboard() {
         return (
           <Suspense fallback={<SectionLoader />}>
             <TouristPlacesManager />
+          </Suspense>
+        );
+
+      case 'maps':
+        return (
+          <Suspense fallback={<SectionLoader />}>
+            <ExploreInterests showTitle={false} />
           </Suspense>
         );
 

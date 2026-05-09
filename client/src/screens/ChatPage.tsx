@@ -182,7 +182,10 @@ const PlaceCard: React.FC<{
     const placeLocation = [place.area, place.state, place.country]
       .filter(Boolean)
       .join(', ');
-    const targetUrl = place.googleMapsUrl || window.location.href;
+    // Share the in-app travel destination page so links open within ABjee Travel
+    const targetUrl = `${window.location.origin}/travel-destinations?place=${encodeURIComponent(
+      String(place.name || '')
+    )}${place.coverImage ? `&img=${encodeURIComponent(String(place.coverImage))}` : ''}`;
     const shareText = `Check out ${place.name}${placeLocation ? ` (${placeLocation})` : ''} on ABjee Travel. ${targetUrl}`;
 
     if (platform === 'facebook') {

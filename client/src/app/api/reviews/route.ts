@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     return ok({
       id: created.reviewId,
-      rebate: created.rebate,
+      ABJee: created.ABJee,
       wallet: created.wallet,
     });
   } catch (error) {
