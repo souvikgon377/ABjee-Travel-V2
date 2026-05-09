@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ABjee Travel logo">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e11d48" />
+      <stop offset="100%" stop-color="#fb7185" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#g)" />
+  <path d="M64 168l32-80h20l32 80h-18l-8-20H90l-8 20H64zm34-34h28l-14-36-14 36z" fill="#fff" />
+  <path d="M146 104h18v64h-18z" fill="#fff" />
+  <circle cx="170" cy="118" r="8" fill="#fff" />
+</svg>

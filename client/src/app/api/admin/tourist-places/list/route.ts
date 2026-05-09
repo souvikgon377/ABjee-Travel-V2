@@ -6,6 +6,40 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 export const runtime = 'nodejs';
 
+const toMillis = (value: unknown): number => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+    if (typeof candidate.toDate === 'function') return candidate.toDate().getTime();
+    if (typeof candidate.seconds === 'number') {
+      return (candidate.seconds * 1000) + Math.floor((candidate.nanoseconds || 0) / 1_000_000);
+    }
+  }
+  return 0;
+};
+
+const compareTouristPlaces = (left: any, right: any) => {
+  const leftPopularity = Number(left?.popularity ?? 0);
+  const rightPopularity = Number(right?.popularity ?? 0);
+  if (leftPopularity !== rightPopularity) {
+    return rightPopularity - leftPopularity;
+  }
+
+  const leftUpdatedAt = toMillis(left?.updatedAt ?? left?.createdAt);
+  const rightUpdatedAt = toMillis(right?.updatedAt ?? right?.createdAt);
+  if (leftUpdatedAt !== rightUpdatedAt) {
+    return rightUpdatedAt - leftUpdatedAt;
+  }
+
+  return String(left?.name || '').localeCompare(String(right?.name || ''));
+};
+
 /**
  * GET /api/admin/tourist-places/list
  * 
@@ -27,7 +61,9 @@ export async function GET(req: NextRequest) {
     if (searchParams.get('all') === 'true') {
       console.warn('[Admin:TouristPlaces:List] Returning ALL places for admin request (unpaginated).');
       const snap = await adminDb.collection('touristPlaces').get();
-      const rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      const rows = snap.docs
+        .map((d: any) => ({ id: d.id, ...d.data() }))
+        .sort(compareTouristPlaces);
 
       return ok({
         data: rows,

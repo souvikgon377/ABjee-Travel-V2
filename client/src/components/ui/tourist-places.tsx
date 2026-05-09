@@ -147,6 +147,42 @@ const TOURIST_PLACES_SEARCH_DEBOUNCE_MS = 450;
 const TOURIST_PLACES_SUMMARY_COLLECTION = 'tourPlaces_summary';
 const TOURIST_PLACES_SUMMARY_DOC = 'metadata';
 
+const toMillis = (value: unknown): number => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+    if (typeof candidate.toDate === 'function') return candidate.toDate().getTime();
+    if (typeof candidate.seconds === 'number') {
+      return (candidate.seconds * 1000) + Math.floor((candidate.nanoseconds || 0) / 1_000_000);
+    }
+  }
+  return 0;
+};
+
+const compareTouristPlaces = (left: TouristPlace, right: TouristPlace) => {
+  const leftPopularity = Number((left as Record<string, unknown>).popularity ?? 0);
+  const rightPopularity = Number((right as Record<string, unknown>).popularity ?? 0);
+  if (leftPopularity !== rightPopularity) {
+    return rightPopularity - leftPopularity;
+  }
+
+  const leftUpdatedAt = toMillis(left.updatedAt ?? left.createdAt);
+  const rightUpdatedAt = toMillis(right.updatedAt ?? right.createdAt);
+  if (leftUpdatedAt !== rightUpdatedAt) {
+    return rightUpdatedAt - leftUpdatedAt;
+  }
+
+  return String(left.name || '').localeCompare(String(right.name || ''));
+};
+
+const sortTouristPlaces = (items: TouristPlace[]) => [...items].sort(compareTouristPlaces);
+
 // ─── Video upload (R2 S3-compatible API) ───────────────────────────────────
 async function uploadVideoToR2(file: File): Promise<MediaItem> {
   const formData = new FormData();
@@ -823,7 +859,7 @@ export function TouristPlacesManager() {
     updates.forEach((place) => {
       if (place.id) byId.set(place.id, place);
     });
-    return Array.from(byId.values());
+    return sortTouristPlaces(Array.from(byId.values()));
   }, []);
 
   const fetchSummary = useCallback(async () => {
@@ -896,7 +932,7 @@ export function TouristPlacesManager() {
             .filter((item: TouristPlace | null): item is TouristPlace => item !== null)
         : [];
 
-      setPlaces((prev) => (reset ? incoming : mergePlaces(prev, incoming)));
+      setPlaces((prev) => (reset ? sortTouristPlaces(incoming) : mergePlaces(prev, incoming)));
       lastDocRef.current = nextPage;
       setHasMore(Boolean(data.hasMore));
       setLastFetchMs(Date.now());
@@ -1661,7 +1697,7 @@ export function TouristPlacesManager() {
         const nextPlaces = editingId
           ? prev.map((place) => (place.id === editingId ? { ...place, ...cachePayload } : place))
           : [{ id: createdId ?? '', ...cachePayload, createdAt: nowIso }, ...prev];
-        return nextPlaces;
+        return sortTouristPlaces(nextPlaces);
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save.';
@@ -1692,10 +1728,7 @@ export function TouristPlacesManager() {
         });
       }
       flash('Place deleted.', 'success');
-      setPlaces((prev) => {
-        const nextPlaces = prev.filter((place) => place.id !== id);
-        return nextPlaces;
-      });
+      setPlaces((prev) => sortTouristPlaces(prev.filter((place) => place.id !== id)));
     } catch {
       flash('Failed to delete.', 'error');
     }
@@ -1851,6 +1884,7 @@ export function TouristPlacesManager() {
 
       setImportFile(null);
       await fetchPlaces({ reset: true });
+      setPlaces((prev) => sortTouristPlaces(prev));
     } catch (err: unknown) {
       setImportError(err instanceof Error ? err.message : 'Import failed.');
     } finally {

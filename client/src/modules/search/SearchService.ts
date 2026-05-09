@@ -155,9 +155,9 @@ export class SearchService {
     const tStart = Date.now();
     const query = options.query || '';
     const limit = Math.max(1, Math.min(100, options.limit || 10));
-    const queryLower = String(query || '').toLowerCase().trim();
+    const searchText = [query, options.location].filter(Boolean).join(' ').toLowerCase().trim();
 
-    console.log(`[SearchService] Falling back to Firestore snapshot for: "${query}"`);
+    console.log(`[SearchService] Falling back to Firestore snapshot for: "${searchText || query}"`);
 
     try {
       const page = Math.max(1, options.page || 1);
@@ -171,7 +171,7 @@ export class SearchService {
         if (options.isActive === undefined && !isActive) return false;
         if (options.category && options.category !== 'all' && doc.category !== options.category) return false;
 
-        if (!queryLower) return true;
+        if (!searchText) return true;
 
         const fields = [
           doc.name,
@@ -190,7 +190,10 @@ export class SearchService {
           doc.searchCountry,
         ];
 
-        return fields.some((value) => String(value || '').toLowerCase().includes(queryLower));
+        const haystack = fields.map((value) => String(value || '').toLowerCase());
+        const tokens = searchText.split(/\s+/).filter(Boolean);
+        if (haystack.some((value) => value.includes(searchText))) return true;
+        return tokens.length > 0 && tokens.every((token) => haystack.some((value) => value.includes(token)));
       });
 
       const startIdx = (page - 1) * limit;
@@ -213,13 +216,14 @@ export class SearchService {
       try {
         const page = Math.max(1, options.page || 1);
         const fetchLimit = Math.min(20, Math.max(limit, page * limit));
+        const prefixQuery = searchText;
 
         const runPrefixQuery = async (field: 'name_lower' | 'location_search') => {
           const snap = await adminDb
             .collection('touristPlaces')
             .orderBy(field as any)
-            .startAt(queryLower)
-            .endAt(`${queryLower}\uf8ff`) // Unicode trick for prefix match
+            .startAt(prefixQuery)
+            .endAt(`${prefixQuery}\uf8ff`) // Unicode trick for prefix match
             .limit(fetchLimit)
             .get();
 
@@ -227,7 +231,7 @@ export class SearchService {
         };
 
         let candidates: any[] = [];
-        if (queryLower) {
+        if (prefixQuery) {
           const [nameMatches, locationMatches] = await Promise.all([
             runPrefixQuery('name_lower'),
             runPrefixQuery('location_search'),
