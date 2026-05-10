@@ -183,6 +183,126 @@ const compareTouristPlaces = (left: TouristPlace, right: TouristPlace) => {
 
 const sortTouristPlaces = (items: TouristPlace[]) => [...items].sort(compareTouristPlaces);
 
+const buildGoogleMapsPreviewUrl = (input: string): string | null => {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try {
+    const url = new URL(withProtocol);
+    const host = url.hostname.toLowerCase();
+    let query = '';
+
+    if (host.includes('google.') || host.includes('goo.gl')) {
+      query = decodeURIComponent(url.searchParams.get('q') || url.searchParams.get('query') || '').trim();
+
+      if (!query) {
+        const placeMatch = url.pathname.match(/\/maps\/place\/([^/]+)/i);
+        if (placeMatch?.[1]) {
+          query = decodeURIComponent(placeMatch[1]).replace(/\+/g, ' ').trim();
+        }
+      }
+
+      if (!query) {
+        const coordsMatch = url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+        if (coordsMatch) {
+          query = `${coordsMatch[1]},${coordsMatch[2]}`;
+        }
+      }
+    }
+
+    if (!query) query = raw;
+
+    return `https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+  } catch {
+    // Graceful fallback: attempt embed search even for non-URL free text.
+    return `https://www.google.com/maps?q=${encodeURIComponent(raw)}&output=embed`;
+  }
+};
+
+const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov|m4v|avi|mkv)(\?|#|$)/i.test(url);
+
+const inferMediaType = (rawType: unknown, url: string, thumbnail: unknown): 'image' | 'video' => {
+  const nextType = String(rawType || '').trim().toLowerCase();
+  if (nextType === 'image' || nextType === 'photo') return 'image';
+  if (nextType === 'video') return 'video';
+  if (isVideoUrl(url)) return 'video';
+  if (typeof thumbnail === 'string' && thumbnail.trim()) return 'video';
+  return 'image';
+};
+
+const normalizeMediaItems = (
+  rawMedia: unknown,
+  coverImage: string,
+  rawPhotos: unknown,
+  rawVideos: unknown,
+): MediaItem[] => {
+  const items: MediaItem[] = [];
+  const seen = new Set<string>();
+
+  const pushItem = (urlInput: unknown, candidate: Record<string, unknown> = {}, forcedType?: 'image' | 'video') => {
+    const url = String(urlInput || '').trim();
+    if (!url) return;
+
+    const thumbnail = String(candidate.thumbnail || candidate.thumb || candidate.poster || '').trim();
+    const type = forcedType || inferMediaType(candidate.type || candidate.mediaType || candidate.kind, url, thumbnail);
+    const key = `${type}:${url}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    items.push({
+      url,
+      publicId: String(candidate.publicId || candidate.key || candidate.id || url).trim(),
+      type,
+      ...(thumbnail ? { thumbnail } : {}),
+      ...(typeof candidate.caption === 'string' && candidate.caption.trim() ? { caption: candidate.caption.trim() } : {}),
+    });
+  };
+
+  if (Array.isArray(rawMedia)) {
+    rawMedia.forEach((entry) => {
+      if (typeof entry === 'string') {
+        pushItem(entry);
+        return;
+      }
+      if (!entry || typeof entry !== 'object') return;
+      const candidate = entry as Record<string, unknown>;
+      pushItem(candidate.url || candidate.src || candidate.secure_url || candidate.file || candidate.path, candidate);
+    });
+  }
+
+  if (Array.isArray(rawPhotos)) {
+    rawPhotos.forEach((entry) => {
+      if (typeof entry === 'string') {
+        pushItem(entry, {}, 'image');
+        return;
+      }
+      if (!entry || typeof entry !== 'object') return;
+      const candidate = entry as Record<string, unknown>;
+      pushItem(candidate.url || candidate.src || candidate.secure_url || candidate.file || candidate.path, candidate, 'image');
+    });
+  }
+
+  if (Array.isArray(rawVideos)) {
+    rawVideos.forEach((entry) => {
+      if (typeof entry === 'string') {
+        pushItem(entry, {}, 'video');
+        return;
+      }
+      if (!entry || typeof entry !== 'object') return;
+      const candidate = entry as Record<string, unknown>;
+      pushItem(candidate.url || candidate.src || candidate.secure_url || candidate.file || candidate.path, candidate, 'video');
+    });
+  }
+
+  if (coverImage) {
+    pushItem(coverImage, {}, 'image');
+  }
+
+  return items;
+};
+
 // ─── Video upload (R2 S3-compatible API) ───────────────────────────────────
 async function uploadVideoToR2(file: File): Promise<MediaItem> {
   const formData = new FormData();
@@ -832,6 +952,9 @@ export function TouristPlacesManager() {
     const id = typeof raw.id === 'string' ? raw.id : undefined;
     if (!id) return null;
 
+    const coverImage = String(raw.coverImage || '');
+    const media = normalizeMediaItems(raw.media, coverImage, raw.photos, raw.videos);
+
     return {
       id,
       name: String(raw.name || ''),
@@ -843,8 +966,8 @@ export function TouristPlacesManager() {
       category: String(raw.category || 'Other'),
       isActive: raw.isActive !== false,
       googleMapsUrl: String(raw.googleMapsUrl || ''),
-      coverImage: String(raw.coverImage || ''),
-      media: Array.isArray(raw.media) ? (raw.media as MediaItem[]) : [],
+      coverImage,
+      media,
       extraInfo: Array.isArray(raw.extraInfo) ? (raw.extraInfo as InfoSection[]) : [],
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
@@ -1014,26 +1137,41 @@ export function TouristPlacesManager() {
       return;
     }
 
+    // Fetch full place data from API to ensure media and extraInfo are complete
+    // (Search results may not include all nested data)
+    let fullPlace = place;
+    try {
+      const response = await adminAPI.getTouristPlace(placeId);
+      const fetchedPlace = response.data?.data?.data ?? response.data?.data;
+      const normalizedFetchedPlace = normalizeTouristPlaceRow({ id: placeId, ...(fetchedPlace || {}) });
+      if (normalizedFetchedPlace) {
+        fullPlace = normalizedFetchedPlace;
+      }
+    } catch (err) {
+      // If fetch fails, use the data from the list view
+      console.warn('Could not fetch full place data, using list data:', err);
+    }
+
     setForm({
-      name: place.name,
-      area: place.area || '',
-      city: place.city || place.area || '',
-      state: place.state,
-      country: place.country,
-      description: place.description,
-      category: place.category,
-      isActive: place.isActive ?? true,
-      googleMapsUrl: place.googleMapsUrl || '',
-      coverImage: place.coverImage || '',
-      media: place.media || [],
-      extraInfo: (place.extraInfo || []).map((s) => ({
+      name: fullPlace.name,
+      area: fullPlace.area || '',
+      city: fullPlace.city || fullPlace.area || '',
+      state: fullPlace.state,
+      country: fullPlace.country,
+      description: fullPlace.description,
+      category: fullPlace.category,
+      isActive: fullPlace.isActive ?? true,
+      googleMapsUrl: fullPlace.googleMapsUrl || '',
+      coverImage: fullPlace.coverImage || '',
+      media: Array.isArray(fullPlace.media) ? fullPlace.media : [],
+      extraInfo: (Array.isArray(fullPlace.extraInfo) ? fullPlace.extraInfo : []).map((s: any) => ({
         ...s,
         id: s.id || `${Date.now()}-${Math.random()}`,
       })),
     });
     setPendingFiles([]);
-    setEditingId(place.id || null);
-    setEditingCategory(place.category);
+    setEditingId(fullPlace.id || null);
+    setEditingCategory(fullPlace.category);
     setShowForm(true);
   };
 
@@ -1974,6 +2112,7 @@ export function TouristPlacesManager() {
 
   const formImages = form.media.filter((m) => m.type === 'image');
   const formVideos = form.media.filter((m) => m.type === 'video');
+  const googleMapsPreviewUrl = buildGoogleMapsPreviewUrl(form.googleMapsUrl);
   const pendingImages = pendingFiles.filter((p) => p.type === 'image');
   const pendingVideos = pendingFiles.filter((p) => p.type === 'video');
 
@@ -2360,6 +2499,27 @@ export function TouristPlacesManager() {
                   value={form.googleMapsUrl}
                   onChange={(e) => setForm({ ...form, googleMapsUrl: e.target.value })} />
                 <p className="text-xs text-muted-foreground">Paste the full Google Maps share URL</p>
+                {googleMapsPreviewUrl && (
+                  <div className="mt-3 rounded-xl border border-border overflow-hidden bg-muted/30">
+                    <iframe
+                      title="Google Maps Preview"
+                      src={googleMapsPreviewUrl}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      className="w-full h-64"
+                    />
+                    <div className="px-3 py-2 border-t border-border bg-background/80">
+                      <a
+                        href={form.googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700"
+                      >
+                        <MapIcon className="h-3.5 w-3.5" /> Open in Google Maps
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

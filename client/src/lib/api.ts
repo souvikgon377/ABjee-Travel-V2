@@ -147,8 +147,8 @@ export const subscriptionsAPI = {
 // Admin API
 export const adminAPI = {
   getStats: () => adminApiInstance.get('/admin/stats'),
-  getSettings: () => api.get('/admin/settings'),
-  updateSettings: (data: any) => api.put('/admin/settings', data),
+  getSettings: () => adminApiInstance.get('/admin/settings'),
+  updateSettings: (data: any) => adminApiInstance.put('/admin/settings', data),
   getPlaces: (params?: {
     search?: string;
     location?: string;
@@ -178,7 +178,8 @@ export const adminAPI = {
     media?: unknown[];
     extraInfo?: unknown[];
     isActive?: boolean;
-  }) => api.post('/admin/tourist-places/create', data),
+  }) => adminApiInstance.post('/admin/tourist-places/create', data),
+  getTouristPlace: (id: string) => adminApiInstance.get(`/admin/tourist-places/${id}`),
   updateTouristPlace: (id: string, data: {
     name: string;
     area?: string;
@@ -192,8 +193,8 @@ export const adminAPI = {
     media?: unknown[];
     extraInfo?: unknown[];
     isActive?: boolean;
-  }) => api.put('/admin/tourist-places', data, { params: { id } }),
-  deleteTouristPlace: (id: string) => api.delete('/admin/tourist-places', { params: { id } }),
+  }) => adminApiInstance.put('/admin/tourist-places', data, { params: { id } }),
+  deleteTouristPlace: (id: string) => adminApiInstance.delete('/admin/tourist-places', { params: { id } }),
   getTravelItineraryList: (params?: {
     search?: string;
     country?: string;
@@ -202,18 +203,18 @@ export const adminAPI = {
     forceRefresh?: boolean;
   }) => adminApiInstance.get('/admin/travel-itineraries/list', { params }),
   getUsers: (params?: any) => adminApiInstance.get('/admin/users', { params }),
-  getUser: (userId: string) => api.get(`/admin/users/${userId}`),
-  createUser: (data: any) => api.post('/admin/users', data),
-  updateUser: (userId: string, data: any) => api.put(`/admin/users/${userId}`, data),
-  deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
-  getUserActivity: (userId: string) => api.get(`/admin/users/${userId}/activity`),
+  getUser: (userId: string) => adminApiInstance.get(`/admin/users/${userId}`),
+  createUser: (data: any) => adminApiInstance.post('/admin/users', data),
+  updateUser: (userId: string, data: any) => adminApiInstance.put(`/admin/users/${userId}`, data),
+  deleteUser: (userId: string) => adminApiInstance.delete(`/admin/users/${userId}`),
+  getUserActivity: (userId: string) => adminApiInstance.get(`/admin/users/${userId}/activity`),
   getSubscriptions: (params?: any) => adminApiInstance.get('/admin/subscriptions', { params }),
   getActivity: (params?: any) => adminApiInstance.get('/admin/activity', { params }),
   getRevenue: (params?: any) => adminApiInstance.get('/admin/revenue', { params }),
-  getSystemStatus: () => api.get('/admin/system-status'),
-  getRedisHealth: () => api.get('/admin/redis-health'),
-  getActivityOverview: () => api.get('/admin/activity/overview'),
-  getQuotaTelemetry: () => api.get('/admin/quota-telemetry'),
+  getSystemStatus: () => adminApiInstance.get('/admin/system-status'),
+  getRedisHealth: () => adminApiInstance.get('/admin/redis-health'),
+  getActivityOverview: () => adminApiInstance.get('/admin/activity/overview'),
+  getQuotaTelemetry: () => adminApiInstance.get('/admin/quota-telemetry'),
   exportSectionChunk: (params: {
     section: string;
     limit?: number;
@@ -224,18 +225,18 @@ export const adminAPI = {
     country?: string;
     place?: string;
     type?: 'all' | 'review' | 'comment';
-  }) => api.get('/admin/export', { params }),
+  }) => adminApiInstance.get('/admin/export', { params }),
   // Chat Communities
-  getChatRooms: (params?: any) => api.get('/admin/chatrooms', { params }),
-  getChatRoom: (roomId: string) => api.get(`/admin/chatrooms/${roomId}`),
-  createChatRoom: (data: any) => api.post('/admin/chatrooms', data),
-  updateChatRoom: (roomId: string, data: any) => api.put(`/admin/chatrooms/${roomId}`, data),
-  deleteChatRoom: (roomId: string) => api.delete(`/admin/chatrooms/${roomId}`),
-  getRoomMembers: (roomId: string) => api.get(`/admin/chatrooms/${roomId}/members`),
-  startTourPlaceSearchMigration: () => api.post('/admin/tour-places/migration/start'),
-  getTourPlaceSearchMigrationStatus: (jobId: string) => api.get('/admin/tour-places/migration/status', { params: { jobId } }),
+  getChatRooms: (params?: any) => adminApiInstance.get('/admin/chatrooms', { params }),
+  getChatRoom: (roomId: string) => adminApiInstance.get(`/admin/chatrooms/${roomId}`),
+  createChatRoom: (data: any) => adminApiInstance.post('/admin/chatrooms', data),
+  updateChatRoom: (roomId: string, data: any) => adminApiInstance.put(`/admin/chatrooms/${roomId}`, data),
+  deleteChatRoom: (roomId: string) => adminApiInstance.delete(`/admin/chatrooms/${roomId}`),
+  getRoomMembers: (roomId: string) => adminApiInstance.get(`/admin/chatrooms/${roomId}/members`),
+  startTourPlaceSearchMigration: () => adminApiInstance.post('/admin/tour-places/migration/start'),
+  getTourPlaceSearchMigrationStatus: (jobId: string) => adminApiInstance.get('/admin/tour-places/migration/status', { params: { jobId } }),
   refreshCache: (scope: string = 'all', rewarm: boolean = true) => adminApiInstance.post('/admin/refresh-cache', { scope, rewarm }),
-  getSearchHealth: () => api.get('/admin/search-health'),
+  getSearchHealth: () => adminApiInstance.get('/admin/search-health'),
 };
 
 export default api;
