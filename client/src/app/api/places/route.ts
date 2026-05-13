@@ -22,8 +22,7 @@ export async function GET(req: NextRequest) {
     const result = await SearchService.searchPlaces({
       query: search,
       location,
-      filter,
-      category,
+      category: filter !== 'all' ? filter : category,
       page,
       limit,
       isActive: true // Public API only shows active places

@@ -23,7 +23,12 @@ export async function POST(req: NextRequest) {
     const roomRef = getAdminRtdb().ref(`chatrooms/${roomId}`);
     const roomSnapshot = await roomRef.get();
 
-    if (!roomSnapshot.exists()) {
+    if (!roomSnapshot) {
+      return fail("Community not found", 404);
+    }
+
+    const roomExists = typeof roomSnapshot.exists === 'function' ? roomSnapshot.exists() : roomSnapshot.exists;
+    if (!roomExists) {
       return fail("Community not found", 404);
     }
 
@@ -50,7 +55,13 @@ export async function POST(req: NextRequest) {
 
     const messageRef = getAdminRtdb().ref(`chatrooms/${roomId}/messages/${messageId}`);
     const messageSnapshot = await messageRef.get();
-    if (!messageSnapshot.exists()) {
+    
+    if (!messageSnapshot) {
+      return fail("Message not found", 404);
+    }
+
+    const messageExists = typeof messageSnapshot.exists === 'function' ? messageSnapshot.exists() : messageSnapshot.exists;
+    if (!messageExists) {
       return fail("Message not found", 404);
     }
 

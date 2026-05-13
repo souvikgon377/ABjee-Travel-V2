@@ -40,7 +40,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ notifi
       const roomRef = getAdminRtdb().ref(`chatrooms/${roomId}`);
       const roomSnapshot = await roomRef.get();
 
-      if (!roomSnapshot.exists()) {
+      if (!roomSnapshot) {
+        return fail('Community not found', 404);
+      }
+
+      const roomExists = typeof roomSnapshot.exists === 'function' ? roomSnapshot.exists() : roomSnapshot.exists;
+      if (!roomExists) {
         return fail('Community not found', 404);
       }
 

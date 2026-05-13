@@ -28,7 +28,7 @@ import {
   UserCircle2,
   MapPin,
 } from 'lucide-react';
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { database } from '@/lib/firebase';

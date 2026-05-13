@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { uploadImageToR2 } from '@/lib/r2Upload';
 import {
@@ -26,6 +26,8 @@ import { Label } from '@/components/ui/label';
 import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
+import useRealtimeCollection from '@/hooks/useRealtimeCollection';
+import { limit, orderBy, where } from 'firebase/firestore';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -166,8 +168,10 @@ const toMillis = (value: unknown): number => {
 };
 
 const compareTouristPlaces = (left: TouristPlace, right: TouristPlace) => {
-  const leftPopularity = Number((left as Record<string, unknown>).popularity ?? 0);
-  const rightPopularity = Number((right as Record<string, unknown>).popularity ?? 0);
+  const leftRecord = left as unknown as Record<string, unknown>;
+  const rightRecord = right as unknown as Record<string, unknown>;
+  const leftPopularity = Number(leftRecord.popularity ?? 0);
+  const rightPopularity = Number(rightRecord.popularity ?? 0);
   if (leftPopularity !== rightPopularity) {
     return rightPopularity - leftPopularity;
   }
@@ -879,6 +883,24 @@ export function TouristPlacesManager() {
     underline: false,
   });
 
+  const isDefaultBrowsingState = !searchInput.trim() && !cityInput.trim() && statusInput === 'all' && !showForm && !editingId;
+
+  const liveTouristPlacesConstraints = useMemo(
+    () => [where('isActive', '==', true), limit(TOURIST_PLACES_PAGE_SIZE)],
+    []
+  );
+
+  const { data: liveTouristPlaces, loading: liveTouristPlacesLoading, error: liveTouristPlacesError } = useRealtimeCollection<TouristPlace>({
+    collectionPath: 'touristPlaces',
+    constraints: liveTouristPlacesConstraints,
+    queryKey: 'touristPlaces:active:first-page',
+    enabled: isDefaultBrowsingState,
+    mapDoc: (doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<TouristPlace, 'id'>),
+    }),
+  });
+
   const buildFilterCacheKey = useCallback((filters: TouristPlacesFilters) => {
     return `${TOURIST_PLACES_CACHE_KEY}:${filters.search.trim().toLowerCase()}:${filters.location.trim().toLowerCase()}:${filters.status}`;
   }, []);
@@ -999,6 +1021,24 @@ export function TouristPlacesManager() {
       // Summary is optional and should not block list operations.
     }
   }, []);
+
+  useEffect(() => {
+    if (!isDefaultBrowsingState) return;
+
+    if (liveTouristPlacesError && process.env.NODE_ENV === 'development') {
+      console.warn('[TouristPlaces] realtime listener paused:', liveTouristPlacesError);
+    }
+
+    if (liveTouristPlacesLoading) return;
+
+    setPlaces((current) => {
+      const next = sortTouristPlaces(liveTouristPlaces);
+      if (current.length === next.length && current.every((place, index) => place.id === next[index]?.id)) {
+        return current;
+      }
+      return next;
+    });
+  }, [isDefaultBrowsingState, liveTouristPlaces, liveTouristPlacesError, liveTouristPlacesLoading]);
 
   const updateSummary = useCallback(async (delta: { total?: number; categoryDelta?: Record<string, number> }) => {
     setSummary((current) => ({
@@ -1131,6 +1171,11 @@ export function TouristPlacesManager() {
   };
 
   const handleEdit = async (placeId: string) => {
+    if (!placeId || !placeId.trim()) {
+      flash('Cannot edit this place because the record id is missing.', 'error');
+      return;
+    }
+
     const place = places.find((item) => item.id === placeId);
     if (!place) {
       flash('Tourist place no longer exists in the current list.', 'error');

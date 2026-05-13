@@ -1,10 +1,6 @@
-import { adminDb, FieldValue, Timestamp } from '@/lib/server/firebaseAdminFirestore';
+import { adminDb, FieldValue } from '@/lib/server/firebaseAdminFirestore';
 import { 
-  CollectionReference, 
-  Query, 
-  DocumentSnapshot, 
-  QuerySnapshot,
-  DocumentData,
+  Query,
   WhereFilterOp,
   OrderByDirection
 } from 'firebase-admin/firestore';

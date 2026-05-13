@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getRedis, safeRedisCall } from '@/lib/server/redis';
+import { safeRedisCall } from '@/lib/server/redis';
 import { authenticateRequest } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
 import { FirestoreService } from '@/modules/database/FirestoreService';
@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
           const rows = typeof cached === 'string' ? JSON.parse(cached) : cached;
           await MetricsService.increment('redis_hit_count');
           return ok({ rows, cacheStatus: 'hit', hasMore: rows.length >= limit });
-        } catch (e) {}
+        } catch {
+          // If parsing fails, treat it as a miss and continue to Firestore
+        }
       }
       await MetricsService.increment('redis_miss_count');
     }

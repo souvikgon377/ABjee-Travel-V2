@@ -1,5 +1,4 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
-import { FirestoreService } from '../database/FirestoreService';
 import { SearchService } from '../search/SearchService';
 import { CacheService } from '../cache/CacheService';
 import { QueueService } from '../queue/QueueService';
@@ -39,12 +38,14 @@ export class TouristPlaceService {
 
     // Queue Sync Job
     await QueueService.push({
-      type: 'sync_place',
-      payload: { id, ...data }
+      type: 'SYNC',
+      collection: 'touristPlaces',
+      id,
+      data: { id, ...data }
     });
 
-    // Immediate Sync (Best effort)
-    await SearchService.syncPlace({ id, ...data });
+    // Invalidate search cache (v2 pattern)
+    await SearchService.invalidateSearchCache('place-updated');
   }
 
   /**
@@ -60,8 +61,8 @@ export class TouristPlaceService {
 
     const newPlace = { id: ref.id, ...data };
     
-    // Sync to search
-    await SearchService.syncPlace(newPlace);
+    // Invalidate search cache post-mutation (v2 pattern)
+    await SearchService.invalidateSearchCache('place-created');
     
     return newPlace;
   }

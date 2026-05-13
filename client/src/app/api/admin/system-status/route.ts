@@ -112,7 +112,7 @@ async function buildSystemStatus() {
       // Super lightweight check: just verify the RTDB instance exists and responds
       // Don't try to read data due to security rules and network latency on serverless
       await withTimeout(
-        rtdb.ref(".info/connected").once("value"),
+        rtdb.ref(".info/connected").once("value") as any,
         "rtdb:connected"
       );
 

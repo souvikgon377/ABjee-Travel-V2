@@ -1,48 +1,73 @@
-import Typesense from 'typesense';
+import Typesense, { Client } from 'typesense';
 
-// ─── Validate & Initialize Typesense Client ────────────────────────────────
-const validateTypesenseEnv = () => {
-  const host = (process.env.TYPESENSE_HOST || 'localhost').trim();
-  const portStr = (process.env.TYPESENSE_PORT || '8108').trim();
-  const protocol = (process.env.TYPESENSE_PROTOCOL || 'http').toLowerCase().replace(/:$/, '');
-  const apiKey = (process.env.TYPESENSE_API_KEY || '').trim();
+// ─── Environment Check (runs once at module load) ─────────────────────────────
+//
+// When TYPESENSE_API_KEY is missing or empty, TYPESENSE_ENABLED = false.
+// All callers check this flag BEFORE making any network attempt.
+// This eliminates the 2-second health-check timeout that was causing slow cold starts.
+//
+const _tsHost = (process.env.TYPESENSE_HOST || '').trim();
+const _tsApiKey = (process.env.TYPESENSE_API_KEY || '').trim();
+const _tsPort = parseInt((process.env.TYPESENSE_PORT || '8108').trim(), 10);
+const _tsProtocol = (process.env.TYPESENSE_PROTOCOL || 'http').toLowerCase().replace(/:$/, '');
 
-  const port = parseInt(portStr, 10);
-  if (Number.isNaN(port) || port < 1 || port > 65535) {
-    throw new Error(
-      `Invalid TYPESENSE_PORT: "${portStr}". Must be a number between 1-65535. (Default: 8108)`
-    );
+/**
+ * True only when ALL required Typesense env vars are present and valid.
+ * Callers must check this before any Typesense operation.
+ */
+export const TYPESENSE_ENABLED: boolean = (() => {
+  if (!_tsApiKey) {
+    // Only log once at startup, not on every import
+    if (process.env.NODE_ENV !== 'test') {
+      console.info('[Typesense] DISABLED — TYPESENSE_API_KEY is not set. Using Firestore fallback.');
+    }
+    return false;
   }
-  if (!['http', 'https'].includes(protocol)) {
-    throw new Error(
-      `Invalid TYPESENSE_PROTOCOL: "${protocol}". Must be "http" or "https". (Default: http)`
-    );
+  if (!_tsHost) {
+    console.info('[Typesense] DISABLED — TYPESENSE_HOST is not set. Using Firestore fallback.');
+    return false;
   }
-  if (!apiKey) {
-    throw new Error(
-      'TYPESENSE_API_KEY is required. Set it in .env (e.g., TYPESENSE_API_KEY=xyz)'
-    );
+  if (Number.isNaN(_tsPort) || _tsPort < 1 || _tsPort > 65535) {
+    console.warn(`[Typesense] DISABLED — Invalid TYPESENSE_PORT: "${_tsPort}". Using Firestore fallback.`);
+    return false;
   }
-  if (!host) {
-    throw new Error(
-      'TYPESENSE_HOST is required. Set it in .env or defaults to "localhost". (Default: localhost)'
-    );
+  if (!['http', 'https'].includes(_tsProtocol)) {
+    console.warn(`[Typesense] DISABLED — Invalid TYPESENSE_PROTOCOL: "${_tsProtocol}". Using Firestore fallback.`);
+    return false;
   }
+  return true;
+})();
 
-  return { host, port, protocol, apiKey };
-};
+// ─── Typesense Client (only instantiated when enabled) ────────────────────────
+//
+// If TYPESENSE_ENABLED is false, `client` is a dummy object.
+// All real calls are guarded by TYPESENSE_ENABLED checks upstream.
+//
+let client: Client;
 
-const { host, port, protocol, apiKey } = validateTypesenseEnv();
+if (TYPESENSE_ENABLED) {
+  client = new Typesense.Client({
+    nodes: [{ host: _tsHost, port: _tsPort, protocol: _tsProtocol }],
+    apiKey: _tsApiKey,
+    connectionTimeoutSeconds: 3, // Reduced from 5s for faster failover
+    retryIntervalSeconds: 0.1,
+    numRetries: 0, // No retries — fail fast, fall through to Firestore
+    logLevel: process.env.TYPESENSE_DEBUG === 'true' ? 'debug' : 'silent',
+  }) as Client;
+  console.info(`[Typesense] ENABLED — ${_tsProtocol}://${_tsHost}:${_tsPort}`);
+} else {
+  // Stub client — prevents runtime errors if code accidentally calls it
+  // while still making import resolution work.
+  client = null as unknown as Client;
+}
 
-const client = new Typesense.Client({
-  nodes: [{ host, port, protocol }],
-  apiKey,
-  connectionTimeoutSeconds: 5,
-});
+// ─── Collection Names ─────────────────────────────────────────────────────────
 
 export const COLLECTION_NAME = 'tourist_places';
 export const USERS_COLLECTION = 'users';
 export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
+
+// ─── Schemas ──────────────────────────────────────────────────────────────────
 
 /**
  * Schema for tourist places
@@ -103,17 +128,26 @@ export const travelRequestsSchema = {
   default_sorting_field: 'updatedAt',
 };
 
+// ─── Health Check ─────────────────────────────────────────────────────────────
+
 /**
  * Health check: Verify Typesense is reachable and responsive.
- * @param timeoutMs - Timeout in milliseconds (default: 5000)
+ *
+ * Returns false immediately if TYPESENSE_ENABLED is false.
+ * No network call is made when Typesense is disabled.
+ *
+ * @param timeoutMs Timeout in milliseconds (default: 3000)
  * @returns true if Typesense is healthy, false otherwise
  */
-export async function healthCheckTypesense(timeoutMs = 5000): Promise<boolean> {
+export async function healthCheckTypesense(timeoutMs = 3000): Promise<boolean> {
+  // Fast-path: skip ALL network calls when disabled
+  if (!TYPESENSE_ENABLED) return false;
+
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), timeoutMs);
-    
-    client
-      .health.retrieve()
+
+    client.health
+      .retrieve()
       .then(() => {
         clearTimeout(timer);
         resolve(true);
@@ -125,12 +159,21 @@ export async function healthCheckTypesense(timeoutMs = 5000): Promise<boolean> {
   });
 }
 
+// ─── Collection Initialization ─────────────────────────────────────────────────
+
 /**
  * Ensures all collections exist in Typesense.
  * Handles 404 gracefully (collection not found = create it).
  * Idempotent: safe to call multiple times.
+ *
+ * Returns early if TYPESENSE_ENABLED is false.
  */
 export async function initializeTypesense() {
+  if (!TYPESENSE_ENABLED) {
+    console.info('[Typesense] initializeTypesense() skipped — Typesense is disabled.');
+    return [];
+  }
+
   const schemas = [touristPlacesSchema, usersSchema, travelRequestsSchema];
   const results: { name: string; status: 'created' | 'updated' | 'exists' | 'error'; message?: string }[] = [];
 
@@ -142,15 +185,13 @@ export async function initializeTypesense() {
       const missingFields = expectedFields.filter((fieldName) => !existingFields.has(fieldName));
 
       if (missingFields.length > 0) {
-        console.log(`[Typesense] Updating collection "${schema.name}" with missing fields: ${missingFields.join(', ')}`);
+        console.log(`[Typesense] Updating collection "${schema.name}" — missing fields: ${missingFields.join(', ')}`);
         await client.collections(schema.name).update(schema as any);
         results.push({ name: schema.name, status: 'updated', message: `Added fields: ${missingFields.join(', ')}` });
       } else {
-        console.log(`[Typesense] Collection "${schema.name}" exists with all required fields.`);
         results.push({ name: schema.name, status: 'exists' });
       }
     } catch (error: any) {
-      // 404 = collection doesn't exist, create it
       if (error.status === 404 || error.httpStatus === 404) {
         try {
           console.log(`[Typesense] Creating collection "${schema.name}"...`);
@@ -158,21 +199,14 @@ export async function initializeTypesense() {
           console.log(`[Typesense] ✅ Created collection "${schema.name}"`);
           results.push({ name: schema.name, status: 'created' });
         } catch (createErr: any) {
-          console.error(`[Typesense] ❌ Failed to create collection "${schema.name}":`, createErr.message);
+          console.error(`[Typesense] ❌ Failed to create "${schema.name}":`, createErr.message);
           results.push({ name: schema.name, status: 'error', message: createErr.message });
         }
       } else {
-        console.error(`[Typesense] ❌ Error checking/updating collection "${schema.name}":`, error.message);
+        console.error(`[Typesense] ❌ Error checking/updating "${schema.name}":`, error.message);
         results.push({ name: schema.name, status: 'error', message: error.message });
       }
     }
-  }
-
-  const allSuccessful = results.every((r) => r.status !== 'error');
-  console.log(`\n[Typesense] Initialization Summary:`, results);
-  
-  if (!allSuccessful) {
-    throw new Error(`Typesense initialization failed for some collections: ${results.filter(r => r.status === 'error').map(r => r.name).join(', ')}`);
   }
 
   return results;

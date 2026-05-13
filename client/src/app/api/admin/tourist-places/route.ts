@@ -6,6 +6,7 @@ import { invalidateCacheVersion } from '@/lib/server/cacheManagement';
 import { SyncService } from '@/modules/search/SyncService';
 import { CacheService } from '@/modules/cache/CacheService';
 import { MetricsService } from '@/modules/analytics/MetricsService';
+import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
 
 export const runtime = 'nodejs';
 
@@ -76,10 +77,14 @@ export async function PUT(req: NextRequest) {
       description_lower: normalizeSearchField(updateData.description),
     };
 
+    console.info('[Admin:TouristPlaces:Update] Updating place', { id });
     await docRef.update({
       ...updateData,
       ...searchFields,
     });
+
+    // Read back the updated doc to return authoritative data
+    const updatedSnap = await docRef.get();
     
     // 1. Real-time Search Sync (via Queue)
     await SyncService.syncOnUpdate({
@@ -97,6 +102,12 @@ export async function PUT(req: NextRequest) {
     // 2. Cache Invalidation
     await CacheService.invalidatePattern('search:'); // Invalidate all search caches
     await CacheService.invalidate(`place:${id}`);
+    // 2b. Update in-memory/shared cache so instances without Redis see the change
+    try {
+      await updateSharedPlaceInCache({ id, ...updateData, ...searchFields }, 'update');
+    } catch (e) {
+      console.warn('[PlacesCache] updateSharedPlaceInCache failed', e);
+    }
 
     // 3. Invalidate cache version for page caches
     await invalidateCacheVersion();
@@ -104,9 +115,7 @@ export async function PUT(req: NextRequest) {
 
     return ok({
       id,
-      ...docSnap.data(),
-      ...updateData,
-      ...searchFields,
+      ...(updatedSnap.exists ? updatedSnap.data() : {}),
     });
   } catch (error: unknown) {
     await MetricsService.increment('admin_write_fail');
@@ -116,6 +125,37 @@ export async function PUT(req: NextRequest) {
 
     const message = error instanceof Error ? error.message : 'Failed to update tourist place';
     console.error('[Admin:TouristPlaces:Update] Error:', message);
+    return fail(message, 500);
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const user = await authenticateRequest(req);
+    requireAdmin(user);
+
+    const { searchParams } = req.nextUrl;
+    const id = String(searchParams.get('id') || '').trim();
+
+    if (!id) {
+      return fail('Missing query parameter: id', 400);
+    }
+
+    const docRef = adminDb.collection('touristPlaces').doc(id);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return fail('Tourist place not found', 404);
+    }
+
+    return ok({ id: docSnap.id, ...docSnap.data() });
+  } catch (error: unknown) {
+    if (error instanceof AuthError) {
+      return fail(error.message, error.status);
+    }
+
+    const message = error instanceof Error ? error.message : 'Failed to fetch tourist place';
+    console.error('[Admin:TouristPlaces:Get] Error:', message);
     return fail(message, 500);
   }
 }

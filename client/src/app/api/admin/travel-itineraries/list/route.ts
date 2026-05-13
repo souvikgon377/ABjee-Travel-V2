@@ -11,7 +11,6 @@ import {
   setInCache,
   getCachedScanResults,
   cacheScanResults,
-  executeScanWithLock,
   CACHE_CONFIG,
 } from '@/lib/server/cacheManagement';
 

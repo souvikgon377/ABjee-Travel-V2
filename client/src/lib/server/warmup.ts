@@ -48,6 +48,11 @@ export async function triggerBackgroundWarmup() {
           fetchUsersFromFirestore().then(u => hybridSet("admin:users", u, { redisTtlSeconds: 180 })),
           refreshSharedPlacesCache()
         ]);
+
+        // Start the real-time Firestore sync once per instance so L1/L2 caches stay aligned.
+        const { ensureFirestoreSync } = await import("@/modules/realtime/firestoreSync");
+        void ensureFirestoreSync();
+
         console.info("[Warmup] SUCCESS | All critical caches hydrated.");
       } catch (err) {
         console.warn("[Warmup] FAILED | One or more keys failed to hydrate:", err);

@@ -85,7 +85,9 @@ async function recordGlobalMetric(name: string) {
   if (!redis) return;
   try {
     await redis.incr(`metrics:${CACHE_VERSION}:${name}`);
-  } catch {}
+  } catch {
+    // Ignore metric recording failures to avoid affecting main flow
+  }
 }
 
 /** Check if Circuit Breaker is active */
@@ -360,7 +362,9 @@ export async function hybridInvalidatePattern(prefix: string): Promise<{ memory:
         await redis.del(...keys);
         redisCount = keys.length;
       }
-    } catch {}
+    } catch {
+      // Ignore redis lookup/deletion errors during mass invalidation
+    }
   }
   return { memory: memoryCount, redis: redisCount };
 }
@@ -373,7 +377,9 @@ export async function hybridInvalidateAll(): Promise<void> {
     try {
       const keys = await redis.keys(`${CACHE_VERSION}:*`);
       if (keys.length > 0) await redis.del(...keys);
-    } catch {}
+    } catch {
+      // Ignore redis deletion errors during full clear
+    }
   }
 }
 
@@ -388,7 +394,9 @@ export async function getCacheStats() {
       keys.forEach((k, i) => {
         if (values[i]) globalMetrics[k as keyof typeof localMetrics] = Number(values[i]);
       });
-    } catch {}
+    } catch {
+      // Ignore metric retrieval failures, return local metrics instead
+    }
   }
 
   const totalHits = globalMetrics.hitsL1 + globalMetrics.hitsL2;

@@ -1,4 +1,5 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { CacheService } from '@/modules/cache/CacheService';
 import { hybridGet, hybridInvalidate, hybridSet } from '@/lib/server/hybridCache';
 import { getRedis } from '@/lib/server/redis';
 import { fullIndexPlaces, updatePlaceIndex, deletePlaceIndex } from './touristSearchUtils';
@@ -37,6 +38,19 @@ let inMemorySnapshot: any[] = [];
 let snapshotMeta = { updatedAt: 0, version: 0 };
 let isRefreshing = false;
 let lastRefreshTriggerAt = 0;
+let realtimeSyncBootstrapAttempted = false;
+
+const ensureRealtimeSyncStarted = async () => {
+  if (realtimeSyncBootstrapAttempted) return;
+  realtimeSyncBootstrapAttempted = true;
+
+  try {
+    const { ensureFirestoreSync } = await import('@/modules/realtime/firestoreSync');
+    void ensureFirestoreSync();
+  } catch (error) {
+    console.warn('[PlacesCache] Unable to start realtime sync', error);
+  }
+};
 
 const shouldRunFullReindex = (force: boolean, reason: string) => {
   if (force) return true;
@@ -87,13 +101,6 @@ export type SharedPlaceRecord = {
   searchCountry: string;
   createdAt: unknown;
   updatedAt: unknown;
-  Name: string;
-  Area: string;
-  City: string;
-  State: string;
-  Country: string;
-  Description: string;
-  Category: string;
   name_lower?: string;
   location_lower?: string;
 };
@@ -123,25 +130,22 @@ const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): SharedPlace
   const area = normalizeText(data.area || data.region || data.city);
   const state = normalizeText(data.state || data.province);
   const country = normalizeText(data.country || 'India');
+  const name = normalizeText(data.name || data.Name || 'Unnamed Place');
+  const description = normalizeText(data.description || data.Description);
+  const category = normalizeText(data.category || data.Category || 'Other');
 
   const id = doc.id || data.id || generateStableId(data);
 
+  // Return only lowercase fields to avoid duplicate JSON keys (Name/name, Description/description, etc.)
   return {
     id: String(id),
-    Name: normalizeText(data.Name || data.name || 'Unnamed Place'),
-    Area: area,
-    City: normalizeText(data.city || area),
-    State: state,
-    Country: country,
-    Description: normalizeText(data.Description || data.description),
-    Category: normalizeText(data.Category || data.category || 'Other'),
-    name: normalizeText(data.name || data.Name || 'Unnamed Place'),
+    name,
     area,
     city: normalizeText(data.city || area),
     state,
     country,
-    description: normalizeText(data.description || data.Description),
-    category: normalizeText(data.category || data.Category || 'Other'),
+    description,
+    category,
     isActive: data.isActive !== false,
     googleMapsUrl: normalizeText(data.googleMapsUrl),
     coverImage: normalizeText(data.coverImage),
@@ -159,8 +163,6 @@ const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): SharedPlace
 };
 
 const toMillis = (value: unknown) => {
-  if (!value) return 0;
-  if (value instanceof Date) return value.getTime();
   if (typeof value === 'object' && value !== null) {
     const ts = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
     if (typeof ts.toDate === 'function') return ts.toDate().getTime();
@@ -234,6 +236,7 @@ export const refreshCacheInBackground = async (force = false, reason: string = "
   if (!force) {
     const meta = await redis.get<string>(K.REFRESH_META);
     if (meta) {
+      await ensureRealtimeSyncStarted();
       try {
         const { lastRun } = JSON.parse(meta);
         if (Date.now() - lastRun < 30000) {
@@ -320,6 +323,13 @@ export const getSharedPlacesCache = async (): Promise<{
   cacheStatus: 'hit' | 'miss' | 'warming' | 'snapshot';
   source: 'hybrid' | 'fallback' | 'snapshot' | 'backup';
 }> => {
+  try {
+    const { ensureFirestoreSync } = await import('@/modules/realtime/firestoreSync');
+    void ensureFirestoreSync();
+  } catch (error) {
+    console.warn('[PlacesCache] Unable to start realtime sync during cache read', error);
+  }
+
   const redis = getRedis();
 
   try {
@@ -341,14 +351,26 @@ export const getSharedPlacesCache = async (): Promise<{
       { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
     );
 
-    // Snapshot Age Check disabled in favor of SearchService
+    // 3. FORCE LOAD FROM FIRESTORE if all caches empty (prevent zero results on cold start)
+    if (!places || places.length === 0) {
+      console.info('[PlacesCache] All caches empty, forcing fresh Firestore load');
+      try {
+        const freshPlaces = await loadPlacesWithRetry(3);
+        inMemorySnapshot = freshPlaces.slice(0, 50000);
+        snapshotMeta.updatedAt = Date.now();
+        console.info('[PlacesCache] Firestore load succeeded', { count: freshPlaces.length });
+        return { places: freshPlaces, cacheStatus: 'warming', source: 'hybrid' };
+      } catch (firebaseError) {
+        console.warn('[PlacesCache] Firestore load failed, trying backup', firebaseError);
+      }
+    }
 
-    // 3. Snapshot Fallback
+    // 4. Snapshot Fallback (already populated from memory)
     if ((!places || places.length === 0) && inMemorySnapshot.length > 0) {
       return { places: inMemorySnapshot as SharedPlaceRecord[], cacheStatus: 'snapshot', source: 'snapshot' };
     }
 
-    // 4. Safe Disk Backup Load (Corruption Guard)
+    // 5. Safe Disk Backup Load (Corruption Guard)
     const backup = safeLoadBackup();
     if ((!places || places.length === 0) && backup) {
       // Disk backup check
@@ -397,6 +419,13 @@ if (typeof window === 'undefined' && process.env.ENABLE_PLACES_CACHE_HEARTBEAT =
 }
 
 export const refreshSharedPlacesCache = async () => {
+  try {
+    const { ensureFirestoreSync } = await import('@/modules/realtime/firestoreSync');
+    void ensureFirestoreSync();
+  } catch (error) {
+    console.warn('[PlacesCache] Unable to start realtime sync during refresh', error);
+  }
+
   await hybridInvalidate(K.ALL);
   const places = await refreshCacheInBackground(true);
   return {
@@ -411,6 +440,43 @@ export const updateSharedPlaceInCache = async (data: any, type: 'create' | 'upda
     const redis = getRedis();
     if (redis) await redis.del(K.REFRESH_META);
     await hybridInvalidate(K.ALL);
+    await CacheService.invalidatePattern('search:');
+    await CacheService.invalidatePattern('places:search:');
+    await CacheService.invalidate('prod:tour:places:all');
+
+    // Update in-memory snapshot so instances without Redis see the change immediately
+    try {
+      const id = String(data.id || data.ID || '').trim();
+      if (id) {
+        if (type === 'delete') {
+          inMemorySnapshot = inMemorySnapshot.filter((p: any) => String(p.id) !== id);
+        } else {
+          const existingIdx = inMemorySnapshot.findIndex((p: any) => String(p.id) === id);
+          const item = {
+            id,
+            name: String(data.name || data.Name || '').trim(),
+            area: String(data.area || data.Area || '').trim(),
+            city: String(data.city || data.City || data.area || data.Area || '').trim(),
+            coverImage: String(data.coverImage || data.cover_img || data.cover || '').trim(),
+            category: String(data.category || data.Category || '').trim(),
+            description: String(data.description || data.Description || '').trim(),
+            media: Array.isArray(data.media) ? data.media : [],
+            extraInfo: Array.isArray(data.extraInfo) ? data.extraInfo : [],
+          };
+          if (existingIdx === -1) {
+            // add to front for recency
+            inMemorySnapshot.unshift(item);
+            // cap snapshot size
+            if (inMemorySnapshot.length > 50000) inMemorySnapshot.length = 50000;
+          } else {
+            inMemorySnapshot[existingIdx] = { ...inMemorySnapshot[existingIdx], ...item };
+          }
+        }
+        snapshotMeta.updatedAt = Date.now();
+      }
+    } catch (e) {
+      console.warn('[PlacesCache] failed to update inMemorySnapshot', e);
+    }
 
     if (type === 'delete') await deletePlaceIndex(data.id);
     else await updatePlaceIndex(data);

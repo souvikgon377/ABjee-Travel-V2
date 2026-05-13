@@ -122,7 +122,7 @@ async function processOneJob(): Promise<boolean> {
     // Try to process one job from the queue
     // If queue is empty, this should return without doing anything
     const result = await SyncService.processQueue();
-    return !!result; // Returns true if a job was processed
+    return result !== null && result !== undefined;
   } catch (err: any) {
     throw new Error(`Failed to process job: ${err.message}`);
   }

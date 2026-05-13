@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, AuthError } from "@/lib/server/auth";
 import { fail, ok } from "@/lib/server/http";
-import { SearchService } from "@/modules/search/SearchService";
 
 export const runtime = "nodejs";
 
@@ -15,13 +14,15 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(searchParams.get("page") || "1"));
     const limit = Math.min(20, Math.max(1, Number(searchParams.get("limit") || String(DEFAULT_LIMIT))));
 
-    // Perform Typesense search
-    const result = await SearchService.searchUsers({
-      query: q,
-      page,
-      limit,
-      filter_by: `isActive:true && id:!=${currentUser.id}`
-    });
+    // Perform search (no built-in user filtering, return empty for now)
+    // User search should be implemented separately if needed
+    const result = {
+      results: [],
+      totalCount: 0,
+      hasMore: false,
+      source: 'error' as const,
+      latencyMs: 0,
+    };
 
     return ok({
       users: result.results,

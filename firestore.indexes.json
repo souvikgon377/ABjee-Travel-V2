@@ -44,6 +44,30 @@
         { "fieldPath": "isActive", "order": "ASCENDING" },
         { "fieldPath": "email_lower", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" }
+      ]
     }
   ]
 }

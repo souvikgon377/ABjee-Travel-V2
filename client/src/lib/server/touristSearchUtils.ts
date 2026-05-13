@@ -62,7 +62,9 @@ async function saveQueue(q: any[]) {
       const tmpFile = `${QUEUE_FILE}.tmp`;
       await fs.promises.writeFile(tmpFile, JSON.stringify(q));
       await fs.promises.rename(tmpFile, QUEUE_FILE);
-    } catch { }
+    } catch {
+      // Ignore write failures to the disk-backed queue
+    }
   }).catch(() => { });
   return writingQueue;
 }
@@ -127,7 +129,9 @@ export async function getSnapshot() {
       const stat = await fs.promises.stat(SNAPSHOT_FILE);
       SNAPSHOT_UPDATED_AT = stat.mtimeMs;
       console.log(`✅ Loaded ${SNAPSHOT.length} items from disk snapshot.`);
-    } catch { }
+    } catch {
+      // Ignore read failures, will try to reload from redis later
+    }
   }
   return SNAPSHOT;
 }
@@ -142,7 +146,9 @@ export async function setSnapshot(data: any[]) {
       const tmpFile = `${SNAPSHOT_FILE}.tmp`;
       await fs.promises.writeFile(tmpFile, JSON.stringify(data));
       await fs.promises.rename(tmpFile, SNAPSHOT_FILE);
-    } catch { }
+    } catch {
+      // Ignore write failures, will try to sync next time
+    }
   }).catch(() => { });
   return writingSnapshot;
 }
@@ -418,13 +424,11 @@ export async function adminSearch({
 }): Promise<SearchResult> {
   const tStart = Date.now();
 
-  const result = await SearchService.search({
+  const result = await SearchService.searchPlaces({
     query: search,
     location,
     category: filter === 'all' ? undefined : filter,
     limit,
-    lastDocId: undefined, // Cursor pagination can be added later if UI supports it
-    isActive: undefined // Admin sees both active and inactive
   });
 
   const latency = Date.now() - tStart;

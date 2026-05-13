@@ -1,6 +1,9 @@
 export const RICH_TEXT_DISPLAY_CLASS =
   'prose prose-sm max-w-none dark:prose-invert text-muted-foreground leading-relaxed prose-p:my-2 prose-ul:my-2 prose-ul:list-disc prose-ul:pl-5 prose-ol:my-2 prose-ol:list-decimal prose-ol:pl-5 prose-li:my-1 prose-headings:text-foreground prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg';
 
+// eslint-disable-next-line no-misleading-character-class
+const ZW_CHARS = /[\u200B\u200C\u200D\uFEFF]/g;
+
 export const hasRichTextHtml = (value: string) =>
   /<(p|div|br|ul|ol|li|h[1-6]|strong|b|em|i|u|span|blockquote|hr)\b/i.test(value);
 
@@ -16,7 +19,7 @@ export const htmlToPlainText = (value: string) => {
 
 export const sanitizeRichTextHtmlForDisplay = (input: string): string => {
   if (!input) return '';
-  if (typeof DOMParser === 'undefined') return input.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
+  if (typeof DOMParser === 'undefined') return input.replace(ZW_CHARS, '');
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(input, 'text/html');
@@ -54,7 +57,7 @@ export const sanitizeRichTextHtmlForDisplay = (input: string): string => {
   const cleanNode = (node: Node): Node | null => {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent || '';
-      const cleaned = text.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
+      const cleaned = text.replace(ZW_CHARS, '');
       return cleaned ? doc.createTextNode(cleaned) : null;
     }
 
@@ -108,5 +111,5 @@ export const sanitizeRichTextHtmlForDisplay = (input: string): string => {
     if (cleaned) root.appendChild(cleaned);
   });
 
-  return root.innerHTML.replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
+  return root.innerHTML.replace(ZW_CHARS, '');
 };

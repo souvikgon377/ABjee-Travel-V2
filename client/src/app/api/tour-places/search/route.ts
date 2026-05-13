@@ -2,8 +2,6 @@ import { NextRequest } from 'next/server';
 import { SearchService } from '@/modules/search/SearchService';
 import { RateLimitService } from '@/modules/auth/RateLimitService';
 import { ok, fail } from '@/lib/server/http';
-import { TypesenseBreaker } from '@/modules/search/typesenseBreaker';
-import { QueueService } from '@/modules/queue/QueueService';
 
 export const runtime = 'nodejs';
 
@@ -23,7 +21,11 @@ export async function GET(req: NextRequest) {
   try {
     // 2. Search Flow (Cache -> Typesense -> Firestore Fallback)
     // Note: Caching is handled inside SearchService.searchPlaces
-    const result = await SearchService.searchPlaces(query, page);
+    const result = await SearchService.searchPlaces({
+      query,
+      page,
+      isActive: true,
+    });
 
     const totalLatency = Date.now() - tStart;
 

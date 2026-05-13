@@ -60,7 +60,11 @@ export async function GET(req: NextRequest) {
     // Admin convenience: return all places when `?all=true` is provided.
     if (searchParams.get('all') === 'true') {
       console.warn('[Admin:TouristPlaces:List] Returning ALL places for admin request (unpaginated).');
-      const snap = await adminDb.collection('touristPlaces').get();
+      // ⚡ OPTIMIZATION: Add safety limit to prevent full collection scan overhead
+      const snap = await adminDb
+        .collection('touristPlaces')
+        .limit(5000)  // Safety cap - most collections << 5000 docs
+        .get();
       const rows = snap.docs
         .map((d: any) => ({ id: d.id, ...d.data() }))
         .sort(compareTouristPlaces);
@@ -71,7 +75,7 @@ export async function GET(req: NextRequest) {
         total: rows.length,
         totalCount: rows.length,
         page: 1,
-        hasMore: false,
+        hasMore: snap.size >= 5000,  // Indicate if more docs exist beyond limit
         source: 'firestore_all',
       });
     }
@@ -79,10 +83,11 @@ export async function GET(req: NextRequest) {
     const result = await SearchService.searchPlaces({
       query: search,
       location,
-      filter,
+      category: filter !== 'all' ? filter : 'all',
       page,
       limit,
-      // Admin sees everything, so we don't filter by isActive:true
+      isActive: undefined,
+      // Admin sees everything (both active and inactive), so we don't filter by isActive
     });
 
     return ok({

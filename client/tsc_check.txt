@@ -1,0 +1,4 @@
+﻿src/modules/search/SearchKeyService.ts(23,5): error TS2578: Unused '@ts-expect-error' directive.
+src/modules/search/typesenseClient.ts(46,13): error TS2503: Cannot find namespace 'Typesense'.
+src/modules/search/typesenseClient.ts(61,31): error TS2503: Cannot find namespace 'Typesense'.
+src/screens/TravelItenaryDisplay.tsx(42,2): error TS2305: Module '"@/lib/richTextDisplay"' has no exported member 'RICH_TEXT_DISPLAY_CLASS'.

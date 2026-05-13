@@ -1,27 +1,6 @@
 import { safeRedisCall } from '@/lib/server/redis';
-
-// ─── L1 In-Memory Cache ───────────────────────────────────────────────────────
-interface L1Entry<T> {
-  data: T;
-  expiresAt: number;
-}
-
-const l1Store = new Map<string, L1Entry<any>>();
+import { GlobalCache } from './GlobalCache';
 const L1_TTL_MS = 30_000; // 30 seconds
-
-function l1Get<T>(key: string): T | null {
-  const entry = l1Store.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    l1Store.delete(key);
-    return null;
-  }
-  return entry.data as T;
-}
-
-function l1Set<T>(key: string, data: T, ttlMs = L1_TTL_MS) {
-  l1Store.set(key, { data, expiresAt: Date.now() + ttlMs });
-}
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
@@ -36,7 +15,7 @@ export class CacheService {
     redisTtlSeconds = 60,
   ): Promise<T> {
     // 1. L1 hit
-    const l1 = l1Get<T>(key);
+    const l1 = GlobalCache.get<T>(key);
     if (l1 !== null) {
       console.log({ source: 'cache', cacheHit: true, tier: 'l1', key });
       return l1;
@@ -61,7 +40,7 @@ export class CacheService {
         }
       }
 
-      l1Set(key, parsed);
+      GlobalCache.set(key, parsed, L1_TTL_MS);
       return parsed as T;
     }
 
@@ -86,7 +65,7 @@ export class CacheService {
     const ttl = isEmpty ? 10 : redisTtlSeconds;
     const memTtl = isEmpty ? 10_000 : L1_TTL_MS;
 
-    l1Set(key, data, memTtl);
+    GlobalCache.set(key, data, memTtl);
     void safeRedisCall(
       (redis) => redis.set(key, JSON.stringify(data), { ex: ttl }),
       null,
@@ -100,7 +79,7 @@ export class CacheService {
    * Evict a key from both L1 and L2.
    */
   static async invalidate(key: string) {
-    l1Store.delete(key);
+    GlobalCache.delete(key);
     await safeRedisCall((redis) => redis.del(key), null, `cache:del:${key}`);
   }
 
@@ -108,9 +87,7 @@ export class CacheService {
    * Evict all keys matching a prefix pattern from L1 and Redis.
    */
   static async invalidatePrefix(prefix: string) {
-    for (const key of l1Store.keys()) {
-      if (key.startsWith(prefix)) l1Store.delete(key);
-    }
+    GlobalCache.invalidatePattern(prefix);
 
     await safeRedisCall(async (redis) => {
       const redisKeys = await redis.keys(`${prefix}*`);
@@ -119,6 +96,70 @@ export class CacheService {
       }
       return null;
     }, null, `cache:del-prefix:${prefix}`);
+  }
+
+  /**
+   * Update a cache entry intelligently:
+   * - If the key exists and contains an array, update/replace the item
+   * - Otherwise, invalidate and refetch
+   */
+  static async smartUpdate<T>(
+    key: string,
+    updater: (current: T | null) => Promise<T>,
+    redisTtlSeconds = 60
+  ): Promise<T> {
+    const current = await this.get<T>(key, async () => null as any, redisTtlSeconds);
+
+    try {
+      const updated = await updater(current);
+      // Re-cache the updated value
+      await this.invalidate(key);
+      return updated;
+    } catch (error) {
+      console.error('[CacheService] Smart update failed, using current value:', { key, error });
+      if (current) return current;
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a key exists in cache (L1 or L2)
+   */
+  static async exists(key: string): Promise<boolean> {
+    // L1 check
+    if (GlobalCache.get(key) !== null) return true;
+
+    // L2 check (Redis)
+    const l2Exists = await safeRedisCall<boolean>(
+      async (redis) => {
+        const result = await redis.exists(key);
+        return result === 1;
+      },
+      false,
+      `cache:exists:${key}`
+    );
+
+    return l2Exists;
+  }
+
+  /**
+   * Get all cache keys matching a pattern
+   */
+  static async getKeys(pattern: string): Promise<string[]> {
+    const l1Keys = GlobalCache.keys().filter((k) => k.includes(pattern));
+
+    const l2Keys = await safeRedisCall<string[]>(
+      async (redis) => {
+        const redisKeys = await redis.keys(`*${pattern}*`);
+        return redisKeys || [];
+      },
+      [],
+      `cache:keys:${pattern}`
+    );
+
+    // Combine and deduplicate
+    const allKeys = new Set([...l1Keys, ...l2Keys]);
+    return Array.from(allKeys);
   }
 
   /**
@@ -132,7 +173,7 @@ export class CacheService {
    * Explicitly set a value in the cache.
    */
   static async set<T>(key: string, data: T, redisTtlSeconds = 60) {
-    l1Set(key, data);
+    GlobalCache.set(key, data, L1_TTL_MS);
     await safeRedisCall(
       (redis) => redis.set(key, JSON.stringify(data), { ex: redisTtlSeconds }),
       null,

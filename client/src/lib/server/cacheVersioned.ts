@@ -1,4 +1,4 @@
-import { getRedis, safeRedisCall } from './redis';
+import { safeRedisCall } from './redis';
 
 export const CACHE_VERSION_KEY = 'places:version';
 export const CACHE_TTL_SECONDS = 90;

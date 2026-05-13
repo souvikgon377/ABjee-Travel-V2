@@ -100,7 +100,7 @@ export const travelPartnersAPI = {
   getRequests: (params?: any) => api.get('/travel-partners/requests', { params }),
   createRequest: (requestData: any) => api.post('/travel-partners/requests', requestData),
   getRequest: (requestId: string) => api.get(`/travel-partners/requests/${requestId}`),
-  respondToRequest: (requestId: string, message: string) => 
+  respondToRequest: (requestId: string, message: string) =>
     api.post(`/travel-partners/requests/${requestId}/respond`, { message }),
   getMyRequests: (params?: any) => api.get('/travel-partners/my-requests', { params }),
 };
@@ -113,6 +113,13 @@ export const usersAPI = {
 };
 
 export const placesAPI = {
+  searchPlaces: (params?: {
+    search?: string;
+    location?: string;
+    filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
+    page?: number;
+    limit?: number;
+  }) => api.get('/places', { params }),
   getReviews: (placeId: string) => api.get('/reviews', { params: { placeId } }),
   createReview: (payload: {
     placeId: string;
@@ -149,13 +156,6 @@ export const adminAPI = {
   getStats: () => adminApiInstance.get('/admin/stats'),
   getSettings: () => adminApiInstance.get('/admin/settings'),
   updateSettings: (data: any) => adminApiInstance.put('/admin/settings', data),
-  getPlaces: (params?: {
-    search?: string;
-    location?: string;
-    filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
-    page?: number;
-    limit?: number;
-  }) => api.get('/places', { params }),
   updatePlacesCache: () => api.post('/update-cache'),
   getTouristPlaceList: (params?: {
     search?: string;
@@ -193,8 +193,8 @@ export const adminAPI = {
     media?: unknown[];
     extraInfo?: unknown[];
     isActive?: boolean;
-  }) => adminApiInstance.put('/admin/tourist-places', data, { params: { id } }),
-  deleteTouristPlace: (id: string) => adminApiInstance.delete('/admin/tourist-places', { params: { id } }),
+  }) => adminApiInstance.put(`/admin/tourist-places/${id}`, data),
+  deleteTouristPlace: (id: string) => adminApiInstance.delete(`/admin/tourist-places/${id}`),
   getTravelItineraryList: (params?: {
     search?: string;
     country?: string;

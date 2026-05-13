@@ -108,8 +108,8 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   const [usersCountResult, statusResult, pageViewsResult, paymentsResult, subscriptionsResult] =
     await Promise.allSettled([
       withTimeout(adminDb.collection("users").count().get(), "users-count"),
-      withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get(), "status"),
-      withTimeout(getAdminRtdb().ref("analytics/pageViews").get(), "pageViews"),
+      withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get() as any, "status"),
+      withTimeout(getAdminRtdb().ref("analytics/pageViews").get() as any, "pageViews"),
       withTimeout(
         adminDb.collection("subscriptionPayments").limit(500).get(),
         "subscriptionPayments",
@@ -122,8 +122,8 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
       ? ((usersCountResult.value as any).data() as { count: number }).count
       : 0;
 
-  const statusSnapshot = statusResult.status === "fulfilled" ? statusResult.value : null;
-  const pageViewsSnapshot = pageViewsResult.status === "fulfilled" ? pageViewsResult.value : null;
+  const statusSnapshot = statusResult.status === "fulfilled" ? (statusResult.value as any) : null;
+  const pageViewsSnapshot = pageViewsResult.status === "fulfilled" ? (pageViewsResult.value as any) : null;
   const paidPaymentsSnapshot = paymentsResult.status === "fulfilled" ? paymentsResult.value : null;
   const subscriptionsSnapshot = subscriptionsResult.status === "fulfilled" ? subscriptionsResult.value : null;
 

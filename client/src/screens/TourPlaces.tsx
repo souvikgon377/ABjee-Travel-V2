@@ -37,6 +37,8 @@ import { placesAPI } from "@/lib/api";
 import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSubscriptionInfo, hasPaidAccess } from "@/lib/subscriptionPolicy";
+import useRealtimeCollection from "@/hooks/useRealtimeCollection";
+import { where } from "firebase/firestore";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
 const MAX_PHOTOS_PER_REVIEW = 2;
@@ -84,11 +86,17 @@ type SearchCursorValue = {
 
 type SearchResponse = {
   results?: TouristPlace[];
+  rows?: TouristPlace[];
   lastDoc?: string | null;
   hasMore?: boolean;
   searchTerm?: string;
   cacheStatus?: 'hit' | 'miss';
   reset?: boolean;
+  pagination?: {
+    page?: number;
+    hasNext?: boolean;
+    total?: number;
+  };
 };
 
 const normalizeSearchInput = (value: string) => value.replace(/\+/g, " ").replace(/\s+/g, " ").trim();
@@ -398,6 +406,8 @@ const TourPlaces: React.FC = () => {
   const [searchResults, setSearchResults] = useState<TouristPlace[]>([]);
   const [searchPage, setSearchPage] = useState<number>(1);
   const [searchHasMore, setSearchHasMore] = useState(false);
+
+
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
@@ -418,6 +428,8 @@ const TourPlaces: React.FC = () => {
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
   const reviewMediaInputRef = useRef<HTMLInputElement | null>(null);
+
+
 
   useEffect(() => {
     setHasHydrated(true);
@@ -532,8 +544,19 @@ const TourPlaces: React.FC = () => {
         throw error;
       }
 
-      clientSearchCacheRef.current.set(cacheKey, payload.data);
-      return payload.data;
+      const normalizedResults = Array.isArray(payload.data.results)
+        ? payload.data.results
+        : Array.isArray(payload.data.rows)
+          ? payload.data.rows
+          : [];
+      const normalizedPayload: SearchResponse = {
+        ...payload.data,
+        results: normalizedResults,
+        hasMore: payload.data.hasMore ?? payload.data.pagination?.hasNext ?? false,
+      };
+
+      clientSearchCacheRef.current.set(cacheKey, normalizedPayload);
+      return normalizedPayload;
     }).finally(() => {
       inFlightSearchRef.current.delete(cacheKey);
     });
@@ -541,6 +564,8 @@ const TourPlaces: React.FC = () => {
     inFlightSearchRef.current.set(cacheKey, request);
     return request;
   }, [buildClientCacheKey]);
+
+
 
   const triggerPrefetch = useCallback((term: string, page: number) => {
     const nextKey = `${term}:p${page}`;
@@ -618,8 +643,8 @@ const TourPlaces: React.FC = () => {
       }
 
       setActiveSearchTerm(normalizedTerm);
-      setSearchPage(payload.pagination?.page ?? page);
-      setSearchHasMore(Boolean(payload.hasMore ?? payload.pagination?.hasNext));
+      setSearchPage(page);
+      setSearchHasMore(Boolean(payload.hasMore ?? false));
       setSearchCacheStatus(payload.cacheStatus ?? null);
       console.log("CLIENT RESULTS:", nextResults.length);
       setSearchResults((prev) => {
@@ -733,6 +758,9 @@ const TourPlaces: React.FC = () => {
 
   useEffect(() => {
     if (!actualSearchQuery) {
+      if (searchInput.trim() === "" && activeSearchTerm.trim() === "") {
+        return;
+      }
       resetSearchState();
       return;
     }
@@ -749,7 +777,7 @@ const TourPlaces: React.FC = () => {
   }, [fetchSearchResults, resetSearchState, actualSearchQuery]);
 
   const searchQuery = normalizeSearchInput(searchInput);
-  const showSuggestions = !actualSearchQuery || searchQuery !== actualSearchQuery;
+  const showSuggestions = searchResults.length === 0 && (!actualSearchQuery || searchQuery !== actualSearchQuery);
   const suggestionPlaces = ["Tirupati", "Manali", "Goa", "Kerala", "Shimla", "Ladakh"];
 
   const selectedPlaceImages = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "image") ?? [], [selectedPlace?.media]);

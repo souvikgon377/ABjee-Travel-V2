@@ -280,8 +280,9 @@ class NotificationService {
 
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch {
-      // Fallback if composite index is not available yet.
-      const snapshot = await this.collection.where("toUserId", "==", userId).get();
+      // Fallback if composite index is not available yet. Run a bounded query to avoid full collection scans.
+      console.warn('[NotificationService] Index required for toUserId+orderBy(createdAt). Using bounded fallback limit.');
+      const snapshot = await this.collection.where("toUserId", "==", userId).limit(safeLimit).get();
       const notifications = snapshot.docs
         .map((doc: any) => ({ id: doc.id, ...doc.data() }))
         .sort((a: AnyObj, b: AnyObj) => {
@@ -306,10 +307,12 @@ class NotificationService {
 
       return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch {
+      console.warn('[NotificationService] Index required for toUserId+type+status+orderBy(createdAt). Using bounded fallback limit.');
       const snapshot = await this.collection
         .where("toUserId", "==", userId)
         .where("type", "==", "room_invite")
         .where("status", "==", "pending")
+        .limit(100)
         .get();
 
       return snapshot.docs

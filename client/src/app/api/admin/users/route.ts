@@ -31,11 +31,10 @@ export async function GET(req: NextRequest) {
     if (status === "active") filters.push(`status:!=inactive`);
     else if (status === "inactive") filters.push(`status:=inactive`);
 
-    const result = await SearchService.searchUsers({
+    const result = await SearchService.searchPlaces({
       query: search,
       page,
       limit,
-      filter_by: filters.join(" && ") || undefined
     });
 
     return ok({

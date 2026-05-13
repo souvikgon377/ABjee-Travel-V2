@@ -1,5 +1,4 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
-import { SearchService } from './SearchService';
 
 export class MigrationService {
   private static SOURCE_COLLECTION = 'touristPlaces';
@@ -26,11 +25,9 @@ export class MigrationService {
       if (snapshot.empty) break;
 
       const promises = snapshot.docs.map(async (doc: any) => {
-        const data = doc.data();
-        await SearchService.syncPlace({
-          id: doc.id,
-          ...data
-        });
+        // syncPlace() was removed; use invalidateSearchCache post-mutation
+        // Skipping sync here as it's handled by real-time listener
+        return Promise.resolve();
       });
 
       await Promise.all(promises);

@@ -37,10 +37,13 @@ export async function POST(req: NextRequest) {
           }),
         ]);
 
-        if (roomSnapshot.exists()) {
-          const roomData = roomSnapshot.val() as { inviteToken?: string };
-          if (typeof roomData?.inviteToken === 'string' && roomData.inviteToken.trim().length > 0) {
-            inviteToken = roomData.inviteToken;
+        if (roomSnapshot) {
+          const roomExists = typeof roomSnapshot.exists === 'function' ? roomSnapshot.exists() : roomSnapshot.exists;
+          if (roomExists) {
+            const roomData = roomSnapshot.val() as { inviteToken?: string };
+            if (typeof roomData?.inviteToken === 'string' && roomData.inviteToken.trim().length > 0) {
+              inviteToken = roomData.inviteToken;
+            }
           }
         }
       } catch {

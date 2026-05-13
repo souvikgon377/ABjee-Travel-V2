@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Trash2, Plus, X, Save, AlertCircle, CheckCircle, Edit2, Loader, RefreshCw, MapPin, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { User, MessageSquare, UserPlus, Search } from 'lucide-react';
+import { User, UserPlus, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adminAPI } from '@/lib/api';
 
