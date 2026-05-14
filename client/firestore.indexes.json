@@ -58,6 +58,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "search_tokens", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
         { "fieldPath": "category", "order": "ASCENDING" }
       ]
     },
@@ -129,6 +137,14 @@
       "collectionGroup": "touristPlaces",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "search_tokens", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "city", "order": "ASCENDING" },
         { "fieldPath": "name_lower", "order": "ASCENDING" }
       ]
@@ -140,6 +156,15 @@
         { "fieldPath": "isActive", "order": "ASCENDING" },
         { "fieldPath": "category", "order": "ASCENDING" },
         { "fieldPath": "name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "search_tokens", "arrayConfig": "CONTAINS" }
       ]
     },
     {

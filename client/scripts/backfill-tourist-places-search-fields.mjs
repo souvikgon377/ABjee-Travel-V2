@@ -33,6 +33,23 @@ const deriveLocationLower = (data) => {
   return normalize([area, city, state, country].filter(Boolean).join(' '));
 };
 
+const buildSearchTokens = (...values) => {
+  const tokens = new Set();
+  const words = normalize(values.filter(Boolean).join(' '))
+    .split(' ')
+    .filter((word) => word.length >= 2);
+
+  for (const word of words) {
+    tokens.add(word);
+    const maxPrefixLength = Math.min(word.length, 20);
+    for (let i = 2; i <= maxPrefixLength; i += 1) {
+      tokens.add(word.slice(0, i));
+    }
+  }
+
+  return Array.from(tokens).slice(0, 500);
+};
+
 const getServiceAccount = () => {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -88,15 +105,25 @@ async function backfill() {
       const nextNameLower = normalize(row.name || row.Name || '');
       const nextLocationLower = deriveLocationLower(row);
       const nextLocationSearch = deriveLocationSearch(row);
+      const nextSearchTokens = buildSearchTokens(
+        row.name || row.Name || '',
+        row.area || row.Area || '',
+        row.city || row.City || '',
+        row.state || row.State || '',
+        row.country || row.Country || '',
+        row.category || row.Category || '',
+      );
 
       const currentNameLower = row.name_lower || '';
       const currentLocationLower = row.location_lower || '';
       const currentLocationSearch = row.location_search || '';
+      const currentSearchTokens = Array.isArray(row.search_tokens) ? row.search_tokens : [];
 
       if (
         nextNameLower === currentNameLower &&
         nextLocationLower === currentLocationLower &&
-        nextLocationSearch === currentLocationSearch
+        nextLocationSearch === currentLocationSearch &&
+        JSON.stringify(nextSearchTokens) === JSON.stringify(currentSearchTokens)
       ) {
         continue;
       }
@@ -105,6 +132,7 @@ async function backfill() {
         name_lower: nextNameLower,
         location_lower: nextLocationLower,
         location_search: nextLocationSearch,
+        search_tokens: nextSearchTokens,
         updatedAt: row.updatedAt ?? new Date(),
       });
       updatesInBatch += 1;

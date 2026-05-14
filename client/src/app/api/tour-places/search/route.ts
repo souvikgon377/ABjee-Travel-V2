@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         totalLatencyMs: totalLatency,
         engineLatencyMs: result.latencyMs,
         source: result.source,
-        firestoreReads: result.source === 'firestore' ? result.results.length : 0,
+        firestoreReads: result.firestoreReads || 0,
       },
     });
 

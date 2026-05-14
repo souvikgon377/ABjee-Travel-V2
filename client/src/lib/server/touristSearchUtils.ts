@@ -427,7 +427,8 @@ export async function adminSearch({
   const result = await SearchService.searchPlaces({
     query: search,
     location,
-    category: filter === 'all' ? undefined : filter,
+    category: undefined,
+    contentFilter: filter as 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated',
     limit,
   });
 

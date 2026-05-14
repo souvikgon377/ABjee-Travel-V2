@@ -56,9 +56,11 @@ export async function GET(req: NextRequest) {
     const filter = searchParams.get('filter') || 'all';
     const page = Math.max(1, Number(searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || '30')));
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
 
     // Admin convenience: return all places when `?all=true` is provided.
-    if (searchParams.get('all') === 'true') {
+    const hasSearchConstraints = Boolean(search.trim() || location.trim() || filter !== 'all');
+    if (searchParams.get('all') === 'true' && !hasSearchConstraints) {
       console.warn('[Admin:TouristPlaces:List] Returning ALL places for admin request (unpaginated).');
       // ⚡ OPTIMIZATION: Add safety limit to prevent full collection scan overhead
       const snap = await adminDb
@@ -83,9 +85,11 @@ export async function GET(req: NextRequest) {
     const result = await SearchService.searchPlaces({
       query: search,
       location,
-      category: filter !== 'all' ? filter : 'all',
+      category: 'all',
+      contentFilter: filter as 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated',
       page,
       limit,
+      forceRefresh,
       isActive: undefined,
       // Admin sees everything (both active and inactive), so we don't filter by isActive
     });
@@ -99,6 +103,7 @@ export async function GET(req: NextRequest) {
       hasMore: result.hasMore,
       source: result.source,
       latencyMs: result.latencyMs,
+      firestoreReads: result.firestoreReads || 0,
     });
 
   } catch (error: any) {

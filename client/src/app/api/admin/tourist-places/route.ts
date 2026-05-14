@@ -17,6 +17,23 @@ const normalizeSearchField = (value: unknown) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const buildSearchTokens = (...values: unknown[]) => {
+  const tokens = new Set<string>();
+  const words = normalizeSearchField(values.filter(Boolean).join(' '))
+    .split(' ')
+    .filter((word) => word.length >= 2);
+
+  for (const word of words) {
+    tokens.add(word);
+    const maxPrefixLength = Math.min(word.length, 20);
+    for (let i = 2; i <= maxPrefixLength; i += 1) {
+      tokens.add(word.slice(0, i));
+    }
+  }
+
+  return Array.from(tokens).slice(0, 500);
+};
+
 export async function PUT(req: NextRequest) {
   try {
     const user = await authenticateRequest(req);
@@ -75,6 +92,14 @@ export async function PUT(req: NextRequest) {
         updateData.country,
       ].filter(Boolean).join(' ')),
       description_lower: normalizeSearchField(updateData.description),
+      search_tokens: buildSearchTokens(
+        updateData.name,
+        updateData.area,
+        updateData.city,
+        updateData.state,
+        updateData.country,
+        updateData.category
+      ),
     };
 
     console.info('[Admin:TouristPlaces:Update] Updating place', { id });

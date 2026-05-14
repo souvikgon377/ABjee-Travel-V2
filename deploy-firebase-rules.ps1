@@ -23,9 +23,9 @@ Write-Host ""
 
 # Step 3: Select Firebase project
 Write-Host "[3/4] Selecting Firebase project..." -ForegroundColor Yellow
-Write-Host "Your project ID: abjee-travel-4fc38" -ForegroundColor Gray
+Write-Host "Your project ID: abjee-travel-26a08" -ForegroundColor Gray
 Write-Host ""
-npx firebase-tools use abjee-travel-4fc38
+npx firebase-tools use abjee-travel-26a08
 
 Write-Host ""
 

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import LandingPage from "@/screens/LandingPage";
 import { publicAsset } from "@/lib/publicAsset";
 
@@ -40,6 +42,30 @@ export const revalidate = 0;
 export const runtime = 'nodejs';
 
 export default async function RootPage() {
+  try {
+    const requestHeaders = await headers();
+    const host = requestHeaders.get('host');
+    const protocol = requestHeaders.get('x-forwarded-proto') ?? 'http';
+
+    if (host) {
+      const settingsResponse = await fetch(new URL('/api/public/settings', `${protocol}://${host}`), {
+        cache: 'no-store',
+      });
+
+      const settingsPayload = await settingsResponse.json().catch(() => null);
+      const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : true;
+
+      if (homePageEnabled === false) {
+        redirect('/community');
+      }
+    }
+  } catch (error) {
+    if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error;
+    }
+    // Fail open and keep homepage available if settings cannot be read.
+  }
+
   const webSiteSchema = {
     "@context": "https://schema.org",
     "@type": "WebSite",

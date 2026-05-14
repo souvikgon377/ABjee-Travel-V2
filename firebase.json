@@ -3,7 +3,7 @@
     "database": "(default)",
     "location": "asia-south1",
     "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "indexes": "client/firestore.indexes.json"
   },
   "database": {
     "rules": "firebase-rtdb-rules.json"

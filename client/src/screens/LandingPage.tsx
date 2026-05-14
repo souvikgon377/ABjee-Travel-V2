@@ -69,6 +69,11 @@ function LandingPage() {
   const [showFeaturesOverlay, setShowFeaturesOverlay] = useState(false)
   const [offers, setOffers] = useState<HomeOffer[]>([])
   const [itineraryCount, setItineraryCount] = useState<number>(0)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   useEffect(() => {
     const dismissed = window.sessionStorage.getItem('abjee-community-popup-dismissed')
@@ -136,15 +141,22 @@ function LandingPage() {
       <Header1 />
       <GradientTypewriter count={itineraryCount} />
       <section className="w-full" aria-label="Featured travel video">
-        <video
-          src={publicAsset('/video1.mp4')}
-          className="h-[58vw] max-h-170 min-h-55 w-full object-cover pt-2 sm:h-[52vw]"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-        />
+        {isHydrated ? (
+          <video
+            src={publicAsset('/video1.mp4')}
+            className="h-[58vw] max-h-170 min-h-55 w-full object-cover pt-2 sm:h-[52vw]"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <div
+            className="h-[58vw] max-h-170 min-h-55 w-full bg-black/5 pt-2 sm:h-[52vw]"
+            aria-hidden="true"
+          />
+        )}
       </section>
 
       <AnimatePresence>

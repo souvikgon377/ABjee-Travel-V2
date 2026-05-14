@@ -15,7 +15,9 @@ export interface SearchOptions {
   limit?: number;
   location?: string;
   category?: string;
+  contentFilter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
   isActive?: boolean;
+  forceRefresh?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export interface SearchResult {
   latencyMs: number;
   fromCache?: boolean;
   method?: string;
+  firestoreReads?: number;
 }
 
 /**
@@ -110,7 +113,7 @@ export class SearchService {
   private static readonly L2_CACHE_TTL_SECONDS = 60; // 60 seconds (Redis)
 
   // Firestore limits
-  private static readonly MAX_FIRESTORE_LIMIT = 20;
+  private static readonly MAX_FIRESTORE_LIMIT = 100;
   private static readonly SAFE_QUERY_LIMIT = 10;
 
   // Query timeout
@@ -263,8 +266,47 @@ export class SearchService {
       ? `loc=${encodeURIComponent(String(options.location).trim().toLowerCase())}`
       : 'loc=any';
     const active = typeof options.isActive === 'boolean' ? `a=${options.isActive ? '1' : '0'}` : 'a=all';
+    const content = options.contentFilter ? `f=${options.contentFilter}` : 'f=all';
 
-    return `search:${q}:p${p}:l${l}:${cat}:${loc}:${active}`;
+    return `search:${q}:p${p}:l${l}:${cat}:${loc}:${active}:${content}`;
+  }
+
+  private static toMillis(value: any): number {
+    if (!value) return 0;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    if (typeof value === 'object') {
+      if (typeof value.toDate === 'function') return value.toDate().getTime();
+      if (typeof value.seconds === 'number') {
+        return (value.seconds * 1000) + Math.floor((value.nanoseconds || 0) / 1_000_000);
+      }
+    }
+    return 0;
+  }
+
+  private static matchesContentFilter(doc: any, filter: SearchOptions['contentFilter']): boolean {
+    if (!filter || filter === 'all') return true;
+
+    const mediaCount = Array.isArray(doc.media) ? doc.media.length : Number(doc.mediaCount || 0);
+    const hasPhotos = Boolean(doc.coverImage) || mediaCount > 0;
+
+    if (filter === 'photos-added') return hasPhotos;
+    if (filter === 'photos-not-added') return !hasPhotos;
+    if (filter === 'recently-updated') {
+      const updatedAt = this.toMillis(doc.updatedAt);
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      return Boolean(updatedAt && updatedAt >= sevenDaysAgo);
+    }
+
+    return true;
+  }
+
+  private static applyContentFilter(rows: any[], filter: SearchOptions['contentFilter']): any[] {
+    return rows.filter((row) => this.matchesContentFilter(row, filter));
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -334,10 +376,13 @@ export class SearchService {
         latencyMs: latency,
       });
 
+      const rawResults = result.hits?.map((h: any) => h.document) || [];
+      const filteredResults = this.applyContentFilter(rawResults, options.contentFilter);
+
       return {
-        results: result.hits?.map((h: any) => h.document) || [],
-        totalCount: result.found,
-        hasMore: result.found > page * limit,
+        results: filteredResults,
+        totalCount: options.contentFilter && options.contentFilter !== 'all' ? filteredResults.length : result.found,
+        hasMore: options.contentFilter && options.contentFilter !== 'all' ? false : result.found > page * limit,
         source: 'typesense',
         latencyMs: latency,
       };
@@ -380,6 +425,7 @@ export class SearchService {
         page: options.page,
         limit: Math.min(options.limit || 10, this.MAX_FIRESTORE_LIMIT),
         category: options.category,
+        contentFilter: options.contentFilter,
         location: options.location,
         isActive: options.isActive,
       };
@@ -404,6 +450,7 @@ export class SearchService {
           source: 'firestore',
           latencyMs: latency,
           method: result.method,
+          firestoreReads: result.firestoreReads,
         };
       }
 
@@ -428,6 +475,7 @@ export class SearchService {
           source: 'snapshot',
           latencyMs: snapshotResult.latencyMs,
           method: snapshotResult.method,
+          firestoreReads: snapshotResult.firestoreReads || 0,
         };
       }
 
@@ -439,6 +487,7 @@ export class SearchService {
         hasMore: false,
         source: 'error',
         latencyMs: Date.now() - tStart,
+        firestoreReads: 0,
       };
     } catch (error) {
       const latency = Date.now() - tStart;
@@ -453,6 +502,7 @@ export class SearchService {
         hasMore: false,
         source: 'error',
         latencyMs: latency,
+        firestoreReads: 0,
       };
     }
   }
@@ -509,21 +559,23 @@ export class SearchService {
     // ────────────────────────────────────────────────────────────────────────
     // LAYER 1: Try L1 cache (in-memory, fastest)
     // ────────────────────────────────────────────────────────────────────────
-    const l1Result = this.getFromCache(cacheKey);
-    if (l1Result) {
-      const latency = Date.now() - tStart;
-      console.info('[SearchService] Search completed (cache HIT)', {
-        source: 'memory',
-        found: l1Result.totalCount,
-        latencyMs: latency,
-      });
-      return { ...l1Result, latencyMs: latency };
+    if (!options.forceRefresh) {
+      const l1Result = this.getFromCache(cacheKey);
+      if (l1Result) {
+        const latency = Date.now() - tStart;
+        console.info('[SearchService] Search completed (cache HIT)', {
+          source: 'memory',
+          found: l1Result.totalCount,
+          latencyMs: latency,
+        });
+        return { ...l1Result, latencyMs: latency };
+      }
     }
 
     // ────────────────────────────────────────────────────────────────────────
     // LAYER 2: Try L2 cache (Redis, if available)
     // ────────────────────────────────────────────────────────────────────────
-    if (this.isRedisAvailable()) {
+    if (!options.forceRefresh && this.isRedisAvailable()) {
       try {
         const redis = getRedis();
         if (redis) {
@@ -639,4 +691,3 @@ export class SearchService {
     };
   }
 }
-

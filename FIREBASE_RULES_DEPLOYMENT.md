@@ -12,7 +12,7 @@ This happens because the Firebase Realtime Database security rules haven't been 
 
 ### Step 1: Open Firebase Console
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Select your project: **abjee-travel-4fc38**
+2. Select your project: **abjee-travel-26a08**
 
 ### Step 2: Navigate to Realtime Database Rules
 1. Click on **Realtime Database** in the left sidebar
