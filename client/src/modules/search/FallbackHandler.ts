@@ -58,7 +58,10 @@ export class FallbackHandler {
       q = q.where('isActive', '==', options.isActive);
     }
     if (options.category && options.category !== 'all') {
-      q = q.where('category', '==', options.category);
+      const cat = options.category;
+      const capitalized = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+      const variations = [...new Set([cat, cat.toLowerCase(), capitalized])];
+      q = q.where('category', 'in', variations);
     }
     if (options.location) {
       q = q.where('city', '==', options.location);
@@ -182,56 +185,15 @@ export class FallbackHandler {
         }
       }
 
-      // No search prefix: return ordered results by equality filters
-      if (!prefix) {
-        console.info('[FallbackHandler] Empty query detected, using shared snapshot cache');
-        return this.fallbackToSnapshot(options);
-      }
+      // Redesigned: Instead of using limited Firestore prefix queries which fail
+      // on substring matches (e.g. searching "kolkata" won't find "Maidan, Kolkata"),
+      // we immediately delegate to the in-memory snapshot cache. 
+      // The snapshot cache supports full substring matching across all fields.
+      console.info('[FallbackHandler] Delegating text search to powerful snapshot cache');
+      return this.fallbackToSnapshot(options);
 
-      // Prefix search across multiple fields
-      const [nameMatches, locationMatches] = await Promise.all([
-        this.runPrefixQuery('name_lower', prefix, options),
-        this.runPrefixQuery('location_search', prefix, options),
-      ]);
-
-      // Deduplicate by id, maintaining first occurrence order
-      const seen = new Map<string, any>();
-      for (const doc of [...nameMatches, ...locationMatches]) {
-        if (!seen.has(doc.id)) {
-          seen.set(doc.id, doc);
-        }
-      }
-
-      let candidates = Array.from(seen.values());
-
-      // Sort by popularity and updatedAt for stable ordering
-      candidates.sort((a: any, b: any) => {
-        const pa = typeof a.popularity === 'number' ? a.popularity : 0;
-        const pb = typeof b.popularity === 'number' ? b.popularity : 0;
-        if (pb !== pa) return pb - pa;
-
-        const ua = a.updatedAt || 0;
-        const ub = b.updatedAt || 0;
-        return ub - ua;
-      });
-
-      const startIdx = (page - 1) * limit;
-      const endIdx = startIdx + limit;
-      const paginatedResults = candidates.slice(startIdx, endIdx);
-      const latency = Date.now() - tStart;
-
-      await MetricsService.trackSearch(latency, candidates.length, true);
-
-      return {
-        results: paginatedResults,
-        totalCount: candidates.length,
-        hasMore: endIdx < candidates.length,
-        source: 'firestore',
-        latencyMs: latency,
-        method: 'prefix',
-      };
     } catch (err: any) {
-      console.error('[FallbackHandler] Optimized search failed:', err);
+      console.error('[FallbackHandler] Fallback search failed:', err);
       return {
         results: [],
         totalCount: 0,

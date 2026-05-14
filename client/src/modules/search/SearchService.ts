@@ -292,17 +292,22 @@ export class SearchService {
         filters.push(`isActive:=${options.isActive ? 'true' : 'false'}`);
       }
       if (options.category && options.category !== 'all') {
-        filters.push(`category:=${options.category}`);
+        const cat = options.category;
+        const capitalized = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+        filters.push(`category:=[${cat}, ${cat.toLowerCase()}, ${capitalized}]`);
       }
 
       // Build query string
       const effectiveQuery = [query, options.location].filter(Boolean).join(' ').trim() || '*';
+      const isExploring = effectiveQuery === '*';
 
       const searchParams: any = {
         q: effectiveQuery,
         query_by:
-          'name,name_lower,city,area,state,country,location_search,location_lower,description,description_lower',
-        sort_by: 'popularity:desc,updatedAt:desc',
+          'name:5,name_lower:5,city:3,area:2,state:2,country:2,location_search:1,location_lower:1,description:1,description_lower:1',
+        sort_by: isExploring 
+          ? 'popularity:desc,updatedAt:desc' 
+          : '_text_match:desc,popularity:desc,updatedAt:desc',
         per_page: limit,
         page: page,
       };
@@ -376,7 +381,7 @@ export class SearchService {
         limit: Math.min(options.limit || 10, this.MAX_FIRESTORE_LIMIT),
         category: options.category,
         location: options.location,
-        isActive: typeof options.isActive === 'boolean' ? options.isActive : true,
+        isActive: options.isActive,
       };
 
       // Try optimized search first (prefix queries)

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       category: filter !== 'all' ? filter : category,
       page,
       limit,
-      isActive: true // Public API only shows active places
+      isActive: undefined // Show all results to match admin-side behavior
     });
 
     // Return search results - ok() will wrap with { success: true, data: {...} }

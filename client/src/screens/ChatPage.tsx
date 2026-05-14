@@ -1165,14 +1165,7 @@ const ChatRoomsList: React.FC = () => {
     let cancelled = false;
 
     const fetchPlaces = async () => {
-      if (!normalizedSearchDestination) {
-        if (!cancelled) {
-          setFirestorePlaces([]);
-          setSearchHasMore(false);
-        }
-        return;
-      }
-
+      // We now allow fetching even without a search query to support category browsing
       setSearchLoading(true);
       try {
         const response = await placesAPI.searchPlaces({
@@ -2312,7 +2305,7 @@ const ChatRoomsList: React.FC = () => {
 
                     {/* -- Tourist Places Grid -- */}
                     {(() => {
-                      if (!hasSearchQuery) {
+                      if (!hasSearchQuery && firestorePlaces.length === 0) {
                         return (
                           <motion.div
                             initial={{ opacity: 0, y: 20 }}
