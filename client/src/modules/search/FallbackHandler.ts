@@ -224,37 +224,59 @@ export class FallbackHandler {
       const { places } = await getSharedPlacesCache();
       const dataset = Array.isArray(places) ? places : [];
 
+      // Tokenize search text ONCE outside the loop
+      const tokens = searchText ? searchText.split(/\s+/).filter(Boolean) : [];
+      const hasTokens = tokens.length > 0;
+
       // In-memory filtering (NO additional Firestore reads)
+      // Highly optimized loop: avoids creating arrays or doing redundant lowercase conversions per document
       const filtered = dataset.filter((doc: any) => {
         // Only filter by isActive if explicitly set (true/false)
-        // If undefined, show all records (both active and inactive)
         if (options.isActive !== undefined && doc.isActive !== options.isActive) return false;
         if (options.category && options.category !== 'all' && doc.category !== options.category) return false;
 
         if (!searchText) return true;
 
-        const fields = [
-          doc.name,
-          doc.name_lower,
-          doc.city,
-          doc.state,
-          doc.country,
-          doc.area,
-          doc.location_search,
-          doc.location_lower,
-          doc.description,
-          doc.description_lower,
-          doc.searchName,
-          doc.searchArea,
-          doc.searchState,
-          doc.searchCountry,
+        // Use pre-computed lowercase fields where possible
+        const haystack = [
+          doc.name_lower || (doc.name ? String(doc.name).toLowerCase() : ''),
+          doc.location_lower || (doc.location_search ? String(doc.location_search).toLowerCase() : ''),
+          doc.description_lower || (doc.description ? String(doc.description).toLowerCase() : ''),
+          doc.city ? String(doc.city).toLowerCase() : '',
+          doc.state ? String(doc.state).toLowerCase() : '',
+          doc.country ? String(doc.country).toLowerCase() : '',
+          doc.area ? String(doc.area).toLowerCase() : '',
+          doc.searchName ? String(doc.searchName).toLowerCase() : '',
+          doc.searchArea ? String(doc.searchArea).toLowerCase() : '',
+          doc.searchState ? String(doc.searchState).toLowerCase() : '',
+          doc.searchCountry ? String(doc.searchCountry).toLowerCase() : ''
         ];
 
-        const haystack = fields.map((value) => String(value || '').toLowerCase());
-        const tokens = searchText.split(/\s+/).filter(Boolean);
+        // 1. Exact substring match on any field
+        for (let i = 0; i < haystack.length; i++) {
+          if (haystack[i] && haystack[i].includes(searchText)) return true;
+        }
 
-        if (haystack.some((value) => value.includes(searchText))) return true;
-        return tokens.length > 0 && tokens.every((token) => haystack.some((value) => value.includes(token)));
+        // 2. Token match (all tokens must exist somewhere in the haystack)
+        if (hasTokens) {
+          let allTokensMatch = true;
+          for (let i = 0; i < tokens.length; i++) {
+            let tokenMatched = false;
+            for (let j = 0; j < haystack.length; j++) {
+              if (haystack[j] && haystack[j].includes(tokens[i])) {
+                tokenMatched = true;
+                break;
+              }
+            }
+            if (!tokenMatched) {
+              allTokensMatch = false;
+              break;
+            }
+          }
+          if (allTokensMatch) return true;
+        }
+
+        return false;
       });
 
       const page = Math.max(1, options.page || 1);

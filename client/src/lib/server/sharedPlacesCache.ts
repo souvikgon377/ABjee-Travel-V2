@@ -358,6 +358,11 @@ export const getSharedPlacesCache = async (): Promise<{
         const freshPlaces = await loadPlacesWithRetry(3);
         inMemorySnapshot = freshPlaces.slice(0, 50000);
         snapshotMeta.updatedAt = Date.now();
+        
+        // CRITICAL FIX: Save the fetched places into the hybrid cache!
+        // Otherwise, the cache continues to return an empty array and forces a full read every request.
+        await hybridSet(K.ALL, freshPlaces, { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS });
+        
         console.info('[PlacesCache] Firestore load succeeded', { count: freshPlaces.length });
         return { places: freshPlaces, cacheStatus: 'warming', source: 'hybrid' };
       } catch (firebaseError) {
