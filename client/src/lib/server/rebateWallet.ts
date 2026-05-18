@@ -189,6 +189,66 @@ export const awardReviewRebate = async (input: {
   return result;
 };
 
+export const reverseReviewRebate = async (input: {
+  userId: string;
+  placeId: string;
+  reviewId: string;
+}) => {
+  const userRef = adminDb.collection("users").doc(input.userId);
+  const reviewRef = adminDb.collection("touristPlaces").doc(input.placeId).collection("reviews").doc(input.reviewId);
+  const walletTransactionRef = userRef.collection("walletTransactions").doc();
+
+  return adminDb.runTransaction(async (transaction) => {
+    const [userSnap, reviewSnap] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(reviewRef),
+    ]);
+
+    if (!reviewSnap.exists) {
+      throw new Error("Review not found.");
+    }
+
+    const reviewData = reviewSnap.data() as AnyObject;
+    const walletReward = (reviewData.walletReward && typeof reviewData.walletReward === "object" ? reviewData.walletReward : {}) as AnyObject;
+    const rebate = (reviewData.ABJee && typeof reviewData.ABJee === "object" ? reviewData.ABJee : {}) as AnyObject;
+    const pointsToReverse = Math.max(0, Math.floor(toFiniteNumber(walletReward.points, toFiniteNumber(rebate.totalPoints))));
+    const textPoints = Math.max(0, Math.floor(toFiniteNumber(rebate.textPoints)));
+    const mediaPoints = Math.max(0, Math.floor(toFiniteNumber(rebate.mediaPoints)));
+
+    transaction.delete(reviewRef);
+
+    if (!userSnap.exists || pointsToReverse <= 0) {
+      return { reversedPoints: 0, wallet: null };
+    }
+
+    const userData = userSnap.data() as AnyObject;
+    const wallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
+    const updatedWallet: WalletState = {
+      availablePoints: Math.max(0, wallet.availablePoints - pointsToReverse),
+      lifetimeEarnedPoints: Math.max(0, wallet.lifetimeEarnedPoints - pointsToReverse),
+      lifetimeRedeemedPoints: wallet.lifetimeRedeemedPoints,
+      lifetimeRedeemedRupees: wallet.lifetimeRedeemedRupees,
+      monthly: wallet.monthly,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    transaction.set(userRef, { wallet: updatedWallet, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(walletTransactionRef, {
+      type: "review_rebate_reversal",
+      placeId: input.placeId,
+      reviewId: input.reviewId,
+      points: -pointsToReverse,
+      rupees: -(pointsToReverse * REBATE_POINT_VALUE_IN_RUPEES),
+      textPoints,
+      mediaPoints,
+      monthKey: wallet.monthly.monthKey,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return { reversedPoints: pointsToReverse, wallet: updatedWallet };
+  });
+};
+
 export const redeemWalletBalance = async (input: { userId: string; amount: number }) => {
   const userRef = adminDb.collection("users").doc(input.userId);
   const walletTransactionRef = userRef.collection("walletTransactions").doc();

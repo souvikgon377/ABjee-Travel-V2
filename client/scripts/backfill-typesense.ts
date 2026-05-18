@@ -45,6 +45,7 @@ async function backfill() {
         updatedAt: data.updatedAt,
         category: data.category || 'Other',
         coverImage: data.coverImage,
+        googleMapsUrl: data.googleMapsUrl,
         description: data.description,
       } as any)
     );

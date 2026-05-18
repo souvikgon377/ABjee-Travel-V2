@@ -89,6 +89,7 @@ export const touristPlacesSchema = {
     { name: 'description', type: 'string' as const, optional: true },
     { name: 'description_lower', type: 'string' as const, optional: true },
     { name: 'coverImage', type: 'string' as const, optional: true },
+    { name: 'googleMapsUrl', type: 'string' as const, optional: true },
     { name: 'popularity', type: 'int32' as const, optional: true },
     { name: 'updatedAt', type: 'int64' as const },
   ],

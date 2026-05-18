@@ -237,6 +237,9 @@ export const adminAPI = {
   getTourPlaceSearchMigrationStatus: (jobId: string) => adminApiInstance.get('/admin/tour-places/migration/status', { params: { jobId } }),
   refreshCache: (scope: string = 'all', rewarm: boolean = true) => adminApiInstance.post('/admin/refresh-cache', { scope, rewarm }),
   getSearchHealth: () => adminApiInstance.get('/admin/search-health'),
+  // ABJee Wallet admin endpoints
+  getWallets: () => adminApiInstance.get('/admin/wallets'),
+  postWalletAction: (userId: string, payload: any) => adminApiInstance.post(`/admin/wallets/${userId}`, payload),
 };
 
 export default api;

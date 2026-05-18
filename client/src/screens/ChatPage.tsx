@@ -16,7 +16,7 @@ import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
 import { publicAsset } from '@/lib/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminAPI, subscriptionsAPI, placesAPI } from '@/lib/api';
+import { subscriptionsAPI, placesAPI } from '@/lib/api';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   getSubscriptionInfo,

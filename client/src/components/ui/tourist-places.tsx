@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
+import { buildGoogleMapsEmbedUrl } from '@/components/ui/google-map-display';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -184,41 +185,7 @@ const compareTouristPlaces = (left: TouristPlace, right: TouristPlace) => {
 const sortTouristPlaces = (items: TouristPlace[]) => [...items].sort(compareTouristPlaces);
 
 const buildGoogleMapsPreviewUrl = (input: string): string | null => {
-  const raw = String(input || '').trim();
-  if (!raw) return null;
-
-  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-
-  try {
-    const url = new URL(withProtocol);
-    const host = url.hostname.toLowerCase();
-    let query = '';
-
-    if (host.includes('google.') || host.includes('goo.gl')) {
-      query = decodeURIComponent(url.searchParams.get('q') || url.searchParams.get('query') || '').trim();
-
-      if (!query) {
-        const placeMatch = url.pathname.match(/\/maps\/place\/([^/]+)/i);
-        if (placeMatch?.[1]) {
-          query = decodeURIComponent(placeMatch[1]).replace(/\+/g, ' ').trim();
-        }
-      }
-
-      if (!query) {
-        const coordsMatch = url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-        if (coordsMatch) {
-          query = `${coordsMatch[1]},${coordsMatch[2]}`;
-        }
-      }
-    }
-
-    if (!query) query = raw;
-
-    return `https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
-  } catch {
-    // Graceful fallback: attempt embed search even for non-URL free text.
-    return `https://www.google.com/maps?q=${encodeURIComponent(raw)}&output=embed`;
-  }
+  return buildGoogleMapsEmbedUrl({ googleMapsUrl: input, zoom: 13 });
 };
 
 const isVideoUrl = (url: string) => /\.(mp4|webm|ogg|mov|m4v|avi|mkv)(\?|#|$)/i.test(url);
@@ -2112,7 +2079,9 @@ export function TouristPlacesManager() {
 
   const formImages = form.media.filter((m) => m.type === 'image');
   const formVideos = form.media.filter((m) => m.type === 'video');
-  const googleMapsPreviewUrl = buildGoogleMapsPreviewUrl(form.googleMapsUrl);
+  const formMapDestination = [form.name, form.area, form.state, form.country].filter(Boolean).join(', ');
+  const googleMapsPreviewUrl = buildGoogleMapsPreviewUrl(form.googleMapsUrl)
+    || buildGoogleMapsEmbedUrl({ destination: formMapDestination, zoom: 13 });
   const pendingImages = pendingFiles.filter((p) => p.type === 'image');
   const pendingVideos = pendingFiles.filter((p) => p.type === 'video');
 
@@ -2509,6 +2478,8 @@ export function TouristPlacesManager() {
                       className="w-full h-64"
                     />
                     <div className="px-3 py-2 border-t border-border bg-background/80">
+                      <span className="mr-3 text-xs font-semibold text-muted-foreground">Map Preview</span>
+                      {form.googleMapsUrl.trim() && (
                       <a
                         href={form.googleMapsUrl}
                         target="_blank"
@@ -2517,6 +2488,7 @@ export function TouristPlacesManager() {
                       >
                         <MapIcon className="h-3.5 w-3.5" /> Open in Google Maps
                       </a>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3019,6 +2991,7 @@ export function TouristPlacesManager() {
             const placeImages = (place.media ?? []).filter((m) => m.type === 'image');
             const placeVideos = (place.media ?? []).filter((m) => m.type === 'video');
             const allMedia = place.media ?? [];
+            const placeMapPreviewUrl = buildGoogleMapsPreviewUrl(place.googleMapsUrl);
             return (
               <motion.div key={place.id}
                 variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
@@ -3142,10 +3115,23 @@ export function TouristPlacesManager() {
 
                   {/* Map link */}
                   {place.googleMapsUrl && (
-                    <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer"
-                      className="mt-auto inline-flex items-center gap-1.5 text-xs font-semibold text-rose-500 hover:text-rose-600 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-1.5 rounded-full transition-colors">
-                      <MapIcon className="h-3.5 w-3.5" /> View on Google Maps
-                    </a>
+                    <div className="mt-auto space-y-2 pt-1">
+                      {placeMapPreviewUrl && (
+                        <div className="overflow-hidden rounded-xl border border-border bg-muted/30">
+                          <iframe
+                            title={`Google Maps preview for ${place.name}`}
+                            src={placeMapPreviewUrl}
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                            className="h-28 w-full border-0"
+                          />
+                        </div>
+                      )}
+                      <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-500 hover:text-rose-600 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-1.5 rounded-full transition-colors">
+                        <MapIcon className="h-3.5 w-3.5" /> View on Google Maps
+                      </a>
+                    </div>
                   )}
                 </div>
               </motion.div>

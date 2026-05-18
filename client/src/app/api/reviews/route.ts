@@ -95,10 +95,85 @@ export async function POST(req: NextRequest) {
       return fail('rating must be between 1 and 5.', 400);
     }
 
+    // Server-side validation for media (counts, types, paid-only video)
+    const SERVER_MAX_PHOTOS_PER_REVIEW = 2;
+    const SERVER_MAX_VIDEOS_PER_REVIEW = 1;
+    const SERVER_MAX_VIDEO_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+    const rawMedia = Array.isArray(body.media) ? body.media : [];
+
+    let photoCount = 0;
+    let videoCount = 0;
+
+    const validateMediaItem = (item: unknown) => {
+      if (!item || typeof item !== 'object') return null;
+      const m = item as Record<string, unknown>;
+      const url = typeof m.url === 'string' ? m.url : null;
+      const publicId = typeof m.publicId === 'string' ? m.publicId : null;
+      const type = m.type === 'video' ? 'video' : 'image';
+      if (!url || !publicId) return null;
+      return { url, publicId, type } as { url: string; publicId: string; type: 'image' | 'video' };
+    };
+
+    const media: { url: string; publicId: string; type: 'image' | 'video' }[] = [];
+
+    for (const item of rawMedia) {
+      const valid = validateMediaItem(item);
+      if (!valid) continue;
+      if (valid.type === 'video') videoCount += 1; else photoCount += 1;
+      media.push(valid);
+    }
+
+    if (photoCount > SERVER_MAX_PHOTOS_PER_REVIEW) {
+      return fail(`Maximum ${SERVER_MAX_PHOTOS_PER_REVIEW} photos allowed per review.`, 400);
+    }
+
+    if (videoCount > SERVER_MAX_VIDEOS_PER_REVIEW) {
+      return fail(`Maximum ${SERVER_MAX_VIDEOS_PER_REVIEW} video allowed per review.`, 400);
+    }
+
+    // Determine if user has an active paid subscription
+    const subscription = (user && typeof user.subscription === 'object') ? (user.subscription as Record<string, unknown>) : null;
+    const isPaidSubscription = (sub: Record<string, unknown> | null | undefined) => {
+      if (!sub || typeof sub !== 'object') return false;
+      const type = typeof sub.type === 'string' ? sub.type.toLowerCase() : 'free';
+      if (type === 'free') return false;
+      const isActive = Boolean(sub.isActive);
+      if (!isActive) return false;
+      const endDate = sub.endDate ? new Date(sub.endDate as any) : null;
+      if (endDate && !Number.isNaN(endDate.getTime()) && endDate.getTime() <= Date.now()) return false;
+      return type === 'pro' || type === 'premium';
+    };
+
+    const userHasPaid = isPaidSubscription(subscription);
+
+    if (videoCount > 0 && !userHasPaid) {
+      return fail('Videos are available only for paid/premium users.', 403);
+    }
+
+    // Optional: try to check remote video size via HEAD request when possible
+    for (const item of media) {
+      if (item.type !== 'video') continue;
+      try {
+        const headRes = await fetch(item.url, { method: 'HEAD' });
+        if (headRes.ok) {
+          const len = headRes.headers.get('content-length');
+          if (len) {
+            const size = Number(len);
+            if (Number.isFinite(size) && size > SERVER_MAX_VIDEO_SIZE_BYTES) {
+              return fail(`Video exceeds maximum allowed size of 5MB.`, 400);
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore network failures here — size check is best-effort.
+      }
+    }
+
     const payload = {
       text: String(body.text || '').trim(),
       rating,
-      media: Array.isArray(body.media) ? body.media : [],
+      media,
       author: user.displayName || user.email || 'Traveller',
       userId: user.firebaseUid || user.id,
       createdAt: new Date(),

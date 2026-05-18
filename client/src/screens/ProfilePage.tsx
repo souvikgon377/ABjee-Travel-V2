@@ -655,17 +655,27 @@ export default function ProfilePage() {
                           <div key={entry.id} className="flex items-start justify-between gap-3 rounded-md bg-muted/60 px-3 py-2 text-sm">
                             <div>
                               <p className="font-medium text-foreground">
-                                {entry.type === 'review_rebate' ? 'Review ABJee' : entry.type === 'wallet_redemption' ? 'Wallet redemption' : 'Wallet activity'}
+                                {entry.type === 'review_rebate'
+                                  ? 'Review rebate'
+                                  : entry.type === 'review_rebate_reversal'
+                                    ? 'Review rebate reversed'
+                                    : entry.type === 'wallet_redemption'
+                                      ? 'Wallet redemption'
+                                      : 'Wallet activity'}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {entry.type === 'review_rebate'
                                   ? `Text ${entry.textPoints || 0} + Media ${entry.mediaPoints || 0}`
+                                  : entry.type === 'review_rebate_reversal'
+                                    ? `Removed Text ${entry.textPoints || 0} + Media ${entry.mediaPoints || 0}`
                                   : `Redeemed Rs ${entry.points}`}
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className={`font-semibold ${entry.type === 'wallet_redemption' ? 'text-rose-600' : 'text-emerald-700'}`}>
-                                {entry.type === 'wallet_redemption' ? `-Rs ${entry.rupees}` : `+Rs ${entry.rupees}`}
+                              <p className={`font-semibold ${entry.type === 'wallet_redemption' || entry.type === 'review_rebate_reversal' ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                {entry.type === 'wallet_redemption' || entry.type === 'review_rebate_reversal'
+                                  ? `-Rs ${Math.abs(entry.rupees)}`
+                                  : `+Rs ${entry.rupees}`}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('en-IN') : 'Recently'}

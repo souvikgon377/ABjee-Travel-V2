@@ -116,6 +116,7 @@ const AdminTravelItenary = lazy(() => import('@/components/ui/travel-itenary'));
 const OffersManager = lazy(() => import('@/components/ui/offers-manager').then((module) => ({ default: module.OffersManager })));
 const BookingsOverview = lazy(() => import('@/components/ui/bookings-overview').then((module) => ({ default: module.BookingsOverview })));
 const ExploreInterests = lazy(() => import('@/components/ui/explore-interests'));
+const ABJeeWalletAdminPanel = lazy(() => import('@/app/admin/abjee-wallet/page').then((m) => ({ default: m.default })));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -978,6 +979,19 @@ export default function AdminDashboard() {
             </div>
             <Suspense fallback={<SectionLoader />}>
               <PlaceFeedbackTable externalSearchQuery={searchQuery} />
+            </Suspense>
+          </div>
+        );
+
+      case 'abjee-wallet':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">ABJee Wallet</h1>
+              <p className="text-muted-foreground text-sm sm:text-base">Manage user wallets, reset monthly caps, and top-up ABJee points.</p>
+            </div>
+            <Suspense fallback={<SectionLoader />}>
+              <ABJeeWalletAdminPanel />
             </Suspense>
           </div>
         );

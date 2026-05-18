@@ -26,6 +26,7 @@ import {
   Database,
   Settings,
   Zap,
+  DollarSign,
   Moon,
   Sun,
   Home,
@@ -50,6 +51,7 @@ const menuItems = [
   { title: 'Offers', icon: TicketPercent, view: 'offers' },
   { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
+  { title: 'ABJee Wallet', icon: DollarSign, view: 'abjee-wallet' },
   { title: 'Settings', icon: Settings, view: 'settings' },
 ];
 

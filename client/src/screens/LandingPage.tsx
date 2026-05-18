@@ -64,10 +64,21 @@ type HomeOffer = {
   priority?: number
 }
 
+type InterestDestination = {
+  id: string
+  name: string
+  description: string
+  googleMapsUrl?: string
+  bestTime?: string
+}
+
+const stripHtml = (value: string) => value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+
 function LandingPage() {
   const [showCommunityPopup, setShowCommunityPopup] = useState(false)
   const [showFeaturesOverlay, setShowFeaturesOverlay] = useState(false)
   const [offers, setOffers] = useState<HomeOffer[]>([])
+  const [interestPlaces, setInterestPlaces] = useState<InterestDestination[]>([])
   const [itineraryCount, setItineraryCount] = useState<number>(0)
   const [isHydrated, setIsHydrated] = useState(false)
 
@@ -128,6 +139,45 @@ function LandingPage() {
       }
     }
     void fetchStats()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchInterestPlaces = async () => {
+      try {
+        const response = await fetch('/api/places/all?limit=6')
+        const payload = await response.json().catch(() => ({ success: false }))
+        if (!response.ok || !payload?.success) return
+
+        const responseData = payload?.data?.data || payload?.data
+        const rows = Array.isArray(responseData?.rows)
+          ? responseData.rows
+          : Array.isArray(responseData?.results)
+            ? responseData.results
+            : []
+
+        const mapped = rows
+          .filter((place: any) => place?.googleMapsUrl || place?.name)
+          .map((place: any) => ({
+            id: String(place.id || place.name),
+            name: String(place.name || 'Destination'),
+            description: stripHtml(String(place.description || [place.area, place.state, place.country].filter(Boolean).join(', ') || 'Explore this destination on ABJEE Travel.')).slice(0, 150),
+            googleMapsUrl: String(place.googleMapsUrl || ''),
+            bestTime: place.extraInfo?.find?.((item: any) => String(item.heading || '').toLowerCase().includes('best'))?.description,
+          }))
+
+        if (!cancelled) setInterestPlaces(mapped)
+      } catch {
+        if (!cancelled) setInterestPlaces([])
+      }
+    }
+
+    void fetchInterestPlaces()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const closeCommunityPopup = () => {
@@ -338,7 +388,7 @@ function LandingPage() {
         showNavigation={true}
       />
       <FeatureBlock3/>
-      <ExploreInterests />
+      <ExploreInterests interests={interestPlaces.length > 0 ? interestPlaces : undefined} />
       <Faq3/>
       <Footer4Col/>
 
