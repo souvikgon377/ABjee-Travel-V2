@@ -1,8 +1,33 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
 import { SearchService } from '@/modules/search/SearchService';
+import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 export const runtime = 'nodejs';
+
+async function enrichPlacesWithMapUrls(rows: any[]) {
+  const missingMapIds = rows
+    .filter((row) => row?.id && !String(row.googleMapsUrl || '').trim())
+    .map((row) => String(row.id));
+
+  if (missingMapIds.length === 0) return rows;
+
+  const refs = missingMapIds.map((id) => adminDb.collection('touristPlaces').doc(id));
+  const docs = await adminDb.getAll(...refs).catch(() => []);
+  const byId = new Map(docs.filter((snap) => snap.exists).map((snap) => [snap.id, snap.data() || {}]));
+
+  return rows.map((row) => {
+    const full = byId.get(String(row?.id || ''));
+    if (!full) return row;
+
+    return {
+      ...row,
+      googleMapsUrl: row.googleMapsUrl || full.googleMapsUrl || '',
+      extraInfo: row.extraInfo || full.extraInfo || [],
+      media: row.media || full.media || [],
+    };
+  });
+}
 
 /**
  * GET /api/places
@@ -28,10 +53,12 @@ export async function GET(req: NextRequest) {
       isActive: undefined // Show all results to match admin-side behavior
     });
 
+    const enrichedResults = await enrichPlacesWithMapUrls(result.results);
+
     // Return search results - ok() will wrap with { success: true, data: {...} }
     return ok({
-      rows: result.results,
-      results: result.results,
+      rows: enrichedResults,
+      results: enrichedResults,
       hasMore: result.hasMore,
       totalCount: result.totalCount,
       queryName: 'typesense',

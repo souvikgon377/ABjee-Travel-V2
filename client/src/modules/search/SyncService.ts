@@ -18,6 +18,7 @@ export interface PlaceSyncData {
   updatedAt: any;
   category?: string;
   coverImage?: string;
+  googleMapsUrl?: string;
 }
 
 export class SyncService {
@@ -148,6 +149,7 @@ export class SyncService {
         description,
         description_lower: normalizeSearchField(description),
         coverImage: data.coverImage || '',
+        googleMapsUrl: data.googleMapsUrl || '',
         popularity: data.popularity || 0,
       };
     }

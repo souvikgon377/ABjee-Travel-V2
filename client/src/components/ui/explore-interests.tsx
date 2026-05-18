@@ -11,6 +11,7 @@ interface InterestDestination {
   description: string;
   latitude?: number;
   longitude?: number;
+  googleMapsUrl?: string;
   icon?: string;
   bestTime?: string;
   rating?: number;
@@ -143,6 +144,7 @@ export default function ExploreInterests({
               <GoogleMapDisplay
                 latitude={currentInterest.latitude}
                 longitude={currentInterest.longitude}
+                googleMapsUrl={currentInterest.googleMapsUrl}
                 destination={currentInterest.name}
                 title={`Map of ${currentInterest.name}`}
                 zoom={12}
@@ -198,7 +200,7 @@ export default function ExploreInterests({
                     Location Marker
                   </p>
                   <p className="text-sm font-medium text-foreground">
-                    {currentInterest.latitude && currentInterest.longitude
+                    {typeof currentInterest.latitude === 'number' && typeof currentInterest.longitude === 'number'
                       ? `${currentInterest.latitude.toFixed(2)}°N, ${currentInterest.longitude.toFixed(2)}°E`
                       : 'View on map'}
                   </p>

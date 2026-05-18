@@ -1,4 +1,4 @@
-# Cloudflare CDN Setup
+# Cloudflare CDN Setup (All Devices)
 
 This project is now configured to work with Cloudflare CDN using `NEXT_PUBLIC_CDN_URL` and cache headers from `next.config.ts`.
 

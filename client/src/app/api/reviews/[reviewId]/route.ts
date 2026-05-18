@@ -3,6 +3,7 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { getRedis } from '@/lib/server/redis';
 import { authenticateRequest } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
+import { reverseReviewRebate } from '@/lib/server/rebateWallet';
 
 const getReviewsCacheKey = (placeId: string) => `reviews_${placeId}`;
 
@@ -35,14 +36,19 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ revi
       return fail('You can delete only your own review.', 403);
     }
 
-    await reviewRef.delete();
+    const reviewUserId = String(review.userId || currentUid);
+    const reversal = await reverseReviewRebate({
+      userId: reviewUserId,
+      placeId,
+      reviewId,
+    });
 
     const redis = getRedis();
     if (redis) {
       await redis.del(getReviewsCacheKey(placeId));
     }
 
-    return ok({ success: true });
+    return ok({ success: true, reversedPoints: reversal.reversedPoints, wallet: reversal.wallet });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete review.';
     return fail(message, 500);

@@ -34,27 +34,16 @@ import { sanitizeRichTextHtmlForDisplay } from "@/lib/richTextDisplay";
 import { buildAbjeeShareText } from "@/lib/socialShare";
 import { createImagePreview, revokeImagePreview, uploadImageToR2 } from "@/lib/r2Upload";
 import { placesAPI } from "@/lib/api";
+import { buildGoogleMapsEmbedUrl } from "@/components/ui/google-map-display";
 import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSubscriptionInfo, hasPaidAccess } from "@/lib/subscriptionPolicy";
-import useRealtimeCollection from "@/hooks/useRealtimeCollection";
-import { where } from "firebase/firestore";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
 const MAX_PHOTOS_PER_REVIEW = 2;
 const MAX_VIDEOS_PER_REVIEW = 1;
 const MAX_VIDEO_SIZE_MB = 5;
 
-const normalizeSearchText = (value?: string) =>
-  (value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const splitSearchTerms = (value: string) => value.split(" ").filter(Boolean);
-
-const SEARCH_DEBOUNCE_MS = 450;
 const SEARCH_PAGE_SIZE = 12;
 const SEARCH_API_PATH = "/api/places";
 
@@ -77,11 +66,6 @@ type PlaceReview = {
     caption?: string;
     thumbnail?: string;
   }>;
-};
-
-type SearchCursorValue = {
-  value: string;
-  id: string;
 };
 
 type SearchResponse = {
@@ -133,18 +117,19 @@ const PlaceCard: React.FC<{
   const [imgIdx, setImgIdx] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
   const dragRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const safeDescriptionHtml = place.description ? sanitizeRichTextHtmlForDisplay(place.description) : "";
 
   useEffect(() => {
-    if (hasVideo || images.length <= 1) return;
+    if (!isInteracting || hasVideo || images.length <= 1) return;
     const timer = window.setInterval(() => {
       setImgIdx((current) => (current + 1) % images.length);
     }, 3500);
     return () => window.clearInterval(timer);
-  }, [hasVideo, images.length]);
+  }, [hasVideo, images.length, isInteracting]);
 
   const sharePlace = (platform: "facebook" | "instagram" | "whatsapp", event: React.MouseEvent) => {
     event.stopPropagation();
@@ -201,6 +186,10 @@ const PlaceCard: React.FC<{
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: 0.04 * idx, type: "spring", stiffness: 260, damping: 24 }}
       whileHover={{ y: -8, scale: 1.02 }}
+      onMouseEnter={() => setIsInteracting(true)}
+      onMouseLeave={() => setIsInteracting(false)}
+      onFocus={() => setIsInteracting(true)}
+      onBlur={() => setIsInteracting(false)}
       className="group relative w-full max-w-[20rem] cursor-pointer overflow-hidden rounded-[1.65rem] border border-white/10 bg-[#2e3138]/90 text-left shadow-[0_14px_36px_rgba(0,0,0,0.28)] transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:shadow-[0_22px_48px_rgba(0,0,0,0.38)]"
     >
       <button
@@ -412,19 +401,16 @@ const TourPlaces: React.FC = () => {
   const [searchError, setSearchError] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
   const [actualSearchQuery, setActualSearchQuery] = useState("");
-  const [searchCacheStatus, setSearchCacheStatus] = useState<'hit' | 'miss' | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<TouristPlace | null>(null);
   const [isWindowExpanded, setIsWindowExpanded] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
-  const [openPhotoCommentKey, setOpenPhotoCommentKey] = useState<string | null>(null);
-  const [photoCommentInputs, setPhotoCommentInputs] = useState<Record<string, string>>({});
-  const [photoComments, setPhotoComments] = useState<Record<string, Array<{ author: string; text: string }>>>({});
   const [placeReviews, setPlaceReviews] = useState<Record<string, PlaceReview[]>>({});
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
   const [reviewMediaFiles, setReviewMediaFiles] = useState<ReviewMediaFile[]>([]);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewUploadError, setReviewUploadError] = useState("");
+  const [reviewRewardMessage, setReviewRewardMessage] = useState("");
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
   const reviewMediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -503,7 +489,6 @@ const TourPlaces: React.FC = () => {
     setSearchLoading(false);
     setSearchError("");
     setActiveSearchTerm("");
-    setSearchCacheStatus(null);
     lastSearchTermRef.current = "";
   }, []);
 
@@ -611,7 +596,6 @@ const TourPlaces: React.FC = () => {
       setSearchPage(1);
       setSearchHasMore(false);
       setSearchError("");
-      setSearchCacheStatus(null);
     } else {
       setSearchLoading(true);
       setSearchError("");
@@ -645,8 +629,6 @@ const TourPlaces: React.FC = () => {
       setActiveSearchTerm(normalizedTerm);
       setSearchPage(page);
       setSearchHasMore(Boolean(payload.hasMore ?? false));
-      setSearchCacheStatus(payload.cacheStatus ?? null);
-      console.log("CLIENT RESULTS:", nextResults.length);
       setSearchResults((prev) => {
         const existingIds = new Set(append ? prev.map((p) => p.id) : []);
         const filteredNext = nextResults.filter((p) => p.id && !existingIds.has(p.id));
@@ -770,7 +752,6 @@ const TourPlaces: React.FC = () => {
       setSearchPage(1);
       setSearchHasMore(false);
       setSearchError("");
-      setSearchCacheStatus(null);
     }
 
     void fetchSearchResults(actualSearchQuery, { append: false });
@@ -782,6 +763,14 @@ const TourPlaces: React.FC = () => {
 
   const selectedPlaceImages = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "image") ?? [], [selectedPlace?.media]);
   const selectedPlaceVideos = useMemo(() => selectedPlace?.media?.filter((item) => item.type === "video") ?? [], [selectedPlace?.media]);
+  const selectedPlaceMapPreviewUrl = useMemo(
+    () => buildGoogleMapsEmbedUrl({
+      destination: selectedPlace?.name,
+      googleMapsUrl: selectedPlace?.googleMapsUrl,
+      zoom: 13,
+    }),
+    [selectedPlace?.googleMapsUrl, selectedPlace?.name],
+  );
   const selectedPlaceReviewList = useMemo(
     () => (selectedPlace?.id ? (placeReviews[selectedPlace.id] ?? []) : []),
     [placeReviews, selectedPlace?.id],
@@ -794,7 +783,6 @@ const TourPlaces: React.FC = () => {
   const closeSelectedPlace = () => {
     setSelectedPlace(null);
     setIsWindowExpanded(false);
-    setOpenPhotoCommentKey(null);
     setReviewRating(0);
     setReviewText("");
     setReviewMediaFiles((current) => {
@@ -802,6 +790,7 @@ const TourPlaces: React.FC = () => {
       return [];
     });
     setReviewUploadError("");
+    setReviewRewardMessage("");
   };
 
   const handlePlaceShare = async (type: "whatsapp" | "facebook" | "copy") => {
@@ -832,16 +821,6 @@ const TourPlaces: React.FC = () => {
     await navigator.clipboard.writeText(url);
     setShareCopied(true);
     window.setTimeout(() => setShareCopied(false), 1200);
-  };
-
-  const submitPhotoComment = (key: string) => {
-    const text = (photoCommentInputs[key] ?? "").trim();
-    if (!text) return;
-    setPhotoComments((prev) => ({
-      ...prev,
-      [key]: [...(prev[key] ?? []), { author: "You", text }],
-    }));
-    setPhotoCommentInputs((prev) => ({ ...prev, [key]: "" }));
   };
 
     const handleReviewMediaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -963,12 +942,17 @@ const TourPlaces: React.FC = () => {
         reviewMedia.push(mediaItem);
       }
 
-      await placesAPI.createReview({
+      const response = await placesAPI.createReview({
         placeId: selectedPlace.id,
         text: reviewTextValue,
         rating: reviewRating,
         media: reviewMedia,
       });
+      const payload = response.data?.data ?? response.data ?? {};
+      const earnedPoints = Number(payload?.ABJee?.totalPoints || 0);
+      if (earnedPoints > 0) {
+        setReviewRewardMessage(`You earned ${earnedPoints} Rb point${earnedPoints === 1 ? "" : "s"} for this review.`);
+      }
 
       await loadPlaceReviews(selectedPlace.id);
 
@@ -997,6 +981,7 @@ const TourPlaces: React.FC = () => {
     setReviewRating(0);
     setReviewText("");
     setReviewUploadError("");
+    setReviewRewardMessage("");
     reviewMediaFiles.forEach((item) => revokeImagePreview(item.preview));
     setReviewMediaFiles([]);
     if (reviewMediaInputRef.current) reviewMediaInputRef.current.value = "";
@@ -1012,6 +997,7 @@ const TourPlaces: React.FC = () => {
     setReviewUploadError("");
     try {
       await placesAPI.deleteReview(selectedPlace.id, reviewId);
+      setReviewRewardMessage("");
       await loadPlaceReviews(selectedPlace.id);
     } catch (error) {
       setReviewUploadError(error instanceof Error ? error.message : "Failed to delete review.");
@@ -1315,6 +1301,9 @@ const TourPlaces: React.FC = () => {
 
                       <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm sm:p-5">
                         <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
+                        <p className="mt-1 text-[11px] text-emerald-700">
+                          Earn Rb points: Free users get 1 for text + 1 for media. Paid and Premium users get 2 for text + 3 for media. 1 Rb = Rs 1.
+                        </p>
                         <div className="mt-3 flex items-center gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
@@ -1376,6 +1365,7 @@ const TourPlaces: React.FC = () => {
                           </div>
                         )}
                         <p className="mt-2 text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
+                        {reviewRewardMessage && <p className="mt-2 text-xs font-semibold text-emerald-700">{reviewRewardMessage}</p>}
                         {reviewUploadError && <p className="mt-2 text-xs text-red-600">{reviewUploadError}</p>}
                       </div>
 
@@ -1494,6 +1484,34 @@ const TourPlaces: React.FC = () => {
                           {shareCopied ? "Copied!" : "Copy Link"}
                         </button>
                       </div>
+                      {selectedPlaceMapPreviewUrl && (
+                        <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                            <h3 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                              <MapPin className="h-4 w-4 text-rose-500" />
+                              Google Maps Preview
+                            </h3>
+                            {selectedPlace.googleMapsUrl && (
+                              <a
+                                href={selectedPlace.googleMapsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700"
+                              >
+                                Open in Google Maps
+                              </a>
+                            )}
+                          </div>
+                          <iframe
+                            title={`Google Maps preview for ${selectedPlace.name}`}
+                            src={selectedPlaceMapPreviewUrl}
+                            loading="lazy"
+                            allowFullScreen
+                            referrerPolicy="no-referrer-when-downgrade"
+                            className="h-72 w-full border-0"
+                          />
+                        </div>
+                      )}
                     </section>
 
                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -1519,16 +1537,6 @@ const TourPlaces: React.FC = () => {
                           </div>
                         )}
 
-                        {selectedPlace.googleMapsUrl && (
-                          <a
-                            href={selectedPlace.googleMapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700"
-                          >
-                            <MapPin className="h-4 w-4" /> View on Google Maps
-                          </a>
-                        )}
                       </div>
 
                       <div className="rounded-2xl border border-border bg-muted/40 p-4">
@@ -1559,53 +1567,6 @@ const TourPlaces: React.FC = () => {
                                 <img src={img.url} alt={img.caption ?? `${selectedPlace.name} photo ${index + 1}`} className="h-full w-full object-cover" />
                                 {img.caption && <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 text-[9px] truncate text-white">{img.caption}</div>}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setOpenPhotoCommentKey(openPhotoCommentKey === `image_${index}` ? null : `image_${index}`)}
-                                className="flex w-full items-center gap-1.5 border-t border-gray-100 px-3 py-2 text-xs text-gray-500 hover:text-rose-500"
-                              >
-                                <MessageCircle className="h-3.5 w-3.5" />
-                                {photoComments[`image_${index}`]?.length ? `${photoComments[`image_${index}`].length} comment${photoComments[`image_${index}`].length > 1 ? 's' : ''}` : 'Add comment'}
-                              </button>
-                              <AnimatePresence>
-                                {openPhotoCommentKey === `image_${index}` && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden border-t border-gray-100"
-                                  >
-                                    <div className="space-y-2 p-3">
-                                      {(photoComments[`image_${index}`] ?? []).length === 0 && (
-                                        <p className="text-[10px] text-gray-400 text-center py-1">No comments yet</p>
-                                      )}
-                                      {(photoComments[`image_${index}`] ?? []).map((comment, commentIndex) => (
-                                        <div key={`${comment.author}-${commentIndex}`} className="rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-2 text-xs text-gray-700">
-                                          <span className="font-semibold text-gray-600">{comment.author}:</span> {comment.text}
-                                        </div>
-                                      ))}
-                                      <div className="flex items-center gap-1.5">
-                                        <input
-                                          type="text"
-                                          value={photoCommentInputs[`image_${index}`] ?? ''}
-                                          onChange={(event) => setPhotoCommentInputs((prev) => ({ ...prev, [`image_${index}`]: event.target.value }))}
-                                          onKeyDown={(event) => { if (event.key === 'Enter') submitPhotoComment(`image_${index}`); }}
-                                          placeholder="Write a comment..."
-                                          className="min-w-0 flex-1 rounded-full border border-gray-200 px-3 py-1.5 text-[11px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => submitPhotoComment(`image_${index}`)}
-                                          className="rounded-full bg-rose-500 p-2 text-white hover:bg-rose-600"
-                                        >
-                                          <ChevronRight className="h-3.5 w-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
                             </div>
                           ))}
                           {selectedPlaceVideos.map((vid, index) => (
@@ -1614,53 +1575,6 @@ const TourPlaces: React.FC = () => {
                                 <video src={vid.url} poster={vid.thumbnail} controls playsInline preload="metadata" className="h-full w-full object-cover" />
                                 {vid.caption && <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 text-[9px] truncate text-white">{vid.caption}</div>}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setOpenPhotoCommentKey(openPhotoCommentKey === `video_${index}` ? null : `video_${index}`)}
-                                className="flex w-full items-center gap-1.5 border-t border-gray-100 px-3 py-2 text-xs text-gray-500 hover:text-rose-500"
-                              >
-                                <MessageCircle className="h-3.5 w-3.5" />
-                                {photoComments[`video_${index}`]?.length ? `${photoComments[`video_${index}`].length} comment${photoComments[`video_${index}`].length > 1 ? 's' : ''}` : 'Add comment'}
-                              </button>
-                              <AnimatePresence>
-                                {openPhotoCommentKey === `video_${index}` && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden border-t border-gray-100"
-                                  >
-                                    <div className="space-y-2 p-3">
-                                      {(photoComments[`video_${index}`] ?? []).length === 0 && (
-                                        <p className="text-[10px] text-gray-400 text-center py-1">No comments yet</p>
-                                      )}
-                                      {(photoComments[`video_${index}`] ?? []).map((comment, commentIndex) => (
-                                        <div key={`${comment.author}-${commentIndex}`} className="rounded-lg border border-rose-100 bg-rose-50/40 px-2.5 py-2 text-xs text-gray-700">
-                                          <span className="font-semibold text-gray-600">{comment.author}:</span> {comment.text}
-                                        </div>
-                                      ))}
-                                      <div className="flex items-center gap-1.5">
-                                        <input
-                                          type="text"
-                                          value={photoCommentInputs[`video_${index}`] ?? ''}
-                                          onChange={(event) => setPhotoCommentInputs((prev) => ({ ...prev, [`video_${index}`]: event.target.value }))}
-                                          onKeyDown={(event) => { if (event.key === 'Enter') submitPhotoComment(`video_${index}`); }}
-                                          placeholder="Write a comment..."
-                                          className="min-w-0 flex-1 rounded-full border border-gray-200 px-3 py-1.5 text-[11px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => submitPhotoComment(`video_${index}`)}
-                                          className="rounded-full bg-rose-500 p-2 text-white hover:bg-rose-600"
-                                        >
-                                          <ChevronRight className="h-3.5 w-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
                             </div>
                           ))}
                         </div>

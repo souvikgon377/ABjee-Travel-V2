@@ -40,6 +40,30 @@ const compareTouristPlaces = (left: any, right: any) => {
   return String(left?.name || '').localeCompare(String(right?.name || ''));
 };
 
+async function enrichPlacesWithMapUrls(rows: any[]) {
+  const missingMapIds = rows
+    .filter((row) => row?.id && !String(row.googleMapsUrl || '').trim())
+    .map((row) => String(row.id));
+
+  if (missingMapIds.length === 0) return rows;
+
+  const refs = missingMapIds.map((id) => adminDb.collection('touristPlaces').doc(id));
+  const docs = await adminDb.getAll(...refs).catch(() => []);
+  const byId = new Map(docs.filter((snap) => snap.exists).map((snap) => [snap.id, snap.data() || {}]));
+
+  return rows.map((row) => {
+    const full = byId.get(String(row?.id || ''));
+    if (!full) return row;
+
+    return {
+      ...row,
+      googleMapsUrl: row.googleMapsUrl || full.googleMapsUrl || '',
+      extraInfo: row.extraInfo || full.extraInfo || [],
+      media: row.media || full.media || [],
+    };
+  });
+}
+
 /**
  * GET /api/admin/tourist-places/list
  * 
@@ -94,9 +118,11 @@ export async function GET(req: NextRequest) {
       // Admin sees everything (both active and inactive), so we don't filter by isActive
     });
 
+    const enrichedResults = await enrichPlacesWithMapUrls(result.results);
+
     return ok({
-      data: result.results,
-      rows: result.results,
+      data: enrichedResults,
+      rows: enrichedResults,
       total: result.totalCount,
       totalCount: result.totalCount,
       page,
