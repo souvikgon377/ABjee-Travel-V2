@@ -12,6 +12,7 @@ import {
   isValidPaidPlan,
 } from '@/lib/server/subscriptionPlans';
 import { getCouponPricing } from '@/lib/server/couponPricing';
+import { getWalletRedemptionPreview, redeemWalletForSubscription } from '@/lib/server/rebateWallet';
 
 export const runtime = 'nodejs';
 
@@ -32,10 +33,6 @@ export async function POST(req: NextRequest) {
       return fail('Invalid billing interval', 400);
     }
 
-    if (!promoCode) {
-      return fail('Coupon code is required', 400);
-    }
-
     const [selectedPrice, configuredPlans, privateRoomLimits] = await Promise.all([
       getConfiguredPlanByInterval(planType, interval),
       getConfiguredSubscriptionPlans(),
@@ -48,16 +45,28 @@ export async function POST(req: NextRequest) {
       baseAmount: selectedPrice.amount,
     });
 
-    if (couponPricing.finalAmount > 0) {
-      return fail('Coupon does not fully cover the payable amount', 400);
+    const walletUserId = String(user.firebaseUid || user.id);
+    const walletPreview = await getWalletRedemptionPreview({
+      userId: walletUserId,
+      amount: couponPricing.finalAmount,
+    });
+
+    if (walletPreview.redeemableAmount < couponPricing.finalAmount) {
+      return fail('RB points do not fully cover the payable amount.', 400);
     }
+
+    const redemption = await redeemWalletForSubscription({
+      userId: walletUserId,
+      amount: couponPricing.finalAmount,
+      planType,
+      interval,
+    });
 
     const selectedPlan = configuredPlans[planType];
     const startDate = new Date();
     const endDate = getIntervalEndDate(interval, startDate);
 
     let subscription = await subscriptionService.findByUserId(user.id);
-
     const plan = {
       type: planType,
       name: selectedPlan.name,
@@ -71,13 +80,16 @@ export async function POST(req: NextRequest) {
       amount: 0,
       currency: selectedPrice.currency,
       status: 'paid',
-      description: `${selectedPlan.name} - ${interval} subscription (100% coupon)` ,
-      invoiceId: `INV-COUPON-${Date.now()}`,
+      description: `${selectedPlan.name} - ${interval} subscription (RB points)`,
+      invoiceId: `INV-RB-${Date.now()}`,
       paymentDate: new Date().toISOString(),
-      paymentGateway: 'coupon',
+      paymentGateway: 'rb_points',
       promoCode: couponPricing.promoCode,
       discountPercent: couponPricing.discountPercent,
-      discountAmount: couponPricing.discountAmount,
+      couponDiscountAmount: couponPricing.discountAmount,
+      rbPointsRedeemed: redemption.redeemedAmount,
+      rbDiscountAmount: redemption.redeemedAmount,
+      discountAmount: couponPricing.discountAmount + redemption.redeemedAmount,
       baseAmount: selectedPrice.amount,
     };
 
@@ -90,10 +102,7 @@ export async function POST(req: NextRequest) {
         endDate: endDate.toISOString(),
         features,
         nextBillingDate: endDate.toISOString(),
-        paymentMethod: {
-          type: 'coupon',
-          promoCode: couponPricing.promoCode,
-        },
+        paymentMethod: { type: 'rb_points' },
         promoCode: couponPricing.promoCode,
         billingHistory: [billingEntry],
       });
@@ -107,10 +116,7 @@ export async function POST(req: NextRequest) {
         nextBillingDate: endDate.toISOString(),
         autoRenew: true,
         cancellation: null,
-        paymentMethod: {
-          type: 'coupon',
-          promoCode: couponPricing.promoCode,
-        },
+        paymentMethod: { type: 'rb_points' },
         promoCode: couponPricing.promoCode,
         billingHistory: [...(subscription.billingHistory || []), billingEntry],
       });
@@ -129,14 +135,15 @@ export async function POST(req: NextRequest) {
     }
 
     return ok({
-      message: 'Coupon redeemed successfully. Subscription activated.',
+      message: 'RB points redeemed successfully. Subscription activated.',
       subscription,
-      pricing: couponPricing,
+      wallet: redemption.wallet,
+      rbPointsRedeemed: redemption.redeemedAmount,
     });
   } catch (error: any) {
     if (error instanceof AuthError) {
       return fail(error.message, error.status);
     }
-    return fail(error?.message || 'Failed to redeem coupon', 500);
+    return fail(error?.message || 'Failed to redeem RB points', 500);
   }
 }

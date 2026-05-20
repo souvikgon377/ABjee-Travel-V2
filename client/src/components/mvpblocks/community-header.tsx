@@ -46,7 +46,7 @@ const navItems: NavItem[] = [
 const getActiveTabFromPath = (pathname: string | null): string => {
   if (!pathname) return 'explore-interest';
 
-  if (pathname.includes('/chat')) {
+  if (pathname.includes('/community')) {
     return 'explore-interest';
   }
 
@@ -78,7 +78,7 @@ const CommunityHeader: React.FC = () => {
     pathname?.includes('/travel-destinations') ||
     pathname?.includes('/trip-stories') ||
     pathname?.includes('/tourplaces') ||
-    pathname?.includes('/chat') ||
+    pathname?.includes('/community') ||
     pathname?.includes('/community');
 
   const handleNavClick = (item: NavItem) => {

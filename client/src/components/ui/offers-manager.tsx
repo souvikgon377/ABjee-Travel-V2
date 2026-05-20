@@ -48,7 +48,7 @@ const EMPTY_FORM: OfferForm = {
   description: '',
   badge: 'Limited Offer',
   ctaText: 'Explore Offer',
-  ctaHref: '/chat',
+  ctaHref: '/community',
   isActive: true,
   priority: 10,
 };
@@ -127,7 +127,7 @@ export function OffersManager() {
         description: form.description.trim(),
         badge: form.badge.trim(),
         ctaText: form.ctaText.trim(),
-        ctaHref: form.ctaHref.trim() || '/chat',
+        ctaHref: form.ctaHref.trim() || '/community',
         updatedAt: now,
         createdAt: now,
       });

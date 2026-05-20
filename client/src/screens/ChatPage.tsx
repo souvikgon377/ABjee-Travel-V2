@@ -1335,7 +1335,7 @@ const ChatRoomsList: React.FC = () => {
                   window.localStorage.removeItem(PENDING_PRIVATE_JOIN_ROOMS_KEY);
                 }
 
-                router.push(`/chat/room/${approvedRoom.id}`);
+                router.push(`/community/room/${approvedRoom.id}`);
                 return;
               }
             }
@@ -1516,7 +1516,7 @@ const ChatRoomsList: React.FC = () => {
       removeIconImage();
 
       // Navigate to the new room
-      router.push(`/chat/room/${roomId}`);
+      router.push(`/community/room/${roomId}`);
     } catch (error: any) {
       const message = error?.message || 'Failed to create room';
       const expectedPolicyError =
@@ -3560,7 +3560,7 @@ const ChatRoomsList: React.FC = () => {
                           >
                             <Card
                               className="cursor-pointer h-full bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-3xl overflow-hidden group relative"
-                              onClick={() => router.push(`/chat/room/${room.id}`)}
+                              onClick={() => router.push(`/community/room/${room.id}`)}
                             >
                               {/* Sliding Background Images Carousel */}
                               {(() => {
@@ -3683,7 +3683,7 @@ const ChatRoomsList: React.FC = () => {
                                         }`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        router.push(`/chat/room/${room.id}`);
+                                        router.push(`/community/room/${room.id}`);
                                       }}
                                     >
                                       <MessageCircle className="h-4 w-4 mr-1.5" />
@@ -3966,7 +3966,7 @@ const ChatRoomsList: React.FC = () => {
                                                 ? 'border-green-400/80 dark:border-green-500/80 shadow-[0_0_0_1px_rgba(34,197,94,0.20),0_0_22px_rgba(34,197,94,0.22)] hover:border-green-300'
                                                 : 'border-blue-400/80 dark:border-blue-500/80 shadow-[0_0_0_1px_rgba(59,130,246,0.20),0_0_22px_rgba(59,130,246,0.22)] hover:border-blue-300'
                                               }`}
-                                            onClick={() => router.push(`/chat/room/${room.id}`)}
+                                            onClick={() => router.push(`/community/room/${room.id}`)}
                                           >
                                             {/* Sliding Background Images Carousel */}
                                             {(() => {
@@ -4181,7 +4181,7 @@ const ChatRoomsList: React.FC = () => {
                                                           }`}
                                                         onClick={(e) => {
                                                           e.stopPropagation();
-                                                          router.push(`/chat/room/${room.id}`);
+                                                          router.push(`/community/room/${room.id}`);
                                                         }}
                                                       >
                                                         <MessageCircle className="h-4 w-4 mr-1.5" />
@@ -4376,12 +4376,16 @@ const ChatPage: React.FC = () => {
 
     const loadOffers = async () => {
       try {
-        const snapshot = await getDocs(collection(firestoreDb, 'offers'));
+        const response = await fetch('/api/offers?limit=20');
+        if (!response.ok) {
+          throw new Error('Failed to fetch offers');
+        }
+        const payload = await response.json();
         if (cancelled) return;
 
-        const rows = snapshot.docs
-          .map((entry) => ({ id: entry.id, ...(entry.data() as Omit<LiveOffer, 'id'>) }))
-          .filter((offer) => offer.isActive)
+        const offerRows = (Array.isArray(payload?.data) ? payload.data : []) as LiveOffer[];
+        const rows = offerRows
+          .filter((offer: LiveOffer) => offer.isActive)
           .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
         setOffers(rows);
       } catch {
@@ -4412,5 +4416,3 @@ const ChatPage: React.FC = () => {
 };
 
 export default ChatPage;
-
-

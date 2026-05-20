@@ -195,8 +195,26 @@ async function loadPlacesWithRetry(retries = 3): Promise<SharedPlaceRecord[]> {
     if (!retryLock) throw new Error("RETRY_STORM_PROTECTION");
   }
   try {
+    const startedAt = Date.now();
+    console.info('[FirestoreQuery] sharedPlacesCache load', {
+      collection: COLLECTION,
+      operation: 'collection.get',
+      retriesRemaining: retries,
+    });
+
     const snapshot = await adminDb.collection(COLLECTION).get();
-    return snapshot.docs.map(normalizeDoc).sort((a: SharedPlaceRecord, b: SharedPlaceRecord) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+    const places = snapshot.docs
+      .map(normalizeDoc)
+      .sort((a: SharedPlaceRecord, b: SharedPlaceRecord) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+
+    console.info('[FirestoreResult] sharedPlacesCache load', {
+      docsRead: snapshot.size,
+      rowsReturned: places.length,
+      durationMs: Date.now() - startedAt,
+      sampleIds: places.slice(0, 5).map((place) => place.id),
+    });
+
+    return places;
   } catch (error) {
     if (retries === 0) throw error;
     await new Promise(r => setTimeout(r, 2000));

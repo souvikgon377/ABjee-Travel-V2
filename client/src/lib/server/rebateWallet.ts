@@ -300,3 +300,97 @@ export const redeemWalletBalance = async (input: { userId: string; amount: numbe
     };
   });
 };
+
+export const getWalletRedemptionPreview = async (input: { userId: string; amount: number }) => {
+  const requestedAmount = Math.max(0, Math.floor(toFiniteNumber(input.amount)));
+  if (requestedAmount <= 0) {
+    return {
+      redeemableAmount: 0,
+      wallet: createDefaultWalletState(),
+      remainingThisMonth: REBATE_MONTHLY_REDEMPTION_LIMIT,
+    };
+  }
+
+  const userSnap = await adminDb.collection("users").doc(input.userId).get();
+  if (!userSnap.exists) {
+    throw new Error("User profile not found.");
+  }
+
+  const userData = userSnap.data() as AnyObject;
+  const wallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
+  const monthlyRemaining = Math.max(0, REBATE_MONTHLY_REDEMPTION_LIMIT - wallet.monthly.redeemedRupees);
+  const redeemableAmount = Math.min(requestedAmount, wallet.availablePoints, monthlyRemaining);
+
+  return {
+    redeemableAmount,
+    wallet,
+    remainingThisMonth: monthlyRemaining,
+  };
+};
+
+export const redeemWalletForSubscription = async (input: {
+  userId: string;
+  amount: number;
+  orderId?: string | null;
+  paymentId?: string | null;
+  planType?: string | null;
+  interval?: string | null;
+}) => {
+  const userRef = adminDb.collection("users").doc(input.userId);
+  const walletTransactionRef = userRef.collection("walletTransactions").doc();
+  const requestedAmount = Math.max(0, Math.floor(toFiniteNumber(input.amount)));
+
+  if (requestedAmount <= 0) {
+    return { redeemedAmount: 0, wallet: null, remainingThisMonth: REBATE_MONTHLY_REDEMPTION_LIMIT };
+  }
+
+  return adminDb.runTransaction(async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists) {
+      throw new Error("User profile not found.");
+    }
+
+    const userData = userSnap.data() as AnyObject;
+    const currentWallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
+    const monthlyRemaining = Math.max(0, REBATE_MONTHLY_REDEMPTION_LIMIT - currentWallet.monthly.redeemedRupees);
+    const redeemable = Math.min(requestedAmount, currentWallet.availablePoints, monthlyRemaining);
+
+    if (redeemable < requestedAmount) {
+      throw new Error("Available RB points changed. Please restart checkout.");
+    }
+
+    const updatedWallet: WalletState = {
+      availablePoints: currentWallet.availablePoints - redeemable,
+      lifetimeEarnedPoints: currentWallet.lifetimeEarnedPoints,
+      lifetimeRedeemedPoints: currentWallet.lifetimeRedeemedPoints + redeemable,
+      lifetimeRedeemedRupees: currentWallet.lifetimeRedeemedRupees + redeemable,
+      monthly: {
+        ...currentWallet.monthly,
+        redeemedPoints: currentWallet.monthly.redeemedPoints + redeemable,
+        redeemedRupees: currentWallet.monthly.redeemedRupees + redeemable,
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    transaction.set(userRef, { wallet: updatedWallet, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.set(walletTransactionRef, {
+      type: "subscription_wallet_redemption",
+      points: redeemable,
+      rupees: redeemable,
+      requestedAmount,
+      orderId: input.orderId || null,
+      paymentId: input.paymentId || null,
+      planType: input.planType || null,
+      interval: input.interval || null,
+      monthlyLimitRupees: REBATE_MONTHLY_REDEMPTION_LIMIT,
+      monthKey: updatedWallet.monthly.monthKey,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      redeemedAmount: redeemable,
+      wallet: updatedWallet,
+      remainingThisMonth: Math.max(0, REBATE_MONTHLY_REDEMPTION_LIMIT - updatedWallet.monthly.redeemedRupees),
+    };
+  });
+};

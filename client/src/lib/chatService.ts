@@ -676,7 +676,7 @@ class ChatService {
    */
   getInviteLink(roomId: string, inviteToken: string): string {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/chat/room/${roomId}?invite=${inviteToken}`;
+    return `${baseUrl}/community/room/${roomId}?invite=${inviteToken}`;
   }
 
   /**

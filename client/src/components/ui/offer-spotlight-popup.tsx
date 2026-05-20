@@ -147,7 +147,7 @@ export default function OfferSpotlightPopup({
                   </p>
 
                   <Link
-                    href={currentOffer.ctaHref || '/chat'}
+                    href={currentOffer.ctaHref || '/community'}
                     onClick={closePopup}
                     className="mt-6 inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r from-rose-500 to-orange-500 px-6 py-3 text-sm font-bold text-white shadow-[0_10px_25px_rgba(244,63,94,0.35)] transition-all hover:scale-[1.02] hover:from-rose-600 hover:to-orange-600"
                   >

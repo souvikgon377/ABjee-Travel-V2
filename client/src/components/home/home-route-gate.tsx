@@ -71,7 +71,7 @@ export default function HomeRouteGate() {
 
   useEffect(() => {
     if (!loadingSetting && !homePageEnabled) {
-      router.replace('/chat');
+      router.replace('/community');
     }
   }, [homePageEnabled, loadingSetting, router]);
 

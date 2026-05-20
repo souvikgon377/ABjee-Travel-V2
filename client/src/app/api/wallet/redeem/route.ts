@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, AuthError } from "@/lib/server/auth";
+import { authenticateRequest, AuthError, invalidateUserProfileCache } from "@/lib/server/auth";
 import { fail, ok } from "@/lib/server/http";
 import { redeemWalletBalance } from "@/lib/server/rebateWallet";
 
@@ -19,6 +19,10 @@ export async function POST(req: NextRequest) {
       userId: String(user.firebaseUid || user.id),
       amount,
     });
+
+    if (user.firebaseUid) {
+      await invalidateUserProfileCache(user.firebaseUid);
+    }
 
     return ok({
       message: "Wallet redemption completed.",

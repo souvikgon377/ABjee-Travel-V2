@@ -8,8 +8,8 @@ import { globalIgnores } from 'eslint/config'
 export default tseslint.config([
   globalIgnores([
     'dist',
-    'src/components/chat/ModerationDialog.tsx',
-    'src/components/chat/TypingIndicator.tsx',
+    'src/components/community/ModerationDialog.tsx',
+    'src/components/community/TypingIndicator.tsx',
     'src/components/mvpblocks/globe1.tsx',
     'src/components/ui/globe.tsx',
     'src/components/ui/multi-step-form.tsx',

@@ -31,7 +31,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
-      url: `${siteUrl}/chat`,
+      url: `${siteUrl}/community`,
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.9,

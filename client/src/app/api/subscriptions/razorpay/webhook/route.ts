@@ -1,5 +1,6 @@
 import { createHmac } from 'crypto';
 import { NextRequest } from 'next/server';
+import { invalidateUserProfileCache } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { subscriptionService } from '@/services/subscriptionService';
@@ -12,6 +13,7 @@ import {
   isValidInterval,
   isValidPaidPlan,
 } from '@/lib/server/subscriptionPlans';
+import { redeemWalletForSubscription } from '@/lib/server/rebateWallet';
 
 export const runtime = 'nodejs';
 
@@ -108,6 +110,9 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentData = paymentDoc.data() as Record<string, any>;
+    if (paymentData.status === 'paid') {
+      return ok({ message: 'Payment already processed' });
+    }
     const userId = String(paymentData.userId || '').trim();
     const planType = String(paymentData.planType || '').trim();
     const interval = String(paymentData.interval || '').trim();
@@ -164,6 +169,8 @@ export async function POST(req: NextRequest) {
     const appliedPromoCode = typeof paymentData.promoCode === 'string' ? paymentData.promoCode : null;
     const discountPercent = Number(paymentData.discountPercent || 0);
     const discountAmount = Number(paymentData.discountAmount || 0);
+    const rbPointsRedeemed = Math.max(0, Math.floor(Number(paymentData.rbPointsRedeemed || 0)));
+    const rbDiscountAmount = Math.max(0, Number(paymentData.rbDiscountAmount || 0));
     const finalAmount = Number(paymentData.amount || selectedPrice.amount);
 
     console.log('[Razorpay Webhook] Pricing details:', {
@@ -202,6 +209,8 @@ export async function POST(req: NextRequest) {
       promoCode: appliedPromoCode,
       discountPercent,
       discountAmount,
+      rbPointsRedeemed,
+      rbDiscountAmount,
       source: 'webhook',
     };
 
@@ -269,11 +278,26 @@ export async function POST(req: NextRequest) {
       'subscription.endDate': endDate.toISOString(),
     });
 
+    if (rbPointsRedeemed > 0 && paymentData.rbRedemptionStatus !== 'redeemed') {
+      await redeemWalletForSubscription({
+        userId: String(paymentData.walletUserId || userId),
+        amount: rbPointsRedeemed,
+        orderId,
+        paymentId,
+        planType,
+        interval,
+      });
+    }
+    if (paymentData.walletUserId) {
+      await invalidateUserProfileCache(String(paymentData.walletUserId));
+    }
+
     console.log('[Razorpay Webhook] Finalizing payment record:', orderId);
     await paymentDocRef.update({
       status: 'paid',
       razorpayPaymentId: paymentId || null,
       razorpayPaymentStatus: paymentStatus,
+      rbRedemptionStatus: rbPointsRedeemed > 0 ? 'redeemed' : paymentData.rbRedemptionStatus || 'none',
       razorpayWebhookEvent: eventName,
       razorpayWebhookReceivedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

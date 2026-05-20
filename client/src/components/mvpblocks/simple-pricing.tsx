@@ -161,6 +161,7 @@ export default function SimplePricing() {
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [useRbPoints, setUseRbPoints] = useState(true);
   const [couponPreviewByPlan, setCouponPreviewByPlan] = useState<Record<string, {
     discountPercent: number;
     discountAmount: number;
@@ -170,13 +171,34 @@ export default function SimplePricing() {
   const { currentUser, userProfile } = useAuth();
   const router = useRouter();
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
-  const isPaidSubscriber = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
+  const walletSummary = useMemo(() => {
+    const wallet = (userProfile as any)?.wallet || {};
+    const monthly = wallet.monthly || {};
+    const availablePoints = Math.max(0, Math.floor(Number(wallet.availablePoints || 0)));
+    const monthlyCap = Math.max(0, Math.floor(Number(monthly.monthlyCapRupees || 30)));
+    const monthlyRedeemed = Math.max(0, Math.floor(Number(monthly.redeemedRupees || 0)));
+    const monthlyRemaining = Math.max(0, monthlyCap - monthlyRedeemed);
+    return {
+      availablePoints,
+      monthlyRemaining,
+      usablePoints: Math.min(availablePoints, monthlyRemaining),
+    };
+  }, [userProfile]);
   const activePlanId = useMemo(() => {
-    if (!isPaidSubscriber) return null;
-    if (subscriptionInfo.type === 'premium') return 'enterprise';
-    if (subscriptionInfo.type === 'pro') return 'pro';
+    if (!hasPaidAccess(subscriptionInfo)) return null;
+
+    const normalizedType = String(subscriptionInfo.type || 'free').toLowerCase();
+
+    if (normalizedType === 'premium' || normalizedType === 'enterprise') {
+      return 'enterprise';
+    }
+
+    if (normalizedType === 'pro' || normalizedType === 'paid' || normalizedType === 'paid-plan') {
+      return 'pro';
+    }
+
     return null;
-  }, [isPaidSubscriber, subscriptionInfo.type]);
+  }, [subscriptionInfo]);
 
   const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 
@@ -199,6 +221,14 @@ export default function SimplePricing() {
     if (planId === 'enterprise') return 'premium';
     return null;
   };
+
+  const getDiscountedPlanAmount = useCallback((planId: string) => {
+    const rawPrice = plans.find((plan) => plan.id === planId)?.price[frequency as 'monthly' | 'yearly'];
+    if (typeof rawPrice !== 'number') return rawPrice;
+    const couponAmount = couponPreviewByPlan[planId]?.finalAmount ?? rawPrice;
+    if (!useRbPoints || walletSummary.usablePoints <= 0 || !getPlanType(planId)) return couponAmount;
+    return Math.max(0, couponAmount - Math.min(walletSummary.usablePoints, couponAmount));
+  }, [couponPreviewByPlan, frequency, plans, useRbPoints, walletSummary.usablePoints]);
 
   const validateCouponForCurrentFrequency = useCallback(async (rawCouponCode: string) => {
     const normalizedCode = rawCouponCode.trim().toUpperCase();
@@ -347,7 +377,7 @@ export default function SimplePricing() {
     const planType = getPlanType(planId);
 
     if (!planType) {
-      router.push('/chat');
+      router.push('/community');
       return;
     }
 
@@ -433,6 +463,7 @@ export default function SimplePricing() {
           planType,
           interval: frequency,
           promoCode: appliedCoupon,
+          useRbPoints,
         }),
       });
 
@@ -442,6 +473,38 @@ export default function SimplePricing() {
       }
 
       const orderData = orderPayload.data;
+
+      if (orderData?.requiresPayment === false) {
+        const redeemRes = await fetch('/api/subscriptions/wallet/redeem', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            planType,
+            interval: frequency,
+            promoCode: appliedCoupon,
+          }),
+        });
+
+        const redeemPayload = await redeemRes.json().catch(() => ({}));
+        if (!redeemRes.ok || !redeemPayload?.success) {
+          throw new Error(redeemPayload?.message || 'Failed to redeem RB points.');
+        }
+
+        const currentScrollY = window.scrollY;
+        triggerPaymentFireworks();
+        setPaymentConfirmation('RB points redeemed successfully. Your subscription is now active.');
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: currentScrollY, behavior: 'auto' });
+        });
+        setTimeout(() => {
+          router.push('/profile');
+        }, 2200);
+        return;
+      }
+
       releaseBodyScrollLock = lockBodyScroll();
 
       const checkout = new (window as any).Razorpay({
@@ -521,7 +584,7 @@ export default function SimplePricing() {
       }
       setProcessingPlan(null);
     }
-  }, [appliedCoupon, currentUser, frequency, loadRazorpayScript, lockBodyScroll, razorpayKeyId, router, triggerPaymentFireworks, userProfile?.displayName, userProfile?.email]);
+  }, [appliedCoupon, currentUser, frequency, loadRazorpayScript, lockBodyScroll, razorpayKeyId, router, triggerPaymentFireworks, useRbPoints, userProfile?.displayName, userProfile?.email]);
 
   useEffect(() => {
     setMounted(true);
@@ -722,6 +785,30 @@ export default function SimplePricing() {
           </motion.div>
         )}
 
+        {currentUser && walletSummary.usablePoints > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.28 }}
+            className="w-full max-w-2xl rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-left"
+          >
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={useRbPoints}
+                onChange={(event) => setUseRbPoints(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-emerald-600"
+              />
+              <span>
+                <span className="block font-medium text-foreground">Use RB points for this subscription</span>
+                <span className="block text-muted-foreground">
+                  Available discount: Rs {walletSummary.usablePoints}. 1 RB point = Rs 1, remaining monthly cap Rs {walletSummary.monthlyRemaining}.
+                </span>
+              </span>
+            </label>
+          </motion.div>
+        )}
+
         <div className="mt-8 grid w-full max-w-6xl grid-cols-1 gap-6 md:grid-cols-3">
           {plans.map((plan, index) => (
             <motion.div
@@ -735,16 +822,18 @@ export default function SimplePricing() {
               {(() => {
                 const isCurrentPlan = Boolean(activePlanId && plan.id === activePlanId);
                 const isFreePlan = plan.id === 'hobby';
+                const isPremiumPlan = plan.id === 'enterprise';
                 return (
               <Card
                 className={cn(
                   'relative h-full w-full bg-secondary/20 text-left transition-all duration-300 hover:shadow-lg',
                   isCurrentPlan && 'border-amber-300/70 bg-linear-to-br from-amber-50/80 via-orange-50/70 to-yellow-50/70 shadow-[0_16px_40px_-20px_rgba(251,191,36,0.75)] ring-2 ring-amber-300/65 dark:border-amber-500/40 dark:from-amber-950/35 dark:via-orange-950/25 dark:to-yellow-950/25 dark:ring-amber-500/50',
-                  isFreePlan && 'border-emerald-400/60 bg-linear-to-br from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-emerald-400/45 shadow-[0_0_22px_rgba(16,185,129,0.2)]',
-                  plan.popular
+                  isFreePlan && !isCurrentPlan && 'border-emerald-400/60 bg-linear-to-br from-emerald-500/10 via-emerald-500/5 to-transparent ring-1 ring-emerald-400/45 shadow-[0_0_22px_rgba(16,185,129,0.2)]',
+                  isPremiumPlan && !isCurrentPlan && 'border-blue-400/60 bg-linear-to-br from-blue-500/10 via-blue-500/5 to-transparent ring-1 ring-blue-400/45 shadow-[0_0_22px_rgba(59,130,246,0.2)]',
+                  plan.popular && !isCurrentPlan
                     ? 'shadow-md ring-2 ring-primary/50 dark:shadow-primary/10'
-                    : 'hover:border-primary/30',
-                  plan.popular &&
+                    : !isCurrentPlan && 'hover:border-primary/30',
+                  plan.popular && !isCurrentPlan &&
                     'bg-linear-to-b from-primary/3 to-transparent',
                 )}
               >
@@ -764,6 +853,27 @@ export default function SimplePricing() {
                     />
                     <motion.div
                       className="pointer-events-none absolute -inset-0.5 z-0 rounded-lg border border-emerald-300/40"
+                      animate={{ opacity: [0.2, 0.55, 0.2] }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+                    />
+                  </>
+                )}
+                {isPremiumPlan && !isCurrentPlan && (
+                  <>
+                    <motion.div
+                      className="pointer-events-none absolute inset-0 z-10 rounded-lg border border-blue-400/75"
+                      animate={{
+                        opacity: [0.35, 0.85, 0.35],
+                        boxShadow: [
+                          '0 0 0px rgba(59,130,246,0.2)',
+                          '0 0 24px rgba(59,130,246,0.55)',
+                          '0 0 0px rgba(59,130,246,0.2)',
+                        ],
+                      }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <motion.div
+                      className="pointer-events-none absolute -inset-0.5 z-0 rounded-lg border border-blue-300/40"
                       animate={{ opacity: [0.2, 0.55, 0.2] }}
                       transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
                     />
@@ -875,17 +985,14 @@ export default function SimplePricing() {
                               maximumFractionDigits: 0,
                             }}
                             value={
-                              (couponPreviewByPlan[plan.id]?.finalAmount ??
-                                (plan.price[
-                                  frequency as keyof typeof plan.price
-                                ] as number))
+                              getDiscountedPlanAmount(plan.id) as number
                             }
                           />
-                          {couponPreviewByPlan[plan.id] && (
+                          {(couponPreviewByPlan[plan.id] || (useRbPoints && walletSummary.usablePoints > 0 && getPlanType(plan.id))) && (
                             <span className="ml-2 text-sm text-muted-foreground line-through">
                               {new Intl.NumberFormat('en-IN', {
                                 style: 'currency',
-                                currency: couponPreviewByPlan[plan.id].currency,
+                                currency: couponPreviewByPlan[plan.id]?.currency || 'INR',
                                 maximumFractionDigits: 0,
                               }).format(plan.price[frequency as keyof typeof plan.price] as number)}
                             </span>

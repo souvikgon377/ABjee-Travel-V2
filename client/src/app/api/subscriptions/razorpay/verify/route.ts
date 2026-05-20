@@ -13,6 +13,7 @@ import {
   isValidInterval,
   isValidPaidPlan,
 } from '@/lib/server/subscriptionPlans';
+import { redeemWalletForSubscription } from '@/lib/server/rebateWallet';
 
 export const runtime = 'nodejs';
 
@@ -107,6 +108,8 @@ export async function POST(req: NextRequest) {
     const appliedPromoCode = typeof paymentData.promoCode === 'string' ? paymentData.promoCode : null;
     const discountPercent = Number(paymentData.discountPercent || 0);
     const discountAmount = Number(paymentData.discountAmount || 0);
+    const rbPointsRedeemed = Math.max(0, Math.floor(Number(paymentData.rbPointsRedeemed || 0)));
+    const rbDiscountAmount = Math.max(0, Number(paymentData.rbDiscountAmount || 0));
     const finalAmount = Number(paymentData.amount || selectedPrice.amount);
     const startDate = new Date();
     const endDate = getIntervalEndDate(interval, startDate);
@@ -134,6 +137,8 @@ export async function POST(req: NextRequest) {
       promoCode: appliedPromoCode,
       discountPercent,
       discountAmount,
+      rbPointsRedeemed,
+      rbDiscountAmount,
     };
 
     if (!subscription) {
@@ -181,6 +186,18 @@ export async function POST(req: NextRequest) {
       'subscription.endDate': endDate.toISOString(),
     });
 
+    let walletRedemption = null;
+    if (rbPointsRedeemed > 0 && paymentData.rbRedemptionStatus !== 'redeemed') {
+      walletRedemption = await redeemWalletForSubscription({
+        userId: String(paymentData.walletUserId || user.firebaseUid || user.id),
+        amount: rbPointsRedeemed,
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        planType,
+        interval,
+      });
+    }
+
     // Invalidate auth cache so the new subscription status is reflected immediately
     if (user.firebaseUid) {
       await invalidateUserProfileCache(user.firebaseUid);
@@ -191,6 +208,7 @@ export async function POST(req: NextRequest) {
       razorpayPaymentId,
       razorpaySignature,
       razorpayPaymentStatus: paymentStatus,
+      rbRedemptionStatus: rbPointsRedeemed > 0 ? 'redeemed' : paymentData.rbRedemptionStatus || 'none',
       verifiedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -198,6 +216,7 @@ export async function POST(req: NextRequest) {
     return ok({
       message: 'Payment verified and subscription activated',
       subscription,
+      wallet: walletRedemption?.wallet || null,
     });
   } catch (error: any) {
     if (error instanceof AuthError) {

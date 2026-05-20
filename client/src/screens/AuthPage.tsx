@@ -38,7 +38,7 @@ export default function AuthPage() {
     }
     
     // Get the intended destination from query param, or fallback to chat page
-    const from = searchParams.get('from') || '/chat';
+    const from = searchParams.get('from') || '/community';
     router.push(from);
   };
 
@@ -89,7 +89,7 @@ export default function AuthPage() {
 
             <div className="space-y-4">
               <Button
-                onClick={() => router.push(canAccessAdmin ? '/admin' : '/chat')}
+                onClick={() => router.push(canAccessAdmin ? '/admin' : '/community')}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {canAccessAdmin ? 'Go to Admin Dashboard' : 'Go to Community Chat'}

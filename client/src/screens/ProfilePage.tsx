@@ -284,11 +284,6 @@ export default function ProfilePage() {
           hydrateForm(userProfile);
           setSavedProfileDetails(mapSavedDetails(userProfile));
           setSubscriptionSourceProfile(userProfile);
-
-          const existingSubscription = (userProfile as any)?.subscription;
-          if (existingSubscription && typeof existingSubscription === 'object') {
-            return;
-          }
         }
 
         const response = await usersAPI.getProfile();
@@ -502,7 +497,7 @@ export default function ProfilePage() {
       setFormData((prev) => ({ ...prev, currentPassword: '', password: '', confirmPassword: '' }));
       setSelectedImageFile(null);
       setMessage('Profile updated successfully.');
-      router.push('/chat');
+      router.push('/community');
     } catch (submitError: any) {
       setError(submitError?.message || 'Failed to update profile. Please try again.');
     } finally {

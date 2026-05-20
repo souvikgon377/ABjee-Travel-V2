@@ -318,8 +318,8 @@ export const DashboardHeader = memo(
       if (item.type !== 'room_invite' && item.type !== 'private_room_join_request') return;
 
       const roomPath = item.inviteToken
-        ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
-        : `/chat/room/${item.roomId}`;
+        ? `/community/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+        : `/community/room/${item.roomId}`;
 
       setNotificationsOpen(false);
       router.push(roomPath);
@@ -350,8 +350,8 @@ export const DashboardHeader = memo(
         if (action === 'accept' && item.type === 'room_invite') {
           setNotificationsOpen(false);
           const roomPath = item.inviteToken
-            ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
-            : `/chat/room/${item.roomId}`;
+            ? `/community/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+            : `/community/room/${item.roomId}`;
           router.push(roomPath);
         }
       } finally {

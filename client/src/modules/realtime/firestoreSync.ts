@@ -115,24 +115,21 @@ function scheduleInvalidation() {
  *
  * Behavior:
  * - In development: **disabled by default** unless ENABLE_REALTIME_SYNC=true
- * - In production:  enabled by default unless ENABLE_REALTIME_SYNC=false
+ * - In production:  disabled by default unless ENABLE_REALTIME_SYNC=true.
+ *   A collection listener reads the initial matching dataset per server process,
+ *   which is expensive on serverless scale. Admin mutations update caches directly.
  */
 export async function ensureFirestoreSync() {
   if (listenerStarted) return;
 
-  const isDev     = process.env.NODE_ENV === 'development';
   const envFlag   = process.env.ENABLE_REALTIME_SYNC;
-  const shouldRun = envFlag !== undefined
-    ? envFlag === 'true'
-    : !isDev; // prod: on by default; dev: off by default
+  const shouldRun = envFlag === 'true';
 
   if (!shouldRun) {
-    if (isDev && !listenerStarted) {
-      console.info(
-        '[Realtime] Listener DISABLED in dev (set ENABLE_REALTIME_SYNC=true to enable). ' +
-        'Cache expires via TTL (30s).'
-      );
-    }
+    console.info(
+      '[Realtime] Listener DISABLED (set ENABLE_REALTIME_SYNC=true to enable). ' +
+      'Cache updates use TTL plus explicit admin mutation invalidation.'
+    );
     listenerStarted = true; // mark as "done" so we don't retry
     return;
   }

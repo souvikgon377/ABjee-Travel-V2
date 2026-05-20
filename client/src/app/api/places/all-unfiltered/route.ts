@@ -1,15 +1,16 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
-import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { CacheService } from '@/modules/cache/CacheService';
+import { getSharedPlacesCache } from '@/lib/server/sharedPlacesCache';
 
 export const runtime = 'nodejs';
 
 /**
  * GET /api/places/all-unfiltered
- * 
- * Direct Firestore scan returning ALL tourist places (including those without isActive set).
- * Bypasses Typesense and treats missing isActive as active by default.
- * Used when we need to ensure we get all 2141 documents.
+ *
+ * Direct listing for all active-ish tourist places, including documents where
+ * isActive is missing. Uses the shared cache instead of scanning Firestore per
+ * request.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -20,53 +21,73 @@ export async function GET(req: NextRequest) {
     const category = params.get('category') || 'all';
 
     const tStart = Date.now();
+    const cacheKey = `api:places:all-unfiltered:${category}:${search}`;
 
-    // Scan ALL documents without filtering by isActive
-    let query: any = adminDb
-      .collection('touristPlaces');
+    console.info('[FirestoreQuery] /api/places/all-unfiltered request', {
+      cacheKey,
+      page,
+      limit,
+      search: search || '(empty)',
+      category,
+      firestoreStrategy: 'sharedPlacesCache',
+    });
 
-    const snapshot = await query.get();
-    
-    // In-memory filtering: exclude only if explicitly false
-    let allDocs = snapshot.docs
-      .map((d: any) => ({ id: d.id, ...d.data() }))
-      .filter((doc: any) => doc.isActive !== false); // Treat missing as active
+    const result = await CacheService.get(cacheKey, async () => {
+      const { places, cacheStatus, source } = await getSharedPlacesCache();
+      const allDocs = places.filter((doc: any) => doc.isActive !== false);
 
-    // Apply search filter in-memory if provided
-    let filtered = allDocs;
-    if (search) {
-      filtered = allDocs.filter((doc: any) => {
-        const name = String(doc.name || '').toLowerCase();
-        const city = String(doc.city || '').toLowerCase();
-        const state = String(doc.state || '').toLowerCase();
-        const country = String(doc.country || '').toLowerCase();
-        const location_search = String(doc.location_search || '').toLowerCase();
-        const area = String(doc.area || '').toLowerCase();
-        
-        return (
-          name.includes(search) ||
-          city.includes(search) ||
-          state.includes(search) ||
-          country.includes(search) ||
-          location_search.includes(search) ||
-          area.includes(search)
-        );
+      let filtered = allDocs;
+      if (search) {
+        filtered = allDocs.filter((doc: any) => {
+          const name = String(doc.name || '').toLowerCase();
+          const city = String(doc.city || '').toLowerCase();
+          const state = String(doc.state || '').toLowerCase();
+          const country = String(doc.country || '').toLowerCase();
+          const locationSearch = String(doc.location_search || doc.location_lower || '').toLowerCase();
+          const area = String(doc.area || '').toLowerCase();
+
+          return (
+            name.includes(search) ||
+            city.includes(search) ||
+            state.includes(search) ||
+            country.includes(search) ||
+            locationSearch.includes(search) ||
+            area.includes(search)
+          );
+        });
+      }
+
+      if (category && category !== 'all') {
+        filtered = filtered.filter((doc: any) => doc.category === category);
+      }
+
+      console.info('[FirestoreResult] /api/places/all-unfiltered cache-fill', {
+        cacheStatus,
+        source,
+        datasetCount: places.length,
+        filteredCount: filtered.length,
+        sampleIds: filtered.slice(0, 5).map((doc: any) => doc.id),
+        firestoreReads: cacheStatus === 'warming' ? places.length : 0,
       });
-    }
 
-    // Apply category filter
-    if (category && category !== 'all') {
-      filtered = filtered.filter((doc: any) => doc.category === category);
-    }
+      return { allDocs: filtered, cacheTime: Date.now() };
+    }, 60);
 
-    // Paginate
+    const filtered = result.allDocs;
     const totalCount = filtered.length;
     const startIdx = (page - 1) * limit;
     const endIdx = startIdx + limit;
     const paginatedResults = filtered.slice(startIdx, endIdx);
     const hasMore = endIdx < totalCount;
-
     const latency = Date.now() - tStart;
+
+    console.info('[FirestoreResult] /api/places/all-unfiltered response', {
+      totalCount,
+      returned: paginatedResults.length,
+      hasMore,
+      latencyMs: latency,
+      sampleIds: paginatedResults.slice(0, 5).map((doc: any) => doc.id),
+    });
 
     return ok({
       success: true,
@@ -82,11 +103,10 @@ export async function GET(req: NextRequest) {
           page,
           limit,
           total: totalCount,
-          hasNext: hasMore
-        }
-      }
+          hasNext: hasMore,
+        },
+      },
     });
-
   } catch (error: any) {
     console.error('[API/Places/All-Unfiltered] GET error:', error);
     return fail(error.message || 'Internal Server Error', 500);

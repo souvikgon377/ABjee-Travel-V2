@@ -452,7 +452,7 @@ const ChatRoom = () => {
 
   useEffect(() => {
     if (!roomId || !user) {
-      router.push('/chat');
+      router.push('/community');
       return;
     }
 
@@ -464,7 +464,7 @@ const ChatRoom = () => {
         // Get room details
         const roomData = await chatService.getRoom(roomId);
         if (!roomData) {
-          router.push('/chat');
+          router.push('/community');
           return;
         }
         
@@ -490,7 +490,7 @@ const ChatRoom = () => {
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Invalid invite link');
-              router.push('/chat');
+              router.push('/community');
               return;
             }
           } else if (roomData.isPublic || generalCommunity) {
@@ -500,7 +500,7 @@ const ChatRoom = () => {
               // Room listener will update the state automatically
             } catch (error: any) {
               alert(error.message || 'Failed to join room');
-              router.push('/chat');
+              router.push('/community');
               return;
             }
           } else {
@@ -512,7 +512,7 @@ const ChatRoom = () => {
               setMessages([]);
             } else {
               alert('This private community is invite-only. Ask the admin for an invite link.');
-              router.push('/chat');
+              router.push('/community');
               return;
             }
             setLoading(false);
@@ -946,14 +946,14 @@ const ChatRoom = () => {
         await chatService.leaveRoom(roomId, user.uid);
       }
 
-      router.push('/chat');
+      router.push('/community');
     } catch (error: any) {
       alert(error?.message || 'Failed to exit community');
     }
   }, [roomId, room, user, router]);
 
   const handleBackToChat = useCallback(() => {
-    router.push('/chat');
+    router.push('/community');
   }, [router]);
 
   const stabilizeVideoDuration = useCallback((video: HTMLVideoElement) => {
@@ -2013,7 +2013,7 @@ const ChatRoom = () => {
       <div className="flex items-center justify-center h-screen">
         <Card className="p-6">
           <p className="text-muted-foreground">Community not found</p>
-          <Button onClick={() => router.push('/chat')} className="mt-4">
+          <Button onClick={() => router.push('/community')} className="mt-4">
             Back to Chat
           </Button>
         </Card>
@@ -2025,7 +2025,7 @@ const ChatRoom = () => {
     <>
       {/* Password Dialog */}
       <Dialog open={showPasswordDialog} onOpenChange={(open) => {
-        if (!open) router.push('/chat'); // Go back if dialog is closed
+        if (!open) router.push('/community'); // Go back if dialog is closed
         setShowPasswordDialog(open);
       }}>
         <DialogContent>
@@ -2060,7 +2060,7 @@ const ChatRoom = () => {
                 type="button" 
                 variant="outline" 
                 className="flex-1"
-                onClick={() => router.push('/chat')}
+                onClick={() => router.push('/community')}
               >
                 Cancel
               </Button>
@@ -2074,7 +2074,7 @@ const ChatRoom = () => {
 
       {/* Exposed Private Room Join Request Dialog */}
       <Dialog open={showJoinRequestDialog} onOpenChange={(open) => {
-        if (!open) router.push('/chat');
+        if (!open) router.push('/community');
         setShowJoinRequestDialog(open);
       }}>
         <DialogContent>
@@ -2101,7 +2101,7 @@ const ChatRoom = () => {
                 type="button"
                 variant="outline"
                 className="flex-1"
-                onClick={() => router.push('/chat')}
+                onClick={() => router.push('/community')}
               >
                 Back
               </Button>

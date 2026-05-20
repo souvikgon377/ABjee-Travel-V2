@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { safeRedisCall } from '@/lib/server/redis';
-import { authenticateRequest } from '@/lib/server/auth';
+import { authenticateRequest, invalidateUserProfileCache } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
 import { FirestoreService } from '@/modules/database/FirestoreService';
 import { RateLimitService } from '@/modules/auth/RateLimitService';
@@ -184,6 +184,10 @@ export async function POST(req: NextRequest) {
       placeId,
       reviewData: payload,
     });
+
+    if (user.firebaseUid) {
+      await invalidateUserProfileCache(user.firebaseUid);
+    }
 
     await safeRedisCall(
       (redis) => redis.del(getReviewsCacheKey(placeId)),

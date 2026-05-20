@@ -216,7 +216,7 @@ export default function Header1() {
     pathname?.includes('/travel-itinerary') ||
     pathname?.includes('/travel-destinations') ||
     pathname?.includes('/trip-stories') ||
-    pathname?.includes('/chat') ||
+    pathname?.includes('/community') ||
     pathname?.includes('/community');
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
   const userDisplayName = userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User';
@@ -237,7 +237,7 @@ export default function Header1() {
     href === '/'
       ? pathname === '/'
       : href === '/community'
-        ? pathname === '/community' || pathname?.startsWith('/chat')
+        ? pathname === '/community' || pathname?.startsWith('/community')
         : pathname?.startsWith(href);
 
   useEffect(() => {
@@ -479,8 +479,8 @@ export default function Header1() {
     await clearRoomNotifications(item.roomId);
 
     const roomPath = item.inviteToken
-      ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
-      : `/chat/room/${item.roomId}`;
+      ? `/community/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+      : `/community/room/${item.roomId}`;
 
     setNotificationsOpen(false);
     setIsMobileMenuOpen(false);
@@ -516,8 +516,8 @@ export default function Header1() {
         await clearRoomNotifications(item.roomId);
         setNotificationsOpen(false);
         const roomPath = item.inviteToken
-          ? `/chat/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
-          : `/chat/room/${item.roomId}`;
+          ? `/community/room/${item.roomId}?invite=${encodeURIComponent(item.inviteToken)}`
+          : `/community/room/${item.roomId}`;
         setIsMobileMenuOpen(false);
         router.push(roomPath);
       }

@@ -1,21 +1,15 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
-import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { CacheService } from '@/modules/cache/CacheService';
+import { getSharedPlacesCache } from '@/lib/server/sharedPlacesCache';
 
 export const runtime = 'nodejs';
 
 /**
  * GET /api/places/all
- * 
- * Direct Firestore search returning ALL active tourist places.
- * Bypasses Typesense entirely for maximum reliability.
- * Supports pagination and basic filtering.
- * 
- * ⚡ OPTIMIZATION: 60-second cache + request coalescing
- * - Single Firestore read per 60 seconds (vs 1 per request)
- * - High-concurrency scenario: 1000 requests = 1 read (vs 1000)
- * - Savings: 99% reduction in uncached read spikes
+ *
+ * Public tourist place listing. Uses the shared places cache so search/category
+ * variants do not re-scan Firestore.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -26,21 +20,21 @@ export async function GET(req: NextRequest) {
     const category = params.get('category') || 'all';
 
     const tStart = Date.now();
-
-    // ⚡ Build deterministic cache key for all combinations
     const cacheKey = `api:places:all:${category}:${search}`;
 
-    // ⚡ Wrap fetch in cache with 60s TTL + request coalescing
+    console.info('[FirestoreQuery] /api/places/all request', {
+      cacheKey,
+      page,
+      limit,
+      search: search || '(empty)',
+      category,
+      firestoreStrategy: 'sharedPlacesCache',
+    });
+
     const result = await CacheService.get(cacheKey, async () => {
-      // Firestore query (only executes on cache miss)
-      let query: any = adminDb
-        .collection('touristPlaces')
-        .where('isActive', '==', true);
+      const { places, cacheStatus, source } = await getSharedPlacesCache();
+      const allDocs = places.filter((doc: any) => doc.isActive !== false);
 
-      const snapshot = await query.get();
-      const allDocs = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() }));
-
-      // Apply search filter in-memory if provided
       let filtered = allDocs;
       if (search) {
         filtered = allDocs.filter((doc: any) => {
@@ -48,36 +42,49 @@ export async function GET(req: NextRequest) {
           const city = String(doc.city || '').toLowerCase();
           const state = String(doc.state || '').toLowerCase();
           const country = String(doc.country || '').toLowerCase();
-          const location_search = String(doc.location_search || '').toLowerCase();
-          
+          const locationSearch = String(doc.location_search || doc.location_lower || '').toLowerCase();
+
           return (
             name.includes(search) ||
             city.includes(search) ||
             state.includes(search) ||
             country.includes(search) ||
-            location_search.includes(search)
+            locationSearch.includes(search)
           );
         });
       }
 
-      // Apply category filter
       if (category && category !== 'all') {
         filtered = filtered.filter((doc: any) => doc.category === category);
       }
 
-      // Return full filtered set (pagination happens below)
-      return { allDocs: filtered, cacheTime: Date.now() };
-    }, 60); // 60-second cache TTL
+      console.info('[FirestoreResult] /api/places/all cache-fill', {
+        cacheStatus,
+        source,
+        datasetCount: places.length,
+        filteredCount: filtered.length,
+        sampleIds: filtered.slice(0, 5).map((doc: any) => doc.id),
+        firestoreReads: cacheStatus === 'warming' ? places.length : 0,
+      });
 
-    // Paginate from cached results
+      return { allDocs: filtered, cacheTime: Date.now() };
+    }, 60);
+
     const filtered = result.allDocs;
     const totalCount = filtered.length;
     const startIdx = (page - 1) * limit;
     const endIdx = startIdx + limit;
     const paginatedResults = filtered.slice(startIdx, endIdx);
     const hasMore = endIdx < totalCount;
-
     const latency = Date.now() - tStart;
+
+    console.info('[FirestoreResult] /api/places/all response', {
+      totalCount,
+      returned: paginatedResults.length,
+      hasMore,
+      latencyMs: latency,
+      sampleIds: paginatedResults.slice(0, 5).map((doc: any) => doc.id),
+    });
 
     return ok({
       success: true,
@@ -93,11 +100,10 @@ export async function GET(req: NextRequest) {
           page,
           limit,
           total: totalCount,
-          hasNext: hasMore
-        }
-      }
+          hasNext: hasMore,
+        },
+      },
     });
-
   } catch (error: any) {
     console.error('[API/Places/All] GET error:', error);
     return fail(error.message || 'Internal Server Error', 500);

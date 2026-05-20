@@ -9,8 +9,11 @@ import {
   isValidPaidPlan,
 } from '@/lib/server/subscriptionPlans';
 import { getCouponPricing } from '@/lib/server/couponPricing';
+import { getWalletRedemptionPreview } from '@/lib/server/rebateWallet';
 
 export const runtime = 'nodejs';
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
 
 const getRazorpayAuthHeader = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -44,6 +47,7 @@ export async function POST(req: NextRequest) {
     const planType = body.planType;
     const interval = body.interval;
     const promoCode = String(body.promoCode || '').trim();
+    const useRbPoints = body.useRbPoints === true;
 
     if (!isValidPaidPlan(planType)) {
       return fail('Invalid plan type', 400);
@@ -57,18 +61,43 @@ export async function POST(req: NextRequest) {
       getConfiguredPlanByInterval(planType, interval),
       getConfiguredSubscriptionPlans(),
     ]);
+    const { keyId, authHeader } = getRazorpayAuthHeader();
     const couponPricing = await getCouponPricing({
       promoCode,
       planType,
       interval,
       baseAmount: selectedPrice.amount,
     });
-    const amountInPaise = Math.round(couponPricing.finalAmount * 100);
+
+    const walletPreview = useRbPoints
+      ? await getWalletRedemptionPreview({
+          userId: String(user.firebaseUid || user.id),
+          amount: couponPricing.finalAmount,
+        })
+      : null;
+    const rbPointsRedeemed = walletPreview?.redeemableAmount || 0;
+    const rbDiscountAmount = rbPointsRedeemed;
+    const finalAmount = round2(Math.max(0, couponPricing.finalAmount - rbDiscountAmount));
+    const amountInPaise = Math.round(finalAmount * 100);
     if (!Number.isFinite(amountInPaise) || amountInPaise <= 0) {
-      return fail('Invalid amount', 400);
+      return ok({
+        requiresPayment: false,
+        amount: 0,
+        currency: selectedPrice.currency,
+        keyId,
+        planType,
+        interval,
+        planName: configuredPlans[planType].name,
+        baseAmount: selectedPrice.amount,
+        finalAmount,
+        discountAmount: round2(couponPricing.discountAmount + rbDiscountAmount),
+        discountPercent: couponPricing.discountPercent,
+        promoCode: couponPricing.promoCode,
+        rbPointsRedeemed,
+        rbDiscountAmount,
+      });
     }
 
-    const { keyId, authHeader } = getRazorpayAuthHeader();
     const receipt = buildReceipt(user.id, planType, interval);
 
     const razorpayRes = await fetch('https://api.razorpay.com/v1/orders', {
@@ -88,6 +117,7 @@ export async function POST(req: NextRequest) {
           planName: configuredPlans[planType].name,
           promoCode: couponPricing.promoCode || '',
           discountPercent: String(couponPricing.discountPercent),
+          rbPointsRedeemed: String(rbPointsRedeemed),
         },
       }),
     });
@@ -104,13 +134,18 @@ export async function POST(req: NextRequest) {
     await adminDb.collection('subscriptionPayments').doc(orderPayload.id).set({
       orderId: orderPayload.id,
       userId: user.id,
+      walletUserId: String(user.firebaseUid || user.id),
       planType,
       interval,
-      amount: couponPricing.finalAmount,
+      amount: finalAmount,
       baseAmount: selectedPrice.amount,
-      discountAmount: couponPricing.discountAmount,
+      discountAmount: round2(couponPricing.discountAmount + rbDiscountAmount),
+      couponDiscountAmount: couponPricing.discountAmount,
       discountPercent: couponPricing.discountPercent,
       promoCode: couponPricing.promoCode,
+      rbPointsRedeemed,
+      rbDiscountAmount,
+      rbRedemptionStatus: rbPointsRedeemed > 0 ? 'pending' : 'none',
       amountInPaise,
       currency: selectedPrice.currency,
       status: 'created',
@@ -128,10 +163,13 @@ export async function POST(req: NextRequest) {
       interval,
       planName: configuredPlans[planType].name,
       baseAmount: selectedPrice.amount,
-      finalAmount: couponPricing.finalAmount,
-      discountAmount: couponPricing.discountAmount,
+      finalAmount,
+      discountAmount: round2(couponPricing.discountAmount + rbDiscountAmount),
+      couponDiscountAmount: couponPricing.discountAmount,
       discountPercent: couponPricing.discountPercent,
       promoCode: couponPricing.promoCode,
+      rbPointsRedeemed,
+      rbDiscountAmount,
     });
   } catch (error: any) {
     if (error instanceof AuthError) {
