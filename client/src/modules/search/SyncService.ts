@@ -64,6 +64,15 @@ export class SyncService {
     });
   }
 
+  static async syncTravelDestination(destination: any) {
+    await QueueService.push({
+      type: 'SYNC',
+      collection: 'travel_destinations',
+      id: destination.id,
+      data: destination
+    });
+  }
+
   static async delete(collection: string, id: string) {
     await QueueService.push({
       type: 'DELETE',
@@ -161,6 +170,24 @@ export class SyncService {
         email: data.email,
         role: data.role,
         status: data.status || 'active',
+      };
+    }
+
+    if (collection === 'travel_destinations') {
+      const place = String(data.place || '').trim();
+      const country = String(data.country || '').trim();
+      const places = Array.isArray(data.places) ? data.places : [];
+      const locationSearch = normalizeSearchField([country, place, ...places].join(' '));
+
+      return {
+        ...base,
+        place,
+        country,
+        introduction: String(data.introduction || data.overview || '').trim(),
+        itinerary: String(data.itinerary || '').trim(),
+        name_lower: normalizeSearchField(place),
+        location_search: locationSearch,
+        location_lower: normalizeSearchField([place, ...places, country].join(' ')),
       };
     }
 

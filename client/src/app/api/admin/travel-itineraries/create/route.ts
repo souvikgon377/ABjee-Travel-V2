@@ -3,6 +3,8 @@ import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth'
 import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { invalidateCacheVersion } from '@/lib/server/cacheVersioned';
+import { SearchService } from '@/modules/search/SearchService';
+import { SyncService } from '@/modules/search/SyncService';
 
 export const runtime = 'nodejs';
 
@@ -49,9 +51,11 @@ export async function POST(req: NextRequest) {
     };
 
     const docRef = await adminDb.collection('travel-destinations').add(travelItinerary);
+    await SyncService.syncTravelDestination({ id: docRef.id, ...travelItinerary });
     
     // Invalidate cache after create
     await invalidateCacheVersion();
+    await SearchService.invalidateSearchCache('travel-itinerary-created');
 
     return ok(
       {

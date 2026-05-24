@@ -2,12 +2,8 @@ import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
 import { adminDb as db } from '@/lib/server/firebaseAdminFirestore';
 import { FieldPath } from 'firebase-admin/firestore';
-
-interface TravelDestinationDoc {
-  place?: string;
-  country?: string;
-  [key: string]: unknown;
-}
+import { SearchService } from '@/modules/search/SearchService';
+import { SyncService } from '@/modules/search/SyncService';
 
 const DEFAULT_PUBLIC_LIMIT = 20;
 const MAX_PUBLIC_LIMIT = 20;
@@ -102,84 +98,31 @@ export async function GET(req: NextRequest) {
       return fail('Database not initialized', 500);
     }
 
-    const hasFilters = Boolean(searchQuery || countryFilter);
-
-    if (!hasFilters) {
-      const startedAt = Date.now();
-      let pageQuery = db
-        .collection('travel-destinations')
-        .orderBy(FieldPath.documentId())
-        .limit(pageLimit);
-
-      if (cursor) {
-        pageQuery = pageQuery.startAfter(cursor);
-      }
-
-      const snapshot = await pageQuery.get();
-      const durationMs = Date.now() - startedAt;
-      if (durationMs > SLOW_QUERY_MS) {
-        console.warn('[TravelAPI] SLOW_QUERY', { route: '/api/travel', durationMs, docsRead: snapshot.size });
-      }
-      const results = snapshot.docs.map((doc: any) => normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>));
-      const hasMore = snapshot.size === pageLimit;
-      const nextCursor = hasMore ? snapshot.docs[snapshot.docs.length - 1]?.id || null : null;
-      return ok({ results, hasMore, nextCursor }, 200);
-    }
-
-    const matchesFilters = (doc: TravelDestinationDoc) => {
-      const place = String(doc.place || '').toLowerCase();
-      const country = String(doc.country || '').toLowerCase();
-      const matchesSearch = searchQuery ? place.includes(searchQuery) || country.includes(searchQuery) : true;
-      const matchesCountry = countryFilter ? country.includes(countryFilter) : true;
-      return matchesSearch && matchesCountry;
-    };
-
-    const scanChunkSize = Math.max(pageLimit * 2, 50);
-    const maxScanRounds = 8;
-    let round = 0;
-    let scanCursor = cursor;
-    let hasMore = true;
-    const collected: ReturnType<typeof normalizeTravelDoc>[] = [];
     const startedAt = Date.now();
-    let docsRead = 0;
-
-    while (collected.length < pageLimit && round < maxScanRounds && hasMore) {
-      let scanQuery = db
-        .collection('travel-destinations')
-        .orderBy(FieldPath.documentId())
-        .limit(scanChunkSize);
-
-      if (scanCursor) {
-        scanQuery = scanQuery.startAfter(scanCursor);
-      }
-
-      const snapshot = await scanQuery.get();
-      docsRead += snapshot.size;
-      if (snapshot.empty) {
-        hasMore = false;
-        break;
-      }
-
-      snapshot.docs.forEach((doc: any) => {
-        const normalized = normalizeTravelDoc(doc.id, doc.data() as Record<string, unknown>);
-        if (matchesFilters(normalized)) {
-          collected.push(normalized);
-        }
-      });
-
-      scanCursor = snapshot.docs[snapshot.docs.length - 1]?.id || scanCursor;
-      hasMore = snapshot.size === scanChunkSize;
-      round += 1;
-    }
-
-    const results = collected.slice(0, pageLimit);
-    const nextCursor = hasMore ? scanCursor || null : null;
+    const result = await SearchService.searchTravelDestinations({
+      query: searchQuery,
+      country: countryFilter,
+      cursor,
+      limit: pageLimit,
+    });
     const durationMs = Date.now() - startedAt;
     if (durationMs > SLOW_QUERY_MS) {
-      console.warn('[TravelAPI] SLOW_QUERY', { route: '/api/travel', durationMs, docsRead });
+      console.warn('[TravelAPI] SLOW_QUERY', {
+        route: '/api/travel',
+        durationMs,
+        docsRead: result.firestoreReads || 0,
+        source: result.source,
+      });
     }
 
-    return ok({ results, hasMore, nextCursor }, 200);
+    return ok({
+      results: result.results.map((row: any) => normalizeTravelDoc(String(row.id), row)),
+      hasMore: result.hasMore,
+      nextCursor: result.nextCursor || null,
+      source: result.source,
+      latencyMs: result.latencyMs,
+      firestoreReads: result.firestoreReads || 0,
+    }, 200);
   } catch (error: any) {
     console.error('GET /api/travel error:', error);
     return fail(error.message || 'Failed to fetch travel data', 500);
@@ -246,6 +189,8 @@ export async function POST(req: NextRequest) {
     };
 
     const docRef = await db.collection('travel-destinations').add(travelData);
+    await SyncService.syncTravelDestination({ id: docRef.id, ...travelData });
+    await SearchService.invalidateSearchCache('travel-destination-created');
 
     return ok({
       id: docRef.id,

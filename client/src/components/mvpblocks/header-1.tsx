@@ -6,7 +6,7 @@ import { publicAsset } from '@/lib/publicAsset';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox } from 'lucide-react';
+import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox, Crown } from 'lucide-react';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -859,10 +859,28 @@ export default function Header1() {
                     priority
                     className="h-8 w-8 object-cover"
                   />
+                  {isPaidSubscriber && (
+                    <motion.span
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.3 }}
+                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-amber-200 bg-linear-to-r from-amber-500 via-orange-500 to-yellow-500 text-white shadow-[0_0_14px_rgba(251,191,36,0.55)]"
+                      aria-label="Active paid subscription"
+                      title="Active paid subscription"
+                    >
+                      <Crown className="h-2.5 w-2.5" />
+                    </motion.span>
+                  )}
                 </div>
                 <span className={`relative z-1 hidden bg-linear-to-r bg-clip-text text-xl font-bold text-transparent sm:inline ${isPaidSubscriber ? 'from-amber-500 via-orange-500 to-rose-600' : 'from-rose-500 to-rose-700'}`}>
                   ABjee Travel
                 </span>
+                {isPaidSubscriber && (
+                  <span className="hidden items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-[0_0_14px_rgba(251,191,36,0.24)] sm:inline-flex">
+                    <Crown className="h-3 w-3" />
+                    Premium
+                  </span>
+                )}
               </Link>
             </motion.div>
 
@@ -974,7 +992,15 @@ export default function Header1() {
                     <p className="text-sm font-medium text-foreground">
                       {userDisplayName}
                     </p>
-                    <p className="text-xs text-muted-foreground">Welcome back!</p>
+                    <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                      <span>Welcome back!</span>
+                      {isPaidSubscriber && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 font-semibold text-amber-700 shadow-[0_0_12px_rgba(251,191,36,0.2)]">
+                          <Crown className="h-3 w-3" />
+                          Premium
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -1059,14 +1085,14 @@ export default function Header1() {
             )}
             <ModeToggle />
             <button
-              className="rounded-lg p-2 transition-colors duration-200 hover:bg-muted active:scale-95"
+              className={`rounded-lg p-2 transition-all duration-200 active:scale-95 ${isPaidSubscriber ? 'border border-amber-300/80 bg-linear-to-r from-amber-100/85 via-yellow-50/80 to-orange-100/85 text-amber-700 shadow-[0_0_16px_rgba(251,191,36,0.3)] hover:bg-amber-100/90 dark:border-amber-500/50 dark:from-amber-900/25 dark:via-yellow-950/20 dark:to-orange-900/20 dark:text-amber-300 dark:shadow-[0_0_18px_rgba(251,191,36,0.25)]' : 'hover:bg-muted'}`}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
-                <X className="h-6 w-6" />
+                <X className={`h-6 w-6 ${isPaidSubscriber ? 'text-amber-600 dark:text-amber-300' : ''}`} />
               ) : (
-                <Menu className="h-6 w-6" />
+                <Menu className={`h-6 w-6 ${isPaidSubscriber ? 'text-amber-600 dark:text-amber-300' : ''}`} />
               )}
             </button>
           </div>
@@ -1157,7 +1183,15 @@ export default function Header1() {
                     </button>
                     <div>
                       <p className="font-medium text-foreground">{userDisplayName}</p>
-                      <p className="text-xs text-muted-foreground">Welcome back!</p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span>Welcome back!</span>
+                        {isPaidSubscriber && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 font-semibold text-amber-700 shadow-[0_0_12px_rgba(251,191,36,0.2)]">
+                            <Crown className="h-3 w-3" />
+                            Premium
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   {userProfile?.role === 'admin' && (

@@ -114,6 +114,26 @@ const hydrateWalletForMonth = (wallet: WalletState) => {
   };
 };
 
+const resolveUserDocumentRef = async (userIdOrFirebaseUid: string) => {
+  const directRef = adminDb.collection("users").doc(userIdOrFirebaseUid);
+  const directSnap = await directRef.get();
+  if (directSnap.exists) {
+    return directRef;
+  }
+
+  const byFirebaseUid = await adminDb
+    .collection("users")
+    .where("firebaseUid", "==", userIdOrFirebaseUid)
+    .limit(1)
+    .get();
+
+  if (!byFirebaseUid.empty) {
+    return byFirebaseUid.docs[0].ref;
+  }
+
+  return directRef;
+};
+
 export const awardReviewRebate = async (input: {
   userId: string;
   placeId: string;
@@ -123,10 +143,11 @@ export const awardReviewRebate = async (input: {
     media: unknown[];
     author: string;
     userId: string;
+    walletUserId?: string;
     createdAt: Date;
   };
 }) => {
-  const userRef = adminDb.collection("users").doc(input.userId);
+  const userRef = await resolveUserDocumentRef(input.userId);
   const reviewRef = adminDb.collection("touristPlaces").doc(input.placeId).collection("reviews").doc();
   const walletTransactionRef = userRef.collection("walletTransactions").doc();
 
@@ -146,6 +167,7 @@ export const awardReviewRebate = async (input: {
 
     transaction.set(reviewRef, {
       ...input.reviewData,
+      walletUserId: userRef.id,
       ABJee,
       walletReward: {
         points: ABJee.totalPoints,
@@ -194,7 +216,7 @@ export const reverseReviewRebate = async (input: {
   placeId: string;
   reviewId: string;
 }) => {
-  const userRef = adminDb.collection("users").doc(input.userId);
+  const userRef = await resolveUserDocumentRef(input.userId);
   const reviewRef = adminDb.collection("touristPlaces").doc(input.placeId).collection("reviews").doc(input.reviewId);
   const walletTransactionRef = userRef.collection("walletTransactions").doc();
 

@@ -1,10 +1,18 @@
-import client, { COLLECTION_NAME, healthCheckTypesense } from './typesenseClient';
+import client, {
+  COLLECTION_NAME,
+  TRAVEL_DESTINATIONS_COLLECTION,
+  TYPESENSE_ENABLED,
+  USERS_COLLECTION,
+  healthCheckTypesense,
+} from './typesenseClient';
 import { CacheService } from '../cache/CacheService';
 import { TypesenseBreaker } from './typesenseBreaker';
 import { MetricsService } from '../analytics/MetricsService';
 import { getRedis } from '@/lib/server/redis';
 import { GlobalCache } from '@/modules/cache/GlobalCache';
 import { FallbackHandler, FallbackSearchOptions, FallbackResult } from './FallbackHandler';
+import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { FieldPath } from 'firebase-admin/firestore';
 
 /**
  * SearchOptions - Flexible search configuration
@@ -17,6 +25,24 @@ export interface SearchOptions {
   category?: string;
   contentFilter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
   isActive?: boolean;
+  forceRefresh?: boolean;
+}
+
+export interface UserSearchOptions {
+  query?: string;
+  page?: number;
+  limit?: number;
+  role?: string;
+  status?: string;
+  forceRefresh?: boolean;
+}
+
+export interface TravelDestinationSearchOptions {
+  query?: string;
+  country?: string;
+  cursor?: string;
+  page?: number;
+  limit?: number;
   forceRefresh?: boolean;
 }
 
@@ -109,8 +135,15 @@ export interface SearchResult {
  */
 export class SearchService {
   // TTL constants (milliseconds)
-  private static readonly L1_CACHE_TTL_MS = 30_000; // 30 seconds (in-memory)
-  private static readonly L2_CACHE_TTL_SECONDS = 60; // 60 seconds (Redis)
+  private static readonly L1_CACHE_TTL_MS = 120_000; // 2 minutes (in-memory)
+  private static readonly L2_CACHE_TTL_SECONDS = 300; // 5 minutes (Redis)
+  private static readonly REDIS_MISS_COOLDOWN_MS = 15_000;
+  private static readonly REDIS_WRITE_DEDUPE_MS = 30_000;
+  private static readonly SEARCH_VERSION_L1_TTL_MS = 5_000;
+  private static readonly SEARCH_VERSION_KEY = 'search:version';
+  private static redisMissCooldown = new Map<string, number>();
+  private static redisWriteCooldown = new Map<string, number>();
+  private static cachedSearchVersion: { value: string; expiresAt: number } | null = null;
 
   // Firestore limits
   private static readonly MAX_FIRESTORE_LIMIT = 100;
@@ -122,6 +155,277 @@ export class SearchService {
   // ──────────────────────────────────────────────────────────────────────────
   // MODULAR FUNCTION: Build cache key
   // ──────────────────────────────────────────────────────────────────────────
+
+  static async searchUsers(options: UserSearchOptions = {}): Promise<SearchResult> {
+    const tStart = Date.now();
+    const page = Math.max(1, options.page || 1);
+    const limit = Math.min(100, Math.max(1, options.limit || 20));
+    const query = String(options.query || '').trim();
+    const role = options.role || 'all';
+    const status = options.status || 'all';
+    const cacheKey = await this.buildVersionedCacheKey(
+      this.buildScopedCacheKey('users', { query, page, limit, role, status })
+    );
+
+    this.logSearchOperation('[SearchService:Users] Search started', {
+      query: query || '(empty)',
+      page,
+      limit,
+      role,
+      status,
+      cacheKey,
+      typesenseEnabled: TYPESENSE_ENABLED,
+      redisAvailable: this.isRedisAvailable(),
+    });
+
+    if (!options.forceRefresh) {
+      const cached = this.getFromCache(cacheKey);
+      if (cached) return { ...cached, latencyMs: Date.now() - tStart };
+    }
+
+    if (!TypesenseBreaker.isOpen() && await this.isTypesenseAvailable()) {
+      try {
+        const filters: string[] = [];
+        if (role !== 'all') filters.push(`role:=${role}`);
+        if (status === 'active') filters.push('status:!=inactive');
+        if (status === 'inactive') filters.push('status:=inactive');
+
+        const params: any = {
+          q: query || '*',
+          query_by: 'displayName,email,role,status',
+          sort_by: query ? '_text_match:desc,updatedAt:desc' : 'updatedAt:desc',
+          per_page: limit,
+          page,
+        };
+        if (filters.length > 0) params.filter_by = filters.join(' && ');
+
+        this.logSearchOperation('[SearchService:Users] Typesense query', {
+          collection: USERS_COLLECTION,
+          query: params.q,
+          query_by: params.query_by,
+          filter_by: params.filter_by || '(none)',
+          page,
+          limit,
+        });
+
+        const tsResult = await client.collections(USERS_COLLECTION).documents().search(params);
+        TypesenseBreaker.recordSuccess();
+        const rows = tsResult.hits?.map((hit: any) => hit.document) || [];
+        const result: SearchResult = {
+          results: rows,
+          totalCount: tsResult.found || rows.length,
+          hasMore: (tsResult.found || 0) > page * limit,
+          source: 'typesense',
+          latencyMs: Date.now() - tStart,
+        };
+        this.logSearchOperation('[SearchService:Users] Typesense success', {
+          query,
+          found: result.totalCount,
+          latencyMs: result.latencyMs,
+        });
+        if (result.totalCount > 0 || query === '') {
+          this.setCache(cacheKey, result, true);
+          return result;
+        }
+      } catch (error) {
+        TypesenseBreaker.recordFailure();
+        this.logSearchOperation('[SearchService:Users] Typesense failed, falling back to Firestore', {
+          query,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'warn');
+      }
+    }
+
+    if (!options.forceRefresh) {
+      const redisCached = await this.getFromRedisCache(cacheKey, 'Users', { query });
+      if (redisCached) return { ...redisCached, latencyMs: Date.now() - tStart };
+    }
+
+    const fetchLimit = Math.min(1000, page * limit);
+    const snap = await adminDb.collection('users').orderBy('createdAt', 'desc').limit(fetchLimit).get();
+    const normalizedQuery = this.normalizeText(query);
+    const rows = snap.docs
+      .map((doc: any) => ({ id: doc.id, ...doc.data() }))
+      .filter((row: any) => {
+        if (role !== 'all' && String(row.role || '').toLowerCase() !== role.toLowerCase()) return false;
+        if (status === 'active' && String(row.status || 'active').toLowerCase() === 'inactive') return false;
+        if (status === 'inactive' && String(row.status || '').toLowerCase() !== 'inactive') return false;
+        if (!normalizedQuery) return true;
+        return [
+          row.displayName,
+          row.displayName_lower,
+          row.username,
+          row.username_lower,
+          row.email,
+          row.email_lower,
+          row.role,
+          row.status,
+        ].some((value) => this.normalizeText(value).includes(normalizedQuery));
+      });
+    const startIdx = (page - 1) * limit;
+    const result: SearchResult = {
+      results: rows.slice(startIdx, startIdx + limit),
+      totalCount: rows.length,
+      hasMore: rows.length > startIdx + limit,
+      source: 'firestore',
+      latencyMs: Date.now() - tStart,
+      method: 'bounded-users-fallback',
+      firestoreReads: snap.size,
+    };
+    this.setCache(cacheKey, result);
+    this.logSearchOperation('[SearchService:Users] Firestore fallback completed', {
+      query,
+      docsRead: snap.size,
+      found: result.totalCount,
+      latencyMs: result.latencyMs,
+    });
+    return result;
+  }
+
+  static async searchTravelDestinations(options: TravelDestinationSearchOptions = {}): Promise<SearchResult & { nextCursor?: string | null }> {
+    const tStart = Date.now();
+    const query = String(options.query || '').trim();
+    const country = String(options.country || '').trim();
+    const cursor = String(options.cursor || '').trim();
+    const page = Math.max(1, options.page || 1);
+    const limit = Math.min(100, Math.max(1, options.limit || 20));
+    const cacheKey = await this.buildVersionedCacheKey(
+      this.buildScopedCacheKey('travel-destinations', { query, country, cursor, page, limit })
+    );
+
+    this.logSearchOperation('[SearchService:Travel] Search started', {
+      query: query || '(empty)',
+      country: country || '(any)',
+      cursor: cursor || '(none)',
+      page,
+      limit,
+      cacheKey,
+      typesenseEnabled: TYPESENSE_ENABLED,
+      redisAvailable: this.isRedisAvailable(),
+    });
+
+    if (!options.forceRefresh) {
+      const cached = this.getFromCache(cacheKey) as (SearchResult & { nextCursor?: string | null }) | null;
+      if (cached) return { ...cached, latencyMs: Date.now() - tStart };
+    }
+
+    if (!TypesenseBreaker.isOpen() && !cursor && await this.isTypesenseAvailable()) {
+      try {
+        const params: any = {
+          q: [query, country].filter(Boolean).join(' ') || '*',
+          query_by: 'place:5,country:3,name_lower:4,location_search:2,location_lower:2,introduction:1,itinerary:1',
+          sort_by: query || country ? '_text_match:desc,updatedAt:desc' : 'updatedAt:desc',
+          per_page: limit,
+          page,
+        };
+
+        this.logSearchOperation('[SearchService:Travel] Typesense query', {
+          collection: TRAVEL_DESTINATIONS_COLLECTION,
+          query: params.q,
+          query_by: params.query_by,
+          page,
+          limit,
+        });
+
+        const tsResult = await client.collections(TRAVEL_DESTINATIONS_COLLECTION).documents().search(params);
+        TypesenseBreaker.recordSuccess();
+        const rows = tsResult.hits?.map((hit: any) => hit.document) || [];
+        const result: SearchResult & { nextCursor?: string | null } = {
+          results: rows,
+          totalCount: tsResult.found || rows.length,
+          hasMore: (tsResult.found || 0) > page * limit,
+          nextCursor: (tsResult.found || 0) > page * limit ? String(page + 1) : null,
+          source: 'typesense',
+          latencyMs: Date.now() - tStart,
+        };
+        this.logSearchOperation('[SearchService:Travel] Typesense success', {
+          query,
+          country,
+          found: result.totalCount,
+          latencyMs: result.latencyMs,
+        });
+        if (result.totalCount > 0 || (!query && !country)) {
+          this.setCache(cacheKey, result, true);
+          return result;
+        }
+      } catch (error) {
+        TypesenseBreaker.recordFailure();
+        this.logSearchOperation('[SearchService:Travel] Typesense failed, falling back to Firestore', {
+          query,
+          country,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'warn');
+      }
+    }
+
+    if (!options.forceRefresh) {
+      const redisCached = await this.getFromRedisCache(cacheKey, 'Travel', { query, country });
+      if (redisCached) {
+        return {
+          ...redisCached,
+          latencyMs: Date.now() - tStart,
+        } as SearchResult & { nextCursor?: string | null };
+      }
+    }
+
+    const normalizedQuery = this.normalizeText(query);
+    const normalizedCountry = this.normalizeText(country);
+    const hasFilters = Boolean(normalizedQuery || normalizedCountry);
+    const scanLimit = hasFilters ? Math.min(200, Math.max(limit * 4, 50)) : limit;
+    let pageQuery: any = adminDb.collection('travel-destinations').orderBy(FieldPath.documentId()).limit(scanLimit);
+    if (cursor) pageQuery = pageQuery.startAfter(cursor);
+
+    this.logSearchOperation('[SearchService:Travel] Firestore query', {
+      collection: 'travel-destinations',
+      strategy: hasFilters ? 'bounded-filter-scan' : 'cursor-page',
+      query: query || '(empty)',
+      country: country || '(any)',
+      cursor: cursor || '(none)',
+      readLimit: scanLimit,
+    });
+
+    const snap = await pageQuery.get();
+    const allRows = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    const filteredRows = hasFilters
+      ? allRows.filter((row: any) => {
+          const matchesQuery = !normalizedQuery || [
+            row.place,
+            row.country,
+            row.name_lower,
+            row.location_search,
+            row.location_lower,
+            row.introduction,
+            row.itinerary,
+            ...(Array.isArray(row.places) ? row.places : []),
+          ].some((value) => this.normalizeText(value).includes(normalizedQuery));
+          const matchesCountry = !normalizedCountry || this.normalizeText(row.country).includes(normalizedCountry);
+          return matchesQuery && matchesCountry;
+        })
+      : allRows;
+    const rows = filteredRows.slice(0, limit);
+    const hasMore = snap.size === scanLimit;
+    const nextCursor = hasMore ? snap.docs[snap.docs.length - 1]?.id || null : null;
+    const result: SearchResult & { nextCursor?: string | null } = {
+      results: rows,
+      totalCount: filteredRows.length,
+      hasMore,
+      nextCursor,
+      source: 'firestore',
+      latencyMs: Date.now() - tStart,
+      method: hasFilters ? 'bounded-travel-filter-scan' : 'travel-cursor-page',
+      firestoreReads: snap.size,
+    };
+    this.setCache(cacheKey, result);
+    this.logSearchOperation('[SearchService:Travel] Firestore fallback completed', {
+      query,
+      country,
+      docsRead: snap.size,
+      found: result.totalCount,
+      returned: rows.length,
+      latencyMs: result.latencyMs,
+    });
+    return result;
+  }
 
   /**
    * Build normalized cache key from search options
@@ -141,6 +445,87 @@ export class SearchService {
     return null;
   }
 
+  private static shouldSkipRedisRead(key: string): boolean {
+    const blockedUntil = this.redisMissCooldown.get(key) || 0;
+    if (blockedUntil > Date.now()) return true;
+    if (blockedUntil > 0) this.redisMissCooldown.delete(key);
+    return false;
+  }
+
+  private static markRedisMiss(key: string) {
+    this.redisMissCooldown.set(key, Date.now() + this.REDIS_MISS_COOLDOWN_MS);
+  }
+
+  private static shouldSkipRedisWrite(key: string): boolean {
+    const blockedUntil = this.redisWriteCooldown.get(key) || 0;
+    if (blockedUntil > Date.now()) return true;
+    if (blockedUntil > 0) this.redisWriteCooldown.delete(key);
+    return false;
+  }
+
+  private static markRedisWrite(key: string) {
+    this.redisWriteCooldown.set(key, Date.now() + this.REDIS_WRITE_DEDUPE_MS);
+  }
+
+  private static async getSearchVersion(): Promise<string> {
+    if (this.cachedSearchVersion && this.cachedSearchVersion.expiresAt > Date.now()) {
+      return this.cachedSearchVersion.value;
+    }
+
+    try {
+      const redis = getRedis();
+      const version = redis ? await redis.get<string>(this.SEARCH_VERSION_KEY) : null;
+      const value = version || '1';
+      this.cachedSearchVersion = { value, expiresAt: Date.now() + this.SEARCH_VERSION_L1_TTL_MS };
+      return value;
+    } catch (error) {
+      console.warn('[SearchService] Redis search version read failed, using local version', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return this.cachedSearchVersion?.value || '1';
+    }
+  }
+
+  private static async buildVersionedCacheKey(key: string): Promise<string> {
+    const version = await this.getSearchVersion();
+    return `${key}:v=${version}`;
+  }
+
+  private static async getFromRedisCache(
+    key: string,
+    scope: string,
+    context: Record<string, unknown> = {},
+  ): Promise<SearchResult | null> {
+    if (!this.isRedisAvailable() || this.shouldSkipRedisRead(key)) {
+      return null;
+    }
+
+    try {
+      const redis = getRedis();
+      const raw = redis ? await redis.get<string>(key) : null;
+      if (typeof raw === 'string' && raw) {
+        const result = JSON.parse(raw) as SearchResult;
+        result.fromCache = true;
+        result.source = 'redis';
+        console.info(`[SearchService:${scope}] Redis cache HIT`, { key, ...context });
+        this.setCache(key, result, true);
+        return result;
+      }
+
+      this.markRedisMiss(key);
+      console.info(`[SearchService:${scope}] Redis cache MISS`, { key, ...context });
+      return null;
+    } catch (error) {
+      this.markRedisMiss(key);
+      console.warn(`[SearchService:${scope}] Redis cache lookup failed`, {
+        key,
+        ...context,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
   /**
    * Store result in cache layers (L1 + L2 if Redis available)
    *
@@ -154,14 +539,16 @@ export class SearchService {
     console.info('[SearchService] Cache SET (L1/in-memory)', { key });
 
     // L2: Try Redis if available and not bypassed
-    if (!bypassRedis) {
+    if (!bypassRedis && !this.shouldSkipRedisWrite(key)) {
       try {
         const redis = getRedis();
         if (redis) {
+          this.markRedisWrite(key);
           redis
-            .setex(key, this.L2_CACHE_TTL_SECONDS, JSON.stringify(result))
+            .set(key, JSON.stringify(result), { ex: this.L2_CACHE_TTL_SECONDS })
             .catch((err) => {
-              console.warn('[SearchService] Redis SETEX failed, continuing with L1 only', {
+              this.redisWriteCooldown.delete(key);
+              console.warn('[SearchService] Redis SET failed, continuing with L1 only', {
                 error: err?.message,
               });
             });
@@ -194,10 +581,21 @@ export class SearchService {
     try {
       const redis = getRedis();
       if (redis) {
-        // Redis doesn't have pattern delete in async mode, so we track manually
-        // Note: In production, use SCAN + DEL for large keyspaces
-        await CacheService.invalidatePrefix(prefix);
-        console.info('[SearchService] Cache invalidated (L2/Redis)');
+        if (prefix === 'search:') {
+          const nextVersion = await redis.incr(this.SEARCH_VERSION_KEY);
+          this.cachedSearchVersion = {
+            value: String(nextVersion),
+            expiresAt: Date.now() + this.SEARCH_VERSION_L1_TTL_MS,
+          };
+          this.redisMissCooldown.clear();
+          this.redisWriteCooldown.clear();
+          console.info('[SearchService] Search cache version bumped (L2/Redis)', {
+            version: nextVersion,
+          });
+        } else {
+          await CacheService.invalidatePrefix(prefix);
+          console.info('[SearchService] Cache invalidated (L2/Redis)');
+        }
       }
     } catch (error) {
       console.warn('[SearchService] Redis invalidation failed, L1 cleared only', {
@@ -269,6 +667,37 @@ export class SearchService {
     const content = options.contentFilter ? `f=${options.contentFilter}` : 'f=all';
 
     return `search:${q}:p${p}:l${l}:${cat}:${loc}:${active}:${content}`;
+  }
+
+  private static normalizeText(value: unknown): string {
+    return String(value ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9@._\-\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private static buildScopedCacheKey(scope: string, options: Record<string, unknown>): string {
+    const stable = Object.keys(options)
+      .sort()
+      .map((key) => `${key}=${encodeURIComponent(String(options[key] ?? ''))}`)
+      .join(':');
+    return `search:${scope}:${stable}`;
+  }
+
+  private static logSearchOperation(
+    label: string,
+    payload: Record<string, unknown>,
+    level: 'info' | 'warn' | 'error' = 'info',
+  ) {
+    const entry = {
+      at: new Date().toISOString(),
+      ...payload,
+    };
+
+    if (level === 'error') console.error(label, entry);
+    else if (level === 'warn') console.warn(label, entry);
+    else console.info(label, entry);
   }
 
   private static toMillis(value: any): number {
@@ -554,7 +983,7 @@ export class SearchService {
     });
 
     // Build cache key
-    const cacheKey = this.buildCacheKey(options);
+    const cacheKey = await this.buildVersionedCacheKey(this.buildCacheKey(options));
 
     // ────────────────────────────────────────────────────────────────────────
     // LAYER 1: Try L1 cache (in-memory, fastest)
@@ -575,30 +1004,6 @@ export class SearchService {
     // ────────────────────────────────────────────────────────────────────────
     // LAYER 2: Try L2 cache (Redis, if available)
     // ────────────────────────────────────────────────────────────────────────
-    if (!options.forceRefresh && this.isRedisAvailable()) {
-      try {
-        const redis = getRedis();
-        if (redis) {
-          const l2Raw = await redis.getex(cacheKey, { ex: this.L2_CACHE_TTL_SECONDS });
-          if (typeof l2Raw === 'string' && l2Raw) {
-            const l2Result: SearchResult = JSON.parse(l2Raw);
-            l2Result.fromCache = true;
-            l2Result.source = 'redis';
-            const latency = Date.now() - tStart;
-            console.info('[SearchService] Cache HIT (L2/Redis)', { latency });
-
-            // Backfill L1
-            this.setCache(cacheKey, l2Result, true);
-            return { ...l2Result, latencyMs: latency };
-          }
-        }
-      } catch (error) {
-        console.warn('[SearchService] L2 cache (Redis) lookup failed, continuing to L3', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
     // ────────────────────────────────────────────────────────────────────────
     // LAYER 3: Check Typesense circuit breaker
     // ────────────────────────────────────────────────────────────────────────
@@ -615,17 +1020,29 @@ export class SearchService {
       if (typesenseOk) {
         result = await this.searchTypesense(options);
         if (result) {
-          // Cache and return
-          this.setCache(cacheKey, result);
+          // Cache in-memory only; do not promote every Typesense hit into Redis.
           const latency = Date.now() - tStart;
           console.info('[SearchService] Search completed (Typesense)', {
             found: result.totalCount,
             latencyMs: latency,
           });
-          return { ...result, latencyMs: latency };
+          if (result.totalCount > 0 || !query) {
+            this.setCache(cacheKey, result, true);
+            return { ...result, latencyMs: latency };
+          }
         }
       } else {
         console.info('[SearchService] Typesense unavailable, skipping to Firestore');
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // LAYER 3.5: Redis fallback for this exact query only
+    // ────────────────────────────────────────────────────────────────────────
+    if (!options.forceRefresh) {
+      const redisCached = await this.getFromRedisCache(cacheKey, 'Places', { query, page, limit });
+      if (redisCached) {
+        return { ...redisCached, latencyMs: Date.now() - tStart };
       }
     }
 

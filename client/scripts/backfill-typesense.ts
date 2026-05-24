@@ -50,10 +50,39 @@ async function backfill() {
       } as any)
     );
 
+    console.log('\nUsers');
+    const totalUsers = await syncCollectionInBatches(
+      'users',
+      'users',
+      'Users',
+      (data, id) => SyncService.syncUser({
+        id,
+        displayName: data.displayName || data.username || '',
+        email: data.email || '',
+        role: data.role || 'user',
+        status: data.status || 'active',
+        updatedAt: data.updatedAt || data.createdAt,
+      })
+    );
+
+    console.log('\nTravel Destinations');
+    const totalTravelDestinations = await syncCollectionInBatches(
+      'travel-destinations',
+      'travel_destinations',
+      'Travel Destinations',
+      (data, id) => SyncService.syncTravelDestination({
+        id,
+        ...data,
+        updatedAt: data.updatedAt || data.createdAt,
+      })
+    );
+
     const duration = ((Date.now() - tStart) / 1000).toFixed(2);
     console.log(`\n✅ Full Backfill Complete in ${duration}s!`);
     console.log(`📊 Summary:`);
     console.log(`   - Tourist Places: ${totalPlaces} queued for sync`);
+    console.log(`   - Users: ${totalUsers} queued for sync`);
+    console.log(`   - Travel Destinations: ${totalTravelDestinations} queued for sync`);
     console.log(`\n💡 Next Steps:`);
     console.log(`   1. Start the worker: npm run worker:search-sync`);
     console.log(`   2. Monitor logs for sync progress`);

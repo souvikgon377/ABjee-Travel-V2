@@ -672,8 +672,8 @@ const TourPlaces: React.FC = () => {
     }
   }, [requestSearchPage, resetSearchState]);
 
-  const loadPlaceReviews = useCallback(async (placeId: string) => {
-    const response = await placesAPI.getReviews(placeId);
+  const loadPlaceReviews = useCallback(async (placeId: string, options?: { refresh?: boolean }) => {
+    const response = await placesAPI.getReviews(placeId, options);
     const payload = response.data?.data ?? response.data ?? {};
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
 
@@ -888,7 +888,8 @@ const TourPlaces: React.FC = () => {
   };
 
   const submitPlaceReview = async () => {
-    if (!selectedPlace?.id || reviewRating < 1 || reviewRating > 5) return;
+    const hasContent = reviewText.trim().length > 0 || reviewMediaFiles.length > 0 || reviewRating > 0;
+    if (!selectedPlace?.id || !hasContent) return;
 
     setReviewSubmitting(true);
     setReviewUploadError("");
@@ -945,7 +946,7 @@ const TourPlaces: React.FC = () => {
       const response = await placesAPI.createReview({
         placeId: selectedPlace.id,
         text: reviewTextValue,
-        rating: reviewRating,
+        rating: reviewRating > 0 ? reviewRating : 5,
         media: reviewMedia,
       });
       const payload = response.data?.data ?? response.data ?? {};
@@ -954,7 +955,7 @@ const TourPlaces: React.FC = () => {
         setReviewRewardMessage(`You earned ${earnedPoints} Rb point${earnedPoints === 1 ? "" : "s"} for this review.`);
       }
 
-      await loadPlaceReviews(selectedPlace.id);
+      await loadPlaceReviews(selectedPlace.id, { refresh: true });
 
       setReviewText("");
       setReviewRating(0);
@@ -998,7 +999,7 @@ const TourPlaces: React.FC = () => {
     try {
       await placesAPI.deleteReview(selectedPlace.id, reviewId);
       setReviewRewardMessage("");
-      await loadPlaceReviews(selectedPlace.id);
+      await loadPlaceReviews(selectedPlace.id, { refresh: true });
     } catch (error) {
       setReviewUploadError(error instanceof Error ? error.message : "Failed to delete review.");
     } finally {
@@ -1345,7 +1346,7 @@ const TourPlaces: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => void submitPlaceReview()}
-                            disabled={reviewRating === 0 || reviewSubmitting}
+                            disabled={reviewSubmitting || (!reviewText.trim() && reviewMediaFiles.length === 0 && reviewRating === 0)}
                             className="inline-flex items-center justify-center rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
                           >
                             {reviewSubmitting ? "Posting..." : "Post Review + Media"}
@@ -1373,8 +1374,8 @@ const TourPlaces: React.FC = () => {
                         {selectedPlaceReviewList.length === 0 ? (
                           <p className="text-center text-xs text-gray-500">No reviews yet. Be the first to rate this place.</p>
                         ) : (
-                          <div className="space-y-3">
-                            {selectedPlaceReviewList.slice(0, 3).map((review) => (
+                          <div className="max-h-128 space-y-3 overflow-y-auto pr-1">
+                            {selectedPlaceReviewList.map((review) => (
                               <div key={review.id} className="rounded-xl border border-gray-100 bg-white p-3">
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-sm font-semibold text-gray-800">{review.author}</span>
@@ -1396,7 +1397,7 @@ const TourPlaces: React.FC = () => {
                                 </div>
                                 {review.text && <p className="mt-1 text-sm text-gray-600">{review.text}</p>}
                                 {review.media.length > 0 && (
-                                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                     {review.media.map((mediaItem, mediaIndex) => (
                                       <a
                                         key={mediaItem.publicId || mediaItem.url || `media-${mediaIndex}`}
@@ -1412,6 +1413,8 @@ const TourPlaces: React.FC = () => {
                                               <img
                                                 src={mediaItem.thumbnail}
                                                 alt={mediaItem.caption ?? "Review video"}
+                                                loading="lazy"
+                                                decoding="async"
                                                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                               />
                                             ) : (
@@ -1427,6 +1430,8 @@ const TourPlaces: React.FC = () => {
                                             <img
                                               src={mediaItem.url}
                                               alt={mediaItem.caption ?? "Review photo"}
+                                              loading="lazy"
+                                              decoding="async"
                                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                                             />
                                           )}

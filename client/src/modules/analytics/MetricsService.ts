@@ -2,34 +2,63 @@ import { safeRedisCall } from '@/lib/server/redis';
 
 export class MetricsService {
   private static readonly NS = 'metrics';
+  private static readonly FLUSH_EVERY_COUNT = 25;
+  private static readonly FLUSH_EVERY_MS = 10_000;
+  private static readonly LATENCY_SAMPLE_RATE = 0.2;
+  private static pendingCounters = new Map<string, number>();
+  private static pendingEvents = 0;
+  private static lastFlushAt = Date.now();
+
+  private static shouldFlush() {
+    return (
+      this.pendingEvents >= this.FLUSH_EVERY_COUNT ||
+      Date.now() - this.lastFlushAt >= this.FLUSH_EVERY_MS
+    );
+  }
+
+  private static async flushCounters() {
+    if (this.pendingCounters.size === 0) return;
+
+    const counters = Array.from(this.pendingCounters.entries());
+    this.pendingCounters.clear();
+    this.pendingEvents = 0;
+    this.lastFlushAt = Date.now();
+
+    await safeRedisCall(async (redis) => {
+      const pipeline = redis.pipeline();
+      for (const [name, amount] of counters) {
+        pipeline.incrby(`${this.NS}:${name}`, amount);
+      }
+      await pipeline.exec();
+      return null;
+    }, null, 'metrics:flush');
+  }
 
   /**
    * Track a numerical metric (increment)
    */
   static async increment(name: string, amount: number = 1) {
-    await safeRedisCall(
-      (redis) => redis.incrby(`${this.NS}:${name}`, amount),
-      null,
-      `metrics:inc:${name}`
-    );
+    this.pendingCounters.set(name, (this.pendingCounters.get(name) || 0) + amount);
+    this.pendingEvents += 1;
+    if (this.shouldFlush()) {
+      await this.flushCounters();
+    }
   }
 
   /**
    * Track a latency metric (timing)
    */
   static async observeLatency(name: string, ms: number) {
+    if (Math.random() > this.LATENCY_SAMPLE_RATE) return;
+
     // Store in a list for P95 calculation or just keep a rolling average
-    await safeRedisCall(
-      (redis) => redis.lpush(`${this.NS}:latency:${name}`, ms),
-      null,
-      `metrics:latency:${name}`
-    );
-    // Trim to keep only last 1000 observations
-    await safeRedisCall(
-      (redis) => redis.ltrim(`${this.NS}:latency:${name}`, 0, 999),
-      null,
-      `metrics:trim:${name}`
-    );
+    await safeRedisCall(async (redis) => {
+      const pipeline = redis.pipeline();
+      pipeline.lpush(`${this.NS}:latency:${name}`, ms);
+      pipeline.ltrim(`${this.NS}:latency:${name}`, 0, 499);
+      await pipeline.exec();
+      return null;
+    }, null, `metrics:latency:${name}`);
   }
 
   /**
@@ -46,6 +75,8 @@ export class MetricsService {
    * Get metrics summary
    */
   static async getSummary() {
+    await this.flushCounters();
+
     const metrics = [
       'search_total_count',
       'zero_result_count',

@@ -28,7 +28,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ revi
       return fail('Review not found.', 404);
     }
 
-    const review = reviewSnap.data() as { userId?: string };
+    const review = reviewSnap.data() as { userId?: string; walletUserId?: string };
     const currentUid = user.firebaseUid || user.id;
     const isAdmin = user.role === 'admin' || user.role === 'owner';
 
@@ -36,7 +36,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ revi
       return fail('You can delete only your own review.', 403);
     }
 
-    const reviewUserId = String(review.userId || currentUid);
+    const reviewUserId = String(review.walletUserId || review.userId || currentUid);
     const reversal = await reverseReviewRebate({
       userId: reviewUserId,
       placeId,

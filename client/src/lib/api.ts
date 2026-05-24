@@ -120,7 +120,8 @@ export const placesAPI = {
     page?: number;
     limit?: number;
   }) => api.get('/places', { params }),
-  getReviews: (placeId: string) => api.get('/reviews', { params: { placeId } }),
+  getReviews: (placeId: string, options?: { refresh?: boolean }) =>
+    api.get('/reviews', { params: { placeId, ...(options?.refresh ? { refresh: true } : {}) } }),
   createReview: (payload: {
     placeId: string;
     text: string;

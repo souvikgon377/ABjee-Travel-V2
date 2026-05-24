@@ -1,6 +1,34 @@
 import { safeRedisCall } from '@/lib/server/redis';
 import { GlobalCache } from './GlobalCache';
-const L1_TTL_MS = 30_000; // 30 seconds
+const L1_TTL_MS = 120_000; // 2 minutes
+const REDIS_MISS_COOLDOWN_MS = 15_000;
+const REDIS_WRITE_DEDUPE_MS = 30_000;
+const SEARCH_VERSION_KEY = 'search:version';
+
+const redisMissCooldown = new Map<string, number>();
+const redisWriteCooldown = new Map<string, number>();
+
+const shouldSkipRedisRead = (key: string) => {
+  const blockedUntil = redisMissCooldown.get(key) || 0;
+  if (blockedUntil > Date.now()) return true;
+  if (blockedUntil > 0) redisMissCooldown.delete(key);
+  return false;
+};
+
+const markRedisMiss = (key: string) => {
+  redisMissCooldown.set(key, Date.now() + REDIS_MISS_COOLDOWN_MS);
+};
+
+const shouldSkipRedisWrite = (key: string) => {
+  const blockedUntil = redisWriteCooldown.get(key) || 0;
+  if (blockedUntil > Date.now()) return true;
+  if (blockedUntil > 0) redisWriteCooldown.delete(key);
+  return false;
+};
+
+const markRedisWrite = (key: string) => {
+  redisWriteCooldown.set(key, Date.now() + REDIS_WRITE_DEDUPE_MS);
+};
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
@@ -22,11 +50,13 @@ export class CacheService {
     }
 
     // 2. L2 hit (Redis)
-    const l2 = await safeRedisCall<T | null>(
-      (redis) => redis.get(key) as Promise<T | null>,
-      null,
-      `cache:get:${key}`,
-    );
+    const l2 = shouldSkipRedisRead(key)
+      ? null
+      : await safeRedisCall<T | null>(
+          (redis) => redis.get(key) as Promise<T | null>,
+          null,
+          `cache:get:${key}`,
+        );
     if (l2 !== null && l2 !== undefined) {
       console.log({ source: 'cache', cacheHit: true, tier: 'l2', key });
       // Redis stores JSON-serialized values. Parse if necessary.
@@ -34,7 +64,7 @@ export class CacheService {
       if (typeof l2 === 'string') {
         try {
           parsed = JSON.parse(l2 as unknown as string);
-        } catch (err) {
+        } catch {
           // If parsing fails, fall back to raw value
           parsed = l2;
         }
@@ -43,6 +73,7 @@ export class CacheService {
       GlobalCache.set(key, parsed, L1_TTL_MS);
       return parsed as T;
     }
+    markRedisMiss(key);
 
     // 3. Cache MISS — fetch fresh data
     console.log({ source: 'cache', cacheHit: false, tier: 'miss', key });
@@ -66,11 +97,14 @@ export class CacheService {
     const memTtl = isEmpty ? 10_000 : L1_TTL_MS;
 
     GlobalCache.set(key, data, memTtl);
-    void safeRedisCall(
-      (redis) => redis.set(key, JSON.stringify(data), { ex: ttl }),
-      null,
-      `cache:set:${key}`,
-    );
+    if (!shouldSkipRedisWrite(key)) {
+      markRedisWrite(key);
+      void safeRedisCall(
+        (redis) => redis.set(key, JSON.stringify(data), { ex: ttl }),
+        null,
+        `cache:set:${key}`,
+      );
+    }
 
     return data;
   }
@@ -88,6 +122,17 @@ export class CacheService {
    */
   static async invalidatePrefix(prefix: string) {
     GlobalCache.invalidatePattern(prefix);
+
+    if (prefix === 'search:') {
+      redisMissCooldown.clear();
+      redisWriteCooldown.clear();
+      await safeRedisCall(
+        (redis) => redis.incr(SEARCH_VERSION_KEY),
+        null,
+        `cache:version-bump:${prefix}`,
+      );
+      return;
+    }
 
     await safeRedisCall(async (redis) => {
       const redisKeys = await redis.keys(`${prefix}*`);
@@ -174,6 +219,8 @@ export class CacheService {
    */
   static async set<T>(key: string, data: T, redisTtlSeconds = 60) {
     GlobalCache.set(key, data, L1_TTL_MS);
+    if (shouldSkipRedisWrite(key)) return;
+    markRedisWrite(key);
     await safeRedisCall(
       (redis) => redis.set(key, JSON.stringify(data), { ex: redisTtlSeconds }),
       null,

@@ -65,6 +65,7 @@ if (TYPESENSE_ENABLED) {
 
 export const COLLECTION_NAME = 'tourist_places';
 export const USERS_COLLECTION = 'users';
+export const TRAVEL_DESTINATIONS_COLLECTION = 'travel_destinations';
 export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
 
 type TypesenseSchemaField = {
@@ -114,6 +115,24 @@ export const usersSchema = {
     { name: 'email', type: 'string' as const },
     { name: 'role', type: 'string' as const },
     { name: 'status', type: 'string' as const },
+    { name: 'updatedAt', type: 'int64' as const },
+  ],
+  default_sorting_field: 'updatedAt',
+};
+
+/**
+ * Schema for generated travel destinations / itineraries
+ */
+export const travelDestinationsSchema = {
+  name: TRAVEL_DESTINATIONS_COLLECTION,
+  fields: [
+    { name: 'place', type: 'string' as const },
+    { name: 'country', type: 'string' as const },
+    { name: 'introduction', type: 'string' as const, optional: true },
+    { name: 'itinerary', type: 'string' as const, optional: true },
+    { name: 'name_lower', type: 'string' as const, optional: true },
+    { name: 'location_search', type: 'string' as const, optional: true },
+    { name: 'location_lower', type: 'string' as const, optional: true },
     { name: 'updatedAt', type: 'int64' as const },
   ],
   default_sorting_field: 'updatedAt',
@@ -181,7 +200,7 @@ export async function initializeTypesense() {
     return [];
   }
 
-  const schemas = [touristPlacesSchema, usersSchema, travelRequestsSchema];
+  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema];
   const results: { name: string; status: 'created' | 'updated' | 'exists' | 'error'; message?: string }[] = [];
 
   for (const schema of schemas) {

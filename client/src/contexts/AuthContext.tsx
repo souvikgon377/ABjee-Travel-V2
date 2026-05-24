@@ -45,6 +45,7 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<void>;
   changePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
   updateUserProfile: (data: Partial<UserProfile>) => Promise<void>;
+  refreshUserProfile: () => Promise<UserProfile | null>;
 }
 
 interface UserProfile {
@@ -491,6 +492,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshUserProfile = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user) return null;
+
+    const token = await refreshToken(user, true);
+    const profile = await fetchUserProfile(token, true);
+
+    if (!profile) {
+      return null;
+    }
+
+    const normalizedProfile = normalizeUserProfile(profile);
+    setUserProfile(normalizedProfile);
+    lastFetchedUidRef.current = user.uid;
+    lastFetchedAtRef.current = Date.now();
+    return normalizedProfile;
+  }, [fetchUserProfile, normalizeUserProfile, refreshToken]);
+
   // Listen for auth state changes
   useEffect(() => {
     let isActive = true;
@@ -661,6 +680,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     resetPassword,
     changePassword,
     updateUserProfile,
+    refreshUserProfile,
   }), [
     currentUser,
     userProfile,
@@ -672,7 +692,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     resetPassword,
     changePassword,
-    updateUserProfile
+    updateUserProfile,
+    refreshUserProfile,
   ]);
 
   return (

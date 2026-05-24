@@ -25,16 +25,12 @@ export async function GET(req: NextRequest) {
     const role = searchParams.get("role") || "all";
     const status = searchParams.get("status") || "all";
 
-    // Build Typesense filter
-    const filters: string[] = [];
-    if (role !== "all") filters.push(`role:=${role}`);
-    if (status === "active") filters.push(`status:!=inactive`);
-    else if (status === "inactive") filters.push(`status:=inactive`);
-
-    const result = await SearchService.searchPlaces({
+    const result = await SearchService.searchUsers({
       query: search,
       page,
       limit,
+      role,
+      status,
     });
 
     return ok({
@@ -94,6 +90,7 @@ export async function POST(req: NextRequest) {
       status: userData.status,
       updatedAt: userData.updatedAt,
     });
+    await SearchService.invalidateSearchCache("user-created");
 
     return ok({ message: "User created successfully", user: { id: ref.id, ...userData } }, 201);
   } catch (error: unknown) {

@@ -1780,14 +1780,28 @@ export default function TripStoriesPage() {
   };
 
   const handleSubmitStory = async (data: Partial<TripStory>) => {
-    const docRef = await addDoc(collection(firestoreDb, 'stories'), {
+    const response = await fetch('/api/trip-stories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
       ...data,
       authorId: uid ?? '',
       authorEmail: userEmail ?? data.authorEmail ?? '',
-      createdAt: serverTimestamp(),
+      }),
     });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.success === false) {
+      throw new Error(payload?.message || 'Failed to submit story.');
+    }
+    const created = payload?.data || {};
     // optimistically add
-    setStories(prev => [{ ...data, id: docRef.id, createdAt: { toDate: () => new Date() } } as TripStory, ...prev]);
+    setStories(prev => [{
+      ...data,
+      id: created.id,
+      authorId: uid ?? '',
+      authorEmail: userEmail ?? data.authorEmail ?? '',
+      createdAt: { toDate: () => new Date(created.createdAt || Date.now()) },
+    } as TripStory, ...prev]);
   };
 
   const featured = stories.find(s => s.featured) || stories[0];
@@ -2139,4 +2153,3 @@ export default function TripStoriesPage() {
     </div>
   );
 }
-

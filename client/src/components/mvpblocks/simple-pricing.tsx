@@ -168,7 +168,7 @@ export default function SimplePricing() {
     finalAmount: number;
     currency: string;
   }>>({});
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, refreshUserProfile } = useAuth();
   const router = useRouter();
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
   const walletSummary = useMemo(() => {
@@ -432,6 +432,7 @@ export default function SimplePricing() {
           const currentScrollY = window.scrollY;
           triggerPaymentFireworks();
           setPaymentConfirmation('Coupon applied successfully. Your subscription is now active.');
+          void refreshUserProfile?.();
           requestAnimationFrame(() => {
             window.scrollTo({ top: currentScrollY, behavior: 'auto' });
           });
@@ -496,6 +497,7 @@ export default function SimplePricing() {
         const currentScrollY = window.scrollY;
         triggerPaymentFireworks();
         setPaymentConfirmation('RB points redeemed successfully. Your subscription is now active.');
+        void refreshUserProfile?.();
         requestAnimationFrame(() => {
           window.scrollTo({ top: currentScrollY, behavior: 'auto' });
         });

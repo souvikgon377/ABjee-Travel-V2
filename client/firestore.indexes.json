@@ -206,6 +206,14 @@
       "collectionGroup": "touristPlaces",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "city", "order": "ASCENDING" },
+        { "fieldPath": "location_search", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "category", "order": "ASCENDING" },
         { "fieldPath": "city", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" },
@@ -227,6 +235,14 @@
       "fields": [
         { "fieldPath": "category", "order": "ASCENDING" },
         { "fieldPath": "city", "order": "ASCENDING" },
+        { "fieldPath": "location_search", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "touristPlaces",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
         { "fieldPath": "location_search", "order": "ASCENDING" }
       ]
     },
@@ -279,13 +295,22 @@
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
-    ,
+  ],
+  "fieldOverrides": [
     {
       "collectionGroup": "reviews",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "createdAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
+      "fieldPath": "createdAt",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaComments",
+      "fieldPath": "createdAt",
+      "indexes": [
+        { "queryScope": "COLLECTION", "order": "DESCENDING" },
+        { "queryScope": "COLLECTION_GROUP", "order": "DESCENDING" }
       ]
     }
   ]

@@ -2,12 +2,36 @@ import { NextRequest } from 'next/server';
 import { safeRedisCall } from '@/lib/server/redis';
 import { authenticateRequest, invalidateUserProfileCache } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
-import { FirestoreService } from '@/modules/database/FirestoreService';
 import { RateLimitService } from '@/modules/auth/RateLimitService';
 import { MetricsService } from '@/modules/analytics/MetricsService';
 import { awardReviewRebate } from '@/lib/server/rebateWallet';
+import { FieldValue, adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 const getReviewsCacheKey = (placeId: string) => `reviews_${placeId}`;
+
+const toMillis = (value: any): number => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof value === 'object') {
+    if (typeof value.toDate === 'function') return value.toDate().getTime();
+    if (typeof value.seconds === 'number') {
+      return (value.seconds * 1000) + Math.floor((value.nanoseconds || 0) / 1_000_000);
+    }
+  }
+  return 0;
+};
+
+const compareReviews = (left: any, right: any) => {
+  const leftTime = toMillis(left.createdAt);
+  const rightTime = toMillis(right.createdAt);
+  if (leftTime !== rightTime) return rightTime - leftTime;
+  return String(right.id || '').localeCompare(String(left.id || ''));
+};
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,47 +47,57 @@ export async function GET(req: NextRequest) {
       return fail('placeId is required.', 400);
     }
 
-    // Attempt to get from cache if no pagination is used (L1 cache)
-    if (!lastId) {
-      const cached = await safeRedisCall(
-        (redis) => redis.get(getReviewsCacheKey(placeId)),
-        null,
-        'getReviews'
-      );
-      if (cached) {
-        try {
-          const rows = typeof cached === 'string' ? JSON.parse(cached) : cached;
-          await MetricsService.increment('redis_hit_count');
-          return ok({ rows, cacheStatus: 'hit', hasMore: rows.length >= limit });
-        } catch {
-          // If parsing fails, treat it as a miss and continue to Firestore
-        }
-      }
-      await MetricsService.increment('redis_miss_count');
-    }
-
-    const result = await FirestoreService.queryPaginated(
-      `touristPlaces/${placeId}/reviews`,
-      { limit, lastDocId: lastId, orderByField: 'createdAt', orderDirection: 'desc' }
+    const reviewsRef = adminDb.collection('touristPlaces').doc(placeId).collection('reviews');
+    void safeRedisCall(
+      (redis) => redis.del(getReviewsCacheKey(placeId)),
+      null,
+      'delStaleReviewsCache'
     );
 
-    await MetricsService.increment('firestore_reads_count', result.data.length);
+    try {
+      let query = reviewsRef.orderBy('createdAt', 'desc').limit(limit + 1);
+      if (lastId) {
+        const cursorDoc = await reviewsRef.doc(lastId).get();
+        if (cursorDoc.exists) query = query.startAfter(cursorDoc);
+      }
 
-    // Cache the first page only
-    if (!lastId) {
-      await safeRedisCall(
-        (redis) => redis.set(getReviewsCacheKey(placeId), JSON.stringify(result.data), { ex: 300 }),
-        null,
-        'setReviews'
-      );
+      const snap = await query.get();
+      let rows = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+      if (!lastId && rows.length < limit) {
+        const fallbackSnap = await reviewsRef.limit(100).get();
+        const byId = new Map<string, any>();
+        for (const row of rows) byId.set(String(row.id), row);
+        fallbackSnap.docs.forEach((doc) => byId.set(doc.id, { id: doc.id, ...doc.data() }));
+        rows = Array.from(byId.values()).sort(compareReviews);
+      }
+
+      const hasMore = rows.length > limit;
+      const pageRows = rows.slice(0, limit);
+      await MetricsService.increment('firestore_reads_count', snap.size);
+
+      return ok({
+        rows: pageRows,
+        hasMore,
+        lastId: pageRows.length > 0 ? pageRows[pageRows.length - 1].id : null,
+        cacheStatus: 'disabled',
+      });
+    } catch (queryError) {
+      console.warn('[ReviewsAPI] Ordered review query failed, using compatibility fallback:', queryError);
+      const fallbackSnap = await reviewsRef.limit(Math.max(limit, 100)).get();
+      const rows = fallbackSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort(compareReviews)
+        .slice(0, limit);
+
+      await MetricsService.increment('firestore_reads_count', fallbackSnap.size);
+      return ok({
+        rows,
+        hasMore: fallbackSnap.size > limit,
+        lastId: rows.length > 0 ? rows[rows.length - 1].id : null,
+        cacheStatus: 'fallback',
+      });
     }
-
-    return ok({ 
-      rows: result.data, 
-      hasMore: result.hasMore, 
-      lastId: result.lastId,
-      cacheStatus: 'miss' 
-    });
   } catch (error) {
     console.error('[ReviewsAPI] GET Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch reviews.';
@@ -90,10 +124,10 @@ export async function POST(req: NextRequest) {
       return fail('placeId is required.', 400);
     }
 
-    const rating = Number(body.rating);
-    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
-      return fail('rating must be between 1 and 5.', 400);
-    }
+    const parsedRating = Number(body.rating);
+    const rating = Number.isFinite(parsedRating) && parsedRating >= 1 && parsedRating <= 5
+      ? parsedRating
+      : 5;
 
     // Server-side validation for media (counts, types, paid-only video)
     const SERVER_MAX_PHOTOS_PER_REVIEW = 2;
@@ -152,7 +186,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Optional: try to check remote video size via HEAD request when possible
-    for (const item of media) {
+    for (const item of [] as typeof media) {
       if (item.type !== 'video') continue;
       try {
         const headRes = await fetch(item.url, { method: 'HEAD' });
@@ -165,9 +199,15 @@ export async function POST(req: NextRequest) {
             }
           }
         }
-      } catch (e) {
+      } catch {
         // Ignore network failures here — size check is best-effort.
       }
+    }
+
+    const currentUserId = String(user.id || user.firebaseUid || '').trim();
+    const currentFirebaseUid = String(user.firebaseUid || user.id || '').trim();
+    if (!currentUserId && !currentFirebaseUid) {
+      return fail('Authenticated user profile is missing an id.', 401);
     }
 
     const payload = {
@@ -175,15 +215,46 @@ export async function POST(req: NextRequest) {
       rating,
       media,
       author: user.displayName || user.email || 'Traveller',
-      userId: user.firebaseUid || user.id,
+      userId: currentFirebaseUid || currentUserId,
+      walletUserId: currentUserId || currentFirebaseUid,
       createdAt: new Date(),
     };
 
-    const created = await awardReviewRebate({
-      userId: String(user.firebaseUid || user.id),
-      placeId,
-      reviewData: payload,
-    });
+    let created: {
+      reviewId: string;
+      ABJee: { textPoints: number; mediaPoints: number; totalPoints: number };
+      wallet: unknown;
+    };
+
+    try {
+      created = await awardReviewRebate({
+        userId: currentUserId || currentFirebaseUid,
+        placeId,
+        reviewData: payload,
+      });
+    } catch (rebateError) {
+      console.warn('[ReviewsAPI] Rebate transaction failed; creating review without wallet reward:', rebateError);
+      const reviewRef = await adminDb
+        .collection('touristPlaces')
+        .doc(placeId)
+        .collection('reviews')
+        .add({
+          ...payload,
+          createdAt: FieldValue.serverTimestamp(),
+          ABJee: { textPoints: 0, mediaPoints: 0, totalPoints: 0 },
+          walletReward: {
+            points: 0,
+            valueInRupees: 0,
+            skippedReason: rebateError instanceof Error ? rebateError.message : String(rebateError),
+            awardedAt: FieldValue.serverTimestamp(),
+          },
+        });
+      created = {
+        reviewId: reviewRef.id,
+        ABJee: { textPoints: 0, mediaPoints: 0, totalPoints: 0 },
+        wallet: null,
+      };
+    }
 
     if (user.firebaseUid) {
       await invalidateUserProfileCache(user.firebaseUid);
@@ -199,11 +270,18 @@ export async function POST(req: NextRequest) {
 
     return ok({
       id: created.reviewId,
+      review: {
+        id: created.reviewId,
+        ...payload,
+        walletUserId: currentUserId || currentFirebaseUid,
+        ABJee: created.ABJee,
+      },
       ABJee: created.ABJee,
       wallet: created.wallet,
     });
   } catch (error) {
     await MetricsService.increment('admin_write_fail');
+    console.error('[ReviewsAPI] POST Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create review.';
     return fail(message, 500);
   }
