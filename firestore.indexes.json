@@ -69,5 +69,14 @@
         { "fieldPath": "type", "order": "ASCENDING" }
       ]
     }
+    ,
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    }
   ]
 }
