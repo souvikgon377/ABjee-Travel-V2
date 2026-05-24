@@ -202,6 +202,9 @@ export async function POST(req: NextRequest) {
     if (user.firebaseUid) {
       await invalidateUserProfileCache(user.firebaseUid);
     }
+    if (paymentData.walletUserId && paymentData.walletUserId !== user.firebaseUid) {
+      await invalidateUserProfileCache(String(paymentData.walletUserId));
+    }
 
     await paymentDocRef.update({
       status: 'paid',

@@ -67,6 +67,15 @@ export const COLLECTION_NAME = 'tourist_places';
 export const USERS_COLLECTION = 'users';
 export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
 
+type TypesenseSchemaField = {
+  name: string;
+  type: string;
+  optional?: boolean;
+};
+
+const getSchemaFields = (fields: TypesenseSchemaField[]) =>
+  fields.filter((field) => field.name !== 'id');
+
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 /**
@@ -75,7 +84,6 @@ export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
 export const touristPlacesSchema = {
   name: COLLECTION_NAME,
   fields: [
-    { name: 'id', type: 'string' as const },
     { name: 'name', type: 'string' as const },
     { name: 'name_lower', type: 'string' as const, optional: true },
     { name: 'city', type: 'string' as const },
@@ -102,7 +110,6 @@ export const touristPlacesSchema = {
 export const usersSchema = {
   name: USERS_COLLECTION,
   fields: [
-    { name: 'id', type: 'string' as const },
     { name: 'displayName', type: 'string' as const },
     { name: 'email', type: 'string' as const },
     { name: 'role', type: 'string' as const },
@@ -118,7 +125,6 @@ export const usersSchema = {
 export const travelRequestsSchema = {
   name: TRAVEL_REQUESTS_COLLECTION,
   fields: [
-    { name: 'id', type: 'string' as const },
     { name: 'destination', type: 'string' as const },
     { name: 'city', type: 'string' as const },
     { name: 'state', type: 'string' as const },
@@ -182,12 +188,14 @@ export async function initializeTypesense() {
     try {
       const collection = (await client.collections(schema.name).retrieve()) as any;
       const existingFields = new Set<string>((collection.fields || []).map((field: any) => field.name));
-      const expectedFields = schema.fields.map((field: any) => field.name);
+      const schemaFields = getSchemaFields(schema.fields as TypesenseSchemaField[]);
+      const expectedFields = schemaFields.map((field) => field.name);
       const missingFields = expectedFields.filter((fieldName) => !existingFields.has(fieldName));
 
       if (missingFields.length > 0) {
         console.log(`[Typesense] Updating collection "${schema.name}" — missing fields: ${missingFields.join(', ')}`);
-        await client.collections(schema.name).update(schema as any);
+        const fieldsToAdd = schemaFields.filter((field) => missingFields.includes(field.name));
+        await client.collections(schema.name).update({ fields: fieldsToAdd } as any);
         results.push({ name: schema.name, status: 'updated', message: `Added fields: ${missingFields.join(', ')}` });
       } else {
         results.push({ name: schema.name, status: 'exists' });
@@ -196,7 +204,10 @@ export async function initializeTypesense() {
       if (error.status === 404 || error.httpStatus === 404) {
         try {
           console.log(`[Typesense] Creating collection "${schema.name}"...`);
-          await client.collections().create(schema as any);
+          await client.collections().create({
+            ...schema,
+            fields: getSchemaFields(schema.fields as TypesenseSchemaField[]),
+          } as any);
           console.log(`[Typesense] ✅ Created collection "${schema.name}"`);
           results.push({ name: schema.name, status: 'created' });
         } catch (createErr: any) {

@@ -130,8 +130,9 @@ export async function POST(req: NextRequest) {
       'subscription.endDate': endDate.toISOString(),
     });
 
-    if (user.firebaseUid) {
-      await invalidateUserProfileCache(user.firebaseUid);
+    const walletUserId = String(user.firebaseUid || user.id);
+    if (walletUserId) {
+      await invalidateUserProfileCache(walletUserId);
     }
 
     return ok({
