@@ -41,29 +41,23 @@ export async function GET(req: NextRequest) {
       diagnostics.redis.error = String(err);
     }
 
-    // Check Firestore document breakdown
+    // Check Firestore document breakdown using aggregate counts to avoid
+    // fetching all documents (prevents large reads when Redis is unavailable).
     try {
-      const snapshot = await adminDb.collection('touristPlaces').get();
-      diagnostics.firestore.total_documents = snapshot.size;
+      // Total documents (aggregate count)
+      const totalAgg = await adminDb.collection('touristPlaces').count().get();
+      diagnostics.firestore.total_documents = totalAgg.data().count || 0;
 
-      let with_true = 0;
-      let with_false = 0;
-      let with_missing = 0;
+      // Counts by isActive using aggregate count queries (no document reads)
+      const [trueAgg, falseAgg, missingAgg] = await Promise.all([
+        adminDb.collection('touristPlaces').where('isActive', '==', true).count().get(),
+        adminDb.collection('touristPlaces').where('isActive', '==', false).count().get(),
+        adminDb.collection('touristPlaces').where('isActive', '==', null).count().get(),
+      ]);
 
-      snapshot.docs.forEach((doc: any) => {
-        const data = doc.data();
-        if (data.isActive === true) {
-          with_true++;
-        } else if (data.isActive === false) {
-          with_false++;
-        } else {
-          with_missing++;
-        }
-      });
-
-      diagnostics.firestore.with_isactive_true = with_true;
-      diagnostics.firestore.with_isactive_false = with_false;
-      diagnostics.firestore.with_isactive_missing = with_missing;
+      diagnostics.firestore.with_isactive_true = trueAgg.data().count || 0;
+      diagnostics.firestore.with_isactive_false = falseAgg.data().count || 0;
+      diagnostics.firestore.with_isactive_missing = missingAgg.data().count || 0;
     } catch (err) {
       diagnostics.firestore.error = String(err);
     }

@@ -112,82 +112,123 @@ export async function uploadImageToCloudinary(
   file: File, 
   options: ImageUploadOptions = {}
 ): Promise<ImageUploadResult> {
-  
-  // Check if Cloudinary is configured
-  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY) {
-    throw new Error('Cloudinary is not configured. Please check your environment variables.');
-  }
-  
   // Merge options with defaults
   const uploadOptions = { ...DEFAULT_OPTIONS, ...options };
-  
+
   // Validate file
   validateFile(file, uploadOptions);
-  
+
   // Calculate SHA-256 hash
   const hash = await calculateSHA256(file);
-  
-  // Prepare form data
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  formData.append('cloud_name', CLOUDINARY_CLOUD_NAME);
-  
-  // Add folder if specified
-  if (uploadOptions.folder) {
-    formData.append('folder', uploadOptions.folder);
-  }
-  
-  // Add SHA-256 hash to metadata for verification and deduplication
-  formData.append('context', `sha256=${hash}`);
-  
-  // Add tags for organization
-  formData.append('tags', 'chat-room,user-upload');
-  
-  try {
-    // Upload to Cloudinary
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-      {
-        method: 'POST',
-        body: formData
-      }
-    );
-    
-    if (!response.ok) {
-      const error = await response.json();
-      
-      if ((process.env.NODE_ENV === "development")) {
-        console.error('Cloudinary upload error:', error);
-      }
-      
-      // Provide user-friendly error message
-      if (error.error?.message?.includes('Upload preset') || error.error?.message?.includes('preset')) {
-        throw new Error(
-          'Upload configuration error. Please contact support or try again later.'
-        );
-      }
-      
-      throw new Error(error.error?.message || 'Failed to upload image. Please try again.');
+
+  // If Cloudinary is configured, use the legacy Cloudinary flow
+  if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY) {
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('cloud_name', CLOUDINARY_CLOUD_NAME);
+
+    // Add folder if specified
+    if (uploadOptions.folder) {
+      formData.append('folder', uploadOptions.folder);
     }
-    
-    const data = await response.json();
-    
-    // Return structured result
+
+    // Add SHA-256 hash to metadata for verification and deduplication
+    formData.append('context', `sha256=${hash}`);
+
+    // Add tags for organization
+    formData.append('tags', 'chat-room,user-upload');
+
+    try {
+      // Upload to Cloudinary
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+
+        if ((process.env.NODE_ENV === 'development')) {
+          console.error('Cloudinary upload error:', error);
+        }
+
+        // Provide user-friendly error message
+        if (error.error?.message?.includes('Upload preset') || error.error?.message?.includes('preset')) {
+          throw new Error('Upload configuration error. Please contact support or try again later.');
+        }
+
+        throw new Error(error.error?.message || 'Failed to upload image. Please try again.');
+      }
+
+      const data = await response.json();
+
+      // Return structured result
+      return {
+        url: data.secure_url,
+        publicId: data.public_id,
+        hash: hash,
+        width: data.width,
+        height: data.height,
+        format: data.format,
+        bytes: data.bytes,
+        createdAt: data.created_at
+      };
+    } catch (error: any) {
+      console.error('Image upload error:', error);
+      throw new Error(`Failed to upload image: ${error?.message || String(error)}`);
+    }
+  }
+
+  // Cloudinary not configured — fallback to R2 server upload endpoint
+  try {
+    // Compute image dimensions before upload
+    const { width, height } = await (async () => {
+      return new Promise<{ width: number; height: number }>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          resolve({ width: img.naturalWidth || 0, height: img.naturalHeight || 0 });
+        };
+        img.onerror = () => resolve({ width: 0, height: 0 });
+        img.src = URL.createObjectURL(file);
+      });
+    })();
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (uploadOptions.folder) formData.append('folder', uploadOptions.folder);
+
+    // Optionally provide a deterministic key using the hash
+    const key = `${uploadOptions.folder || 'uploads'}/${hash}-${Date.now()}`;
+    formData.append('key', key);
+
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body?.error || body?.message || 'R2 upload failed');
+    }
+
+    const payload = await resp.json();
+
+    // Normalize response to ImageUploadResult
+    const now = new Date().toISOString();
     return {
-      url: data.secure_url,
-      publicId: data.public_id,
-      hash: hash,
-      width: data.width,
-      height: data.height,
-      format: data.format,
-      bytes: data.bytes,
-      createdAt: data.created_at
+      url: payload?.url || payload?.data?.url || '',
+      publicId: payload?.key || payload?.data?.key || key,
+      hash,
+      width: width || 0,
+      height: height || 0,
+      format: payload?.format || payload?.data?.format || (file.type.split('/')[1] || 'unknown'),
+      bytes: payload?.bytes || payload?.data?.bytes || (file.size || 0),
+      createdAt: now,
     };
-    
   } catch (error: any) {
-    console.error('Image upload error:', error);
-    throw new Error(`Failed to upload image: ${error.message}`);
+    console.error('R2 upload error:', error);
+    throw new Error(`Failed to upload image to R2: ${error?.message || String(error)}`);
   }
 }
 

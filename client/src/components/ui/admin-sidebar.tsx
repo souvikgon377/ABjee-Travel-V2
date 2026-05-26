@@ -35,6 +35,7 @@ import {
   MessageSquare,
   BookOpen,
   TicketPercent,
+  Megaphone,
 } from 'lucide-react';
 
 const menuItems = [
@@ -49,6 +50,7 @@ const menuItems = [
   { title: 'Tourist Places', icon: MapPin, view: 'tourist-places' },
   { title: 'Travel Itinerary', icon: FileText, view: 'travel-itinerary' },
   { title: 'Offers', icon: TicketPercent, view: 'offers' },
+  { title: 'Advertisements', icon: Megaphone, view: 'advertisements' },
   { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
   { title: 'ABJee Wallet', icon: DollarSign, view: 'abjee-wallet' },

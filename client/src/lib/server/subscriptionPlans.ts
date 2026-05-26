@@ -2,7 +2,7 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 type Interval = 'monthly' | 'yearly';
 
-export type PaidPlanType = 'pro' | 'premium';
+export type PaidPlanType = 'pro' | 'premium' | 'advertizer';
 
 export type SubscriptionPlanConfig = {
   type: PaidPlanType;
@@ -24,11 +24,18 @@ export const SUBSCRIPTION_PLANS: Record<PaidPlanType, SubscriptionPlanConfig> = 
     price: { amount: 2, currency: 'INR', interval: 'monthly' },
     yearlyPrice: { amount: 15, currency: 'INR', interval: 'yearly' },
   },
+  advertizer: {
+    type: 'advertizer',
+    name: 'Advertizers',
+    price: { amount: 1000, currency: 'INR', interval: 'monthly' },
+    yearlyPrice: { amount: 10000, currency: 'INR', interval: 'yearly' },
+  },
 };
 
 export const DEFAULT_PRIVATE_ROOM_LIMITS: Record<PaidPlanType, number> = {
   pro: 3,
   premium: 10,
+  advertizer: 0,
 };
 
 const SETTINGS_COLLECTION = 'admin_settings';
@@ -47,7 +54,7 @@ const parseLimit = (value: unknown, fallback: number) => {
 };
 
 export const isValidPaidPlan = (value: unknown): value is PaidPlanType => {
-  return value === 'pro' || value === 'premium';
+  return value === 'pro' || value === 'premium' || value === 'advertizer';
 };
 
 export const isValidInterval = (value: unknown): value is Interval => {
@@ -94,6 +101,19 @@ export const getConfiguredSubscriptionPlans = async (): Promise<Record<PaidPlanT
         yearlyPrice: {
           ...SUBSCRIPTION_PLANS.premium.yearlyPrice,
           amount: parseAmount(pricing.premiumYearly, SUBSCRIPTION_PLANS.premium.yearlyPrice.amount),
+          currency: baseCurrency,
+        },
+      },
+      advertizer: {
+        ...SUBSCRIPTION_PLANS.advertizer,
+        price: {
+          ...SUBSCRIPTION_PLANS.advertizer.price,
+          amount: parseAmount(pricing.advertizerMonthly, SUBSCRIPTION_PLANS.advertizer.price.amount),
+          currency: baseCurrency,
+        },
+        yearlyPrice: {
+          ...SUBSCRIPTION_PLANS.advertizer.yearlyPrice,
+          amount: parseAmount(pricing.advertizerYearly, SUBSCRIPTION_PLANS.advertizer.yearlyPrice.amount),
           currency: baseCurrency,
         },
       },

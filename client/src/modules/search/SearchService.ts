@@ -13,6 +13,8 @@ import { GlobalCache } from '@/modules/cache/GlobalCache';
 import { FallbackHandler, FallbackSearchOptions, FallbackResult } from './FallbackHandler';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { FieldPath } from 'firebase-admin/firestore';
+import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
+import { SyncService } from './SyncService';
 
 /**
  * SearchOptions - Flexible search configuration
@@ -241,7 +243,15 @@ export class SearchService {
       if (redisCached) return { ...redisCached, latencyMs: Date.now() - tStart };
     }
 
-    const fetchLimit = Math.min(1000, page * limit);
+    // Cap Firestore reads to avoid large collection scans. For deep pagination
+    // require Typesense or cursor-based queries. Use configured MAX_FIRESTORE_LIMIT.
+    const fetchLimit = Math.min(this.MAX_FIRESTORE_LIMIT, Math.max(this.SAFE_QUERY_LIMIT, page * limit));
+    if (page * limit > this.MAX_FIRESTORE_LIMIT) {
+      this.logSearchOperation('[SearchService] Firestore read cap applied, consider using Typesense for deep pages', {
+        requested: page * limit,
+        cappedAt: fetchLimit,
+      }, 'warn');
+    }
     const snap = await adminDb.collection('users').orderBy('createdAt', 'desc').limit(fetchLimit).get();
     const normalizedQuery = this.normalizeText(query);
     const rows = snap.docs
@@ -872,6 +882,41 @@ export class SearchService {
           method: result.method,
         });
 
+        // Propagate fetched Firestore documents to all caches and indexing systems.
+        try {
+          // Update shared snapshot & redis shards and invalidate search caches
+          for (const doc of result.results || []) {
+            try {
+              // Best-effort: update in-memory snapshot, redis shards, and search index
+              void updateSharedPlaceInCache(doc, 'update');
+
+              // Enqueue Typesense sync job for this place (background worker will process)
+              try {
+                // Ensure we pass the minimal PlaceSyncData shape
+                const placeData = {
+                  id: String(doc.id || doc.ID || doc._id),
+                  name: doc.name || doc.Name || '',
+                  city: doc.city || doc.area || '',
+                  state: doc.state || '',
+                  country: doc.country || '',
+                  popularity: doc.popularity || 0,
+                  updatedAt: doc.updatedAt || Date.now(),
+                  category: doc.category || 'Other',
+                  coverImage: doc.coverImage || doc.image || '',
+                  googleMapsUrl: doc.googleMapsUrl || '',
+                };
+                void SyncService.syncPlace(placeData as any);
+              } catch (e) {
+                console.warn('[SearchService] Failed to enqueue Typesense sync for doc', { id: doc.id, err: e instanceof Error ? e.message : e });
+              }
+            } catch (e) {
+              console.warn('[SearchService] Failed to propagate Firestore doc to caches', { id: doc.id, err: e instanceof Error ? e.message : e });
+            }
+          }
+        } catch (e) {
+          console.warn('[SearchService] Propagation of Firestore results failed', e);
+        }
+
         return {
           results: result.results,
           totalCount: result.totalCount,
@@ -985,70 +1030,72 @@ export class SearchService {
     // Build cache key
     const cacheKey = await this.buildVersionedCacheKey(this.buildCacheKey(options));
 
-    // ────────────────────────────────────────────────────────────────────────
-    // LAYER 1: Try L1 cache (in-memory, fastest)
-    // ────────────────────────────────────────────────────────────────────────
-    if (!options.forceRefresh) {
-      const l1Result = this.getFromCache(cacheKey);
-      if (l1Result) {
-        const latency = Date.now() - tStart;
-        console.info('[SearchService] Search completed (cache HIT)', {
-          source: 'memory',
-          found: l1Result.totalCount,
-          latencyMs: latency,
-        });
-        return { ...l1Result, latencyMs: latency };
-      }
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // LAYER 2: Try L2 cache (Redis, if available)
-    // ────────────────────────────────────────────────────────────────────────
-    // ────────────────────────────────────────────────────────────────────────
-    // LAYER 3: Check Typesense circuit breaker
-    // ────────────────────────────────────────────────────────────────────────
+    // New priority per request: 1) Typesense -> 2) Cache (L1/L2) -> 3) Snapshot -> 4) Firestore
     let result: SearchResult | null = null;
 
+    // 1) Try Typesense first (preferred primary source)
     if (TypesenseBreaker.isOpen()) {
-      console.warn('[SearchService] Typesense circuit breaker OPEN, skipping to Firestore');
+      console.warn('[SearchService] Typesense circuit breaker OPEN, skipping Typesense');
       await MetricsService.increment('search_breaker_open');
     } else {
-      // ────────────────────────────────────────────────────────────────────────
-      // LAYER 3: Try Typesense search (if breaker closed)
-      // ────────────────────────────────────────────────────────────────────────
       const typesenseOk = await this.isTypesenseAvailable();
       if (typesenseOk) {
         result = await this.searchTypesense(options);
         if (result) {
-          // Cache in-memory only; do not promote every Typesense hit into Redis.
-          const latency = Date.now() - tStart;
-          console.info('[SearchService] Search completed (Typesense)', {
-            found: result.totalCount,
-            latencyMs: latency,
-          });
-          if (result.totalCount > 0 || !query) {
+          const latencyTs = Date.now() - tStart;
+          console.info('[SearchService] Typesense attempt completed', { found: result.totalCount, latencyMs: latencyTs });
+          // If Typesense returned results, cache and return immediately
+          if (result.totalCount > 0) {
             this.setCache(cacheKey, result, true);
-            return { ...result, latencyMs: latency };
+            return { ...result, latencyMs: latencyTs };
           }
+          // If Typesense returned zero results, continue to next layers
         }
       } else {
-        console.info('[SearchService] Typesense unavailable, skipping to Firestore');
+        console.info('[SearchService] Typesense unavailable, continuing to cache/snapshot');
       }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // LAYER 3.5: Redis fallback for this exact query only
-    // ────────────────────────────────────────────────────────────────────────
+    // 2) Check caches (L1 then L2)
     if (!options.forceRefresh) {
+      const l1Result = this.getFromCache(cacheKey);
+      if (l1Result) {
+        const latency = Date.now() - tStart;
+        console.info('[SearchService] Search completed (L1 cache HIT)', { found: l1Result.totalCount, latencyMs: latency });
+        return { ...l1Result, latencyMs: latency };
+      }
+
       const redisCached = await this.getFromRedisCache(cacheKey, 'Places', { query, page, limit });
       if (redisCached) {
-        return { ...redisCached, latencyMs: Date.now() - tStart };
+        const latency = Date.now() - tStart;
+        console.info('[SearchService] Search completed (L2 cache HIT)', { found: redisCached.totalCount, latencyMs: latency });
+        return { ...redisCached, latencyMs: latency };
       }
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // LAYER 4: Fallback to Firestore (optimized or snapshot)
-    // ────────────────────────────────────────────────────────────────────────
+    // 3) Snapshot fallback (zero Firestore reads)
+    try {
+      const snapshotResult: FallbackResult = await FallbackHandler.fallbackToSnapshot({
+        query: options.query,
+        page: options.page,
+        limit: Math.min(options.limit || 10, this.MAX_FIRESTORE_LIMIT),
+        category: options.category,
+        contentFilter: options.contentFilter,
+        location: options.location,
+        isActive: options.isActive,
+      });
+
+      if (snapshotResult && snapshotResult.source === 'snapshot' && snapshotResult.totalCount > 0) {
+        const latency = Date.now() - tStart;
+        this.setCache(cacheKey, { results: snapshotResult.results, totalCount: snapshotResult.totalCount, hasMore: snapshotResult.hasMore, source: 'snapshot', latencyMs: latency }, false);
+        console.info('[SearchService] Search completed (snapshot)', { found: snapshotResult.totalCount, latencyMs: latency });
+        return { results: snapshotResult.results, totalCount: snapshotResult.totalCount, hasMore: snapshotResult.hasMore, source: 'snapshot', latencyMs: Date.now() - tStart };
+      }
+    } catch (err) {
+      console.warn('[SearchService] Snapshot check failed, proceeding to Firestore', err);
+    }
+
+    // 4) Final resort: Firestore (optimized)
     result = await this.searchFirestore(options);
 
     // Cache result (even if empty)

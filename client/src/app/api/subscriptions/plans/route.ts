@@ -14,7 +14,7 @@ export async function GET() {
   ]);
 
   // Fetch admin feature text
-  let adminFeatures = { proFeatures: '', premiumFeatures: '' };
+  let adminFeatures = { proFeatures: '', premiumFeatures: '', advertizerFeatures: '' };
   try {
     const snapshot = await adminDb.collection('admin_settings').doc('system').get();
     const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
@@ -22,6 +22,7 @@ export async function GET() {
     adminFeatures = {
       proFeatures: typeof features.proFeatures === 'string' ? features.proFeatures : '',
       premiumFeatures: typeof features.premiumFeatures === 'string' ? features.premiumFeatures : '',
+      advertizerFeatures: typeof features.advertizerFeatures === 'string' ? features.advertizerFeatures : '',
     };
   } catch (error) {
     console.error('Failed to fetch admin features:', error);
@@ -71,6 +72,20 @@ export async function GET() {
           profileBoost: true,
           fileUploadLimit: 100,
           customDestinations: true,
+        },
+      },
+      advertizer: {
+        ...configuredPlans.advertizer,
+        features: {
+          privateChatAccess: false,
+          maxPrivateChats: privateRoomLimits.advertizer || 0,
+          maxPrivateChatsYearly: privateRoomLimits.advertizer || 0,
+          travelPartnerRequests: 0,
+          prioritySupport: true,
+          advancedFilters: false,
+          profileBoost: false,
+          fileUploadLimit: 500,
+          customDestinations: false,
         },
       },
     },

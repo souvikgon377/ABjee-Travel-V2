@@ -14,6 +14,7 @@ import {
   BarChart3,
   Settings,
   Zap,
+  Megaphone,
 } from 'lucide-react';
 import { DashboardCard } from '@/components/ui/dashboard-card';
 import { Button } from '@/components/ui/button';
@@ -45,14 +46,18 @@ type RevenueSettings = {
     proYearly: number;
     premiumMonthly: number;
     premiumYearly: number;
+    advertizerMonthly?: number;
+    advertizerYearly?: number;
   };
   privateRoomLimits: {
     pro: number;
     premium: number;
+    advertizer?: number;
   };
   features?: {
     proFeatures: string;
     premiumFeatures: string;
+    advertizerFeatures?: string;
   };
 };
 
@@ -63,6 +68,8 @@ const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
     proYearly: 15,
     premiumMonthly: 2,
     premiumYearly: 15,
+    advertizerMonthly: 1000,
+    advertizerYearly: 10000,
   },
   privateRoomLimits: {
     pro: 3,
@@ -117,6 +124,7 @@ const OffersManager = lazy(() => import('@/components/ui/offers-manager').then((
 const BookingsOverview = lazy(() => import('@/components/ui/bookings-overview').then((module) => ({ default: module.BookingsOverview })));
 const ExploreInterests = lazy(() => import('@/components/ui/explore-interests'));
 const ABJeeWalletAdminPanel = lazy(() => import('@/app/admin/abjee-wallet/page').then((m) => ({ default: m.default })));
+const AdvertisementsManager = lazy(() => import('@/components/ui/advertisements-manager').then((module) => ({ default: module.AdvertisementsManager })));
 
 function SectionLoader() {
   return <div className="h-24 animate-pulse rounded-lg bg-muted/40" />;
@@ -228,6 +236,8 @@ export default function AdminDashboard() {
         proYearly: toAmount(pricing.proYearly, REVENUE_SETTINGS_DEFAULTS.pricing.proYearly),
         premiumMonthly: toAmount(pricing.premiumMonthly, REVENUE_SETTINGS_DEFAULTS.pricing.premiumMonthly),
         premiumYearly: toAmount(pricing.premiumYearly, REVENUE_SETTINGS_DEFAULTS.pricing.premiumYearly),
+        advertizerMonthly: toAmount(pricing.advertizerMonthly, REVENUE_SETTINGS_DEFAULTS.pricing.advertizerMonthly),
+        advertizerYearly: toAmount(pricing.advertizerYearly, REVENUE_SETTINGS_DEFAULTS.pricing.advertizerYearly),
       },
       privateRoomLimits: {
         pro: toLimit(limits.pro, REVENUE_SETTINGS_DEFAULTS.privateRoomLimits.pro),
@@ -236,6 +246,7 @@ export default function AdminDashboard() {
       features: {
         proFeatures: typeof features.proFeatures === 'string' && features.proFeatures.trim() ? features.proFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.proFeatures || '',
         premiumFeatures: typeof features.premiumFeatures === 'string' && features.premiumFeatures.trim() ? features.premiumFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.premiumFeatures || '',
+        advertizerFeatures: typeof features.advertizerFeatures === 'string' && features.advertizerFeatures.trim() ? features.advertizerFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.advertizerFeatures || '',
       },
     };
   }, []);
@@ -409,14 +420,18 @@ export default function AdminDashboard() {
           proYearly: Number(revenueForm.pricing.proYearly) || 0,
           premiumMonthly: Number(revenueForm.pricing.premiumMonthly) || 0,
           premiumYearly: Number(revenueForm.pricing.premiumYearly) || 0,
+          advertizerMonthly: Number(revenueForm.pricing.advertizerMonthly) || 0,
+          advertizerYearly: Number(revenueForm.pricing.advertizerYearly) || 0,
         },
         privateRoomLimits: {
           pro: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.pro) || 0)),
           premium: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.premium) || 0)),
+          advertizer: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.advertizer) || 0)),
         },
         features: {
           proFeatures: revenueForm.features?.proFeatures || '',
           premiumFeatures: revenueForm.features?.premiumFeatures || '',
+          advertizerFeatures: revenueForm.features?.advertizerFeatures || '',
         },
       };
 
@@ -467,6 +482,7 @@ export default function AdminDashboard() {
           { title: 'Users', desc: 'Accounts, roles, and permissions', view: 'users', icon: Users, tone: 'from-blue-500 to-cyan-500' },
           { title: 'Communities', desc: 'Chat communities and moderation', view: 'chatrooms', icon: Database, tone: 'from-violet-500 to-indigo-500' },
           { title: 'Offers', desc: 'Homepage campaigns and promotions', view: 'offers', icon: TicketPercent, tone: 'from-rose-500 to-orange-500' },
+          { title: 'Advertisements', desc: 'Approve and publish ad submissions', view: 'advertisements', icon: Megaphone, tone: 'from-amber-500 to-rose-500' },
           { title: 'Trip Stories', desc: 'Review and curate user stories', view: 'trip-stories', icon: BookOpen, tone: 'from-fuchsia-500 to-pink-500' },
           { title: 'Tourist Places', desc: 'Manage destination directory', view: 'tourist-places', icon: MapPin, tone: 'from-emerald-500 to-teal-500' },
           { title: 'Explore Maps', desc: 'View destination maps and locations', view: 'maps', icon: MapPin, tone: 'from-cyan-500 to-sky-500' },
@@ -767,6 +783,30 @@ export default function AdminDashboard() {
                             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                           />
                         </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Advertizers Monthly
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.advertizerMonthly}
+                            onChange={(event) => handleRevenuePricingChange('advertizerMonthly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Advertizers Yearly
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.advertizerYearly}
+                            onChange={(event) => handleRevenuePricingChange('advertizerYearly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
                       </div>
                     </div>
 
@@ -793,6 +833,18 @@ export default function AdminDashboard() {
                             step="1"
                             value={revenueForm.privateRoomLimits.premium}
                             onChange={(event) => handleRevenueLimitChange('premium', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Max private communities an Advertizer user can create
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={revenueForm.privateRoomLimits.advertizer}
+                            onChange={(event) => handleRevenueLimitChange('advertizer', event.target.value)}
                             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                           />
                         </label>
@@ -826,6 +878,24 @@ export default function AdminDashboard() {
                           rows={4}
                           className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                           placeholder="Create up to 10 private communities (monthly)&#10;Create up to 20 private communities (yearly)&#10;Unlimited private community joining"
+                        />
+                      </label>
+
+                      <label className="block text-xs text-muted-foreground">
+                        Advertizers Plan Features (one per line)
+                        <textarea
+                          value={revenueForm.features?.advertizerFeatures || ''}
+                          onChange={(event) => setRevenueForm((prev) => ({
+                            ...prev,
+                            features: {
+                              proFeatures: prev.features?.proFeatures || '',
+                              premiumFeatures: prev.features?.premiumFeatures || '',
+                              advertizerFeatures: event.target.value,
+                            },
+                          }))}
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          placeholder="Advertisers plan: Submit ads for approval, priority placement options, analytics dashboard"
                         />
                       </label>
                     </div>
@@ -962,6 +1032,23 @@ export default function AdminDashboard() {
             </div>
             <Suspense fallback={<SectionLoader />}>
               <OffersManager />
+            </Suspense>
+          </div>
+        );
+
+      case 'advertisements':
+        return (
+          <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+            <div className="px-2 sm:px-0">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Advertisements
+              </h1>
+              <p className="text-muted-foreground text-sm sm:text-base">
+                Review pending ads, approve them, or add a new live advertisement directly.
+              </p>
+            </div>
+            <Suspense fallback={<SectionLoader />}>
+              <AdvertisementsManager />
             </Suspense>
           </div>
         );

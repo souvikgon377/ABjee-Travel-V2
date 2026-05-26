@@ -369,23 +369,26 @@ export const getSharedPlacesCache = async (): Promise<{
       { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS }
     );
 
-    // 3. FORCE LOAD FROM FIRESTORE if all caches empty (prevent zero results on cold start)
+    // 3. If caches are empty, trigger a background refresh instead of forcing
+    //    a synchronous full Firestore load. Synchronous loads on cold serverless
+    //    instances can cause repeated full-collection reads and large Firestore
+    //    bills. We will trigger `refreshCacheInBackground()` (protected by a
+    //    global Redis lock) and return an empty snapshot; callers should handle
+    //    the empty result (the snapshot will warm in the background).
     if (!places || places.length === 0) {
-      console.info('[PlacesCache] All caches empty, forcing fresh Firestore load');
+      console.info('[PlacesCache] All caches empty → scheduling background refresh (no sync load)');
       try {
-        const freshPlaces = await loadPlacesWithRetry(3);
-        inMemorySnapshot = freshPlaces.slice(0, 50000);
-        snapshotMeta.updatedAt = Date.now();
-        
-        // CRITICAL FIX: Save the fetched places into the hybrid cache!
-        // Otherwise, the cache continues to return an empty array and forces a full read every request.
-        await hybridSet(K.ALL, freshPlaces, { redisTtlSeconds: SHARED_PLACES_CACHE_TTL_SECONDS });
-        
-        console.info('[PlacesCache] Firestore load succeeded', { count: freshPlaces.length });
-        return { places: freshPlaces, cacheStatus: 'warming', source: 'hybrid' };
-      } catch (firebaseError) {
-        console.warn('[PlacesCache] Firestore load failed, trying backup', firebaseError);
+        // Avoid awaiting to prevent blocking the request path. The background
+        // refresh will populate Redis and in-memory snapshot when complete.
+        triggerRefreshIfNeeded('cold_start', false);
+      } catch (err) {
+        console.warn('[PlacesCache] Failed to schedule background refresh', err);
       }
+      // If we have an in-memory snapshot return that, otherwise return an empty array
+      if (inMemorySnapshot.length > 0) {
+        return { places: inMemorySnapshot as SharedPlaceRecord[], cacheStatus: 'snapshot', source: 'snapshot' };
+      }
+      return { places: [], cacheStatus: 'warming', source: 'hybrid' };
     }
 
     // 4. Snapshot Fallback (already populated from memory)

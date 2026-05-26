@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, ChevronLeft, ChevronRight, Compass } from 'lucide-react';
 import GoogleMapDisplay from './google-map-display';
+import AdsStrip from './ads-strip';
 
 interface InterestDestination {
   id: string;
@@ -108,6 +109,7 @@ export default function ExploreInterests({
   return (
     <section className="w-full bg-gradient-to-b from-background via-background to-muted/20 px-4 py-12 md:px-8 md:py-16">
       <div className="max-w-7xl mx-auto">
+        <div className="max-h-[80vh] overflow-y-auto pr-2">
         {showTitle && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -256,6 +258,9 @@ export default function ExploreInterests({
           ))}
         </motion.div>
 
+        {/* Sponsored Ads Strip */}
+        <AdsStrip />
+
         {/* Call to Action */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -277,6 +282,7 @@ export default function ExploreInterests({
             Explore All Destinations
           </a>
         </motion.div>
+        </div>
       </div>
     </section>
   );

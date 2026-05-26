@@ -80,6 +80,22 @@ const DEFAULT_PLANS = [
     ],
     cta: 'Choose Premium',
   },
+  {
+    id: 'advertizer',
+    name: 'Advertizers',
+    icon: Crown,
+    price: {
+      monthly: 1000,
+      yearly: 10000,
+    },
+    description: 'Advertise on ABJee: submit ads, get visibility and analytics.',
+    features: [
+      'Submit ads for approval',
+      'Priority placement options',
+      'Basic analytics dashboard',
+    ],
+    cta: 'Contact Sales',
+  },
 ];
 
 const generateFeaturesFromApi = (planId: string, features: any, adminFeatureText?: string): string[] => {
@@ -147,6 +163,16 @@ const generateFeaturesFromApi = (planId: string, features: any, adminFeatureText
     }
   }
 
+  if (planId === 'advertizer') {
+    if (features?.fileUploadLimit) {
+      featuresList.push(`File upload limit: ${features.fileUploadLimit}`);
+    }
+    if (features?.prioritySupport) {
+      featuresList.push('Priority support');
+    }
+    // use admin feature text if available via caller
+  }
+
   // If no features were generated, use defaults
   return featuresList.length > 0 ? featuresList : DEFAULT_PLANS.find((p) => p.id === planId)?.features || [];
 };
@@ -171,19 +197,32 @@ export default function SimplePricing() {
   const { currentUser, userProfile, refreshUserProfile } = useAuth();
   const router = useRouter();
   const subscriptionInfo = useMemo(() => getSubscriptionInfo(userProfile), [userProfile]);
+  const currentWalletMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
   const walletSummary = useMemo(() => {
     const wallet = (userProfile as any)?.wallet || {};
     const monthly = wallet.monthly || {};
     const availablePoints = Math.max(0, Math.floor(Number(wallet.availablePoints || 0)));
     const monthlyCap = Math.max(0, Math.floor(Number(monthly.monthlyCapRupees || 30)));
-    const monthlyRedeemed = Math.max(0, Math.floor(Number(monthly.redeemedRupees || 0)));
+
+    // Wallet month rolls over each calendar month; previous month redemption should not block current month.
+    const monthKey = typeof monthly.monthKey === 'string' ? monthly.monthKey : '';
+    const isCurrentWalletMonth = monthKey === currentWalletMonthKey;
+    const monthlyRedeemed = isCurrentWalletMonth
+      ? Math.max(0, Math.floor(Number(monthly.redeemedRupees || 0)))
+      : 0;
+
     const monthlyRemaining = Math.max(0, monthlyCap - monthlyRedeemed);
     return {
       availablePoints,
+      monthlyCap,
+      monthlyRedeemed,
       monthlyRemaining,
       usablePoints: Math.min(availablePoints, monthlyRemaining),
     };
-  }, [userProfile]);
+  }, [currentWalletMonthKey, userProfile]);
   const activePlanId = useMemo(() => {
     if (!hasPaidAccess(subscriptionInfo)) return null;
 
@@ -222,13 +261,21 @@ export default function SimplePricing() {
     return null;
   };
 
+  const getRbDiscountForPlan = useCallback((planId: string) => {
+    const rawPrice = plans.find((plan) => plan.id === planId)?.price[frequency as 'monthly' | 'yearly'];
+    if (typeof rawPrice !== 'number') return 0;
+    const couponAmount = couponPreviewByPlan[planId]?.finalAmount ?? rawPrice;
+    if (!useRbPoints || walletSummary.usablePoints <= 0 || !getPlanType(planId)) return 0;
+    return Math.min(walletSummary.usablePoints, couponAmount);
+  }, [couponPreviewByPlan, frequency, plans, useRbPoints, walletSummary.usablePoints]);
+
   const getDiscountedPlanAmount = useCallback((planId: string) => {
     const rawPrice = plans.find((plan) => plan.id === planId)?.price[frequency as 'monthly' | 'yearly'];
     if (typeof rawPrice !== 'number') return rawPrice;
     const couponAmount = couponPreviewByPlan[planId]?.finalAmount ?? rawPrice;
-    if (!useRbPoints || walletSummary.usablePoints <= 0 || !getPlanType(planId)) return couponAmount;
-    return Math.max(0, couponAmount - Math.min(walletSummary.usablePoints, couponAmount));
-  }, [couponPreviewByPlan, frequency, plans, useRbPoints, walletSummary.usablePoints]);
+    const rbDiscount = getRbDiscountForPlan(planId);
+    return Math.max(0, couponAmount - rbDiscount);
+  }, [couponPreviewByPlan, frequency, getRbDiscountForPlan, plans]);
 
   const validateCouponForCurrentFrequency = useCallback(async (rawCouponCode: string) => {
     const normalizedCode = rawCouponCode.trim().toUpperCase();
@@ -609,6 +656,7 @@ export default function SimplePricing() {
             hobby: 'free',
             pro: 'pro',
             enterprise: 'premium',
+            advertizer: 'advertizer',
           };
           
           // Merge fetched pricing and features with default plan structure
@@ -620,7 +668,7 @@ export default function SimplePricing() {
             
             if (fetchedPlan && fetchedPlan.price && fetchedPlan.yearlyPrice) {
               // Get admin feature text for this plan
-              const featureTextKey = defaultPlan.id === 'pro' ? 'proFeatures' : defaultPlan.id === 'enterprise' ? 'premiumFeatures' : null;
+              const featureTextKey = defaultPlan.id === 'pro' ? 'proFeatures' : defaultPlan.id === 'enterprise' ? 'premiumFeatures' : defaultPlan.id === 'advertizer' ? 'advertizerFeatures' : null;
               const adminFeatureText = featureTextKey ? adminFeatures[featureTextKey] : null;
               
               const features = generateFeaturesFromApi(defaultPlan.id, fetchedPlan.features, adminFeatureText);
@@ -804,7 +852,7 @@ export default function SimplePricing() {
               <span>
                 <span className="block font-medium text-foreground">Use RB points for this subscription</span>
                 <span className="block text-muted-foreground">
-                  Available discount: Rs {walletSummary.usablePoints}. 1 RB point = Rs 1, remaining monthly cap Rs {walletSummary.monthlyRemaining}.
+                  Available discount: Rs {walletSummary.usablePoints}. 1 RB point = Rs 1. Monthly redemption cap: Rs {walletSummary.monthlyCap} (remaining this month: Rs {walletSummary.monthlyRemaining}). Unredeemed points stay in your wallet.
                 </span>
               </span>
             </label>
@@ -975,34 +1023,41 @@ export default function SimplePricing() {
                       {typeof plan.price[
                         frequency as keyof typeof plan.price
                       ] === 'number' ? (
-                        <div className="flex items-baseline">
-                          <NumberFlow
-                            className={cn(
-                              'text-3xl font-bold',
-                              plan.popular ? 'text-primary' : 'text-foreground',
-                            )}
-                            format={{
-                              style: 'currency',
-                              currency: 'INR',
-                              maximumFractionDigits: 0,
-                            }}
-                            value={
-                              getDiscountedPlanAmount(plan.id) as number
-                            }
-                          />
-                          {(couponPreviewByPlan[plan.id] || (useRbPoints && walletSummary.usablePoints > 0 && getPlanType(plan.id))) && (
-                            <span className="ml-2 text-sm text-muted-foreground line-through">
-                              {new Intl.NumberFormat('en-IN', {
+                        <>
+                          <div className="flex items-baseline">
+                            <NumberFlow
+                              className={cn(
+                                'text-3xl font-bold',
+                                plan.popular ? 'text-primary' : 'text-foreground',
+                              )}
+                              format={{
                                 style: 'currency',
-                                currency: couponPreviewByPlan[plan.id]?.currency || 'INR',
+                                currency: 'INR',
                                 maximumFractionDigits: 0,
-                              }).format(plan.price[frequency as keyof typeof plan.price] as number)}
+                              }}
+                              value={
+                                getDiscountedPlanAmount(plan.id) as number
+                              }
+                            />
+                            {(couponPreviewByPlan[plan.id] || (useRbPoints && walletSummary.usablePoints > 0 && getPlanType(plan.id))) && (
+                              <span className="ml-2 text-sm text-muted-foreground line-through">
+                                {new Intl.NumberFormat('en-IN', {
+                                  style: 'currency',
+                                  currency: couponPreviewByPlan[plan.id]?.currency || 'INR',
+                                  maximumFractionDigits: 0,
+                                }).format(plan.price[frequency as keyof typeof plan.price] as number)}
+                              </span>
+                            )}
+                            <span className="ml-1 text-sm text-muted-foreground">
+                              /month, billed {frequency}
                             </span>
+                          </div>
+                          {getRbDiscountForPlan(plan.id) > 0 && (
+                            <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                              Includes RB discount of Rs {getRbDiscountForPlan(plan.id)} (max Rs 30/month)
+                            </p>
                           )}
-                          <span className="ml-1 text-sm text-muted-foreground">
-                            /month, billed {frequency}
-                          </span>
-                        </div>
+                        </>
                       ) : (
                         <span
                           className={cn(

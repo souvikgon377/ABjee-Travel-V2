@@ -15,14 +15,18 @@ const DEFAULT_PRICING = {
   proYearly: 15,
   premiumMonthly: 2,
   premiumYearly: 15,
+  advertizerMonthly: 1000,
+  advertizerYearly: 10000,
 };
 const DEFAULT_PRIVATE_ROOM_LIMITS = {
   pro: 3,
   premium: 10,
+  advertizer: 0,
 };
 const DEFAULT_FEATURES = {
   proFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nExpose private rooms for join requests\nPriority support',
   premiumFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nAdvanced member tools\nPriority assistance',
+  advertizerFeatures: 'Advertisers plan: Submit ads for approval, priority placement options, analytics dashboard',
 };
 
 const normalizeBoolean = (value: unknown, defaultValue = true) =>
@@ -56,6 +60,8 @@ const normalizePricing = (value: unknown) => {
     proYearly: normalizeAmount(raw.proYearly, DEFAULT_PRICING.proYearly),
     premiumMonthly: normalizeAmount(raw.premiumMonthly, DEFAULT_PRICING.premiumMonthly),
     premiumYearly: normalizeAmount(raw.premiumYearly, DEFAULT_PRICING.premiumYearly),
+    advertizerMonthly: normalizeAmount(raw.advertizerMonthly, DEFAULT_PRICING.advertizerMonthly),
+    advertizerYearly: normalizeAmount(raw.advertizerYearly, DEFAULT_PRICING.advertizerYearly),
   };
 };
 
@@ -65,6 +71,7 @@ const normalizePrivateRoomLimits = (value: unknown) => {
   return {
     pro: normalizeLimit(raw.pro, DEFAULT_PRIVATE_ROOM_LIMITS.pro),
     premium: normalizeLimit(raw.premium, DEFAULT_PRIVATE_ROOM_LIMITS.premium),
+    advertizer: normalizeLimit(raw.advertizer, DEFAULT_PRIVATE_ROOM_LIMITS.advertizer),
   };
 };
 
@@ -74,6 +81,7 @@ const normalizeFeatures = (value: unknown) => {
   return {
     proFeatures: typeof raw.proFeatures === 'string' && raw.proFeatures.trim() ? raw.proFeatures.trim() : DEFAULT_FEATURES.proFeatures,
     premiumFeatures: typeof raw.premiumFeatures === 'string' && raw.premiumFeatures.trim() ? raw.premiumFeatures.trim() : DEFAULT_FEATURES.premiumFeatures,
+    advertizerFeatures: typeof raw.advertizerFeatures === 'string' && raw.advertizerFeatures.trim() ? raw.advertizerFeatures.trim() : DEFAULT_FEATURES.advertizerFeatures,
   };
 };
 

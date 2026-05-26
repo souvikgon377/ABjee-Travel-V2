@@ -23,6 +23,7 @@ const navItems: NavItem[] = [
   { name: 'Home', href: '/' },
   { name: 'Community', href: '/community' },
   { name: 'Booking Categories', href: '/booking-categories' },
+  { name: 'Advertisement', href: '/advertisement' },
   { name: 'About', href: '/about' },
   { name: 'Subscription', href: '/pricing' },
 ];
@@ -899,6 +900,8 @@ export default function Header1() {
                 </Link>
               </motion.div>
             )}
+
+            {/* Advertisement header button removed per request */}
           </div>
 
           <nav
