@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { CheckCircle2, Clock3, Loader2, Megaphone, RefreshCw, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { CheckCircle2, Clock3, Loader2, Megaphone, PencilLine, RefreshCw, Search, Trash2, XCircle, UploadCloud } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { AdvertisementForm } from '@/components/ui/advertisement-form';
+import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 
 type AdvertisementDoc = {
   id: string;
@@ -18,12 +20,30 @@ type AdvertisementDoc = {
   area: string;
   photoUrl: string;
   status: 'pending' | 'approved' | 'rejected';
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
   createdAt?: any;
   updatedAt?: any;
   description?: string;
 };
 
+type AdvertisementEditState = {
+  id: string;
+  name: string;
+  mobileNumber: string;
+  country: string;
+  state: string;
+  area: string;
+  description: string;
+  photoUrl: string;
+};
+
 const AD_COLLECTION = 'advertisements';
+
+const normalizeApprovalStatus = (status: AdvertisementDoc['status']) => {
+  if (status === 'approved') return 'approved';
+  if (status === 'rejected') return 'rejected';
+  return 'pending';
+};
 
 const toDate = (value: any) => {
   if (!value) return new Date();
@@ -37,6 +57,12 @@ export function AdvertisementsManager() {
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingItem, setEditingItem] = useState<AdvertisementEditState | null>(null);
+  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
+  const [editPhotoPreview, setEditPhotoPreview] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadItems = async () => {
     setLoading(true);
@@ -46,6 +72,7 @@ export function AdvertisementsManager() {
       const snapshot = await getDocs(query(collection(firestoreDb, AD_COLLECTION), orderBy('createdAt', 'desc')));
       const rows = snapshot.docs.map((document) => {
         const data = document.data() as Record<string, any>;
+        const status = (data.status || 'pending') as AdvertisementDoc['status'];
         return {
           id: document.id,
           name: String(data.name || ''),
@@ -55,13 +82,24 @@ export function AdvertisementsManager() {
           area: String(data.area || ''),
           description: typeof data.description === 'string' ? data.description : '',
           photoUrl: String(data.photoUrl || ''),
-          status: (data.status || 'pending') as AdvertisementDoc['status'],
+          status,
+          approvalStatus: (data.approvalStatus || normalizeApprovalStatus(status)) as AdvertisementDoc['approvalStatus'],
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         };
       });
 
       setItems(rows);
+
+      await Promise.all(
+        rows
+          .filter((row) => row.status !== row.approvalStatus)
+          .map((row) => updateDoc(doc(firestoreDb, AD_COLLECTION, row.id), {
+            approvalStatus: normalizeApprovalStatus(row.status),
+            ...(row.status === 'approved' ? { approvedAt: row.updatedAt || serverTimestamp() } : {}),
+            updatedAt: serverTimestamp(),
+          }))
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load advertisements');
     } finally {
@@ -88,11 +126,138 @@ export function AdvertisementsManager() {
     [items],
   );
 
+  const filteredItems = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) return items;
+
+    return items.filter((item) => {
+      const haystack = [
+        item.name,
+        item.mobileNumber,
+        item.country,
+        item.state,
+        item.area,
+        item.description,
+        item.status,
+      ].join(' ').toLowerCase();
+
+      return haystack.includes(term);
+    });
+  }, [items, searchQuery]);
+
+  const closeEditor = () => {
+    if (editPhotoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(editPhotoPreview);
+    }
+    setEditingItem(null);
+    setEditPhotoFile(null);
+    setEditPhotoPreview('');
+  };
+
+  const startEdit = (item: AdvertisementDoc) => {
+    closeEditor();
+    setEditingItem({
+      id: item.id,
+      name: item.name,
+      mobileNumber: item.mobileNumber,
+      country: item.country,
+      state: item.state,
+      area: item.area,
+      description: item.description || '',
+      photoUrl: item.photoUrl,
+    });
+    setEditPhotoPreview(item.photoUrl);
+  };
+
+  const updateEditField = (key: keyof Omit<AdvertisementEditState, 'id' | 'photoUrl'>, value: string) => {
+    setEditingItem((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const handleEditPhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+
+    if (editPhotoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(editPhotoPreview);
+    }
+
+    if (!file) {
+      setEditPhotoFile(null);
+      setEditPhotoPreview(editingItem?.photoUrl || '');
+      return;
+    }
+
+    setEditPhotoFile(file);
+    setEditPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const saveEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingItem) return;
+
+    setSavingEdit(true);
+    setErrorMessage('');
+
+    try {
+      if (!editingItem.name.trim()) throw new Error('Name is required');
+      if (!editingItem.mobileNumber.trim()) throw new Error('Mobile number is required');
+      if (!editingItem.country || !editingItem.state || !editingItem.area) throw new Error('Please select country, state, and area/locality');
+
+      let photoData = {
+        photoUrl: editingItem.photoUrl,
+      };
+
+      if (editPhotoFile) {
+        const uploadResult = await uploadImageToCloudinary(editPhotoFile, { folder: 'advertisements' });
+        photoData = { photoUrl: uploadResult.url };
+      }
+
+      await updateDoc(doc(firestoreDb, AD_COLLECTION, editingItem.id), {
+        name: editingItem.name.trim(),
+        mobileNumber: editingItem.mobileNumber.trim(),
+        description: editingItem.description ? editingItem.description.trim() : '',
+        country: editingItem.country,
+        state: editingItem.state,
+        area: editingItem.area,
+        ...photoData,
+        approvalStatus: normalizeApprovalStatus((items.find((item) => item.id === editingItem.id)?.status || 'pending') as AdvertisementDoc['status']),
+        updatedAt: serverTimestamp(),
+      });
+
+      closeEditor();
+      await loadItems();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to update advertisement');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteItem = async (id: string) => {
+    const confirmed = window.confirm('Delete this advertisement permanently?');
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    setErrorMessage('');
+
+    try {
+      await deleteDoc(doc(firestoreDb, AD_COLLECTION, id));
+      if (editingItem?.id === id) {
+        closeEditor();
+      }
+      await loadItems();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to delete advertisement');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const approveItem = async (id: string) => {
     setActionId(id);
     try {
       await updateDoc(doc(firestoreDb, AD_COLLECTION, id), {
         status: 'approved',
+        approvalStatus: 'approved',
         approvedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -107,6 +272,7 @@ export function AdvertisementsManager() {
     try {
       await updateDoc(doc(firestoreDb, AD_COLLECTION, id), {
         status: 'rejected',
+        approvalStatus: 'rejected',
         updatedAt: serverTimestamp(),
       });
       await loadItems();
@@ -128,9 +294,6 @@ export function AdvertisementsManager() {
               <Megaphone className="h-5 w-5" />
               <span className="text-xs font-semibold uppercase tracking-[0.24em]">Advertisements</span>
             </div>
-                        {item.description ? (
-                          <div className="mb-2 text-sm text-muted-foreground">{item.description}</div>
-                        ) : null}
             <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Approve submissions and add live ads</h2>
             <p className="mt-2 max-w-2xl text-sm text-white/90 sm:text-base">
               Review public submissions, approve them for publishing, or add a new advertisement directly from admin with the same form.
@@ -247,14 +410,101 @@ export function AdvertisementsManager() {
               <CardTitle>All advertisement records</CardTitle>
               <CardDescription>Includes pending, approved, and rejected submissions.</CardDescription>
             </div>
-            <Badge variant="secondary" className="rounded-full px-3 py-1">
-              {rejectedCount} rejected
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="rounded-full px-3 py-1">
+                {rejectedCount} rejected
+              </Badge>
+              <div className="relative w-full min-w-64 sm:w-80">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search advertisement"
+                  className="pl-9"
+                />
+              </div>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {editingItem ? (
+            <form onSubmit={saveEdit} className="mb-6 rounded-3xl border border-rose-200/40 bg-rose-500/5 p-4 shadow-sm dark:border-rose-900/30 dark:bg-rose-950/20">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">Edit advertisement</h3>
+                  <p className="text-sm text-muted-foreground">Update fields and replace the photo if needed.</p>
+                </div>
+                <Button type="button" variant="outline" onClick={closeEditor}>Cancel</Button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Name</span>
+                  <Input value={editingItem.name} onChange={(event) => updateEditField('name', event.target.value)} />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Mobile Number</span>
+                  <Input value={editingItem.mobileNumber} onChange={(event) => updateEditField('mobileNumber', event.target.value)} />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Country</span>
+                  <Input value={editingItem.country} onChange={(event) => updateEditField('country', event.target.value)} />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">State</span>
+                  <Input value={editingItem.state} onChange={(event) => updateEditField('state', event.target.value)} />
+                </label>
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-sm font-medium">Area / Locality</span>
+                  <Input value={editingItem.area} onChange={(event) => updateEditField('area', event.target.value)} />
+                </label>
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-sm font-medium">Description</span>
+                  <textarea
+                    value={editingItem.description}
+                    onChange={(event) => updateEditField('description', event.target.value)}
+                    rows={4}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Replace photo</span>
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
+                        <UploadCloud className="h-4 w-4" />
+                      </div>
+                      <div className="text-sm text-muted-foreground">Choose a new image only if you want to replace the existing advertisement photo.</div>
+                    </div>
+                    <Input type="file" accept="image/*" onChange={handleEditPhotoChange} className="mt-4" />
+                    {editPhotoPreview ? <img src={editPhotoPreview} alt="Advertisement preview" className="mt-4 h-44 w-full rounded-xl object-cover" /> : null}
+                  </div>
+                </label>
+
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+                  <div className="font-semibold text-foreground">Current record</div>
+                  <div className="mt-2 space-y-1">
+                    <div>Status: <span className="capitalize">{items.find((item) => item.id === editingItem.id)?.status || 'unknown'}</span></div>
+                    <div>ID: {editingItem.id}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button type="submit" disabled={savingEdit} className="gap-2">
+                  <PencilLine className="h-4 w-4" />
+                  {savingEdit ? 'Saving...' : 'Save changes'}
+                </Button>
+                <Button type="button" variant="outline" onClick={closeEditor} disabled={savingEdit}>Cancel</Button>
+              </div>
+            </form>
+          ) : null}
+
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-semibold">{item.name}</h3>
@@ -266,9 +516,26 @@ export function AdvertisementsManager() {
                 <p className="mt-3 text-sm text-muted-foreground">{item.area}, {item.state}, {item.country}</p>
                 {item.photoUrl ? <img src={item.photoUrl} alt={item.name} className="mt-3 h-36 w-full rounded-xl object-cover" /> : null}
                 <div className="mt-3 text-xs text-muted-foreground">Created: {toDate(item.createdAt).toLocaleString()}</div>
+                <div className="mt-1 text-xs text-muted-foreground">Approval status: <span className="capitalize">{item.approvalStatus || item.status}</span></div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => startEdit(item)} className="gap-2">
+                    <PencilLine className="h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button type="button" variant="destructive" size="sm" onClick={() => deleteItem(item.id)} disabled={deletingId === item.id} className="gap-2">
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
+
+          {!loading && filteredItems.length === 0 ? (
+            <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+              No advertisements match your search.
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

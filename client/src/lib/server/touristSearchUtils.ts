@@ -427,9 +427,11 @@ export async function adminSearch({
   const result = await SearchService.searchPlaces({
     query: search,
     location,
-    category: undefined,
+    category: 'all',
     contentFilter: filter as 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated',
+    page,
     limit,
+    isActive: undefined,
   });
 
   const latency = Date.now() - tStart;
@@ -439,8 +441,8 @@ export async function adminSearch({
     total: result.totalCount, // Note: total count is -1 in basic search, can be fetched if needed
     page,
     hasMore: result.hasMore,
-    source: 'redis-incremental', // Keep source for UI compatibility
-    cacheStatus: 'hit',
+    source: result.source,
+    cacheStatus: result.fromCache ? 'hit' : 'miss',
     latencyMs: latency
   };
 }

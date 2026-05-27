@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { CheckCircle2, ImagePlus, Loader2, Phone, Sparkles, UploadCloud } from 'lucide-react';
+import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { fetchAdvertisementLocations, type AdvertisementLocationOption } from '@/lib/advertisementLocations';
+import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +34,8 @@ const emptyState = {
 };
 
 export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode = 'public', onSubmitted }: AdvertisementFormProps) {
+  const { currentUser, userProfile } = useAuth();
+  const profileEmail = currentUser?.email || userProfile?.email || '';
   const [form, setForm] = useState(emptyState);
   const [locations, setLocations] = useState<AdvertisementLocationOption[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -148,11 +151,16 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
 
       const documentRef = await addDoc(collection(firestoreDb, AD_COLLECTION), {
         name: form.name.trim(),
+        email: profileEmail || null,
         mobileNumber: form.mobileNumber.trim(),
         description: form.description ? form.description.trim() : '',
         country: form.country,
         state: form.state,
         area: form.area,
+        ownerUid: currentUser?.uid || null,
+        ownerEmail: profileEmail || null,
+        ownerName: currentUser?.displayName || userProfile?.displayName || form.name.trim(),
+        ownerPhoneNumber: (currentUser as any)?.phoneNumber || (userProfile as any)?.phoneNumber || null,
         photoUrl: uploadResult.url,
         photoPublicId: uploadResult.publicId,
         photoHash: uploadResult.hash,
@@ -224,6 +232,24 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
               />
             </label>
 
+            <div className="space-y-2 md:col-span-2">
+              <span className="text-sm font-medium">Email</span>
+              <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-muted/30 shadow-sm">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-muted-foreground">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <Input
+                  value={profileEmail}
+                  readOnly
+                  aria-readonly="true"
+                  className="h-12 border-0 bg-transparent pl-11 pr-4 text-sm font-medium text-foreground shadow-none focus-visible:ring-0"
+                  placeholder="Email from your profile"
+                  title={profileEmail}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Loaded from your profile and saved with the advertisement.</p>
+            </div>
+
             <label className="space-y-2">
               <span className="text-sm font-medium">Short description (optional)</span>
               <textarea
@@ -231,7 +257,7 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
                 onChange={(e) => setForm((cur) => ({ ...cur, description: e.target.value }))}
                 rows={3}
                 maxLength={300}
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-ring/30"
                 placeholder="Briefly describe your ad or offer (max 300 chars)"
               />
             </label>

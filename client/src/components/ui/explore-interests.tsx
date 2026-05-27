@@ -1,15 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, ChevronLeft, ChevronRight, Compass } from 'lucide-react';
 import GoogleMapDisplay from './google-map-display';
 import AdsStrip from './ads-strip';
+import type { TouristPlace } from './tourist-places';
 
 interface InterestDestination {
   id: string;
   name: string;
   description: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  area?: string;
   latitude?: number;
   longitude?: number;
   googleMapsUrl?: string;
@@ -75,6 +80,25 @@ const DEFAULT_INTERESTS: InterestDestination[] = [
   },
 ];
 
+const buildAdsLocationContext = (interest: InterestDestination): TouristPlace => {
+  const [firstSegment, ...otherSegments] = interest.name.split(',').map((segment) => segment.trim()).filter(Boolean);
+  const lastSegment = otherSegments[otherSegments.length - 1] || '';
+
+  return {
+    name: interest.name,
+    area: interest.area || firstSegment || interest.name,
+    city: interest.city || firstSegment || interest.name,
+    state: interest.state || '',
+    country: interest.country || lastSegment,
+    description: interest.description,
+    category: 'Other',
+    googleMapsUrl: interest.googleMapsUrl || '',
+    coverImage: '',
+    media: [],
+    extraInfo: [],
+  };
+};
+
 interface ExploreInterestsProps {
   interests?: InterestDestination[];
   showTitle?: boolean;
@@ -88,11 +112,21 @@ interface ExploreInterestsProps {
 export default function ExploreInterests({
   interests = DEFAULT_INTERESTS,
   showTitle = true,
-  maxItems = 6,
+  maxItems,
 }: ExploreInterestsProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const displayInterests = interests.slice(0, maxItems);
+  const displayInterests = typeof maxItems === 'number' ? interests.slice(0, maxItems) : interests;
   const currentInterest = displayInterests[currentIndex];
+  const currentInterestLocation = useMemo(
+    () => (currentInterest ? buildAdsLocationContext(currentInterest) : null),
+    [currentInterest],
+  );
+
+  useEffect(() => {
+    if (currentIndex >= displayInterests.length) {
+      setCurrentIndex(0);
+    }
+  }, [currentIndex, displayInterests.length]);
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => (prev === 0 ? displayInterests.length - 1 : prev - 1));
@@ -107,7 +141,7 @@ export default function ExploreInterests({
   };
 
   return (
-    <section className="w-full bg-gradient-to-b from-background via-background to-muted/20 px-4 py-12 md:px-8 md:py-16">
+    <section className="w-full bg-linear-to-b from-background via-background to-muted/20 px-4 py-12 md:px-8 md:py-16">
       <div className="max-w-7xl mx-auto">
         <div className="max-h-[80vh] overflow-y-auto pr-2">
         {showTitle && (
@@ -166,7 +200,7 @@ export default function ExploreInterests({
               <div>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <MapPin className="h-6 w-6 text-rose-500 flex-shrink-0" />
+                    <MapPin className="h-6 w-6 text-rose-500 shrink-0" />
                     <h3 className="text-3xl md:text-4xl font-bold text-foreground">
                       {currentInterest.name}
                     </h3>
@@ -259,7 +293,10 @@ export default function ExploreInterests({
         </motion.div>
 
         {/* Sponsored Ads Strip */}
-        <AdsStrip />
+        <AdsStrip
+          searchTerm={currentInterest?.name || ''}
+          places={currentInterestLocation ? [currentInterestLocation] : []}
+        />
 
         {/* Call to Action */}
         <motion.div
@@ -267,7 +304,7 @@ export default function ExploreInterests({
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="mt-12 rounded-2xl border border-border bg-gradient-to-r from-rose-500/10 to-orange-500/10 p-6 md:p-8 text-center"
+          className="mt-12 rounded-2xl border border-border bg-linear-to-r from-rose-500/10 to-orange-500/10 p-6 md:p-8 text-center"
         >
           <h3 className="text-2xl font-bold text-foreground mb-2">
             Ready to Explore?

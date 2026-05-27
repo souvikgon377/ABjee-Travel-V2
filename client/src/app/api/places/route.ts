@@ -42,14 +42,17 @@ export async function GET(req: NextRequest) {
     const filter = params.get('filter') || 'all';
     const category = params.get('category') || 'all';
     const page = Math.max(1, Number(params.get('page') || '1'));
-    const limit = Math.min(20, Math.max(1, Number(params.get('limit') || '12')));
+    const limit = Math.min(100, Math.max(1, Number(params.get('limit') || '12')));
+    const forceRefresh = params.get('forceRefresh') === 'true';
 
     const result = await SearchService.searchPlaces({
       query: search,
       location,
-      category: filter !== 'all' ? filter : category,
+      category,
+      contentFilter: filter as 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated',
       page,
       limit,
+      forceRefresh,
       isActive: undefined // Show all results to match admin-side behavior
     });
 
@@ -61,7 +64,7 @@ export async function GET(req: NextRequest) {
       results: enrichedResults,
       hasMore: result.hasMore,
       totalCount: result.totalCount,
-      queryName: 'typesense',
+      queryName: result.source,
       source: result.source,
       latencyMs: result.latencyMs,
       pagination: {

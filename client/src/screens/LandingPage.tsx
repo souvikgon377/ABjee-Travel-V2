@@ -72,6 +72,9 @@ type InterestDestination = {
   bestTime?: string
 }
 
+const INTEREST_PLACES_PAGE_LIMIT = 100
+const INTEREST_PLACES_MAX_PAGES = 20
+
 const stripHtml = (value: string) => value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 
 function LandingPage() {
@@ -146,18 +149,32 @@ function LandingPage() {
 
     const fetchInterestPlaces = async () => {
       try {
-        const response = await fetch('/api/places/all?limit=6')
-        const payload = await response.json().catch(() => ({ success: false }))
-        if (!response.ok || !payload?.success) return
+        const rows: any[] = []
+        let page = 1
+        let hasMore = true
 
-        const responseData = payload?.data?.data || payload?.data
-        const rows = Array.isArray(responseData?.rows)
-          ? responseData.rows
-          : Array.isArray(responseData?.results)
-            ? responseData.results
-            : []
+        while (!cancelled && hasMore && page <= INTEREST_PLACES_MAX_PAGES) {
+          const response = await fetch(`/api/places/all-unfiltered?limit=${INTEREST_PLACES_PAGE_LIMIT}&page=${page}`)
+          const payload = await response.json().catch(() => ({ success: false }))
+          if (!response.ok || !payload?.success) break
 
-        const mapped = rows
+          const responseData = payload?.data?.data || payload?.data
+          const pageRows = Array.isArray(responseData?.rows)
+            ? responseData.rows
+            : Array.isArray(responseData?.results)
+              ? responseData.results
+              : []
+
+          rows.push(...pageRows)
+          hasMore = Boolean(responseData?.hasMore || responseData?.pagination?.hasNext)
+          page += 1
+        }
+
+        const uniqueRows = Array.from(
+          new Map(rows.map((place: any, index) => [String(place?.id || place?.name || index), place])).values()
+        )
+
+        const mapped = uniqueRows
           .filter((place: any) => place?.googleMapsUrl || place?.name)
           .map((place: any) => ({
             id: String(place.id || place.name),

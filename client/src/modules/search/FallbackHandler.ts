@@ -35,6 +35,7 @@ export interface FallbackResult {
 export class FallbackHandler {
   private static readonly SAFE_LIMIT = 10;
   private static readonly FETCH_LIMIT = 20;
+  private static readonly SAFE_BROWSE_READ_LIMIT = 500;
   private static readonly MAX_TOKEN_QUERY_VALUES = 10;
 
   private static normalizeText(value: unknown): string {
@@ -193,15 +194,17 @@ export class FallbackHandler {
    */
   private static async safeFallbackQuery(
     baseRef: any,
-    options: FallbackSearchOptions
+    options: FallbackSearchOptions,
+    readLimit: number = this.SAFE_LIMIT
   ): Promise<any[]> {
     try {
-      const safeRef = this.applyEqualityFilters(baseRef, options).limit(this.SAFE_LIMIT);
+      const safeRef = this.applyEqualityFilters(baseRef, options).limit(readLimit);
       const snap = await safeRef.get();
       const rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
       console.log('[FallbackHandler] Safe limited query returned results', {
         count: rows.length,
-        method: 'safe_limit_10',
+        method: 'safe_limited_query',
+        readLimit,
       });
       return rows;
     } catch (safeErr) {
@@ -219,7 +222,9 @@ export class FallbackHandler {
     prefix: string,
     options: FallbackSearchOptions
   ): Promise<any[]> {
-    const fetchLimit = Math.min(this.FETCH_LIMIT, options.limit || 20);
+    const page = Math.max(1, options.page || 1);
+    const requestedLimit = Math.max(1, Math.min(100, options.limit || this.FETCH_LIMIT));
+    const fetchLimit = Math.min(100, (requestedLimit * page) + 1);
 
     try {
       let qRef: any = adminDb.collection('touristPlaces');
@@ -236,6 +241,7 @@ export class FallbackHandler {
         field,
         prefix,
         count: results.length,
+        readLimit: fetchLimit,
       });
 
       return results;
@@ -351,12 +357,16 @@ export class FallbackHandler {
 
       // For blank query, always run a bounded query (never full scan).
       if (!prefix) {
-        const safeRows = await this.safeFallbackQuery(baseRef, options);
+        const readLimit = Math.min(this.SAFE_BROWSE_READ_LIMIT, (limit * page) + 1);
+        const safeRows = await this.safeFallbackQuery(baseRef, options, readLimit);
+        const startIdx = (page - 1) * limit;
+        const endIdx = startIdx + limit;
+        const paginated = safeRows.slice(startIdx, endIdx);
         const latency = Date.now() - tStart;
         return {
-          results: safeRows.slice(0, limit),
+          results: paginated,
           totalCount: safeRows.length,
-          hasMore: safeRows.length > limit,
+          hasMore: safeRows.length > endIdx,
           source: 'firestore',
           latencyMs: latency,
           method: 'safe',
@@ -440,12 +450,17 @@ export class FallbackHandler {
       const dataset = getInMemorySnapshot();
 
       if (!Array.isArray(dataset) || dataset.length === 0) {
-        const safeRows = await this.safeFallbackQuery(adminDb.collection('touristPlaces'), options);
+        const page = Math.max(1, options.page || 1);
+        const readLimit = Math.min(this.SAFE_BROWSE_READ_LIMIT, (limit * page) + 1);
+        const safeRows = await this.safeFallbackQuery(adminDb.collection('touristPlaces'), options, readLimit);
+        const startIdx = (page - 1) * limit;
+        const endIdx = startIdx + limit;
+        const paginated = safeRows.slice(startIdx, endIdx);
         const latency = Date.now() - tStart;
         return {
-          results: safeRows.slice(0, limit),
+          results: paginated,
           totalCount: safeRows.length,
-          hasMore: safeRows.length > limit,
+          hasMore: safeRows.length > endIdx,
           source: 'firestore',
           latencyMs: latency,
           method: 'safe',

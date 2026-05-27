@@ -38,6 +38,7 @@ import { buildGoogleMapsEmbedUrl } from "@/components/ui/google-map-display";
 import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSubscriptionInfo, hasPaidAccess } from "@/lib/subscriptionPolicy";
+import AdsStrip from "@/components/ui/ads-strip";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
 const MAX_PHOTOS_PER_REVIEW = 2;
@@ -383,6 +384,7 @@ const TourPlaces: React.FC = () => {
   const handledPlaceParamRef = useRef<string | null>(null);
   const lastSearchTermRef = useRef<string>("");
   const searchRequestIdRef = useRef(0);
+  const searchPageRef = useRef(1);
   const clientSearchCacheRef = useRef(new Map<string, SearchResponse>());
   const inFlightSearchRef = useRef(new Map<string, Promise<SearchResponse>>());
   const prefetchQueueRef = useRef<Map<string, SearchResponse>>(new Map());
@@ -485,6 +487,7 @@ const TourPlaces: React.FC = () => {
   const resetSearchState = useCallback(() => {
     setSearchResults([]);
     setSearchPage(1);
+    searchPageRef.current = 1;
     setSearchHasMore(false);
     setSearchLoading(false);
     setSearchError("");
@@ -496,10 +499,10 @@ const TourPlaces: React.FC = () => {
     return `search:${query.toLowerCase()}:p:${page}`;
   }, []);
 
-  const requestSearchPage = useCallback(async (query: string, page: number, options?: { signal?: AbortSignal }): Promise<SearchResponse> => {
+  const requestSearchPage = useCallback(async (query: string, page: number, options?: { signal?: AbortSignal; forceRefresh?: boolean }): Promise<SearchResponse> => {
     const cacheKey = buildClientCacheKey(query, page);
     const cached = clientSearchCacheRef.current.get(cacheKey);
-    if (cached) {
+    if (cached && !options?.forceRefresh) {
       return {
         ...cached,
         cacheStatus: "hit",
@@ -507,7 +510,7 @@ const TourPlaces: React.FC = () => {
     }
 
     const existingRequest = inFlightSearchRef.current.get(cacheKey);
-    if (existingRequest) {
+    if (existingRequest && !options?.forceRefresh) {
       return existingRequest;
     }
 
@@ -515,6 +518,9 @@ const TourPlaces: React.FC = () => {
     requestUrl.searchParams.set("search", query);
     requestUrl.searchParams.set("limit", String(SEARCH_PAGE_SIZE));
     requestUrl.searchParams.set("page", String(page));
+    if (options?.forceRefresh) {
+      requestUrl.searchParams.set("forceRefresh", "true");
+    }
 
     const request = fetch(requestUrl.toString(), {
       method: "GET",
@@ -562,24 +568,7 @@ const TourPlaces: React.FC = () => {
     }).catch(() => null);
   }, [requestSearchPage]);
 
-  // Observer for prefetch
-  useEffect(() => {
-    if (!searchHasMore || !activeSearchTerm) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        triggerPrefetch(activeSearchTerm, searchPage + 1);
-      }
-    }, { rootMargin: '400px' }); // Trigger when 400px from button
-
-    if (seeMoreRef.current) {
-      observer.observe(seeMoreRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, [searchHasMore, searchPage, activeSearchTerm, triggerPrefetch]);
-
-  const fetchSearchResults = useCallback(async (term: string, options?: { append?: boolean; lastDoc?: string | null }) => {
+  const fetchSearchResults = useCallback(async (term: string, options?: { append?: boolean; page?: number; lastDoc?: string | null; forceRefresh?: boolean }) => {
     const normalizedTerm = normalizeSearchInput(term);
     if (normalizedTerm.length < 3) {
       resetSearchState();
@@ -588,7 +577,7 @@ const TourPlaces: React.FC = () => {
 
     const requestId = ++searchRequestIdRef.current;
     const append = options?.append ?? false;
-    const page = append ? (searchPage + 1) : 1;
+    const page = append ? (options?.page || (searchPageRef.current + 1)) : 1;
 
     if (!append) {
       setSearchLoading(true);
@@ -602,9 +591,8 @@ const TourPlaces: React.FC = () => {
     }
 
     try {
-      // Check prefetch cache first
       const cacheKey = `${normalizedTerm}:p${page}`;
-      const prefetched = prefetchQueueRef.current.get(cacheKey);
+      const prefetched = options?.forceRefresh ? undefined : prefetchQueueRef.current.get(cacheKey);
 
       let payload: SearchResponse;
       if (prefetched) {
@@ -612,12 +600,14 @@ const TourPlaces: React.FC = () => {
         payload = prefetched;
         prefetchQueueRef.current.delete(cacheKey);
       } else {
-        // Handle request abortion
         if (!append) {
           abortControllerRef.current?.abort();
           abortControllerRef.current = new AbortController();
         }
-        payload = await requestSearchPage(normalizedTerm, page, { signal: abortControllerRef.current?.signal });
+        payload = await requestSearchPage(normalizedTerm, page, {
+          signal: abortControllerRef.current?.signal,
+          forceRefresh: options?.forceRefresh,
+        });
       }
 
       const nextResults = Array.isArray(payload.results) ? payload.results : [];
@@ -628,12 +618,12 @@ const TourPlaces: React.FC = () => {
 
       setActiveSearchTerm(normalizedTerm);
       setSearchPage(page);
+      searchPageRef.current = page;
       setSearchHasMore(Boolean(payload.hasMore ?? false));
       setSearchResults((prev) => {
         const existingIds = new Set(append ? prev.map((p) => p.id) : []);
         const filteredNext = nextResults.filter((p) => p.id && !existingIds.has(p.id));
-        
-        // Final sanity check for duplicates within filteredNext itself
+
         const finalResults = [];
         const seenIds = new Set(existingIds);
         for (const p of filteredNext) {
@@ -671,6 +661,23 @@ const TourPlaces: React.FC = () => {
       }
     }
   }, [requestSearchPage, resetSearchState]);
+
+  // Observer for prefetch
+  useEffect(() => {
+    if (!searchHasMore || !activeSearchTerm) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        triggerPrefetch(activeSearchTerm, searchPage + 1);
+      }
+    }, { rootMargin: '400px' }); // Trigger when 400px from button
+
+    if (seeMoreRef.current) {
+      observer.observe(seeMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [searchHasMore, searchPage, activeSearchTerm, triggerPrefetch]);
 
   const loadPlaceReviews = useCallback(async (placeId: string, options?: { refresh?: boolean }) => {
     const response = await placesAPI.getReviews(placeId, options);
@@ -1009,7 +1016,11 @@ const TourPlaces: React.FC = () => {
 
   const handleSeeMore = useCallback(() => {
     if (!activeSearchTerm || !searchHasMore || searchLoading) return;
-    void fetchSearchResults(activeSearchTerm, { append: true });
+    void fetchSearchResults(activeSearchTerm, {
+      append: true,
+      page: searchPageRef.current + 1,
+      forceRefresh: true,
+    });
   }, [activeSearchTerm, fetchSearchResults, searchHasMore, searchLoading]);
 
   const placeCards = useMemo(
@@ -1160,6 +1171,9 @@ const TourPlaces: React.FC = () => {
                     </span>
 
                   </div>
+                  {searchResults.length > 0 ? (
+                    <AdsStrip searchTerm={activeSearchTerm || searchQuery} places={searchResults} maxItems={12} />
+                  ) : null}
                 </div>
                 {searchError && (
                   <div className="mx-auto w-full max-w-2xl rounded-2xl border border-rose-400/30 bg-rose-500/15 px-4 py-3 text-center text-sm text-rose-100 backdrop-blur-md">

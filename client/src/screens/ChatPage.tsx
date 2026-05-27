@@ -1171,7 +1171,7 @@ const ChatRoomsList: React.FC = () => {
         const response = await placesAPI.searchPlaces({
           search: normalizedSearchDestination,
           page: searchPage,
-          limit: 16,
+          limit: 100,
         });
 
         if (cancelled) return;
@@ -3910,7 +3910,7 @@ const ChatRoomsList: React.FC = () => {
                       ].map((section, sectionIndex) => (
                         <motion.div
                           key={section.key}
-                          className="relative overflow-hidden space-y-4 rounded-3xl border border-amber-300/50 dark:border-amber-700/50 bg-linear-to-br from-white/55 via-amber-50/35 to-rose-100/25 dark:from-slate-900/55 dark:via-amber-950/15 dark:to-rose-950/10 p-4 sm:p-5 shadow-[0_20px_45px_-28px_rgba(245,158,11,0.55)]"
+                          className="relative space-y-4 rounded-3xl border border-amber-300/50 dark:border-amber-700/50 bg-linear-to-br from-white/55 via-amber-50/35 to-rose-100/25 dark:from-slate-900/55 dark:via-amber-950/15 dark:to-rose-950/10 p-4 sm:p-5 shadow-[0_20px_45px_-28px_rgba(245,158,11,0.55)]"
                           initial={{ opacity: 0, y: 14 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.45, delay: sectionIndex * 0.08 }}

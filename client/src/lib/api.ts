@@ -116,9 +116,11 @@ export const placesAPI = {
   searchPlaces: (params?: {
     search?: string;
     location?: string;
+    category?: string;
     filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
     page?: number;
     limit?: number;
+    forceRefresh?: boolean;
   }) => api.get('/places', { params }),
   getReviews: (placeId: string, options?: { refresh?: boolean }) =>
     api.get('/reviews', { params: { placeId, ...(options?.refresh ? { refresh: true } : {}) } }),

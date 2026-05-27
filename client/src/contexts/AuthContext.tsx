@@ -9,6 +9,7 @@ import {
   onAuthStateChanged,
   updateProfile,
   updatePassword,
+  linkWithCredential,
   EmailAuthProvider,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
@@ -58,6 +59,7 @@ interface UserProfile {
   avatar?: string;
   profilePicture?: string;
   profileImage?: string;
+  phoneNumber?: string;
   address?: string;
   city?: string;
   zipCode?: string;
@@ -120,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       avatar: typeof profile.avatar === 'string' ? profile.avatar : mergedPhotoURL,
       profilePicture: typeof profile.profilePicture === 'string' ? profile.profilePicture : undefined,
       profileImage: typeof profile.profileImage === 'string' ? profile.profileImage : mergedPhotoURL,
+      phoneNumber: typeof profile.phoneNumber === 'string' ? profile.phoneNumber : typeof profile.phone === 'string' ? profile.phone : undefined,
       address: profile.address,
       city: profile.city,
       zipCode: profile.zipCode,
@@ -444,9 +447,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
         await reauthenticateWithCredential(currentUser, credential);
+        await updatePassword(currentUser, newPassword);
+      } else {
+        if (!currentUser.email) {
+          throw new Error('Unable to verify your account email for password setup.');
+        }
+
+        const credential = EmailAuthProvider.credential(currentUser.email, newPassword);
+        await linkWithCredential(currentUser, credential);
       }
 
-      await updatePassword(currentUser, newPassword);
+      const token = await refreshToken(currentUser, true);
+      localStorage.setItem('token', token);
     } catch (error: any) {
       if ((process.env.NODE_ENV === 'development')) {
         console.error('Password change error:', error);
