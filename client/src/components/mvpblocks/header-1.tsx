@@ -22,7 +22,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Home', href: '/' },
   { name: 'Community', href: '/community' },
-  { name: 'Booking Categories', href: '/booking-categories' },
+  // Temporarily disabled: Booking Categories
+  // { name: 'Booking Categories', href: '/booking-categories' },
   { name: 'Partner Registration', href: '/advertisement' },
   { name: 'About', href: '/about' },
   { name: 'Subscription', href: '/pricing' },
