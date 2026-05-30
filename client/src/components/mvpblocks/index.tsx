@@ -1044,7 +1044,7 @@ export default function AdminDashboard() {
                 Advertisements
               </h1>
               <p className="text-muted-foreground text-sm sm:text-base">
-                Review pending ads, approve them, or add a new live advertisement directly.
+                Review pending ads, approve them, or add a new live Registration directly.
               </p>
             </div>
             <Suspense fallback={<SectionLoader />}>

@@ -19,6 +19,18 @@ type AdvertisementDoc = {
   state: string;
   area: string;
   photoUrl: string;
+  idProofUrl?: string | null;
+  photoPublicId?: string | null;
+  idProofUrl?: string | null;
+  idProofPublicId?: string | null;
+  idProofHash?: string | null;
+  ownerEmail?: string | null;
+  ownerName?: string | null;
+  ownerPhoneNumber?: string | null;
+  category?: string | null;
+  editedByEmail?: string | null;
+  editedAt?: any;
+  approvedAt?: any;
   status: 'pending' | 'approved' | 'rejected';
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   createdAt?: any;
@@ -35,6 +47,11 @@ type AdvertisementEditState = {
   area: string;
   description: string;
   photoUrl: string;
+  idProofUrl?: string | null;
+  ownerEmail?: string | null;
+  ownerName?: string | null;
+  ownerPhoneNumber?: string | null;
+  category?: string | null;
 };
 
 const AD_COLLECTION = 'advertisements';
@@ -61,6 +78,8 @@ export function AdvertisementsManager() {
   const [editingItem, setEditingItem] = useState<AdvertisementEditState | null>(null);
   const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
   const [editPhotoPreview, setEditPhotoPreview] = useState('');
+  const [editIdFile, setEditIdFile] = useState<File | null>(null);
+  const [editIdPreviewName, setEditIdPreviewName] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -73,6 +92,9 @@ export function AdvertisementsManager() {
       const rows = snapshot.docs.map((document) => {
         const data = document.data() as Record<string, any>;
         const status = (data.status || 'pending') as AdvertisementDoc['status'];
+        const candidateEmail = (typeof data.ownerEmail === 'string' && data.ownerEmail) || (typeof data.email === 'string' && data.email) || null;
+        const candidateName = (typeof data.ownerName === 'string' && data.ownerName) || (typeof data.name === 'string' && data.name) || null;
+        const candidatePhone = (typeof data.ownerPhoneNumber === 'string' && data.ownerPhoneNumber) || (typeof data.mobileNumber === 'string' && data.mobileNumber) || null;
         return {
           id: document.id,
           name: String(data.name || ''),
@@ -82,6 +104,17 @@ export function AdvertisementsManager() {
           area: String(data.area || ''),
           description: typeof data.description === 'string' ? data.description : '',
           photoUrl: String(data.photoUrl || ''),
+          photoPublicId: typeof data.photoPublicId === 'string' ? data.photoPublicId : null,
+          idProofUrl: typeof data.idProofUrl === 'string' ? data.idProofUrl : (typeof data.id_proof_url === 'string' ? data.id_proof_url : null),
+          idProofPublicId: typeof data.idProofPublicId === 'string' ? data.idProofPublicId : (typeof data.id_proof_public_id === 'string' ? data.id_proof_public_id : null),
+          idProofHash: typeof data.idProofHash === 'string' ? data.idProofHash : (typeof data.id_proof_hash === 'string' ? data.id_proof_hash : null),
+          ownerEmail: candidateEmail,
+          ownerName: candidateName,
+          ownerPhoneNumber: candidatePhone,
+          category: typeof data.category === 'string' ? data.category : null,
+          editedByEmail: typeof data.editedByEmail === 'string' ? data.editedByEmail : null,
+          editedAt: data.editedAt || null,
+          approvedAt: data.approvedAt || null,
           status,
           approvalStatus: (data.approvalStatus || normalizeApprovalStatus(status)) as AdvertisementDoc['approvalStatus'],
           createdAt: data.createdAt,
@@ -165,8 +198,14 @@ export function AdvertisementsManager() {
       area: item.area,
       description: item.description || '',
       photoUrl: item.photoUrl,
+      idProofUrl: item.idProofUrl || null,
+      ownerEmail: item.ownerEmail || null,
+      ownerName: item.ownerName || null,
+      ownerPhoneNumber: item.ownerPhoneNumber || null,
+      category: item.category || null,
     });
     setEditPhotoPreview(item.photoUrl);
+    setEditIdPreviewName(item.idProofUrl || '');
   };
 
   const updateEditField = (key: keyof Omit<AdvertisementEditState, 'id' | 'photoUrl'>, value: string) => {
@@ -190,6 +229,19 @@ export function AdvertisementsManager() {
     setEditPhotoPreview(URL.createObjectURL(file));
   };
 
+  const handleEditIdChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+
+    if (!file) {
+      setEditIdFile(null);
+      setEditIdPreviewName(editingItem?.idProofUrl || '');
+      return;
+    }
+
+    setEditIdFile(file);
+    setEditIdPreviewName(file.name);
+  };
+
   const saveEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingItem) return;
@@ -208,7 +260,13 @@ export function AdvertisementsManager() {
 
       if (editPhotoFile) {
         const uploadResult = await uploadImageToCloudinary(editPhotoFile, { folder: 'advertisements' });
-        photoData = { photoUrl: uploadResult.url };
+        photoData = { photoUrl: uploadResult.url, photoPublicId: uploadResult.publicId };
+      }
+      // If admin replaced ID proof
+      let idData: Record<string, any> = {};
+      if (editIdFile) {
+        const idUpload = await uploadImageToCloudinary(editIdFile, { folder: 'advertisements/id-proofs', allowedFormats: ['pdf','jpg','jpeg','png'] });
+        idData = { idProofUrl: idUpload.url, idProofPublicId: idUpload.publicId, idProofHash: idUpload.hash };
       }
 
       await updateDoc(doc(firestoreDb, AD_COLLECTION, editingItem.id), {
@@ -219,6 +277,7 @@ export function AdvertisementsManager() {
         state: editingItem.state,
         area: editingItem.area,
         ...photoData,
+        ...idData,
         approvalStatus: normalizeApprovalStatus((items.find((item) => item.id === editingItem.id)?.status || 'pending') as AdvertisementDoc['status']),
         updatedAt: serverTimestamp(),
       });
@@ -226,14 +285,14 @@ export function AdvertisementsManager() {
       closeEditor();
       await loadItems();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to update advertisement');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to update Registration');
     } finally {
       setSavingEdit(false);
     }
   };
 
   const deleteItem = async (id: string) => {
-    const confirmed = window.confirm('Delete this advertisement permanently?');
+    const confirmed = window.confirm('Delete this Registration permanently?');
     if (!confirmed) return;
 
     setDeletingId(id);
@@ -246,7 +305,7 @@ export function AdvertisementsManager() {
       }
       await loadItems();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to delete advertisement');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to delete Registration');
     } finally {
       setDeletingId(null);
     }
@@ -296,7 +355,7 @@ export function AdvertisementsManager() {
             </div>
             <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Approve submissions and add live ads</h2>
             <p className="mt-2 max-w-2xl text-sm text-white/90 sm:text-base">
-              Review public submissions, approve them for publishing, or add a new advertisement directly from admin with the same form.
+              Review public submissions, approve them for publishing, or add a new Registration directly from admin with the same form.
             </p>
 
             <div className="mt-5 grid grid-cols-3 gap-3 text-center text-sm">
@@ -316,7 +375,7 @@ export function AdvertisementsManager() {
           </div>
 
           <AdvertisementForm
-            submitLabel="Add Advertisement"
+            submitLabel="Add Registration"
             defaultStatus="approved"
             mode="admin"
             onSubmitted={quickAddHandler}
@@ -352,7 +411,7 @@ export function AdvertisementsManager() {
 
             {!loading && pendingItems.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
-                No pending advertisement submissions right now.
+                No pending Registration submissions right now.
               </div>
             ) : null}
 
@@ -381,6 +440,21 @@ export function AdvertisementsManager() {
                       <div className="sm:col-span-2">Area / Locality: {item.area}</div>
                     </div>
 
+                    {item.category ? <div className="mt-2 text-sm">Category: <span className="font-medium">{item.category}</span></div> : null}
+                    {item.description ? <div className="mt-2 text-sm">Description: <div className="text-sm text-foreground mt-1">{item.description}</div></div> : null}
+                    {item.ownerEmail ? <div className="mt-2 text-sm">Owner email: <span className="font-medium">{item.ownerEmail}</span></div> : null}
+                    {item.ownerName ? <div className="mt-1 text-sm">Owner name: <span className="font-medium">{item.ownerName}</span></div> : null}
+                    {item.ownerPhoneNumber ? <div className="mt-1 text-sm">Owner phone: <span className="font-medium">{item.ownerPhoneNumber}</span></div> : null}
+                    <div className="mt-2 text-xs text-muted-foreground">Submitted: {toDate(item.createdAt).toLocaleString()}</div>
+                    {item.editedByEmail ? <div className="mt-1 text-xs text-muted-foreground">Last edited by: <span className="font-medium">{item.editedByEmail}</span> at {item.editedAt ? toDate(item.editedAt).toLocaleString() : ''}</div> : null}
+
+                    {item.idProofUrl ? (
+                      <div className="mt-2 text-sm">
+                        <div className="text-xs text-muted-foreground">ID Proof</div>
+                        <a href={item.idProofUrl} target="_blank" rel="noreferrer" className="underline text-foreground">View / Download</a>
+                      </div>
+                    ) : null}
+
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" onClick={() => approveItem(item.id)} disabled={actionId === item.id} className="gap-2">
                         <CheckCircle2 className="h-4 w-4" />
@@ -407,7 +481,7 @@ export function AdvertisementsManager() {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle>All advertisement records</CardTitle>
+              <CardTitle>All Registration records</CardTitle>
               <CardDescription>Includes pending, approved, and rejected submissions.</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -419,7 +493,7 @@ export function AdvertisementsManager() {
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search advertisement"
+                  placeholder="Search Registration"
                   className="pl-9"
                 />
               </div>
@@ -431,7 +505,7 @@ export function AdvertisementsManager() {
             <form onSubmit={saveEdit} className="mb-6 rounded-3xl border border-rose-200/40 bg-rose-500/5 p-4 shadow-sm dark:border-rose-900/30 dark:bg-rose-950/20">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-semibold">Edit advertisement</h3>
+                  <h3 className="text-base font-semibold">Edit Registration</h3>
                   <p className="text-sm text-muted-foreground">Update fields and replace the photo if needed.</p>
                 </div>
                 <Button type="button" variant="outline" onClick={closeEditor}>Cancel</Button>
@@ -467,6 +541,18 @@ export function AdvertisementsManager() {
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   />
                 </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Owner Email</span>
+                  <Input value={editingItem.ownerEmail || ''} readOnly />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Owner Name</span>
+                  <Input value={editingItem.ownerName || ''} readOnly />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Category</span>
+                  <Input value={editingItem.category || ''} onChange={(e) => updateEditField('category', e.target.value)} />
+                </label>
               </div>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
@@ -477,10 +563,32 @@ export function AdvertisementsManager() {
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
                         <UploadCloud className="h-4 w-4" />
                       </div>
-                      <div className="text-sm text-muted-foreground">Choose a new image only if you want to replace the existing advertisement photo.</div>
+                      <div className="text-sm text-muted-foreground">Choose a new image only if you want to replace the existing Registration photo.</div>
                     </div>
                     <Input type="file" accept="image/*" onChange={handleEditPhotoChange} className="mt-4" />
-                    {editPhotoPreview ? <img src={editPhotoPreview} alt="Advertisement preview" className="mt-4 h-44 w-full rounded-xl object-cover" /> : null}
+                    {editPhotoPreview ? <img src={editPhotoPreview} alt="Registration preview" className="mt-4 h-44 w-full rounded-xl object-cover" /> : null}
+                  </div>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Replace ID proof</span>
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
+                        <UploadCloud className="h-4 w-4" />
+                      </div>
+                      <div className="text-sm text-muted-foreground">Choose a new ID file only if you want to replace the existing proof (PDF or image).</div>
+                    </div>
+                    <Input type="file" accept=".pdf,image/png,image/jpeg,image/jpg" onChange={handleEditIdChange} className="mt-4" />
+                    {editIdPreviewName ? (
+                      <div className="mt-4 text-sm">
+                        {editIdPreviewName.startsWith('http') ? (
+                          <a href={editIdPreviewName} target="_blank" rel="noreferrer" className="underline text-foreground">{editIdPreviewName}</a>
+                        ) : (
+                          <span className="text-foreground">{editIdPreviewName}</span>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </label>
 
@@ -517,6 +625,17 @@ export function AdvertisementsManager() {
                 {item.photoUrl ? <img src={item.photoUrl} alt={item.name} className="mt-3 h-36 w-full rounded-xl object-cover" /> : null}
                 <div className="mt-3 text-xs text-muted-foreground">Created: {toDate(item.createdAt).toLocaleString()}</div>
                 <div className="mt-1 text-xs text-muted-foreground">Approval status: <span className="capitalize">{item.approvalStatus || item.status}</span></div>
+                {item.ownerEmail ? <div className="mt-2 text-sm">Owner email: <span className="font-medium">{item.ownerEmail}</span></div> : null}
+                {item.ownerName ? <div className="mt-1 text-sm">Owner name: <span className="font-medium">{item.ownerName}</span></div> : null}
+                {item.category ? <div className="mt-1 text-sm">Category: <span className="font-medium">{item.category}</span></div> : null}
+                {item.editedByEmail ? <div className="mt-1 text-sm">Last edited by: <span className="font-medium">{item.editedByEmail}</span> at <span className="font-medium">{item.editedAt ? toDate(item.editedAt).toLocaleString() : ''}</span></div> : null}
+                {item.approvedAt ? <div className="mt-1 text-sm">Approved at: <span className="font-medium">{toDate(item.approvedAt).toLocaleString()}</span></div> : null}
+                {item.idProofUrl ? (
+                  <div className="mt-2 text-sm">
+                    <div className="text-xs text-muted-foreground">ID Proof</div>
+                    <a href={item.idProofUrl} target="_blank" rel="noreferrer" className="underline text-foreground">View / Download</a>
+                  </div>
+                ) : null}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => startEdit(item)} className="gap-2">
                     <PencilLine className="h-3.5 w-3.5" />

@@ -11,6 +11,7 @@ import { resolveAvatarUrl } from '@/lib/avatar';
 export default function AuthPage() {
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [profileAvatarError, setProfileAvatarError] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -29,6 +30,18 @@ export default function AuthPage() {
       router.replace('/admin');
     }
   }, [currentUser, canAccessAdmin, router, searchParams]);
+
+  useEffect(() => {
+    try {
+      const didResetPassword = localStorage.getItem('abjee:passwordResetSuccess');
+      if (didResetPassword) {
+        localStorage.removeItem('abjee:passwordResetSuccess');
+        setResetSuccessMessage('Password updated successfully. You can sign in with your new password now.');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   const handleAuthComplete = () => {
     // Check if user has admin role and redirect to admin dashboard
@@ -58,7 +71,7 @@ export default function AuthPage() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Header />
-        <div className="container mx-auto px-6 py-16">
+        <div className="container mx-auto px-6 pb-16 pt-28 sm:pt-32">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -112,7 +125,17 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
-      <div className="container mx-auto px-6 py-16">
+      <div className="container mx-auto px-6 pb-16 pt-28 sm:pt-32">
+        {resetSuccessMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 mx-auto max-w-md rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 shadow-sm dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200"
+          >
+            <p className="text-sm font-semibold">Password reset successful</p>
+            <p className="text-sm">{resetSuccessMessage}</p>
+          </motion.div>
+        )}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

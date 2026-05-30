@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
       'subscription.endDate': endDate.toISOString(),
     });
 
-    const walletUserId = String(user.firebaseUid || user.id);
+    // Reuse walletUserId declared earlier to avoid redeclaration
     if (walletUserId) {
       await invalidateUserProfileCache(walletUserId);
     }

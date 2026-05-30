@@ -17,7 +17,7 @@ export async function fetchAdvertisementLocations(): Promise<AdvertisementLocati
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.success) {
-    throw new Error(payload?.error || 'Failed to load advertisement locations');
+    throw new Error(payload?.error || 'Failed to load Registration locations');
   }
 
   return payload.data as AdvertisementLocationResponse;

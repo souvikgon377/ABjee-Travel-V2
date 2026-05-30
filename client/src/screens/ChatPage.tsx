@@ -3936,9 +3936,9 @@ const ChatRoomsList: React.FC = () => {
                                 : section.emptyMessage}
                             </div>
                           ) : (
-                            <div className="relative z-10 max-h-136 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(245,158,11,0.6)_transparent]">
+                            <div className="relative z-10 overflow-visible pr-2">
                               <motion.div
-                                className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-1"
+                                className="grid grid-cols-1 sm:grid-cols-2 items-stretch gap-6 pb-1"
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 transition={{ duration: 0.5 }}
@@ -4075,7 +4075,7 @@ const ChatRoomsList: React.FC = () => {
                                               <div className="absolute inset-0 bg-black/35 backdrop-brightness-75 z-2 pointer-events-none" />
                                             )}
 
-                                            <CardHeader className="relative z-10 pb-2">
+                                            <CardHeader className="relative z-10 pb-2 pt-14 sm:pt-24">
                                               <CardTitle
                                                 className={`flex items-center gap-2.5 text-xl sm:text-2xl font-bold ${room.backgroundImage?.url && room.iconImage?.url
                                                     ? 'text-slate-50'
@@ -4364,6 +4364,7 @@ const ChatRoomsList: React.FC = () => {
  */
 const ChatPage: React.FC = () => {
   const { userProfile, loading: authLoading } = useAuth();
+  const [showResetSuccessPopup, setShowResetSuccessPopup] = useState(false);
   const [offers, setOffers] = useState<LiveOffer[]>([]);
   const showOfferSpotlight = useMemo(() => {
     if (authLoading) return false;
@@ -4400,9 +4401,36 @@ const ChatPage: React.FC = () => {
     };
   }, []);
 
+  // Show one-time password reset success popup if redirected from reset flow
+  useEffect(() => {
+    try {
+      const flag = localStorage.getItem('abjee:passwordResetSuccess');
+      if (flag) {
+        localStorage.removeItem('abjee:passwordResetSuccess');
+        setShowResetSuccessPopup(true);
+        window.setTimeout(() => setShowResetSuccessPopup(false), 3500);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
   return (
     <div className="min-h-screen pt-16 md:pt-20 bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
       <Header />
+      {showResetSuccessPopup && (
+        <div className="fixed left-1/2 top-24 z-50 w-[min(92%,420px)] -translate-x-1/2 rounded-lg bg-emerald-600/95 text-white p-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <div className="font-semibold">Password updated</div>
+              <div className="text-sm opacity-90">Your password was updated — you're signed in now.</div>
+            </div>
+            <div className="shrink-0">
+              <Button onClick={() => setShowResetSuccessPopup(false)} variant="ghost" className="text-white">Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
       {showOfferSpotlight && (
         <OfferSpotlightPopup
           offers={offers}

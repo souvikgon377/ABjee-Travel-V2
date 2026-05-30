@@ -284,14 +284,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await refreshToken(user);
       localStorage.setItem('token', token);
     } catch (error: any) {
-      if ((process.env.NODE_ENV === "development")) {
-        console.error('Login error:', error);
-      }
+      const code = String(error?.code || '');
       const errorMessages: Record<string, string> = {
         'auth/user-not-found': 'Invalid email or password.',
         'auth/wrong-password': 'Invalid email or password.',
+        'auth/invalid-credential': 'Invalid email or password.',
         'auth/too-many-requests': 'Too many failed login attempts. Please try again later.',
       };
+
+      if ((process.env.NODE_ENV === 'development') && !errorMessages[code]) {
+        console.error('Login error:', error?.message || error);
+      }
+
       throw new Error(errorMessages[error.code] || 'Failed to log in. Please try again.');
     }
   };
@@ -409,7 +413,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Reset password
   const resetPassword = async (email: string) => {
     try {
-      await sendPasswordResetEmail(auth, email);
+      // Prefer the current origin for local testing; fall back to configured site URL.
+      let continueUrl: string | undefined = undefined;
+      if (typeof window !== 'undefined') {
+        continueUrl = `${window.location.origin}/auth/reset/confirm?flow=password-reset`;
+      } else if (process?.env?.NEXT_PUBLIC_SITE_URL) {
+        continueUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/auth/reset/confirm?flow=password-reset`;
+      }
+
+      const actionCodeSettings: any = continueUrl
+        ? { url: continueUrl, handleCodeInApp: true }
+        : { handleCodeInApp: true };
+
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
     } catch (error: any) {
       if ((process.env.NODE_ENV === "development")) {
         console.error('Password reset error:', error);

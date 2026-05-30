@@ -1,4 +1,7 @@
+"use client";
+
 import { useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -252,27 +255,22 @@ const handleNextStep = async (data: any) => {
               )}
 
               {mode !== 'signup' && (
-              <>
-
-                <div className="mb-6">
-                  <GoogleSignInButton 
-                    onClick={handleGoogleSignIn}
-                    disabled={isSubmitting}
-                    text="Sign in with Google"
-                  />
-                </div>
-
-                <div className="relative mb-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                <>
+                  <div className="mb-6">
+                    <GoogleSignInButton onClick={handleGoogleSignIn} disabled={isSubmitting} text="Sign in with Google" />
                   </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
-                      Or continue with email
-                    </span>
+
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
+                        Or continue with email
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </>
+                </>
               )}
 
               {error && (
@@ -282,114 +280,117 @@ const handleNextStep = async (data: any) => {
               )}
 
               {mode !== 'signup' && (
-              <form
-                onSubmit={handleSubmit(handleNextStep)}
-                className="space-y-4"
-              >
-                {loginStep.fields.map((field) => {
-                  const IconComponent = field.icon;
-                  
-                  // Handle select field for role
-                  if (field.type === 'select' && 'options' in field && field.options) {
+                <form
+                  onSubmit={handleSubmit(handleNextStep)}
+                  className="space-y-4"
+                >
+                  {loginStep.fields.map((field) => {
+                    const IconComponent = field.icon;
+
+                    if (field.type === 'select' && 'options' in field && field.options) {
+                      return (
+                        <div key={field.name} className="space-y-2">
+                          <Label htmlFor={field.name} className="text-gray-700 dark:text-gray-300 font-medium">
+                            {field.label}
+                          </Label>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                              <IconComponent className="h-5 w-5 text-gray-400" />
+                            </div>
+                            <Select
+                              value={selectedRole}
+                              onValueChange={(value) => {
+                                setSelectedRole(value);
+                              }}
+                            >
+                              <SelectTrigger className="pl-10 h-12 border-gray-300 dark:border-gray-600">
+                                <SelectValue placeholder={field.placeholder} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {field.options.map((option: FieldOption) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={field.name} className="space-y-2">
                         <Label htmlFor={field.name} className="text-gray-700 dark:text-gray-300 font-medium">
                           {field.label}
                         </Label>
                         <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none z-10">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <IconComponent className="h-5 w-5 text-gray-400" />
                           </div>
-                          <Select
-                            value={selectedRole}
-                            onValueChange={(value) => {
-                              setSelectedRole(value);
-                            }}
-                          >
-                            <SelectTrigger className="pl-10 h-12 border-gray-300 dark:border-gray-600">
-                              <SelectValue placeholder={field.placeholder} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {field.options.map((option: FieldOption) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  // Handle regular input fields
-                  return (
-                    <div key={field.name} className="space-y-2">
-                      <Label htmlFor={field.name} className="text-gray-700 dark:text-gray-300 font-medium">
-                        {field.label}
-                      </Label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <IconComponent className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <Input
-                          id={field.name}
-                          type={field.type === 'password' && showPasswords[field.name] ? 'text' : field.type}
-                          placeholder={field.placeholder}
-                          {...register(field.name as any)}
-                          className={cn(
-                            'pl-10 h-12 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-                            field.type === 'password' && 'pr-12',
-                            errors[field.name as string] && 'border-red-500 focus:ring-red-500',
-                          )}
-                        />
-                        {field.type === 'password' && (
-                          <button
-                            type="button"
-                            onClick={() => togglePasswordVisibility(field.name)}
-                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                            aria-label={showPasswords[field.name] ? 'Hide password' : 'Show password'}
-                          >
-                            {showPasswords[field.name] ? (
-                              <EyeOff className="h-5 w-5" />
-                            ) : (
-                              <Eye className="h-5 w-5" />
+                          <Input
+                            id={field.name}
+                            type={field.type === 'password' && showPasswords[field.name] ? 'text' : field.type}
+                            placeholder={field.placeholder}
+                            {...register(field.name as any)}
+                            className={cn(
+                              'pl-10 h-12 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                              field.type === 'password' && 'pr-12',
+                              errors[field.name as string] && 'border-red-500 focus:ring-red-500',
                             )}
-                          </button>
+                          />
+                          {field.type === 'password' && (
+                            <button
+                              type="button"
+                              onClick={() => togglePasswordVisibility(field.name)}
+                              className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                              aria-label={showPasswords[field.name] ? 'Hide password' : 'Show password'}
+                            >
+                              {showPasswords[field.name] ? (
+                                <EyeOff className="h-5 w-5" />
+                              ) : (
+                                <Eye className="h-5 w-5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        {errors[field.name as string] && (
+                          <p className="text-red-500 text-sm flex items-center gap-1">
+                            <span className="w-1 h-1 bg-red-500 rounded-full"></span>
+                            {errors[field.name as string]?.message as string}
+                          </p>
                         )}
                       </div>
-                      {errors[field.name as string] && (
-                        <p className="text-red-500 text-sm flex items-center gap-1">
-                          <span className="w-1 h-1 bg-red-500 rounded-full"></span>
-                          {errors[field.name as string]?.message as string}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
-                <div className="flex justify-between pt-6">
-                  <Button 
-                    type="submit" 
-                    disabled={isSubmitting}
-                    className={cn(
-                      'bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-all',
-                      mode === 'login' && 'w-full'
-                    )}
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Signing In...
-                      </div>
-                    ) : (
-                      <>Sign In</>
-                    )}
-                  </Button>
-                </div>
-              </form>
+                  <div className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm shrink-0">
+                      <Link href="/auth/reset" className="text-blue-600 hover:underline">
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className={cn(
+                        'w-full bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-all sm:w-auto',
+                        mode === 'login' && 'sm:min-w-44',
+                      )}
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Signing In...
+                        </div>
+                      ) : (
+                        'Sign In'
+                      )}
+                    </Button>
+                  </div>
+                </form>
               )}
-          </motion.div>
+            </motion.div>
         </>
       ) : (
         <motion.div

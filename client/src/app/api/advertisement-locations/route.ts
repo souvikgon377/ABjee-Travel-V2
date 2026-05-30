@@ -76,7 +76,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load advertisement locations';
+    const message = error instanceof Error ? error.message : 'Failed to load Registration locations';
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

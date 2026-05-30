@@ -75,9 +75,8 @@ function validateFile(file: File, options: ImageUploadOptions): void {
   }
 
   // Check MIME type
-  if (!file.type.startsWith('image/')) {
-    throw new Error('File must be an image');
-  }
+  // MIME type check is intentionally relaxed to allow non-image files
+  // (e.g. PDF) when their extension is explicitly allowed via options.allowedFormats.
 }
 
 /**
@@ -140,15 +139,17 @@ export async function uploadImageToCloudinary(
     // Add tags for organization
     formData.append('tags', 'chat-room,user-upload');
 
+    // Decide endpoint: use raw upload for non-image formats like PDF
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+    const isRaw = fileExtension === 'pdf';
+    const endpoint = isRaw ? `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload` : `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
     try {
       // Upload to Cloudinary
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-        {
-          method: 'POST',
-          body: formData
-        }
-      );
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData
+      });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -162,7 +163,7 @@ export async function uploadImageToCloudinary(
           throw new Error('Upload configuration error. Please contact support or try again later.');
         }
 
-        throw new Error(error.error?.message || 'Failed to upload image. Please try again.');
+        throw new Error(error.error?.message || 'Failed to upload file. Please try again.');
       }
 
       const data = await response.json();
@@ -172,15 +173,15 @@ export async function uploadImageToCloudinary(
         url: data.secure_url,
         publicId: data.public_id,
         hash: hash,
-        width: data.width,
-        height: data.height,
-        format: data.format,
-        bytes: data.bytes,
-        createdAt: data.created_at
+        width: data.width || 0,
+        height: data.height || 0,
+        format: data.format || fileExtension,
+        bytes: data.bytes || file.size,
+        createdAt: data.created_at || new Date().toISOString()
       };
     } catch (error: any) {
-      console.error('Image upload error:', error);
-      throw new Error(`Failed to upload image: ${error?.message || String(error)}`);
+      console.error('Cloudinary upload error:', error);
+      throw new Error(`Failed to upload file: ${error?.message || String(error)}`);
     }
   }
 
