@@ -502,6 +502,7 @@ const TourPlaces: React.FC = () => {
   const requestSearchPage = useCallback(async (query: string, page: number, options?: { signal?: AbortSignal; forceRefresh?: boolean }): Promise<SearchResponse> => {
     const cacheKey = buildClientCacheKey(query, page);
     const cached = clientSearchCacheRef.current.get(cacheKey);
+    console.info('[Client/Places] requestSearchPage', { cacheKey, hasCached: Boolean(cached), forceRefresh: Boolean(options?.forceRefresh) });
     if (cached && !options?.forceRefresh) {
       return {
         ...cached,
@@ -526,6 +527,7 @@ const TourPlaces: React.FC = () => {
       method: "GET",
       signal: options?.signal,
     }).then(async (response) => {
+      console.info('[Client/Places] fetched', { url: requestUrl.toString(), status: response.status });
       const payload = (await response.json().catch(() => null)) as { success?: boolean; data?: SearchResponse; message?: string; reset?: boolean } | null;
       if (!response.ok || !payload?.success || !payload.data) {
         const error = new Error(payload?.message || `Search failed with status ${response.status}`) as Error & { reset?: boolean };
@@ -611,6 +613,21 @@ const TourPlaces: React.FC = () => {
       }
 
       const nextResults = Array.isArray(payload.results) ? payload.results : [];
+      // Normalize IDs: ensure every result has a stable string `id` to avoid client-side filtering
+      const normalizedNextResults = nextResults.map((r, idx) => {
+        const raw = (r && typeof r === 'object') ? r as Record<string, unknown> : {};
+        const candidateId = raw.id ?? raw._id ?? raw.placeId ?? raw.placeID ?? raw.name ?? `${normalizedTerm}:p${page}:i${idx}`;
+        const idStr = typeof candidateId === 'string' ? candidateId : String(candidateId);
+        return { ...(r as Record<string, unknown>), id: idStr } as TouristPlace;
+      });
+
+      // Debug: log raw next results IDs for troubleshooting
+      try {
+        const sampleIds = normalizedNextResults.slice(0, 12).map((r) => ({ id: r?.id, name: r?.name }));
+        console.info('[Client/Places] Fetched page results', { page, nextResultsCount: normalizedNextResults.length, sampleIds });
+      } catch (e) {
+        console.info('[Client/Places] Fetched page results (unable to sample ids)', { page, nextResultsCount: normalizedNextResults.length });
+      }
 
       if (requestId !== searchRequestIdRef.current) {
         return;
@@ -621,16 +638,38 @@ const TourPlaces: React.FC = () => {
       searchPageRef.current = page;
       setSearchHasMore(Boolean(payload.hasMore ?? false));
       setSearchResults((prev) => {
-        const existingIds = new Set(append ? prev.map((p) => p.id) : []);
-        const filteredNext = nextResults.filter((p) => p.id && !existingIds.has(p.id));
+        // Optional debug bypass: append raw results without dedupe when ?debugAppend=1 is present
+        let skipDedupe = false;
+        try {
+          if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            skipDedupe = params.get('debugAppend') === '1';
+          }
+        } catch (e) {
+          skipDedupe = false;
+        }
 
-        const finalResults = [];
+        if (append && skipDedupe) {
+          console.info('[Client/Places] Debug append bypass active - appending raw results', { appendCount: normalizedNextResults.length, page });
+          return [...prev, ...normalizedNextResults];
+        }
+
+        const existingIds = new Set(append ? prev.map((p) => p.id) : []);
+        const filteredNext = normalizedNextResults.filter((p) => p.id && !existingIds.has(p.id));
+
+        const finalResults: TouristPlace[] = [];
         const seenIds = new Set(existingIds);
         for (const p of filteredNext) {
           if (p.id && !seenIds.has(p.id)) {
             finalResults.push(p);
             seenIds.add(p.id);
           }
+        }
+
+        if (append) {
+          console.info('[Client/Places] Appending deduped results', { appendCount: finalResults.length, page });
+        } else {
+          console.info('[Client/Places] Replacing results', { newCount: finalResults.length, page });
         }
 
         return append ? [...prev, ...finalResults] : finalResults;
@@ -1016,12 +1055,13 @@ const TourPlaces: React.FC = () => {
 
   const handleSeeMore = useCallback(() => {
     if (!activeSearchTerm || !searchHasMore || searchLoading) return;
+    const nextPage = searchPage + 1;
+    console.info('[Client/Places] See More clicked', { activeSearchTerm, searchPage, nextPage });
     void fetchSearchResults(activeSearchTerm, {
       append: true,
-      page: searchPageRef.current + 1,
-      forceRefresh: true,
+      page: nextPage,
     });
-  }, [activeSearchTerm, fetchSearchResults, searchHasMore, searchLoading]);
+  }, [activeSearchTerm, fetchSearchResults, searchHasMore, searchLoading, searchPage]);
 
   const placeCards = useMemo(
     () =>
