@@ -55,6 +55,39 @@ export async function processOneLocalJob(processor: (job: QueueJob) => Promise<v
     return true;
   } catch (err) {
     console.error('[LocalQueue] Processing local job failed:', err);
+
+    // Detect Typesense "collection not found" (ObjectNotFound) and attempt to
+    // initialize the collections, then retry the job once. This helps recover
+    // when the Typesense instance was recently created but collections are
+    // missing (common when pointing the app to a new VPS).
+    const isTypesenseNotFound =
+      (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+      String((err && (err as any).message) || '').includes('Collection not found') ||
+      String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+    if (isTypesenseNotFound) {
+      try {
+        console.info('[LocalQueue] Detected Typesense collection missing — attempting initializeTypesense() and retry.');
+        const { initializeTypesense } = await import('../search/typesenseClient');
+        const initResult = await initializeTypesense();
+        console.info('[LocalQueue] initializeTypesense result:', initResult);
+      } catch (initErr) {
+        console.error('[LocalQueue] initializeTypesense() failed:', initErr);
+      }
+
+      // Retry the job once after attempting initialization
+      try {
+        await processor(first.job);
+        await fs.unlink(first.path);
+        console.info(`[LocalQueue] Processed and removed ${first.filename} after initialize`);
+        return true;
+      } catch (retryErr) {
+        console.error('[LocalQueue] Retry after initialize failed:', retryErr);
+        // leave the file for later retry
+        return false;
+      }
+    }
+
     // leave the file for later retry
     return false;
   }

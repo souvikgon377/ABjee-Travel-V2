@@ -59,6 +59,28 @@ export class SyncService {
           return;
         } catch (err: any) {
           console.warn('[SyncService] Direct upsert failed despite Typesense availability:', err?.message || err);
+
+          // If the failure is due to missing Typesense collections, try to
+          // initialize the collections and retry the upsert once. This helps
+          // when pointing the app to a fresh Typesense instance on a VPS.
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              const initRes = await initializeTypesense();
+              console.info('[SyncService] initializeTypesense result:', initRes);
+              // Retry upsert once
+              await client.collections('tourist_places').documents().upsert(doc);
+              console.info(`[SyncService] 🔁 Directly synced tourist_places/${place.id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense failed:', retryErr);
+            }
+          }
         }
       }
     } catch (err) {
@@ -85,6 +107,23 @@ export class SyncService {
           return;
         } catch (err: any) {
           console.warn('[SyncService] Direct user upsert failed:', err?.message || err);
+
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              await initializeTypesense();
+              await client.collections('users').documents().upsert(doc);
+              console.info(`[SyncService] 🔁 Directly synced users/${user.id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense for users failed:', retryErr);
+            }
+          }
         }
       }
     } catch (err) {
@@ -110,6 +149,23 @@ export class SyncService {
           return;
         } catch (err: any) {
           console.warn('[SyncService] Direct travel destination upsert failed:', err?.message || err);
+
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              await initializeTypesense();
+              await client.collections('travel_destinations').documents().upsert(doc);
+              console.info(`[SyncService] 🔁 Directly synced travel_destinations/${destination.id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense for travel destinations failed:', retryErr);
+            }
+          }
         }
       }
     } catch (err) {
@@ -134,6 +190,23 @@ export class SyncService {
           return;
         } catch (err: any) {
           console.warn('[SyncService] Direct delete failed despite Typesense availability:', err?.message || err);
+
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              await initializeTypesense();
+              await client.collections(collection).documents(id).delete();
+              console.info(`[SyncService] 🔁 Directly deleted ${collection}/${id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense for delete failed:', retryErr);
+            }
+          }
         }
       }
     } catch (err) {

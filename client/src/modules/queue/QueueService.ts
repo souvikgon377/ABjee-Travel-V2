@@ -62,6 +62,33 @@ export class QueueService {
           } catch (error) {
             console.error(`[QueueService] Job failed: ${job.id}`, error);
 
+            // If failure is due to missing Typesense collection, attempt to
+            // initialize collections and retry the job once before applying
+            // the usual retry/persist logic.
+            const isTypesenseNotFound =
+              (error && (error as any).httpStatus === 404) || (error && (error as any).status === 404) ||
+              String((error && (error as any).message) || '').includes('Collection not found') ||
+              String((error && (error as any).message) || '').includes('ObjectNotFound');
+
+            if (isTypesenseNotFound) {
+              try {
+                console.info('[QueueService] Detected Typesense collection missing — attempting initializeTypesense() and retry.');
+                const { initializeTypesense } = await import('../search/typesenseClient');
+                const initResult = await initializeTypesense();
+                console.info('[QueueService] initializeTypesense result:', initResult);
+                // Retry processor once after init
+                try {
+                  await processor(job);
+                  console.info(`[QueueService] Job ${job.id} succeeded after initializeTypesense()`);
+                  return;
+                } catch (retryErr) {
+                  console.error('[QueueService] Retry after initializeTypesense() failed:', retryErr);
+                }
+              } catch (initErr) {
+                console.error('[QueueService] initializeTypesense() failed:', initErr);
+              }
+            }
+
             if (job.retries < this.MAX_RETRIES) {
               job.retries++;
               const { MetricsService } = await import('../analytics/MetricsService');
