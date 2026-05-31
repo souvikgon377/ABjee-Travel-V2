@@ -1,15 +1,19 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { adminDb } from '../src/lib/server/firebaseAdminFirestore';
-import { SyncService } from '../src/modules/search/SyncService';
-import { healthCheckTypesense } from '../src/modules/search/typesenseClient';
 
+// Load .env before importing any runtime modules that read env vars.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.join(__dirname, '..');
-
 dotenv.config({ path: path.join(rootDir, '.env') });
+
+// Defer importing modules that read process.env until after dotenv has run.
+let adminDb: any;
+let SyncService: any;
+let healthCheckTypesense: (timeoutMs?: number) => Promise<boolean>;
+
+// (dotenv already loaded above)
 
 const BATCH_SIZE = 50; // Process in batches to avoid memory overload
 
@@ -18,6 +22,11 @@ async function backfill() {
   const tStart = Date.now();
 
   try {
+    // Dynamic imports so modules pick up environment variables from `.env`.
+    ({ adminDb } = await import('../src/lib/server/firebaseAdminFirestore'));
+    ({ SyncService } = await import('../src/modules/search/SyncService'));
+    ({ healthCheckTypesense } = await import('../src/modules/search/typesenseClient'));
+
     // 1. Health check: ensure Typesense is reachable
     console.log('📡 Checking Typesense connectivity...');
     const isHealthy = await healthCheckTypesense(10_000);

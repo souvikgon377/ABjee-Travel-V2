@@ -2,14 +2,35 @@ import Typesense, { Client } from 'typesense';
 
 // ─── Environment Check (runs once at module load) ─────────────────────────────
 //
+// Support a single `TYPESENSE_URL` (e.g. "http://typesense:8108") for simpler
+// Docker setups. Falls back to separate env vars `TYPESENSE_HOST`,
+// `TYPESENSE_PORT`, `TYPESENSE_PROTOCOL` when URL isn't provided.
 // When TYPESENSE_API_KEY is missing or empty, TYPESENSE_ENABLED = false.
 // All callers check this flag BEFORE making any network attempt.
 // This eliminates the 2-second health-check timeout that was causing slow cold starts.
 //
-const _tsHost = (process.env.TYPESENSE_HOST || '').trim();
-const _tsApiKey = (process.env.TYPESENSE_API_KEY || '').trim();
-const _tsPort = parseInt((process.env.TYPESENSE_PORT || '8108').trim(), 10);
-const _tsProtocol = (process.env.TYPESENSE_PROTOCOL || 'http').toLowerCase().replace(/:$/, '');
+const _tsUrlRaw = (process.env.TYPESENSE_URL || '').trim();
+const _tsApiKey = (
+  process.env.TYPESENSE_API_KEY || process.env.NEXT_PUBLIC_TYPESENSE_SEARCH_API_KEY || ''
+).trim();
+
+// Start with explicit env vars, then override from URL if provided
+let _tsHost = (process.env.TYPESENSE_HOST || '').trim();
+let _tsPortRaw = (process.env.TYPESENSE_PORT || '').trim();
+let _tsProtocol = (process.env.TYPESENSE_PROTOCOL || 'http').toLowerCase().replace(/:$/, '');
+
+if (_tsUrlRaw) {
+  try {
+    const parsed = new URL(_tsUrlRaw);
+    _tsHost = parsed.hostname;
+    _tsPortRaw = parsed.port || (parsed.protocol === 'https:' ? '443' : '8108');
+    _tsProtocol = parsed.protocol.replace(/:$/, '');
+  } catch (e: any) {
+    console.warn('[Typesense] Invalid TYPESENSE_URL value, falling back to individual env vars.', e?.message || e);
+  }
+}
+
+const _tsPort = parseInt(_tsPortRaw || '8108', 10);
 
 /**
  * True only when ALL required Typesense env vars are present and valid.

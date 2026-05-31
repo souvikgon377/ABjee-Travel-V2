@@ -1,5 +1,6 @@
 import { QueueService, QueueJob } from '../queue/QueueService';
 import client from './typesenseClient';
+import { getRedis } from '@/lib/server/redis';
 
 const normalizeSearchField = (value: unknown) =>
   String(value ?? '')
@@ -47,6 +48,24 @@ export class SyncService {
    * High-level sync: Pushes to queue for asynchronous processing.
    */
   static async syncPlace(place: PlaceSyncData) {
+    // If Typesense is available, prefer immediate upsert so search remains current
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        const doc = this.transformForTypesense('tourist_places', place);
+        try {
+          await client.collections('tourist_places').documents().upsert(doc);
+          console.info(`[SyncService] 🔁 Directly synced tourist_places/${place.id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct upsert failed despite Typesense availability:', err?.message || err);
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed:', err);
+    }
+
+    // Fallback: enqueue for later processing (Redis/local queue)
     await QueueService.push({
       type: 'SYNC',
       collection: 'tourist_places',
@@ -56,6 +75,22 @@ export class SyncService {
   }
 
   static async syncUser(user: any) {
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        const doc = this.transformForTypesense('users', user);
+        try {
+          await client.collections('users').documents().upsert(doc);
+          console.info(`[SyncService] 🔁 Directly synced users/${user.id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct user upsert failed:', err?.message || err);
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed for users:', err);
+    }
+
     await QueueService.push({
       type: 'SYNC',
       collection: 'users',
@@ -65,6 +100,22 @@ export class SyncService {
   }
 
   static async syncTravelDestination(destination: any) {
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        const doc = this.transformForTypesense('travel_destinations', destination);
+        try {
+          await client.collections('travel_destinations').documents().upsert(doc);
+          console.info(`[SyncService] 🔁 Directly synced travel_destinations/${destination.id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct travel destination upsert failed:', err?.message || err);
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed for travel destinations:', err);
+    }
+
     await QueueService.push({
       type: 'SYNC',
       collection: 'travel_destinations',
@@ -74,6 +125,21 @@ export class SyncService {
   }
 
   static async delete(collection: string, id: string) {
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        try {
+          await client.collections(collection).documents(id).delete();
+          console.info(`[SyncService] 🔁 Directly deleted ${collection}/${id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct delete failed despite Typesense availability:', err?.message || err);
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed for delete:', err);
+    }
+
     await QueueService.push({
       type: 'DELETE',
       collection,
@@ -85,13 +151,17 @@ export class SyncService {
    * Check if Typesense is reachable (quick health check).
    */
   private static async isTypesenseAvailable(): Promise<boolean> {
+    // If the Typesense module was disabled at import-time, treat as unavailable
+    // (module-level flag avoids long timeouts on cold-starts).
     try {
+      // `client` may be a stub when Typesense is disabled — guard against that.
+      if (!client) return false;
       // Quick health check: try to retrieve a collection
       await client.collections('tourist_places').retrieve();
       return true;
     } catch (error: any) {
       // Connection refused, timeout, or other network error
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+      if (error && (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT')) {
         return false;
       }
       // For other errors (404, etc), Typesense is technically available, just missing the collection

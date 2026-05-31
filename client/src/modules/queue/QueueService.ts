@@ -6,6 +6,7 @@
  */
 
 import { getRedis } from '@/lib/server/redis';
+import { enqueueLocalJob, processOneLocalJob, getLocalQueueLength } from './localQueue';
 
 export interface QueueJob {
   type: 'SYNC' | 'DELETE';
@@ -24,14 +25,22 @@ export class QueueService {
    */
   static async push(job: Omit<QueueJob, 'retries'>) {
     const redis = getRedis();
+    const jobWithRetry: QueueJob = { ...job, retries: 0 };
+
+    // If Redis isn't configured, persist the job to a local durable queue
     if (!redis) {
-      console.warn('[QueueService] Redis unavailable, sync might be delayed.');
+      console.warn('[QueueService] Redis unavailable, persisting job to local queue.');
+      await enqueueLocalJob(jobWithRetry);
       return;
     }
 
-    const jobWithRetry: QueueJob = { ...job, retries: 0 };
-    await redis.rpush(this.QUEUE_KEY, JSON.stringify(jobWithRetry));
-    console.log(`[QueueService] Job queued: ${job.type} for ${job.id}`);
+    try {
+      await redis.rpush(this.QUEUE_KEY, JSON.stringify(jobWithRetry));
+      console.log(`[QueueService] Job queued: ${job.type} for ${job.id}`);
+    } catch (err) {
+      console.warn('[QueueService] Redis push failed, persisting job to local queue:', err);
+      await enqueueLocalJob(jobWithRetry);
+    }
   }
 
   /**
@@ -40,38 +49,62 @@ export class QueueService {
    */
   static async processNext(processor: (job: QueueJob) => Promise<void>) {
     const redis = getRedis();
-    if (!redis) return;
 
-    const rawJob = await redis.lpop(this.QUEUE_KEY);
-    if (!rawJob) return;
+    // Try Redis first (if configured)
+    if (redis) {
+      try {
+        const rawJob = await redis.lpop(this.QUEUE_KEY);
+        if (rawJob) {
+          const job = typeof rawJob === 'string' ? JSON.parse(rawJob) : rawJob;
+          try {
+            await processor(job);
+            return;
+          } catch (error) {
+            console.error(`[QueueService] Job failed: ${job.id}`, error);
 
-    const job = typeof rawJob === 'string' ? JSON.parse(rawJob) : rawJob;
-
-    try {
-      await processor(job);
-    } catch (error) {
-      console.error(`[QueueService] Job failed: ${job.id}`, error);
-      
-      if (job.retries < this.MAX_RETRIES) {
-        job.retries++;
-        // Track retry metric
-        const { MetricsService } = await import('../analytics/MetricsService');
-        await MetricsService.increment('queue_retry_count');
-        
-        // Push back to the end for later retry
-        await redis.rpush(this.QUEUE_KEY, JSON.stringify(job));
-        console.warn(`[QueueService] Job re-queued (Attempt ${job.retries})`);
-      } else {
-        const { MetricsService } = await import('../analytics/MetricsService');
-        await MetricsService.increment('queue_failure_count');
-        console.error(`[QueueService] Job ${job.id} exhausted retries. Data lost.`);
+            if (job.retries < this.MAX_RETRIES) {
+              job.retries++;
+              const { MetricsService } = await import('../analytics/MetricsService');
+              await MetricsService.increment('queue_retry_count');
+              // Try to requeue; if that fails we'll fall back to local persistence
+              try {
+                await redis.rpush(this.QUEUE_KEY, JSON.stringify(job));
+                console.warn(`[QueueService] Job re-queued (Attempt ${job.retries})`);
+              } catch (pushErr) {
+                console.warn('[QueueService] Requeue to Redis failed, persisting locally', pushErr);
+                await enqueueLocalJob(job);
+              }
+            } else {
+              const { MetricsService } = await import('../analytics/MetricsService');
+              await MetricsService.increment('queue_failure_count');
+              console.error(`[QueueService] Job ${job.id} exhausted retries. Data lost.`);
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[QueueService] Redis lpop failed:', err);
       }
+    }
+
+    // Redis not configured or no job available — process one local queued job if present
+    try {
+      await processOneLocalJob(processor);
+    } catch (err) {
+      console.error('[QueueService] Local queue processing failed:', err);
     }
   }
 
   static async getQueueLength(): Promise<number> {
     const redis = getRedis();
-    if (!redis) return 0;
-    return await redis.llen(this.QUEUE_KEY);
+    const localLen = await getLocalQueueLength();
+    if (!redis) return localLen;
+    try {
+      const redisLen = await redis.llen(this.QUEUE_KEY);
+      return redisLen + localLen;
+    } catch (err) {
+      console.warn('[QueueService] Failed to get redis queue length:', err);
+      return localLen;
+    }
   }
 }

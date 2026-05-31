@@ -814,8 +814,10 @@ export class SearchService {
 
       const searchParams: any = {
         q: effectiveQuery,
-        query_by:
-          'name:5,name_lower:5,city:3,area:2,state:2,country:2,location_search:1,location_lower:1,description:1,description_lower:1',
+        // Use explicit `query_by` field names and provide weights via `query_by_weights`
+        // to support Typesense servers that don't accept inline weights like `name:5`.
+        query_by: 'name,name_lower,city,area,state,country,location_search,location_lower,description,description_lower',
+        query_by_weights: '5,5,3,2,2,2,1,1,1,1',
         sort_by: isExploring 
           ? 'popularity:desc,updatedAt:desc' 
           : '_text_match:desc,popularity:desc,updatedAt:desc',
