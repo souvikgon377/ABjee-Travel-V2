@@ -9,13 +9,13 @@ import { firestoreDb } from '@/lib/firebaseFirestore';
 export default function HomeRouteGate() {
   const router = useRouter();
   const [loadingSetting, setLoadingSetting] = useState(true);
-  const [homePageEnabled, setHomePageEnabled] = useState(true);
+  const [homePageEnabled, setHomePageEnabled] = useState(false);
 
   const getHomeSettingFromClientFirestore = async () => {
     const settingsRef = doc(firestoreDb, 'admin_settings', 'system');
     const snapshot = await getDoc(settingsRef);
-    const value = snapshot.exists() ? snapshot.data()?.homePageEnabled : true;
-    return value !== false;
+    const value = snapshot.exists() ? snapshot.data()?.homePageEnabled : false;
+    return value === true;
   };
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function HomeRouteGate() {
           try {
             enabledValue = await getHomeSettingFromClientFirestore();
           } catch {
-            enabledValue = true;
+            enabledValue = false;
           }
         }
 
@@ -47,13 +47,13 @@ export default function HomeRouteGate() {
           return;
         }
 
-        setHomePageEnabled(enabledValue !== false);
+        setHomePageEnabled(enabledValue === true);
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error('Failed to load home page setting:', error);
         }
         if (isMounted) {
-          setHomePageEnabled(true);
+          setHomePageEnabled(false);
         }
       } finally {
         if (isMounted) {

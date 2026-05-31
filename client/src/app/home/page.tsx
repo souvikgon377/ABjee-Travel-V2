@@ -17,9 +17,9 @@ export default async function HomeRoute() {
     });
 
     const settingsPayload = await settingsResponse.json().catch(() => null);
-    const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : true;
+    const homePageEnabled = settingsPayload?.success ? settingsPayload?.data?.homePageEnabled : false;
 
-    if (homePageEnabled === false) {
+    if (homePageEnabled !== true) {
       redirect('/community');
     }
   } catch (error) {
@@ -27,7 +27,7 @@ export default async function HomeRoute() {
     if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
-    // Fail open if the setting cannot be read.
+    // Fail closed if the setting cannot be read.
   }
 
   return <HomePage />;

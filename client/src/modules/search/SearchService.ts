@@ -289,6 +289,21 @@ export class SearchService {
       found: result.totalCount,
       latencyMs: result.latencyMs,
     });
+    // Backfill: enqueue Typesense sync jobs for returned users so future
+    // searches hit Typesense instead of falling back to Firestore.
+    (async () => {
+      try {
+        for (const row of result.results) {
+          try {
+            await SyncService.syncUser(row);
+          } catch (err) {
+            console.warn('[SearchService] SyncService.syncUser failed for', { id: row?.id, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      } catch (err) {
+        console.warn('[SearchService] Backfill enqueue failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
     return result;
   }
 
@@ -434,6 +449,21 @@ export class SearchService {
       returned: rows.length,
       latencyMs: result.latencyMs,
     });
+    // Backfill: enqueue Typesense sync jobs for returned travel destinations
+    // so Typesense gets updated and future searches avoid Firestore fallback.
+    (async () => {
+      try {
+        for (const row of result.results) {
+          try {
+            await SyncService.syncTravelDestination(row);
+          } catch (err) {
+            console.warn('[SearchService] SyncService.syncTravelDestination failed for', { id: row?.id, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      } catch (err) {
+        console.warn('[SearchService] Backfill enqueue failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
     return result;
   }
 

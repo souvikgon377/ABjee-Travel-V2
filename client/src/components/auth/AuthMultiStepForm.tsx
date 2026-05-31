@@ -56,7 +56,7 @@ export default function AuthMultiStepForm({
   const [selectedRole, setSelectedRole] = useState<string>('user');
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
-  const { login, adminLogin, loginWithGoogle, logout } = useAuth();
+  const { login, adminLogin, loginWithGoogle, logout, userProfile, refreshUserProfile } = useAuth();
 
   // Simple login step
   const loginStep = {
@@ -119,23 +119,13 @@ export default function AuthMultiStepForm({
       await loginWithGoogle();
 
       if (mode === 'login' && (selectedRole === 'admin' || selectedRole === 'owner')) {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication token not found. Please try again.');
+        const profile = (await refreshUserProfile()) || userProfile;
+
+        if (!profile) {
+          throw new Error('Failed to verify account role. Please try again.');
         }
 
-        const response = await fetch('/api/auth/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result?.message || 'Failed to verify account role.');
-        }
-
-        const role = result?.data?.user?.role;
+        const role = profile?.role;
         const hasAdminAccess = selectedRole === 'owner'
           ? role === 'owner'
           : role === 'admin' || role === 'owner';

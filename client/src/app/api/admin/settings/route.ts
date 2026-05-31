@@ -29,7 +29,7 @@ const DEFAULT_FEATURES = {
   advertizerFeatures: 'Advertisers plan: Submit ads for approval, priority placement options, analytics dashboard',
 };
 
-const normalizeBoolean = (value: unknown, defaultValue = true) =>
+const normalizeBoolean = (value: unknown, defaultValue = false) =>
   typeof value === 'boolean' ? value : defaultValue;
 
 const normalizeAmount = (value: unknown, fallback: number) => {
@@ -86,7 +86,7 @@ const normalizeFeatures = (value: unknown) => {
 };
 
 const normalizeSettingsPayload = (data: Record<string, unknown>) => ({
-  homePageEnabled: normalizeBoolean(data.homePageEnabled, true),
+  homePageEnabled: normalizeBoolean(data.homePageEnabled, false),
   bookingCategoriesEnabled: normalizeBoolean(data.bookingCategoriesEnabled, true),
   pricing: normalizePricing(data.pricing),
   privateRoomLimits: normalizePrivateRoomLimits(data.privateRoomLimits),
@@ -113,7 +113,7 @@ const isDatastoreTransientError = (error: unknown) => {
 };
 
 const DEFAULT_SETTINGS_PAYLOAD = {
-  homePageEnabled: true,
+  homePageEnabled: false,
   bookingCategoriesEnabled: true,
   pricing: { ...DEFAULT_PRICING },
   privateRoomLimits: { ...DEFAULT_PRIVATE_ROOM_LIMITS },

@@ -48,7 +48,7 @@ export async function GET() {
     const raw = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
 
     const settings = {
-      homePageEnabled: raw.homePageEnabled !== false,
+      homePageEnabled: raw.homePageEnabled === true,
       bookingCategoriesEnabled: raw.bookingCategoriesEnabled !== false,
     };
 
@@ -60,7 +60,7 @@ export async function GET() {
 
     return ok(
       {
-        homePageEnabled: true,
+        homePageEnabled: false,
         bookingCategoriesEnabled: true,
         _fallback: true,
       },

@@ -80,22 +80,6 @@ const DEFAULT_PLANS = [
     ],
     cta: 'Choose Premium',
   },
-  {
-    id: 'advertizer',
-    name: 'Advertizers',
-    icon: Crown,
-    price: {
-      monthly: 1000,
-      yearly: 10000,
-    },
-    description: 'Advertise on ABJee: submit ads, get visibility and analytics.',
-    features: [
-      'Submit ads for approval',
-      'Priority placement options',
-      'Basic analytics dashboard',
-    ],
-    cta: 'Contact Sales',
-  },
 ];
 
 const generateFeaturesFromApi = (planId: string, features: any, adminFeatureText?: string): string[] => {
@@ -656,7 +640,6 @@ export default function SimplePricing() {
             hobby: 'free',
             pro: 'pro',
             enterprise: 'premium',
-            advertizer: 'advertizer',
           };
           
           // Merge fetched pricing and features with default plan structure
@@ -668,7 +651,7 @@ export default function SimplePricing() {
             
             if (fetchedPlan && fetchedPlan.price && fetchedPlan.yearlyPrice) {
               // Get admin feature text for this plan
-              const featureTextKey = defaultPlan.id === 'pro' ? 'proFeatures' : defaultPlan.id === 'enterprise' ? 'premiumFeatures' : defaultPlan.id === 'advertizer' ? 'advertizerFeatures' : null;
+              const featureTextKey = defaultPlan.id === 'pro' ? 'proFeatures' : defaultPlan.id === 'enterprise' ? 'premiumFeatures' : null;
               const adminFeatureText = featureTextKey ? adminFeatures[featureTextKey] : null;
               
               const features = generateFeaturesFromApi(defaultPlan.id, fetchedPlan.features, adminFeatureText);
