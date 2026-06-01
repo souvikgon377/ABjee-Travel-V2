@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { Timestamp } from 'firebase/firestore';
 import { ArrowRight, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, Megaphone, Search, ShieldCheck, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { AdvertisementForm } from '@/components/ui/advertisement-form';

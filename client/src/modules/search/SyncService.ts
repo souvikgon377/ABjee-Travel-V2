@@ -1,6 +1,5 @@
 import { QueueService, QueueJob } from '../queue/QueueService';
 import client from './typesenseClient';
-import { getRedis } from '@/lib/server/redis';
 
 const normalizeSearchField = (value: unknown) =>
   String(value ?? '')

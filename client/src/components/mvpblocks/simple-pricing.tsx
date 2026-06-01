@@ -188,7 +188,10 @@ export default function SimplePricing() {
   const walletSummary = useMemo(() => {
     const wallet = (userProfile as any)?.wallet || {};
     const monthly = wallet.monthly || {};
-    const availablePoints = Math.max(0, Math.floor(Number(wallet.availablePoints || 0)));
+    const availablePoints = Math.max(
+      0,
+      Math.floor(Number(wallet.availablePoints ?? wallet.availableRupees ?? 0)),
+    );
     const monthlyCap = Math.max(0, Math.floor(Number(monthly.monthlyCapRupees || 30)));
 
     // Wallet month rolls over each calendar month; previous month redemption should not block current month.
@@ -832,8 +835,8 @@ export default function SimplePricing() {
                 onChange={(event) => setUseRbPoints(event.target.checked)}
                 className="mt-1 h-4 w-4 accent-emerald-600"
               />
-              <span>
-                <span className="block font-medium text-foreground">Use RB points for this subscription</span>
+                <span>
+                <span className="block font-medium text-foreground">Use ABjee Wallet Points</span>
                 <span className="block text-muted-foreground">
                   Available discount: Rs {walletSummary.usablePoints}. 1 RB point = Rs 1. Monthly redemption cap: Rs {walletSummary.monthlyCap} (remaining this month: Rs {walletSummary.monthlyRemaining}). Unredeemed points stay in your wallet.
                 </span>

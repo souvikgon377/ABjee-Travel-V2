@@ -114,14 +114,10 @@ export default function ProfilePage() {
   );
   const [pageLoading, setPageLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [walletRedeeming, setWalletRedeeming] = useState(false);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [walletMessage, setWalletMessage] = useState<string | null>(null);
-  const [walletError, setWalletError] = useState<string | null>(null);
-  const [walletRedeemAmount, setWalletRedeemAmount] = useState('');
   const [walletHistory, setWalletHistory] = useState<WalletHistoryRow[]>([]);
   const [walletHistoryLoading, setWalletHistoryLoading] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -341,34 +337,6 @@ export default function ProfilePage() {
     }
   };
 
-  const handleWalletRedeem = async () => {
-    setWalletMessage(null);
-    setWalletError(null);
-
-    const amount = Math.floor(Number(walletRedeemAmount));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setWalletError('Enter a valid redemption amount.');
-      return;
-    }
-
-    try {
-      setWalletRedeeming(true);
-      const response = await walletAPI.redeem(amount);
-      const payload = response?.data?.data || {};
-      const refreshed = await usersAPI.getProfile();
-      const refreshedUser = refreshed?.data?.data?.user || {};
-      setSavedProfileDetails(mapSavedDetails(refreshedUser));
-      setSubscriptionSourceProfile(refreshedUser);
-      setWalletRedeemAmount('');
-      setWalletMessage(`Redeemed Rs ${Number(payload.redeemedAmount || amount)} successfully.`);
-      void loadWalletHistory();
-    } catch (redeemError: any) {
-      setWalletError(redeemError?.response?.data?.message || redeemError?.message || 'Failed to redeem wallet balance.');
-    } finally {
-      setWalletRedeeming(false);
-    }
-  };
-
   const handleProfileImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -578,7 +546,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+            <div id="abjee-wallet" className="mb-6 scroll-mt-28 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                   ABJee Wallet
@@ -604,31 +572,9 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
-                <Input
-                  type="number"
-                  min="1"
-                  max={Math.min(walletSummary.availablePoints, walletSummary.monthlyRemaining) || 1}
-                  value={walletRedeemAmount}
-                  onChange={(event) => setWalletRedeemAmount(event.target.value)}
-                  placeholder="Enter amount to redeem"
-                />
-                <Button
-                  type="button"
-                  onClick={handleWalletRedeem}
-                  disabled={walletRedeeming || walletSummary.availablePoints <= 0 || walletSummary.monthlyRemaining <= 0}
-                >
-                  {walletRedeeming ? 'Redeeming...' : 'Redeem'}
-                </Button>
-              </div>
               <p className="mt-2 text-xs text-muted-foreground">
                 1 Rb point = Rs 1. Monthly redemption is capped at Rs 30. Unredeemed points stay in your wallet.
               </p>
-              {(walletMessage || walletError) && (
-                <p className={`mt-3 text-sm ${walletMessage ? 'text-emerald-700' : 'text-red-600'}`}>
-                  {walletMessage || walletError}
-                </p>
-              )}
             </div>
 
             <div className="mb-6 rounded-lg border bg-muted/40 p-4">

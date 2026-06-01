@@ -58,7 +58,7 @@ export default function ResetConfirmPage() {
     try {
       await confirmPasswordReset(auth, activeCode, password);
       setSuccess(true);
-      try { localStorage.setItem('abjee:passwordResetSuccess', '1'); } catch {}
+      try { localStorage.setItem('abjee:passwordResetSuccess', '1'); } catch { /* ignore */ }
     } catch (err: any) {
       setError(err?.message || 'Failed to reset password.');
     } finally {

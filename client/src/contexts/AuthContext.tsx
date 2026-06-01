@@ -59,6 +59,17 @@ interface UserProfile {
   avatar?: string;
   profilePicture?: string;
   profileImage?: string;
+  wallet?: {
+    availablePoints?: number;
+    availableRupees?: number;
+    monthly?: {
+      capRupees?: number;
+      redeemedPoints?: number;
+      redeemedRupees?: number;
+      monthKey?: string;
+    };
+    lifetimeEarned?: number;
+  };
   phoneNumber?: string;
   address?: string;
   city?: string;
@@ -122,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       avatar: typeof profile.avatar === 'string' ? profile.avatar : mergedPhotoURL,
       profilePicture: typeof profile.profilePicture === 'string' ? profile.profilePicture : undefined,
       profileImage: typeof profile.profileImage === 'string' ? profile.profileImage : mergedPhotoURL,
+      wallet: profile.wallet && typeof profile.wallet === 'object' ? profile.wallet : undefined,
       phoneNumber: typeof profile.phoneNumber === 'string' ? profile.phoneNumber : typeof profile.phone === 'string' ? profile.phone : undefined,
       address: profile.address,
       city: profile.city,

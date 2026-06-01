@@ -6,7 +6,7 @@ import { publicAsset } from '@/lib/publicAsset';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox, Crown } from 'lucide-react';
+import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox, Crown, Wallet } from 'lucide-react';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
@@ -972,6 +972,14 @@ export default function Header1() {
             {currentUser ? (
               <>
                 <div className="flex items-center space-x-3">
+                  <Link
+                    href="/profile#abjee-wallet"
+                    className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-background text-emerald-600 transition-colors hover:bg-emerald-500/10 active:scale-95 touch-manipulation pointer-events-auto"
+                    aria-label="Open ABJee Wallet"
+                    title="ABJee Wallet"
+                  >
+                    <Wallet className="h-4 w-4" />
+                  </Link>
                   <div className="relative" ref={desktopNotificationsRef}>
                     <button
                       type="button"
@@ -1067,25 +1075,35 @@ export default function Header1() {
           {/* Mobile: Notifications + Theme toggle + Hamburger */}
           <div className="ml-auto flex items-center space-x-2 lg:hidden">
             {currentUser && (
-              <div className="relative" ref={mobileNotificationsRef}>
-                <button
-                  type="button"
-                  onClick={() => setNotificationsOpen((open) => !open)}
-                  className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted active:scale-95 touch-manipulation pointer-events-auto"
-                  aria-label="Open notifications"
-                  title="Notifications"
+              <>
+                <Link
+                  href="/profile#abjee-wallet"
+                  className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-background text-emerald-600 transition-colors hover:bg-emerald-500/10 active:scale-95 touch-manipulation pointer-events-auto"
+                  aria-label="Open ABJee Wallet"
+                  title="ABJee Wallet"
                 >
-                  <Bell className="h-4 w-4" />
-                  {totalCount > 0 && (
-                    <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
-                      {totalCount > 9 ? '9+' : totalCount}
-                    </span>
-                  )}
-                </button>
-                <AnimatePresence>
-                  {notificationsOpen && renderNotificationPanel('fixed left-1/2 top-[4.5rem] w-[calc(100vw-1rem)] max-w-sm -translate-x-1/2 origin-top')}
-                </AnimatePresence>
-              </div>
+                  <Wallet className="h-4 w-4" />
+                </Link>
+                <div className="relative" ref={mobileNotificationsRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNotificationsOpen((open) => !open)}
+                    className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:bg-muted active:scale-95 touch-manipulation pointer-events-auto"
+                    aria-label="Open notifications"
+                    title="Notifications"
+                  >
+                    <Bell className="h-4 w-4" />
+                    {totalCount > 0 && (
+                      <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                        {totalCount > 9 ? '9+' : totalCount}
+                      </span>
+                    )}
+                  </button>
+                  <AnimatePresence>
+                    {notificationsOpen && renderNotificationPanel('fixed left-1/2 top-[4.5rem] w-[calc(100vw-1rem)] max-w-sm -translate-x-1/2 origin-top')}
+                  </AnimatePresence>
+                </div>
+              </>
             )}
             <ModeToggle />
             <button
@@ -1247,5 +1265,4 @@ export default function Header1() {
     </motion.header>
   );
 }
-
 
