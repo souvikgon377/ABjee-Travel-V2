@@ -156,6 +156,8 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       updatedAt: updateData.updatedAt,
       category: updateData.category,
       coverImage: updateData.coverImage,
+      description: updateData.description,
+      googleMapsUrl: updateData.googleMapsUrl,
     });
 
     await CacheService.invalidatePattern('search:');

@@ -121,7 +121,9 @@ export async function PUT(req: NextRequest) {
       popularity: updateData.popularity,
       updatedAt: updateData.updatedAt,
       category: updateData.category,
-      coverImage: updateData.coverImage
+      coverImage: updateData.coverImage,
+      description: updateData.description,
+      googleMapsUrl: updateData.googleMapsUrl,
     });
 
     // 2. Cache Invalidation

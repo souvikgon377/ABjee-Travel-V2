@@ -27,6 +27,7 @@ import { modernConfirm } from '@/lib/modernDialog';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { adminAPI } from '@/lib/api';
 import { buildGoogleMapsEmbedUrl } from '@/components/ui/google-map-display';
+import { hasTouristPlacePhotos } from '@/lib/touristPlaceMedia';
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -851,7 +852,7 @@ export function TouristPlacesManager() {
   }, []);
 
   const matchesContentFilter = useCallback((place: TouristPlace, status: TouristPlacesFilters['status']) => {
-    const hasPhotos = Boolean(place.coverImage) || (place.media?.length || 0) > 0;
+    const hasPhotos = hasTouristPlacePhotos(place);
     const updatedAtValue = place.updatedAt instanceof Date
       ? place.updatedAt.getTime()
       : place.updatedAt && typeof place.updatedAt === 'object' && 'toDate' in place.updatedAt
@@ -977,12 +978,14 @@ export function TouristPlacesManager() {
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
-  const fetchPlaces = useCallback(async (options?: { reset?: boolean; forceRefresh?: boolean; filters?: TouristPlacesFilters }) => {
+  const fetchPlaces = useCallback(async (options?: { reset?: boolean; forceRefresh?: boolean; filters?: TouristPlacesFilters; keepScanning?: boolean }) => {
     const selectedFilters = options?.filters ?? appliedFiltersRef.current;
     const reset = options?.reset ?? false;
     if (reset) setLoading(true);
     else setLoadingMore(true);
-    setScanningFilters(false);
+    if (!options?.keepScanning) {
+      setScanningFilters(false);
+    }
 
     try {
       const nextPage = reset ? 1 : ((lastDocRef.current || 0) + 1);
@@ -1031,13 +1034,17 @@ export function TouristPlacesManager() {
         totalCount: Number(data.totalCount || current.totalCount || 0),
         updatedAtLabel: new Date().toLocaleString(),
       }));
+      return { hasMore: Boolean(data.hasMore), totalCount: Number(data.totalCount || 0), loaded: incoming.length };
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('[TouristPlaces] fetchPlaces failed:', error);
       }
       flash('Failed to load tourist places.', 'error');
+      return null;
     } finally {
-      setScanningFilters(false);
+      if (!options?.keepScanning) {
+        setScanningFilters(false);
+      }
       if (reset) setLoading(false);
       else setLoadingMore(false);
     }

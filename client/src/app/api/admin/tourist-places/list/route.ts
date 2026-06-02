@@ -3,6 +3,7 @@ import { ok, fail } from '@/lib/server/http';
 import { SearchService } from '@/modules/search/SearchService';
 import { authenticateRequest, requireAdmin } from '@/lib/server/auth';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { enrichTouristPlacesFromFirestore } from '@/lib/server/touristPlaceHydration';
 
 export const runtime = 'nodejs';
 
@@ -39,30 +40,6 @@ const compareTouristPlaces = (left: any, right: any) => {
 
   return String(left?.name || '').localeCompare(String(right?.name || ''));
 };
-
-async function enrichPlacesWithMapUrls(rows: any[]) {
-  const missingMapIds = rows
-    .filter((row) => row?.id && !String(row.googleMapsUrl || '').trim())
-    .map((row) => String(row.id));
-
-  if (missingMapIds.length === 0) return rows;
-
-  const refs = missingMapIds.map((id) => adminDb.collection('touristPlaces').doc(id));
-  const docs = await adminDb.getAll(...refs).catch(() => []);
-  const byId = new Map(docs.filter((snap) => snap.exists).map((snap) => [snap.id, snap.data() || {}]));
-
-  return rows.map((row) => {
-    const full = byId.get(String(row?.id || ''));
-    if (!full) return row;
-
-    return {
-      ...row,
-      googleMapsUrl: row.googleMapsUrl || full.googleMapsUrl || '',
-      extraInfo: row.extraInfo || full.extraInfo || [],
-      media: row.media || full.media || [],
-    };
-  });
-}
 
 /**
  * GET /api/admin/tourist-places/list
@@ -118,7 +95,7 @@ export async function GET(req: NextRequest) {
       // Admin sees everything (both active and inactive), so we don't filter by isActive
     });
 
-    const enrichedResults = await enrichPlacesWithMapUrls(result.results);
+    const enrichedResults = await enrichTouristPlacesFromFirestore(result.results);
 
     return ok({
       data: enrichedResults,

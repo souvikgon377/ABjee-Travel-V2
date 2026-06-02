@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { ok, fail } from '@/lib/server/http';
 import { SearchService } from '@/modules/search/SearchService';
+import { enrichTouristPlacesFromFirestore } from '@/lib/server/touristPlaceHydration';
 
 export const runtime = 'nodejs';
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
       isActive: undefined,
     });
 
-    const paginatedResults = result.results;
+    const paginatedResults = await enrichTouristPlacesFromFirestore(result.results);
     const totalCount = result.totalCount;
     const hasMore = result.hasMore;
     const latency = Date.now() - tStart;

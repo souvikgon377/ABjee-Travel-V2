@@ -1,5 +1,6 @@
 import { QueueService, QueueJob } from '../queue/QueueService';
 import client from './typesenseClient';
+import { getTouristPlacePhotoCount } from '@/lib/touristPlaceMedia';
 
 const normalizeSearchField = (value: unknown) =>
   String(value ?? '')
@@ -18,6 +19,7 @@ export interface PlaceSyncData {
   updatedAt: any;
   category?: string;
   coverImage?: string;
+  description?: string;
   googleMapsUrl?: string;
 }
 
@@ -284,6 +286,7 @@ export class SyncService {
       const area = String(data.area || data.city || '').trim();
       const description = String(data.description || '').trim();
       const locationSearch = normalizeSearchField([country, state, city, area].filter(Boolean).join(' '));
+      const mediaCount = getTouristPlacePhotoCount(data);
 
       return {
         ...base,
@@ -300,6 +303,7 @@ export class SyncService {
         description,
         description_lower: normalizeSearchField(description),
         coverImage: data.coverImage || '',
+        mediaCount,
         googleMapsUrl: data.googleMapsUrl || '',
         popularity: data.popularity || 0,
       };

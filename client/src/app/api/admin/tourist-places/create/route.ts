@@ -4,6 +4,8 @@ import { fail, ok } from '@/lib/server/http';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { invalidateCacheVersion } from '@/lib/server/cacheManagement';
 import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
+import { CacheService } from '@/modules/cache/CacheService';
+import { SyncService } from '@/modules/search/SyncService';
 
 export const runtime = 'nodejs';
 
@@ -101,6 +103,20 @@ export async function POST(req: NextRequest) {
       Category: touristPlace.category,
       Description: touristPlace.description
     }, 'create');
+
+    await SyncService.syncOnCreate({
+      id: docRef.id,
+      name: touristPlace.name,
+      city: touristPlace.city,
+      state: touristPlace.state,
+      country: touristPlace.country,
+      updatedAt: touristPlace.updatedAt,
+      category: touristPlace.category,
+      coverImage: touristPlace.coverImage,
+      description: touristPlace.description,
+      googleMapsUrl: touristPlace.googleMapsUrl,
+    });
+    await CacheService.invalidatePattern('search:');
 
     // Invalidate cache after create
     await invalidateCacheVersion();

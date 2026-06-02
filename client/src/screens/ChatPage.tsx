@@ -24,6 +24,7 @@ import {
   hasPaidAccess,
 } from '@/lib/subscriptionPolicy';
 import { modernConfirm } from '@/lib/modernDialog';
+import { sanitizeRichTextHtmlForDisplay } from '@/lib/richTextDisplay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -2899,12 +2900,11 @@ const ChatRoomsList: React.FC = () => {
                                   </motion.div>
 
                                   {selectedPlace.description && (
-                                    <motion.p
+                                    <motion.div
                                       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                                      className="text-gray-700 leading-relaxed text-base"
-                                    >
-                                      {selectedPlace.description}
-                                    </motion.p>
+                                      className="text-gray-700 leading-relaxed text-base [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:ml-6 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:ml-6 [&_ol]:list-decimal [&_li]:my-1 [&_h1]:mb-3 [&_h1]:text-3xl [&_h1]:font-black [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_h4]:mb-2 [&_h4]:text-lg [&_h4]:font-semibold [&_h5]:mb-2 [&_h5]:text-base [&_h5]:font-semibold [&_h6]:mb-2 [&_h6]:text-sm [&_h6]:font-semibold"
+                                      dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtmlForDisplay(selectedPlace.description) }}
+                                    />
                                   )}
 
                                   {selectedPlace.googleMapsUrl && (

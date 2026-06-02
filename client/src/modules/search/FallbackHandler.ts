@@ -1,6 +1,7 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { MetricsService } from '@/modules/analytics/MetricsService';
 import { getInMemorySnapshot } from '@/lib/server/sharedPlacesCache';
+import { hasTouristPlacePhotos } from '@/lib/touristPlaceMedia';
 
 export interface FallbackSearchOptions {
   query?: string;
@@ -89,8 +90,7 @@ export class FallbackHandler {
   private static matchesContentFilter(doc: any, filter: FallbackSearchOptions['contentFilter']): boolean {
     if (!filter || filter === 'all') return true;
 
-    const mediaCount = Array.isArray(doc.media) ? doc.media.length : Number(doc.mediaCount || 0);
-    const hasPhotos = Boolean(doc.coverImage) || mediaCount > 0;
+    const hasPhotos = hasTouristPlacePhotos(doc);
 
     if (filter === 'photos-added') return hasPhotos;
     if (filter === 'photos-not-added') return !hasPhotos;
@@ -359,14 +359,19 @@ export class FallbackHandler {
       if (!prefix) {
         const readLimit = Math.min(this.SAFE_BROWSE_READ_LIMIT, (limit * page) + 1);
         const safeRows = await this.safeFallbackQuery(baseRef, options, readLimit);
+        // Ensure equality/content/location/category filters are applied to
+        // the safe fallback results so admin filters behave the same when
+        // Redis or snapshot data is not available.
+        const normalized = safeRows.map((r: any) => this.normalizeForSearch(r));
+        const filtered = this.postFilter(normalized, options);
         const startIdx = (page - 1) * limit;
         const endIdx = startIdx + limit;
-        const paginated = safeRows.slice(startIdx, endIdx);
+        const paginated = filtered.slice(startIdx, endIdx);
         const latency = Date.now() - tStart;
         return {
           results: paginated,
-          totalCount: safeRows.length,
-          hasMore: safeRows.length > endIdx,
+          totalCount: filtered.length,
+          hasMore: filtered.length > endIdx,
           source: 'firestore',
           latencyMs: latency,
           method: 'safe',
@@ -453,14 +458,18 @@ export class FallbackHandler {
         const page = Math.max(1, options.page || 1);
         const readLimit = Math.min(this.SAFE_BROWSE_READ_LIMIT, (limit * page) + 1);
         const safeRows = await this.safeFallbackQuery(adminDb.collection('touristPlaces'), options, readLimit);
+        // Apply post-filters so admin filters (content/location/category/isActive)
+        // are honored even when Redis/snapshot is not available.
+        const normalized = safeRows.map((r: any) => this.normalizeForSearch(r));
+        const filtered = this.postFilter(normalized, options);
         const startIdx = (page - 1) * limit;
         const endIdx = startIdx + limit;
-        const paginated = safeRows.slice(startIdx, endIdx);
+        const paginated = filtered.slice(startIdx, endIdx);
         const latency = Date.now() - tStart;
         return {
           results: paginated,
-          totalCount: safeRows.length,
-          hasMore: safeRows.length > endIdx,
+          totalCount: filtered.length,
+          hasMore: filtered.length > endIdx,
           source: 'firestore',
           latencyMs: latency,
           method: 'safe',

@@ -15,6 +15,7 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { FieldPath } from 'firebase-admin/firestore';
 import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
 import { SyncService } from './SyncService';
+import { hasTouristPlacePhotos } from '@/lib/touristPlaceMedia';
 
 /**
  * SearchOptions - Flexible search configuration
@@ -725,6 +726,26 @@ export class SearchService {
     return `search:${scope}:${stable}`;
   }
 
+  private static buildTypesenseContentFilter(filter: SearchOptions['contentFilter']): string | null {
+    if (!filter || filter === 'all') return null;
+
+    if (filter === 'photos-added') {
+      // Use mediaCount only because Typesense rejects empty-string checks on string fields.
+      return 'mediaCount:>0';
+    }
+
+    if (filter === 'photos-not-added') {
+      return 'mediaCount:=0';
+    }
+
+    if (filter === 'recently-updated') {
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      return `updatedAt:>=${sevenDaysAgo}`;
+    }
+
+    return null;
+  }
+
   private static logSearchOperation(
     label: string,
     payload: Record<string, unknown>,
@@ -760,8 +781,7 @@ export class SearchService {
   private static matchesContentFilter(doc: any, filter: SearchOptions['contentFilter']): boolean {
     if (!filter || filter === 'all') return true;
 
-    const mediaCount = Array.isArray(doc.media) ? doc.media.length : Number(doc.mediaCount || 0);
-    const hasPhotos = Boolean(doc.coverImage) || mediaCount > 0;
+    const hasPhotos = hasTouristPlacePhotos(doc);
 
     if (filter === 'photos-added') return hasPhotos;
     if (filter === 'photos-not-added') return !hasPhotos;
@@ -808,6 +828,11 @@ export class SearchService {
         filters.push(`category:=[${cat}, ${cat.toLowerCase()}, ${capitalized}]`);
       }
 
+      const contentFilterClause = this.buildTypesenseContentFilter(options.contentFilter);
+      if (contentFilterClause) {
+        filters.push(contentFilterClause);
+      }
+
       // Build query string
       const effectiveQuery = [query, options.location].filter(Boolean).join(' ').trim() || '*';
       const isExploring = effectiveQuery === '*';
@@ -852,8 +877,8 @@ export class SearchService {
 
       return {
         results: filteredResults,
-        totalCount: options.contentFilter && options.contentFilter !== 'all' ? filteredResults.length : result.found,
-        hasMore: options.contentFilter && options.contentFilter !== 'all' ? false : result.found > page * limit,
+        totalCount: result.found || filteredResults.length,
+        hasMore: (result.found || 0) > page * limit,
         source: 'typesense',
         latencyMs: latency,
       };
@@ -868,6 +893,42 @@ export class SearchService {
         code: errorCode,
         breaker: TypesenseBreaker.getState(),
       });
+
+      // If Typesense rejected the query due to an unknown filter field (schema drift)
+      // try a best-effort retry WITHOUT the content filter clause so searches
+      // still return Typesense results when the server is otherwise healthy.
+      const msg = String(error?.message || '').toLowerCase();
+      const unknownFilterField = /could not find a filter field/.test(msg) || /unknown filter field/.test(msg);
+      if (unknownFilterField && options && options.contentFilter) {
+        try {
+          console.warn('[SearchService] Typesense filter field missing — retrying WITHOUT content filter');
+          // Rebuild search params without the contentFilterClause
+          const retryFilters = filters.filter((f) => f !== contentFilterClause);
+          const retryParams = { ...searchParams };
+          if (retryFilters.length > 0) retryParams.filter_by = retryFilters.join(' && ');
+          else delete retryParams.filter_by;
+
+          const retryResult = await client.collections(COLLECTION_NAME).documents().search(retryParams);
+          TypesenseBreaker.recordSuccess();
+          const latencyRetry = Date.now() - tStart;
+          await MetricsService.trackSearch(latencyRetry, retryResult.found, false);
+          const rawResultsRetry = retryResult.hits?.map((h: any) => h.document) || [];
+          // Apply content filter client-side to ensure correctness
+          const filteredResults = this.applyContentFilter(rawResultsRetry, options.contentFilter);
+
+          return {
+            results: filteredResults,
+            totalCount: retryResult.found || filteredResults.length,
+            hasMore: (retryResult.found || 0) > page * limit,
+            source: 'typesense',
+            latencyMs: latencyRetry,
+          } as SearchResult;
+        } catch (retryErr: any) {
+          TypesenseBreaker.recordFailure();
+          console.error('[SearchService] Typesense retry without content filter also failed', retryErr?.message || retryErr);
+          return null;
+        }
+      }
 
       return null; // Trigger fallback immediately
     }
@@ -935,6 +996,7 @@ export class SearchService {
                   updatedAt: doc.updatedAt || Date.now(),
                   category: doc.category || 'Other',
                   coverImage: doc.coverImage || doc.image || '',
+                  description: doc.description || '',
                   googleMapsUrl: doc.googleMapsUrl || '',
                 };
                 void SyncService.syncPlace(placeData as any);

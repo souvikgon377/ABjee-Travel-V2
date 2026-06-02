@@ -58,7 +58,7 @@ export class QueueService {
           const job = typeof rawJob === 'string' ? JSON.parse(rawJob) : rawJob;
           try {
             await processor(job);
-            return;
+            return true;
           } catch (error) {
             console.error(`[QueueService] Job failed: ${job.id}`, error);
 
@@ -80,7 +80,7 @@ export class QueueService {
                 try {
                   await processor(job);
                   console.info(`[QueueService] Job ${job.id} succeeded after initializeTypesense()`);
-                  return;
+                  return true;
                 } catch (retryErr) {
                   console.error('[QueueService] Retry after initializeTypesense() failed:', retryErr);
                 }
@@ -106,7 +106,7 @@ export class QueueService {
               await MetricsService.increment('queue_failure_count');
               console.error(`[QueueService] Job ${job.id} exhausted retries. Data lost.`);
             }
-            return;
+            return false;
           }
         }
       } catch (err) {
@@ -116,10 +116,12 @@ export class QueueService {
 
     // Redis not configured or no job available — process one local queued job if present
     try {
-      await processOneLocalJob(processor);
+      return await processOneLocalJob(processor);
     } catch (err) {
       console.error('[QueueService] Local queue processing failed:', err);
     }
+
+    return false;
   }
 
   static async getQueueLength(): Promise<number> {
