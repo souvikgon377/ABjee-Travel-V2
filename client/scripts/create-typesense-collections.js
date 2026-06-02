@@ -59,6 +59,7 @@ const touristPlacesSchema = {
     { name: 'description', type: 'string', optional: true },
     { name: 'description_lower', type: 'string', optional: true },
     { name: 'coverImage', type: 'string', optional: true },
+    { name: 'mediaCount', type: 'int32', optional: true },
     { name: 'googleMapsUrl', type: 'string', optional: true },
     { name: 'popularity', type: 'int32', optional: true },
     { name: 'updatedAt', type: 'int64' }
