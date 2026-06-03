@@ -4,6 +4,7 @@ import { SearchService } from '@/modules/search/SearchService';
 import { authenticateRequest, requireAdmin } from '@/lib/server/auth';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { enrichTouristPlacesFromFirestore } from '@/lib/server/touristPlaceHydration';
+import { hasTouristPlacePhotos } from '@/lib/touristPlaceMedia';
 
 export const runtime = 'nodejs';
 
@@ -39,6 +40,17 @@ const compareTouristPlaces = (left: any, right: any) => {
   }
 
   return String(left?.name || '').localeCompare(String(right?.name || ''));
+};
+
+const matchesContentFilter = (place: any, filter: string) => {
+  if (filter === 'photos-added') return hasTouristPlacePhotos(place);
+  if (filter === 'photos-not-added') return !hasTouristPlacePhotos(place);
+  if (filter === 'recently-updated') {
+    const updatedAt = toMillis(place?.updatedAt);
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    return Boolean(updatedAt && updatedAt >= sevenDaysAgo);
+  }
+  return true;
 };
 
 /**
@@ -80,6 +92,33 @@ export async function GET(req: NextRequest) {
         page: 1,
         hasMore: snap.size >= 5000,  // Indicate if more docs exist beyond limit
         source: 'firestore_all',
+      });
+    }
+
+    // Admin photo-status counts must be an exact partition of the collection.
+    // Typesense can exclude documents where optional mediaCount is missing, so use
+    // the same shared photo helper against Firestore rows for these browse filters.
+    if (!search.trim() && !location.trim() && filter !== 'all') {
+      const snap = await adminDb
+        .collection('touristPlaces')
+        .limit(5000)
+        .get();
+      const filteredRows = snap.docs
+        .map((d: any) => ({ id: d.id, ...d.data() }))
+        .filter((row: any) => matchesContentFilter(row, filter))
+        .sort(compareTouristPlaces);
+      const startIdx = (page - 1) * limit;
+      const paginatedRows = filteredRows.slice(startIdx, startIdx + limit);
+
+      return ok({
+        data: paginatedRows,
+        rows: paginatedRows,
+        total: filteredRows.length,
+        totalCount: filteredRows.length,
+        page,
+        hasMore: filteredRows.length > startIdx + limit,
+        source: 'firestore_content_filter',
+        firestoreReads: snap.size,
       });
     }
 
