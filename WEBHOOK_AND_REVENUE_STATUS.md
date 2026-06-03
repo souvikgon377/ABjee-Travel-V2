@@ -10,10 +10,10 @@ https://abjee-travel.vercel.app/api/subscriptions/razorpay/webhook
 ### Webhook Secrets
 | Key | Value |
 |-----|-------|
-| **Webhook Secret** | `Abjee@0909` |
-| **Live API Key** | `rzp_live_SX5CFMayA5UJSz` |
-| **Server API Key** | `rzp_live_SdJSfBwGk0HjP2` |
-| **Server Secret** | `pZ092FU1RPPVhmwfbeNPSSjV` |
+| **Webhook Secret** | `****` |
+| **Live API Key** | `********` |
+| **Server API Key** | `****` |
+| **Server Secret** | `****` |
 
 ### Configuration Location
 - **File**: `client/.env`
