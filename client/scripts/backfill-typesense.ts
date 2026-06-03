@@ -70,6 +70,10 @@ async function backfill() {
         email: data.email || '',
         role: data.role || 'user',
         status: data.status || 'active',
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        username: data.username || '',
+        photoURL: data.photoURL || data.avatar || data.profileImage || '',
         updatedAt: data.updatedAt || data.createdAt,
       })
     );

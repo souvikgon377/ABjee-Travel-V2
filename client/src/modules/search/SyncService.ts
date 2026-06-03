@@ -316,6 +316,10 @@ export class SyncService {
         email: data.email,
         role: data.role,
         status: data.status || 'active',
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        username: data.username || '',
+        photoURL: data.photoURL || data.avatar || data.profileImage || '',
       };
     }
 

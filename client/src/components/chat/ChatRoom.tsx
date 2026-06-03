@@ -2344,7 +2344,8 @@ const ChatRoom = () => {
                       resolveAvatarUrl(result as Record<string, unknown>) ||
                       userAvatarMap[result.id] ||
                       '';
-                    const fallbackInitial = (result.firstName?.[0] || result.username?.[0] || '?').toUpperCase();
+                    const fullName = `${result.firstName || ''} ${result.lastName || ''}`.trim() || result.displayName || result.email || 'User';
+                    const fallbackInitial = (result.firstName?.[0] || result.displayName?.[0] || result.username?.[0] || '?').toUpperCase();
                     return (
                       <div
                         key={result.id}
@@ -2352,14 +2353,16 @@ const ChatRoom = () => {
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Avatar className="h-8 w-8 shrink-0">
-                            <AvatarImage src={avatarSrc || undefined} alt={`${result.firstName || ''} ${result.lastName || ''}`.trim() || result.username || 'User'} />
+                            <AvatarImage src={avatarSrc || undefined} alt={fullName} />
                             <AvatarFallback className="bg-linear-to-br from-blue-400 to-indigo-500 text-white text-xs font-semibold">
                               {fallbackInitial}
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{result.firstName} {result.lastName}</p>
-                            <p className="text-xs text-muted-foreground truncate">@{result.username}</p>
+                            <p className="text-sm font-medium truncate">{fullName}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {result.username ? `@${result.username}` : (result.email || '')}
+                            </p>
                           </div>
                         </div>
                         <Button

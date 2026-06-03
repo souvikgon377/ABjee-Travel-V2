@@ -22,6 +22,18 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },
+  // Redirect legacy /community/room/:roomId paths to the canonical /chat/room/:roomId route.
+  // This covers old notification links, bookmarks, and shared invite URLs created before
+  // the route was moved/standardised under /chat/room/.
+  async redirects() {
+    return [
+      {
+        source: "/community/room/:roomId",
+        destination: "/chat/room/:roomId",
+        permanent: true, // 308 — tells browsers & crawlers the canonical URL has changed
+      },
+    ];
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 60 * 60 * 24 * 30,

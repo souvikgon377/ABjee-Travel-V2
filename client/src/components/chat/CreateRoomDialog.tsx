@@ -41,10 +41,13 @@ export interface RoomData {
 
 interface User {
   id: string;
-  username: string;
+  username?: string;
   firstName?: string;
   lastName?: string;
   avatar?: string;
+  displayName?: string;
+  email?: string;
+  photoURL?: string;
 }
 
 interface SelectedMember extends User {
@@ -271,24 +274,29 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
                     </div>
                   ) : users.length > 0 ? (
                     <div className="max-h-64 overflow-y-auto divide-y">
-                      {users.map(user => (
-                        <button
-                          key={user.id}
-                          type="button"
-                          onClick={() => handleAddMember(user)}
-                          className="w-full text-left p-3 hover:bg-blue-50 transition-colors flex items-center justify-between group"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">
-                              {user.firstName} {user.lastName}
+                      {users.map(user => {
+                        const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.displayName || user.email || 'User';
+                        return (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => handleAddMember(user)}
+                            className="w-full text-left p-3 hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                          >
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">
+                                {fullName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {user.username ? `@${user.username}` : (user.email || '')}
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-500">@{user.username}</div>
-                          </div>
-                          <span className="ml-2 px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700 group-hover:bg-blue-200 transition-colors">
-                            Add
-                          </span>
-                        </button>
-                      ))}
+                            <span className="ml-2 px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700 group-hover:bg-blue-200 transition-colors">
+                              Add
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-4 text-center text-sm text-gray-500">
@@ -308,24 +316,27 @@ const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
                     </Label>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {selectedMembers.map(member => (
-                      <div
-                        key={member.id}
-                        className="flex items-center gap-2 px-3 py-2 bg-linear-to-r from-blue-500 to-blue-600 text-white rounded-full text-sm font-medium shadow-md hover:shadow-lg transition-shadow"
-                      >
-                        <span>
-                          {member.firstName} {member.lastName}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMember(member.id)}
-                          className="hover:bg-white/20 rounded-full p-1 transition-colors"
-                          title="Remove member"
+                    {selectedMembers.map(member => {
+                      const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.displayName || member.email || 'User';
+                      return (
+                        <div
+                          key={member.id}
+                          className="flex items-center gap-2 px-3 py-2 bg-linear-to-r from-blue-500 to-blue-600 text-white rounded-full text-sm font-medium shadow-md hover:shadow-lg transition-shadow"
                         >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                          <span>
+                            {fullName}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMember(member.id)}
+                            className="hover:bg-white/20 rounded-full p-1 transition-colors"
+                            title="Remove member"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

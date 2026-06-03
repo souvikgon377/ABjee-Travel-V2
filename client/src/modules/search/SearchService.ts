@@ -195,7 +195,7 @@ export class SearchService {
 
         const params: any = {
           q: query || '*',
-          query_by: 'displayName,email,role,status',
+          query_by: 'displayName,email,role,status,firstName,lastName,username',
           sort_by: query ? '_text_match:desc,updatedAt:desc' : 'updatedAt:desc',
           per_page: limit,
           page,
@@ -811,49 +811,48 @@ export class SearchService {
    */
   private static async searchTypesense(options: SearchOptions): Promise<SearchResult | null> {
     const tStart = Date.now();
+    const query = String(options.query || '').trim();
+    const page = Math.max(1, options.page || 1);
+    const limit = Math.min(Math.max(1, options.limit || 10), 100);
+
+    // Build Typesense filter_by
+    const filters: string[] = [];
+    if (options.isActive !== undefined) {
+      filters.push(`isActive:=${options.isActive ? 'true' : 'false'}`);
+    }
+    if (options.category && options.category !== 'all') {
+      const cat = options.category;
+      const capitalized = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+      filters.push(`category:=[${cat}, ${cat.toLowerCase()}, ${capitalized}]`);
+    }
+
+    const contentFilterClause = this.buildTypesenseContentFilter(options.contentFilter);
+    if (contentFilterClause) {
+      filters.push(contentFilterClause);
+    }
+
+    // Build query string
+    const effectiveQuery = [query, options.location].filter(Boolean).join(' ').trim() || '*';
+    const isExploring = effectiveQuery === '*';
+
+    const searchParams: any = {
+      q: effectiveQuery,
+      // Use explicit `query_by` field names and provide weights via `query_by_weights`
+      // to support Typesense servers that don't accept inline weights like `name:5`.
+      query_by: 'name,name_lower,city,area,state,country,location_search,location_lower,description,description_lower',
+      query_by_weights: '5,5,3,2,2,2,1,1,1,1',
+      sort_by: isExploring 
+        ? 'popularity:desc,updatedAt:desc' 
+        : '_text_match:desc,popularity:desc,updatedAt:desc',
+      per_page: limit,
+      page: page,
+    };
+
+    if (filters.length > 0) {
+      searchParams.filter_by = filters.join(' && ');
+    }
 
     try {
-      const query = String(options.query || '').trim();
-      const page = Math.max(1, options.page || 1);
-      const limit = Math.min(Math.max(1, options.limit || 10), 100);
-
-      // Build Typesense filter_by
-      const filters: string[] = [];
-      if (options.isActive !== undefined) {
-        filters.push(`isActive:=${options.isActive ? 'true' : 'false'}`);
-      }
-      if (options.category && options.category !== 'all') {
-        const cat = options.category;
-        const capitalized = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
-        filters.push(`category:=[${cat}, ${cat.toLowerCase()}, ${capitalized}]`);
-      }
-
-      const contentFilterClause = this.buildTypesenseContentFilter(options.contentFilter);
-      if (contentFilterClause) {
-        filters.push(contentFilterClause);
-      }
-
-      // Build query string
-      const effectiveQuery = [query, options.location].filter(Boolean).join(' ').trim() || '*';
-      const isExploring = effectiveQuery === '*';
-
-      const searchParams: any = {
-        q: effectiveQuery,
-        // Use explicit `query_by` field names and provide weights via `query_by_weights`
-        // to support Typesense servers that don't accept inline weights like `name:5`.
-        query_by: 'name,name_lower,city,area,state,country,location_search,location_lower,description,description_lower',
-        query_by_weights: '5,5,3,2,2,2,1,1,1,1',
-        sort_by: isExploring 
-          ? 'popularity:desc,updatedAt:desc' 
-          : '_text_match:desc,popularity:desc,updatedAt:desc',
-        per_page: limit,
-        page: page,
-      };
-
-      if (filters.length > 0) {
-        searchParams.filter_by = filters.join(' && ');
-      }
-
       console.info('[SearchService] Searching Typesense', {
         query: effectiveQuery,
         filters: filters.length,
