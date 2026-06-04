@@ -416,12 +416,25 @@ const TourPlaces: React.FC = () => {
   const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
   const [hasHydrated, setHasHydrated] = useState(false);
   const reviewMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const bgVideoRef = useRef<HTMLVideoElement>(null);
 
 
 
   useEffect(() => {
     setHasHydrated(true);
   }, []);
+
+  useEffect(() => {
+    const video = bgVideoRef.current;
+    if (!video) return;
+    if (isVideoPlaying) {
+      video.play().catch((err) => {
+        console.info("Background video play failed/blocked:", err);
+      });
+    } else {
+      video.pause();
+    }
+  }, [isVideoPlaying, hasHydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1096,11 +1109,12 @@ const TourPlaces: React.FC = () => {
       <div className="fixed inset-0 z-0 pointer-events-none">
         {hasHydrated && (
           <video
-            autoPlay={isVideoPlaying && !mobilePerformanceMode}
+            ref={bgVideoRef}
+            autoPlay={isVideoPlaying}
             loop
             muted
             playsInline
-            preload={mobilePerformanceMode ? "none" : "metadata"}
+            preload="auto"
             className="absolute inset-0 h-full w-full object-cover"
           >
             <source src={STATIC_VIDEO_V1} type="video/mp4" />
