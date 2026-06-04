@@ -75,7 +75,7 @@ export default function OfferSpotlightPopup({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-70 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-70 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm overflow-hidden"
           style={{ zIndex: 120 }}
           onClick={closePopup}
         >
@@ -94,7 +94,7 @@ export default function OfferSpotlightPopup({
             transition={{ type: 'spring', stiffness: 280, damping: 24 }}
             onClick={(e) => e.stopPropagation()}
             data-lenis-prevent
-            className="fixed left-1/2 top-1/2 w-[min(92vw,48rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border border-rose-300/40 bg-linear-to-br from-rose-50/95 via-orange-50/95 to-amber-50/95 p-6 shadow-[0_32px_90px_rgba(0,0,0,0.4)] backdrop-blur-xl dark:from-rose-950/80 dark:via-orange-950/70 dark:to-amber-950/80 sm:p-8"
+            className="fixed left-1/2 top-1/2 w-[min(92vw,48rem)] -translate-x-1/2 -translate-y-1/2 overflow-x-hidden overflow-y-auto rounded-3xl border border-rose-300/40 bg-linear-to-br from-rose-50/95 via-orange-50/95 to-amber-50/95 p-6 shadow-[0_32px_90px_rgba(0,0,0,0.4)] backdrop-blur-xl dark:from-rose-950/80 dark:via-orange-950/70 dark:to-amber-950/80 sm:p-8"
             style={{ maxHeight: 'calc(100vh - 2rem)' }}
           >
             <motion.div

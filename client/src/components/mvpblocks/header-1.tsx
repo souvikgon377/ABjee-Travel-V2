@@ -827,8 +827,8 @@ export default function Header1() {
       style={{ perspective: '1000px', backfaceVisibility: 'hidden' }}
     >
       <div className="w-full px-3 sm:px-5 lg:px-6 xl:px-8">
-        <div className="relative flex h-16 items-center lg:h-20">
-          <div className="flex shrink-0 items-center gap-4">
+        <div className="relative flex h-16 items-center justify-between lg:h-20 gap-x-2 sm:gap-x-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <motion.div
               className="flex items-center space-x-2"
               whileHover={{ scale: 1.05 }}
@@ -852,7 +852,7 @@ export default function Header1() {
                     transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
                   />
                 )}
-                <div className="relative z-1 flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden">
+                <div className="relative z-1 flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden shrink-0">
                   <Image
                     src={publicAsset('/logo.jpg')}
                     alt="ABjee Travel"
@@ -874,11 +874,11 @@ export default function Header1() {
                     </motion.span>
                   )}
                 </div>
-                <span className={`relative z-1 hidden bg-linear-to-r bg-clip-text text-xl font-bold text-transparent sm:inline ${isPaidSubscriber ? 'from-amber-500 via-orange-500 to-rose-600' : 'from-rose-500 to-rose-700'}`}>
+                <span className={`relative z-1 hidden bg-linear-to-r bg-clip-text text-xl font-bold text-transparent xl:inline ${isPaidSubscriber ? 'from-amber-500 via-orange-500 to-rose-600' : 'from-rose-500 to-rose-700'}`}>
                   ABjee Travel
                 </span>
                 {isPaidSubscriber && (
-                  <span className="hidden items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-[0_0_14px_rgba(251,191,36,0.24)] sm:inline-flex">
+                  <span className="hidden items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-[0_0_14px_rgba(251,191,36,0.24)] xl:inline-flex">
                     <Crown className="h-3 w-3" />
                     Premium
                   </span>
@@ -888,31 +888,27 @@ export default function Header1() {
 
             {currentUser && userProfile?.role === 'admin' && (
               <motion.div
-                className="hidden lg:block"
+                className="hidden lg:block shrink-0"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
                 <Link
                   href="/admin"
-                  className="inline-flex items-center space-x-2 rounded-full bg-linear-to-r from-purple-500 to-purple-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg"
+                  className="inline-flex h-9 w-9 xl:h-auto xl:w-auto items-center justify-center rounded-full bg-linear-to-r from-purple-500 to-purple-700 text-sm font-medium text-white transition-all duration-200 hover:shadow-lg xl:px-4 xl:py-2"
+                  title="Admin Dashboard"
                 >
-                  <Shield className="h-4 w-4" />
-                  <span>Admin Dashboard</span>
+                  <Shield className="h-4 w-4 shrink-0" />
+                  <span className="hidden xl:inline xl:ml-2">Admin Dashboard</span>
                 </Link>
               </motion.div>
             )}
-
-            {/* Registration header button removed per request */}
           </div>
 
-          <nav
-            className={`absolute left-1/2 top-1/2 hidden w-full -translate-x-1/2 -translate-y-1/2 items-center lg:grid ${navMaxWidthClass}`}
-            style={navGridStyle}
-          >
+          <nav className="hidden lg:flex items-center justify-center gap-x-2 xl:gap-x-4 2xl:gap-x-5 flex-1 max-w-xl mx-2">
             {visibleNavItems.map((item) => (
               <div
                 key={item.name}
-                className="relative flex justify-center"
+                className="relative"
                 onMouseEnter={() =>
                   item.hasDropdown && setActiveDropdown(item.name)
                 }
@@ -920,16 +916,15 @@ export default function Header1() {
               >
                 <Link href={item.href!}
                   className={[
-                    'flex items-center space-x-1 whitespace-nowrap font-medium transition-colors duration-200 hover:text-rose-500',
+                    'flex items-center space-x-1 whitespace-nowrap text-xs lg:text-[13px] xl:text-sm 2xl:text-base font-medium transition-colors duration-200 hover:text-rose-500',
                     isActive(item.href) ? 'text-rose-500' : 'text-foreground',
                   ].join(' ')}
                 >
                   <span>{item.name}</span>
                   {item.hasDropdown && (
-                    <ChevronDown className="h-4 w-4 transition-transform duration-200" />
+                    <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200" />
                   )}
                 </Link>
-                
 
                 {item.hasDropdown && (
                   <AnimatePresence>
@@ -968,19 +963,19 @@ export default function Header1() {
             ))}
           </nav>
 
-          <div className="ml-auto hidden items-center space-x-3 lg:flex">
+          <div className="ml-auto hidden items-center gap-1.5 xl:gap-2.5 lg:flex shrink-0">
             {currentUser ? (
               <>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-1.5 xl:gap-2.5">
                   <Link
                     href="/profile#abjee-wallet"
-                    className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-background text-emerald-600 transition-colors hover:bg-emerald-500/10 active:scale-95 touch-manipulation pointer-events-auto"
+                    className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-background text-emerald-600 transition-colors hover:bg-emerald-500/10 active:scale-95 touch-manipulation pointer-events-auto shrink-0"
                     aria-label="Open ABJee Wallet"
                     title="ABJee Wallet"
                   >
                     <Wallet className="h-4 w-4" />
                   </Link>
-                  <div className="relative" ref={desktopNotificationsRef}>
+                  <div className="relative shrink-0" ref={desktopNotificationsRef}>
                     <button
                       type="button"
                       onClick={() => setNotificationsOpen((open) => !open)}
@@ -1000,7 +995,7 @@ export default function Header1() {
                     </AnimatePresence>
                   </div>
 
-                  <div className="text-right">
+                  <div className="text-right hidden xl:block">
                     <p className="text-sm font-medium text-foreground">
                       {userDisplayName}
                     </p>
@@ -1017,7 +1012,7 @@ export default function Header1() {
                   <button
                     type="button"
                     onClick={goToProfile}
-                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 shrink-0"
                     aria-label="Open profile"
                     title="Open profile"
                   >
@@ -1044,47 +1039,50 @@ export default function Header1() {
                   }}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="inline-flex items-center space-x-2 rounded-full border-2 border-rose-500 px-4 py-2 text-sm font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white"
+                  className="inline-flex h-9 w-9 xl:h-auto xl:w-auto items-center justify-center rounded-full border-2 border-rose-500 text-sm font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white shrink-0"
+                  title="Logout"
                 >
                   <LogOut className="h-4 w-4" />
-                  <span>Logout</span>
+                  <span className="hidden xl:inline xl:ml-2">Logout</span>
                 </motion.button>
               </>
             ) : (
               <>
                 <Link
                   href="/auth"
-                  className="font-medium text-foreground transition-colors duration-200 hover:text-rose-500"
+                  className="font-medium text-foreground transition-colors duration-200 hover:text-rose-500 shrink-0 text-xs lg:text-sm"
                 >
                   Sign In
                 </Link>
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="shrink-0">
                   <Link
                     href="/auth"
-                    className="inline-flex items-center space-x-2 rounded-full bg-linear-to-r from-rose-500 to-rose-700 px-6 py-2.5 font-medium text-white transition-all duration-200 hover:shadow-lg"
+                    className="inline-flex items-center space-x-1.5 rounded-full bg-linear-to-r from-rose-500 to-rose-700 px-4 py-2 lg:px-5 lg:py-2.5 font-medium text-white transition-all duration-200 hover:shadow-lg text-xs lg:text-sm"
                   >
                     <span>Get Started</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </motion.div>
               </>
             )}
-            <ModeToggle />
+            <div className="shrink-0">
+              <ModeToggle />
+            </div>
           </div>
 
           {/* Mobile: Notifications + Theme toggle + Hamburger */}
-          <div className="ml-auto flex items-center space-x-2 lg:hidden">
+          <div className="ml-auto flex items-center space-x-1 sm:space-x-2 lg:hidden shrink-0">
             {currentUser && (
               <>
                 <Link
                   href="/profile#abjee-wallet"
-                  className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-background text-emerald-600 transition-colors hover:bg-emerald-500/10 active:scale-95 touch-manipulation pointer-events-auto"
+                  className="relative z-50 inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-background text-emerald-600 transition-colors hover:bg-emerald-500/10 active:scale-95 touch-manipulation pointer-events-auto shrink-0"
                   aria-label="Open ABJee Wallet"
                   title="ABJee Wallet"
                 >
                   <Wallet className="h-4 w-4" />
                 </Link>
-                <div className="relative" ref={mobileNotificationsRef}>
+                <div className="relative shrink-0" ref={mobileNotificationsRef}>
                   <button
                     type="button"
                     onClick={() => setNotificationsOpen((open) => !open)}
@@ -1105,9 +1103,11 @@ export default function Header1() {
                 </div>
               </>
             )}
-            <ModeToggle />
+            <div className="shrink-0">
+              <ModeToggle />
+            </div>
             <button
-              className={`rounded-lg p-2 transition-all duration-200 active:scale-95 ${isPaidSubscriber ? 'border border-amber-300/80 bg-linear-to-r from-amber-100/85 via-yellow-50/80 to-orange-100/85 text-amber-700 shadow-[0_0_16px_rgba(251,191,36,0.3)] hover:bg-amber-100/90 dark:border-amber-500/50 dark:from-amber-900/25 dark:via-yellow-950/20 dark:to-orange-900/20 dark:text-amber-300 dark:shadow-[0_0_18px_rgba(251,191,36,0.25)]' : 'hover:bg-muted'}`}
+              className={`rounded-lg p-2 transition-all duration-200 active:scale-95 shrink-0 ${isPaidSubscriber ? 'border border-amber-300/80 bg-linear-to-r from-amber-100/85 via-yellow-50/80 to-orange-100/85 text-amber-700 shadow-[0_0_16px_rgba(251,191,36,0.3)] hover:bg-amber-100/90 dark:border-amber-500/50 dark:from-amber-900/25 dark:via-yellow-950/20 dark:to-orange-900/20 dark:text-amber-300 dark:shadow-[0_0_18px_rgba(251,191,36,0.25)]' : 'hover:bg-muted'}`}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label="Toggle menu"
             >

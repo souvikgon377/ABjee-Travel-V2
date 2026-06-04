@@ -652,6 +652,7 @@ body.payment-modal-open {
 }
 
 /* Prevent horizontal scroll */
+html,
 body {
   overflow-x: hidden;
 }
