@@ -283,6 +283,9 @@ export async function POST(req: NextRequest) {
     await MetricsService.increment('admin_write_fail');
     console.error('[ReviewsAPI] POST Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create review.';
-    return fail(message, 500);
+    const status = (error && typeof error === 'object' && 'status' in error && typeof (error as any).status === 'number')
+      ? (error as any).status
+      : 500;
+    return fail(message, status);
   }
 }

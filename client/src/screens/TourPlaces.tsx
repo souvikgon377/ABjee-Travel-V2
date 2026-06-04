@@ -615,10 +615,10 @@ const TourPlaces: React.FC = () => {
       const nextResults = Array.isArray(payload.results) ? payload.results : [];
       // Normalize IDs: ensure every result has a stable string `id` to avoid client-side filtering
       const normalizedNextResults = nextResults.map((r, idx) => {
-        const raw = (r && typeof r === 'object') ? r as Record<string, unknown> : {};
+        const raw = (r && typeof r === 'object') ? r as unknown as Record<string, unknown> : {};
         const candidateId = raw.id ?? raw._id ?? raw.placeId ?? raw.placeID ?? raw.name ?? `${normalizedTerm}:p${page}:i${idx}`;
         const idStr = typeof candidateId === 'string' ? candidateId : String(candidateId);
-        return { ...(r as Record<string, unknown>), id: idStr } as TouristPlace;
+        return { ...(r as unknown as Record<string, unknown>), id: idStr } as TouristPlace;
       });
 
       // Debug: log raw next results IDs for troubleshooting
@@ -1355,73 +1355,94 @@ const TourPlaces: React.FC = () => {
                       </div>
 
                       <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm sm:p-5">
-                        <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
-                        <p className="mt-1 text-[11px] text-emerald-700">
-                          Earn Rb points: Free users get 1 for text + 1 for media. Paid and Premium users get 2 for text + 3 for media. 1 Rb = Rs 1.
-                        </p>
-                        <div className="mt-3 flex items-center gap-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
+                        {!user ? (
+                          <div className="flex flex-col items-center justify-center py-4 text-center">
+                            <div className="mb-3 rounded-full bg-rose-50 p-3 text-rose-500">
+                              <Star className="h-6 w-6 text-rose-500 fill-rose-500" />
+                            </div>
+                            <h4 className="text-sm font-bold text-gray-800">Want to share your experience?</h4>
+                            <p className="mt-1 max-w-sm text-xs font-medium text-emerald-600">
+                              Please login to post a review and get ABjee points in your wallet!
+                            </p>
                             <button
-                              key={star}
                               type="button"
-                              onClick={() => setReviewRating(star)}
-                              className="rounded p-1 transition-colors hover:bg-amber-100"
-                              aria-label={`Rate ${star} stars`}
+                              onClick={() => router.push("/auth")}
+                              className="mt-4 inline-flex items-center justify-center rounded-full bg-rose-500 px-6 py-2 text-xs font-bold text-white hover:bg-rose-600 transition"
                             >
-                              <Star className={`h-5 w-5 ${star <= reviewRating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`} />
+                              Login Now
                             </button>
-                          ))}
-                          <span className="ml-2 text-xs text-gray-500">{reviewRating > 0 ? `${reviewRating}/5 selected` : "Tap stars to rate"}</span>
-                        </div>
-                        <input
-                          type="text"
-                          value={reviewText}
-                          onChange={(event) => setReviewText(event.target.value)}
-                          placeholder="Write your review (optional)..."
-                          className="mt-3 w-full rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
-                        />
-                        <input
-                          ref={reviewMediaInputRef}
-                          type="file"
-                          accept="image/*,video/*"
-                          multiple
-                          onChange={handleReviewMediaFileChange}
-                          className="hidden"
-                        />
-                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <button
-                            type="button"
-                            onClick={() => reviewMediaInputRef.current?.click()}
-                            className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50"
-                          >
-                            <ImageIcon className="mr-1.5 h-4 w-4" />
-                            Choose Files
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void submitPlaceReview()}
-                            disabled={reviewSubmitting || (!reviewText.trim() && reviewMediaFiles.length === 0 && reviewRating === 0)}
-                            className="inline-flex items-center justify-center rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
-                          >
-                            {reviewSubmitting ? "Posting..." : "Post Review + Media"}
-                          </button>
-                        </div>
-                        {reviewMediaFiles.length > 0 && (
-                          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            {reviewMediaFiles.map((item) => (
-                              <div key={item.preview} className="overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
-                                {item.file.type.startsWith("video/") ? (
-                                  <video src={item.preview} controls playsInline className="h-24 w-full object-cover bg-black" />
-                                ) : (
-                                  <img src={item.preview} alt="Selected review media" className="h-24 w-full object-cover" />
-                                )}
-                              </div>
-                            ))}
                           </div>
+                        ) : (
+                          <>
+                            <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
+                            <p className="mt-1 text-[11px] text-emerald-700">
+                              Earn Rb points: Free users get 1 for text + 1 for media. Paid and Premium users get 2 for text + 3 for media. 1 Rb = Rs 1.
+                            </p>
+                            <div className="mt-3 flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => setReviewRating(star)}
+                                  className="rounded p-1 transition-colors hover:bg-amber-100"
+                                  aria-label={`Rate ${star} stars`}
+                                >
+                                  <Star className={`h-5 w-5 ${star <= reviewRating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`} />
+                                </button>
+                              ))}
+                              <span className="ml-2 text-xs text-gray-500">{reviewRating > 0 ? `${reviewRating}/5 selected` : "Tap stars to rate"}</span>
+                            </div>
+                            <input
+                              type="text"
+                              value={reviewText}
+                              onChange={(event) => setReviewText(event.target.value)}
+                              placeholder="Write your review (optional)..."
+                              className="mt-3 w-full rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                            />
+                            <input
+                              ref={reviewMediaInputRef}
+                              type="file"
+                              accept="image/*,video/*"
+                              multiple
+                              onChange={handleReviewMediaFileChange}
+                              className="hidden"
+                            />
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <button
+                                type="button"
+                                onClick={() => reviewMediaInputRef.current?.click()}
+                                className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                              >
+                                <ImageIcon className="mr-1.5 h-4 w-4" />
+                                Choose Files
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void submitPlaceReview()}
+                                disabled={reviewSubmitting || (!reviewText.trim() && reviewMediaFiles.length === 0 && reviewRating === 0)}
+                                className="inline-flex items-center justify-center rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-600"
+                              >
+                                {reviewSubmitting ? "Posting..." : "Post Review + Media"}
+                              </button>
+                            </div>
+                            {reviewMediaFiles.length > 0 && (
+                              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {reviewMediaFiles.map((item) => (
+                                  <div key={item.preview} className="overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                                    {item.file.type.startsWith("video/") ? (
+                                      <video src={item.preview} controls playsInline className="h-24 w-full object-cover bg-black" />
+                                    ) : (
+                                      <img src={item.preview} alt="Selected review media" className="h-24 w-full object-cover" />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <p className="mt-2 text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
+                            {reviewRewardMessage && <p className="mt-2 text-xs font-semibold text-emerald-700">{reviewRewardMessage}</p>}
+                            {reviewUploadError && <p className="mt-2 text-xs text-red-600">{reviewUploadError}</p>}
+                          </>
                         )}
-                        <p className="mt-2 text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
-                        {reviewRewardMessage && <p className="mt-2 text-xs font-semibold text-emerald-700">{reviewRewardMessage}</p>}
-                        {reviewUploadError && <p className="mt-2 text-xs text-red-600">{reviewUploadError}</p>}
                       </div>
 
                       <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm">

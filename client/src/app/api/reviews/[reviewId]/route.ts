@@ -51,6 +51,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ revi
     return ok({ success: true, reversedPoints: reversal.reversedPoints, wallet: reversal.wallet });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to delete review.';
-    return fail(message, 500);
+    const status = (error && typeof error === 'object' && 'status' in error && typeof (error as any).status === 'number')
+      ? (error as any).status
+      : 500;
+    return fail(message, status);
   }
 }
