@@ -61,6 +61,7 @@ export interface TouristPlace {
   extraInfo: InfoSection[];
   createdAt?: unknown;
   updatedAt?: unknown;
+  popularity?: number;
 }
 
 interface TouristImportSummary {
@@ -168,8 +169,8 @@ const toMillis = (value: unknown): number => {
 };
 
 const compareTouristPlaces = (left: TouristPlace, right: TouristPlace) => {
-  const leftPopularity = Number((left as Record<string, unknown>).popularity ?? 0);
-  const rightPopularity = Number((right as Record<string, unknown>).popularity ?? 0);
+  const leftPopularity = Number(left.popularity ?? 0);
+  const rightPopularity = Number(right.popularity ?? 0);
   if (leftPopularity !== rightPopularity) {
     return rightPopularity - leftPopularity;
   }
@@ -955,9 +956,11 @@ export function TouristPlacesManager() {
 
   const fetchSummary = useCallback(async () => {
     try {
-      const response = await adminAPI.getTouristPlaceList({ page: 1, limit: TOURIST_PLACES_PAGE_SIZE });
+      const response = await adminAPI.getTouristPlacesCount();
       const data = response.data?.data ?? response.data ?? {};
       const totalCount = Number(data.totalCount || 0);
+      const countSource = data.source || 'unknown';
+      console.log('[TouristPlaces:Summary] Count fetched. Source:', countSource, 'Total:', totalCount);
       setSummary((current) => ({
         ...current,
         totalCount,

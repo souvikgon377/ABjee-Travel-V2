@@ -168,6 +168,7 @@ export const adminAPI = {
     limit?: number;
     forceRefresh?: boolean;
   }) => adminApiInstance.get('/admin/tourist-places/list', { params }),
+  getTouristPlacesCount: () => adminApiInstance.get('/admin/tourist-places/count'),
   createTouristPlace: (data: {
     name: string;
     area?: string;
