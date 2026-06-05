@@ -88,6 +88,7 @@ export const COLLECTION_NAME = 'tourist_places';
 export const USERS_COLLECTION = 'users';
 export const TRAVEL_DESTINATIONS_COLLECTION = 'travel_destinations';
 export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
+export const ADVERTISEMENTS_COLLECTION = 'advertisements';
 
 type TypesenseSchemaField = {
   name: string;
@@ -180,6 +181,34 @@ export const travelRequestsSchema = {
   default_sorting_field: 'updatedAt',
 };
 
+/**
+ * Schema for advertisements
+ */
+export const advertisementsSchema = {
+  name: ADVERTISEMENTS_COLLECTION,
+  fields: [
+    { name: 'name', type: 'string' as const },
+    { name: 'name_lower', type: 'string' as const, optional: true },
+    { name: 'mobileNumber', type: 'string' as const, optional: true },
+    { name: 'country', type: 'string' as const },
+    { name: 'state', type: 'string' as const },
+    { name: 'area', type: 'string' as const },
+    { name: 'category', type: 'string' as const, optional: true },
+    { name: 'description', type: 'string' as const, optional: true },
+    { name: 'description_lower', type: 'string' as const, optional: true },
+    { name: 'photoUrl', type: 'string' as const, optional: true },
+    { name: 'ownerEmail', type: 'string' as const, optional: true },
+    { name: 'ownerName', type: 'string' as const, optional: true },
+    { name: 'ownerPhoneNumber', type: 'string' as const, optional: true },
+    { name: 'status', type: 'string' as const },
+    { name: 'approvalStatus', type: 'string' as const, optional: true },
+    { name: 'createdAt', type: 'int64' as const, optional: true },
+    { name: 'updatedAt', type: 'int64' as const },
+    { name: 'approvedAt', type: 'int64' as const, optional: true },
+  ],
+  default_sorting_field: 'updatedAt',
+};
+
 // ─── Health Check ─────────────────────────────────────────────────────────────
 
 /**
@@ -226,7 +255,7 @@ export async function initializeTypesense() {
     return [];
   }
 
-  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema];
+  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema, advertisementsSchema];
   const results: { name: string; status: 'created' | 'updated' | 'exists' | 'error'; message?: string }[] = [];
 
   for (const schema of schemas) {

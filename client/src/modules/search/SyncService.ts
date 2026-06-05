@@ -21,6 +21,10 @@ export interface PlaceSyncData {
   coverImage?: string;
   description?: string;
   googleMapsUrl?: string;
+  media?: any;
+  photos?: any;
+  videos?: any;
+  mediaCount?: number;
 }
 
 export class SyncService {
@@ -178,6 +182,48 @@ export class SyncService {
       collection: 'travel_destinations',
       id: destination.id,
       data: destination
+    });
+  }
+
+  static async syncAdvertisement(ad: any) {
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        const doc = this.transformForTypesense('advertisements', ad);
+        try {
+          await client.collections('advertisements').documents().upsert(doc);
+          console.info(`[SyncService] 🔁 Directly synced advertisements/${ad.id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct advertisement upsert failed:', err?.message || err);
+
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              await initializeTypesense();
+              await client.collections('advertisements').documents().upsert(doc);
+              console.info(`[SyncService] 🔁 Directly synced advertisements/${ad.id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense for advertisements failed:', retryErr);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed for advertisements:', err);
+    }
+
+    await QueueService.push({
+      type: 'SYNC',
+      collection: 'advertisements',
+      id: ad.id,
+      data: ad
     });
   }
 
@@ -341,14 +387,41 @@ export class SyncService {
       };
     }
 
+    if (collection === 'advertisements') {
+      const name = String(data.name || '').trim();
+      const description = String(data.description || '').trim();
+      return {
+        ...base,
+        name,
+        name_lower: normalizeSearchField(name),
+        mobileNumber: data.mobileNumber || '',
+        country: data.country || '',
+        state: data.state || '',
+        area: data.area || '',
+        category: data.category || '',
+        description,
+        description_lower: normalizeSearchField(description),
+        photoUrl: data.photoUrl || '',
+        ownerEmail: data.ownerEmail || '',
+        ownerName: data.ownerName || '',
+        ownerPhoneNumber: data.ownerPhoneNumber || '',
+        status: data.status || 'pending',
+        approvalStatus: data.approvalStatus || 'pending',
+        createdAt: this.toTimestamp(data.createdAt),
+        approvedAt: data.approvedAt ? this.toTimestamp(data.approvedAt) : null,
+      };
+    }
+
     return { ...base, ...data };
   }
 
   private static toTimestamp(value: any): number {
-    if (!value) return Date.now();
-    if (typeof value === 'number') return value;
+    if (!value) return Math.floor(Date.now() / 1000);
+    if (typeof value === 'number') {
+      return value > 10_000_000_000 ? Math.floor(value / 1000) : value;
+    }
     if (value.seconds) return value.seconds;
     if (value instanceof Date) return Math.floor(value.getTime() / 1000);
-    return Date.now();
+    return Math.floor(Date.now() / 1000);
   }
 }

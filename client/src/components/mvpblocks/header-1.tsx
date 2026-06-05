@@ -904,7 +904,7 @@ export default function Header1() {
             )}
           </div>
 
-          <nav className="hidden lg:flex items-center justify-center gap-x-2 xl:gap-x-4 2xl:gap-x-5 flex-1 max-w-xl mx-2">
+          <nav className="hidden lg:flex items-center justify-center gap-x-2 xl:gap-x-4 2xl:gap-x-5 mx-auto">
             {visibleNavItems.map((item) => (
               <div
                 key={item.name}
@@ -963,7 +963,7 @@ export default function Header1() {
             ))}
           </nav>
 
-          <div className="ml-auto hidden items-center gap-1.5 xl:gap-2.5 lg:flex shrink-0">
+          <div className="hidden items-center gap-1.5 xl:gap-2.5 lg:flex shrink-0">
             {currentUser ? (
               <>
                 <div className="flex items-center gap-1.5 xl:gap-2.5">

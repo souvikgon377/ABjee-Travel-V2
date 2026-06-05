@@ -56,6 +56,10 @@ async function backfill() {
         coverImage: data.coverImage,
         googleMapsUrl: data.googleMapsUrl,
         description: data.description,
+        media: data.media,
+        photos: data.photos,
+        videos: data.videos,
+        mediaCount: data.mediaCount,
       } as any)
     );
 
@@ -90,12 +94,25 @@ async function backfill() {
       })
     );
 
+    console.log('\nAdvertisements');
+    const totalAdvertisements = await syncCollectionInBatches(
+      'advertisements',
+      'advertisements',
+      'Advertisements',
+      (data, id) => SyncService.syncAdvertisement({
+        id,
+        ...data,
+        updatedAt: data.updatedAt || data.createdAt,
+      })
+    );
+
     const duration = ((Date.now() - tStart) / 1000).toFixed(2);
     console.log(`\n✅ Full Backfill Complete in ${duration}s!`);
     console.log(`📊 Summary:`);
     console.log(`   - Tourist Places: ${totalPlaces} queued for sync`);
     console.log(`   - Users: ${totalUsers} queued for sync`);
     console.log(`   - Travel Destinations: ${totalTravelDestinations} queued for sync`);
+    console.log(`   - Advertisements: ${totalAdvertisements} queued for sync`);
     console.log(`\n💡 Next Steps:`);
     console.log(`   1. Start the worker: npm run worker:search-sync`);
     console.log(`   2. Monitor logs for sync progress`);

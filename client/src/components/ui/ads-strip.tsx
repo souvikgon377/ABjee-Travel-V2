@@ -30,7 +30,6 @@ type AdItem = {
   ownerPhoneNumber?: string;
   status?: string;
   approvalStatus?: string;
-  approvedAt?: any;
   createdAt?: any;
   approvedAt?: any;
   updatedAt?: any;
@@ -66,26 +65,52 @@ const adMatchesSearch = (item: AdItem, searchTerm: string, places: TouristPlace[
     return true;
   }
 
-  const adParts = [item.area, item.state, item.country, item.name, item.description].map(normalize).filter(Boolean);
-
-  if (term && adParts.some((part) => part.includes(term) || term.includes(part))) {
-    return true;
-  }
-
+  const adName = normalize(item.name);
+  const adCategory = normalize(item.category);
+  const adDesc = normalize(item.description);
   const adArea = normalize(item.area);
   const adState = normalize(item.state);
   const adCountry = normalize(item.country);
 
-  return places.some((place) => {
-    const placeLocations = [place.area, place.city, place.state].map(normalize).filter(Boolean);
-    const placeState = normalize(place.state);
+  // 1. Direct search term match on any ad fields (e.g. searching "Bike rental" or "Kolkata")
+  if (term) {
+    const isDirectMatch = 
+      adName.includes(term) ||
+      adCategory.includes(term) ||
+      adDesc.includes(term) ||
+      adArea.includes(term) ||
+      adState.includes(term) ||
+      adCountry.includes(term);
+    if (isDirectMatch) return true;
+  }
 
-    return (
-      (adArea && placeLocations.includes(adArea)) ||
-      (adState && placeState === adState) ||
-      (term && adCountry === term)
-    );
-  });
+  // 2. Location-based match from the searched tourist places
+  if (places.length > 0) {
+    return places.some((place) => {
+      const placeCountry = normalize(place.country);
+      const placeState = normalize(place.state);
+      const placeCity = normalize(place.city);
+      const placeArea = normalize(place.area);
+
+      // Match Country
+      const countryMatch = Boolean(adCountry && placeCountry && adCountry === placeCountry);
+
+      // Match State
+      const stateMatch = Boolean(adState && placeState && adState === placeState);
+
+      // Match Location (Area / City)
+      const areaMatch = Boolean(adArea && (
+        adArea === placeArea ||
+        adArea === placeCity ||
+        (placeArea && placeArea.includes(adArea)) ||
+        (placeCity && placeCity.includes(adArea))
+      ));
+
+      return countryMatch || stateMatch || areaMatch;
+    });
+  }
+
+  return false;
 };
 
 export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }: AdsStripProps) {
@@ -110,16 +135,17 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
     (async () => {
       try {
-        const snap = await getDocs(query(collection(firestoreDb, 'advertisements')));
+        const response = await fetch('/api/advertisements/list?limit=100');
+        if (!response.ok) return;
+        const payload = await response.json();
         if (!mounted) return;
 
-        const rows: AdItem[] = snap.docs.map((document) => {
-          const data = document.data() as Record<string, any>;
+        const rows: AdItem[] = (payload.data?.data || []).map((data: any) => {
           const status = String(data.status || '').toLowerCase();
           const approvalStatus = String(data.approvalStatus || '').toLowerCase();
 
           return {
-            id: document.id,
+            id: data.id,
             photoUrl: String(data.photoUrl || ''),
             name: typeof data.name === 'string' ? data.name : '',
             mobileNumber: typeof data.mobileNumber === 'string' ? data.mobileNumber : '',
@@ -141,7 +167,10 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
         const approvedRows = rows.filter((row) => row.photoUrl && (row.status === 'approved' || row.approvalStatus === 'approved'));
         const matchedRows = approvedRows.filter((row) => adMatchesSearch(row, searchTerm, places));
-        const nextItems = matchedRows.length > 0 ? matchedRows : approvedRows;
+        
+        // Show ONLY matched rows if there is a search filter applied. Do not fall back to all approved rows.
+        const hasFilter = Boolean(normalize(searchTerm) || places.length > 0);
+        const nextItems = hasFilter ? matchedRows : approvedRows;
 
         setItems(
           nextItems

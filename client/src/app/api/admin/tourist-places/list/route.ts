@@ -11,7 +11,9 @@ export const runtime = 'nodejs';
 const toMillis = (value: unknown): number => {
   if (!value) return 0;
   if (value instanceof Date) return value.getTime();
-  if (typeof value === 'number') return value;
+  if (typeof value === 'number') {
+    return value < 10_000_000_000 ? value * 1000 : value;
+  }
   if (typeof value === 'string') {
     const parsed = Date.parse(value);
     return Number.isNaN(parsed) ? 0 : parsed;
@@ -98,29 +100,7 @@ export async function GET(req: NextRequest) {
     // Admin photo-status counts must be an exact partition of the collection.
     // Typesense can exclude documents where optional mediaCount is missing, so use
     // the same shared photo helper against Firestore rows for these browse filters.
-    if (!search.trim() && !location.trim() && filter !== 'all') {
-      const snap = await adminDb
-        .collection('touristPlaces')
-        .limit(5000)
-        .get();
-      const filteredRows = snap.docs
-        .map((d: any) => ({ id: d.id, ...d.data() }))
-        .filter((row: any) => matchesContentFilter(row, filter))
-        .sort(compareTouristPlaces);
-      const startIdx = (page - 1) * limit;
-      const paginatedRows = filteredRows.slice(startIdx, startIdx + limit);
 
-      return ok({
-        data: paginatedRows,
-        rows: paginatedRows,
-        total: filteredRows.length,
-        totalCount: filteredRows.length,
-        page,
-        hasMore: filteredRows.length > startIdx + limit,
-        source: 'firestore_content_filter',
-        firestoreReads: snap.size,
-      });
-    }
 
     const result = await SearchService.searchPlaces({
       query: search,

@@ -163,7 +163,12 @@ const normalizeDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot): SharedPlace
 };
 
 const toMillis = (value: unknown) => {
-  if (typeof value === 'object' && value !== null) {
+  if (!value) return 0;
+  if (typeof value === 'number') {
+    return value < 10_000_000_000 ? value * 1000 : value;
+  }
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object') {
     const ts = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
     if (typeof ts.toDate === 'function') return ts.toDate().getTime();
     if (typeof ts.seconds === 'number') return (ts.seconds * 1000) + Math.floor((ts.nanoseconds ?? 0) / 1_000_000);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from '
 import { collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { CheckCircle2, Clock3, Loader2, Megaphone, PencilLine, RefreshCw, Search, Trash2, XCircle, UploadCloud } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import { auth } from '@/lib/firebase';
 import { AdvertisementForm } from '@/components/ui/advertisement-form';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +22,6 @@ type AdvertisementDoc = {
   photoUrl: string;
   idProofUrl?: string | null;
   photoPublicId?: string | null;
-  idProofUrl?: string | null;
   idProofPublicId?: string | null;
   idProofHash?: string | null;
   ownerEmail?: string | null;
@@ -88,15 +88,25 @@ export function AdvertisementsManager() {
     setErrorMessage('');
 
     try {
-      const snapshot = await getDocs(query(collection(firestoreDb, AD_COLLECTION), orderBy('createdAt', 'desc')));
-      const rows = snapshot.docs.map((document) => {
-        const data = document.data() as Record<string, any>;
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      
+      // Query advertisements from Typesense via admin API route
+      const response = await fetch(`/api/admin/advertisements/list?search=${encodeURIComponent(searchQuery)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load advertisements from search index: ${response.statusText}`);
+      }
+      const payload = await response.json();
+      const rows = (payload.data?.data || []).map((data: any) => {
         const status = (data.status || 'pending') as AdvertisementDoc['status'];
         const candidateEmail = (typeof data.ownerEmail === 'string' && data.ownerEmail) || (typeof data.email === 'string' && data.email) || null;
         const candidateName = (typeof data.ownerName === 'string' && data.ownerName) || (typeof data.name === 'string' && data.name) || null;
         const candidatePhone = (typeof data.ownerPhoneNumber === 'string' && data.ownerPhoneNumber) || (typeof data.mobileNumber === 'string' && data.mobileNumber) || null;
         return {
-          id: document.id,
+          id: data.id,
           name: String(data.name || ''),
           mobileNumber: String(data.mobileNumber || ''),
           country: String(data.country || ''),
@@ -124,15 +134,27 @@ export function AdvertisementsManager() {
 
       setItems(rows);
 
-      await Promise.all(
-        rows
-          .filter((row) => row.status !== row.approvalStatus)
-          .map((row) => updateDoc(doc(firestoreDb, AD_COLLECTION, row.id), {
-            approvalStatus: normalizeApprovalStatus(row.status),
-            ...(row.status === 'approved' ? { approvedAt: row.updatedAt || serverTimestamp() } : {}),
-            updatedAt: serverTimestamp(),
-          }))
-      );
+      const updates = rows.filter((row: any) => row.status !== row.approvalStatus);
+      if (updates.length > 0) {
+        await Promise.all(
+          updates.map(async (row: any) => {
+            await updateDoc(doc(firestoreDb, AD_COLLECTION, row.id), {
+              approvalStatus: normalizeApprovalStatus(row.status),
+              ...(row.status === 'approved' ? { approvedAt: row.updatedAt || serverTimestamp() } : {}),
+              updatedAt: serverTimestamp(),
+            });
+            // Trigger sync for automatically fixed mismatch statuses
+            await fetch('/api/advertisements/sync', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ id: row.id, action: 'upsert' }),
+            }).catch(err => console.warn('Mismatched status sync failed', err));
+          })
+        );
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load advertisements');
     } finally {
@@ -141,8 +163,11 @@ export function AdvertisementsManager() {
   };
 
   useEffect(() => {
-    void loadItems();
-  }, []);
+    const timer = setTimeout(() => {
+      void loadItems();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const pendingItems = useMemo(
     () => items.filter((item) => item.status === 'pending'),
@@ -254,7 +279,7 @@ export function AdvertisementsManager() {
       if (!editingItem.mobileNumber.trim()) throw new Error('Mobile number is required');
       if (!editingItem.country || !editingItem.state || !editingItem.area) throw new Error('Please select country, state, and area/locality');
 
-      let photoData = {
+      let photoData: any = {
         photoUrl: editingItem.photoUrl,
       };
 
@@ -282,6 +307,17 @@ export function AdvertisementsManager() {
         updatedAt: serverTimestamp(),
       });
 
+      // Trigger real-time Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: editingItem.id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger sync', err));
+
       closeEditor();
       await loadItems();
     } catch (error) {
@@ -300,6 +336,18 @@ export function AdvertisementsManager() {
 
     try {
       await deleteDoc(doc(firestoreDb, AD_COLLECTION, id));
+
+      // Trigger real-time Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id, action: 'delete' }),
+      }).catch((err) => console.error('Failed to trigger delete sync', err));
+
       if (editingItem?.id === id) {
         closeEditor();
       }
@@ -320,6 +368,18 @@ export function AdvertisementsManager() {
         approvedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      // Trigger real-time Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger approve sync', err));
+
       await loadItems();
     } finally {
       setActionId(null);
@@ -334,6 +394,18 @@ export function AdvertisementsManager() {
         approvalStatus: 'rejected',
         updatedAt: serverTimestamp(),
       });
+
+      // Trigger real-time Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger reject sync', err));
+
       await loadItems();
     } finally {
       setActionId(null);

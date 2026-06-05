@@ -3,6 +3,7 @@ import client, {
   TRAVEL_DESTINATIONS_COLLECTION,
   TYPESENSE_ENABLED,
   USERS_COLLECTION,
+  ADVERTISEMENTS_COLLECTION,
   healthCheckTypesense,
 } from './typesenseClient';
 import { CacheService } from '../cache/CacheService';
@@ -46,6 +47,15 @@ export interface TravelDestinationSearchOptions {
   cursor?: string;
   page?: number;
   limit?: number;
+  forceRefresh?: boolean;
+}
+
+export interface AdvertisementSearchOptions {
+  query?: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+  category?: string;
   forceRefresh?: boolean;
 }
 
@@ -303,6 +313,143 @@ export class SearchService {
         }
       } catch (err) {
         console.warn('[SearchService] Backfill enqueue failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+    return result;
+  }
+
+  static async searchAdvertisements(options: AdvertisementSearchOptions = {}): Promise<SearchResult> {
+    const tStart = Date.now();
+    const page = Math.max(1, options.page || 1);
+    const limit = Math.min(100, Math.max(1, options.limit || 20));
+    const query = String(options.query || '').trim();
+    const status = options.status || 'all';
+    const category = options.category || 'all';
+    const cacheKey = await this.buildVersionedCacheKey(
+      this.buildScopedCacheKey('advertisements', { query, page, limit, status, category })
+    );
+
+    this.logSearchOperation('[SearchService:Advertisements] Search started', {
+      query: query || '(empty)',
+      page,
+      limit,
+      status,
+      category,
+      cacheKey,
+      typesenseEnabled: TYPESENSE_ENABLED,
+      redisAvailable: this.isRedisAvailable(),
+    });
+
+    if (!options.forceRefresh) {
+      const cached = this.getFromCache(cacheKey);
+      if (cached) return { ...cached, latencyMs: Date.now() - tStart };
+    }
+
+    if (!TypesenseBreaker.isOpen() && await this.isTypesenseAvailable()) {
+      try {
+        const filters: string[] = [];
+        if (status !== 'all') {
+          filters.push(`status:=${status}`);
+        }
+        if (category !== 'all') {
+          filters.push(`category:=${category}`);
+        }
+
+        const params: any = {
+          q: query || '*',
+          query_by: 'name,mobileNumber,country,state,area,category,description',
+          sort_by: query ? '_text_match:desc,updatedAt:desc' : 'updatedAt:desc',
+          per_page: limit,
+          page,
+        };
+        if (filters.length > 0) params.filter_by = filters.join(' && ');
+
+        this.logSearchOperation('[SearchService:Advertisements] Typesense query', {
+          collection: ADVERTISEMENTS_COLLECTION,
+          query: params.q,
+          query_by: params.query_by,
+          filter_by: params.filter_by || '(none)',
+          page,
+          limit,
+        });
+
+        const tsResult = await client.collections(ADVERTISEMENTS_COLLECTION).documents().search(params);
+        TypesenseBreaker.recordSuccess();
+        const rows = tsResult.hits?.map((hit: any) => hit.document) || [];
+        const result: SearchResult = {
+          results: rows,
+          totalCount: tsResult.found || rows.length,
+          hasMore: (tsResult.found || 0) > page * limit,
+          source: 'typesense',
+          latencyMs: Date.now() - tStart,
+        };
+        this.logSearchOperation('[SearchService:Advertisements] Typesense success', {
+          query,
+          found: result.totalCount,
+          latencyMs: result.latencyMs,
+        });
+        if (result.totalCount > 0 || query === '') {
+          this.setCache(cacheKey, result, true);
+          return result;
+        }
+      } catch (error) {
+        TypesenseBreaker.recordFailure();
+        this.logSearchOperation('[SearchService:Advertisements] Typesense failed, falling back to Firestore', {
+          query,
+          error: error instanceof Error ? error.message : String(error),
+        }, 'warn');
+      }
+    }
+
+    if (!options.forceRefresh) {
+      const redisCached = await this.getFromRedisCache(cacheKey, 'Advertisements', { query });
+      if (redisCached) return { ...redisCached, latencyMs: Date.now() - tStart };
+    }
+
+    // Cap Firestore reads to avoid large collection scans.
+    const fetchLimit = Math.min(this.MAX_FIRESTORE_LIMIT, Math.max(this.SAFE_QUERY_LIMIT, page * limit));
+    const snap = await adminDb.collection('advertisements').orderBy('createdAt', 'desc').limit(fetchLimit).get();
+    const normalizedQuery = this.normalizeText(query);
+    const rows = snap.docs
+      .map((doc: any) => ({ id: doc.id, ...doc.data() }))
+      .filter((row: any) => {
+        if (status !== 'all' && String(row.status || 'pending').toLowerCase() !== status.toLowerCase()) return false;
+        if (category !== 'all' && String(row.category || '').toLowerCase() !== category.toLowerCase()) return false;
+        if (!normalizedQuery) return true;
+        return [
+          row.name,
+          row.mobileNumber,
+          row.country,
+          row.state,
+          row.area,
+          row.category,
+          row.description,
+        ].some((value) => this.normalizeText(value).includes(normalizedQuery));
+      });
+    const startIdx = (page - 1) * limit;
+    const result: SearchResult = {
+      results: rows.slice(startIdx, startIdx + limit),
+      totalCount: rows.length,
+      hasMore: rows.length > startIdx + limit,
+      source: 'firestore',
+      latencyMs: Date.now() - tStart,
+      method: 'bounded-advertisements-fallback',
+      firestoreReads: snap.size,
+    };
+    this.setCache(cacheKey, result);
+
+    // Backfill in background
+    (async () => {
+      try {
+        for (const row of result.results) {
+          try {
+            await SyncService.syncAdvertisement(row);
+          } catch (err) {
+            console.warn('[SearchService] SyncService.syncAdvertisement failed for', { id: row?.id, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      } catch (err) {
+        console.warn('[SearchService] Backfill enqueue failed for ads', { error: err instanceof Error ? err.message : String(err) });
       }
     })();
     return result;
@@ -739,7 +886,7 @@ export class SearchService {
     }
 
     if (filter === 'recently-updated') {
-      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = Math.floor((Date.now() - (7 * 24 * 60 * 60 * 1000)) / 1000);
       return `updatedAt:>=${sevenDaysAgo}`;
     }
 
@@ -764,7 +911,9 @@ export class SearchService {
   private static toMillis(value: any): number {
     if (!value) return 0;
     if (value instanceof Date) return value.getTime();
-    if (typeof value === 'number') return value;
+    if (typeof value === 'number') {
+      return value < 10_000_000_000 ? value * 1000 : value;
+    }
     if (typeof value === 'string') {
       const parsed = Date.parse(value);
       return Number.isNaN(parsed) ? 0 : parsed;
@@ -997,6 +1146,10 @@ export class SearchService {
                   coverImage: doc.coverImage || doc.image || '',
                   description: doc.description || '',
                   googleMapsUrl: doc.googleMapsUrl || '',
+                  media: doc.media,
+                  photos: doc.photos,
+                  videos: doc.videos,
+                  mediaCount: doc.mediaCount,
                 };
                 void SyncService.syncPlace(placeData as any);
               } catch (e) {

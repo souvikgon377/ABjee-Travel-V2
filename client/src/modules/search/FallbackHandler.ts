@@ -73,7 +73,9 @@ export class FallbackHandler {
   private static toMillis(value: any): number {
     if (!value) return 0;
     if (value instanceof Date) return value.getTime();
-    if (typeof value === 'number') return value;
+    if (typeof value === 'number') {
+      return value < 10_000_000_000 ? value * 1000 : value;
+    }
     if (typeof value === 'string') {
       const parsed = Date.parse(value);
       return Number.isNaN(parsed) ? 0 : parsed;

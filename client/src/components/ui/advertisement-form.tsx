@@ -7,6 +7,7 @@ import { firestoreDb } from '@/lib/firebaseFirestore';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { fetchAdvertisementLocations, type AdvertisementLocationOption } from '@/lib/advertisementLocations';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth } from '@/lib/firebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -255,6 +256,18 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
         }
 
         await updateDoc(doc(firestoreDb, AD_COLLECTION, adId), updateFields);
+
+        // Trigger real-time Typesense sync
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        await fetch('/api/advertisements/sync', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: adId, action: 'upsert' }),
+        }).catch((err) => console.error('Failed to trigger sync', err));
+
         setSuccessMessage('Registration updated successfully.');
         onSubmitted?.(adId);
       } else {
@@ -290,6 +303,17 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           updatedAt: serverTimestamp(),
           approvedAt: defaultStatus === 'approved' ? serverTimestamp() : null,
         });
+
+        // Trigger real-time Typesense sync
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        await fetch('/api/advertisements/sync', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: documentRef.id, action: 'upsert' }),
+        }).catch((err) => console.error('Failed to trigger sync', err));
 
         setSuccessMessage(defaultStatus === 'approved' ? 'Registration saved and marked approved.' : 'Registration submitted for approval.');
         resetForm();

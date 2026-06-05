@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import { auth } from '@/lib/firebase';
 
 type OwnerAdvertisement = {
   id: string;
@@ -98,10 +99,17 @@ export default function AdvertisementPage() {
     setOwnerAdsError('');
 
     try {
-      const snapshot = await getDocs(query(collection(firestoreDb, 'advertisements'), orderBy('createdAt', 'desc')));
-
-      const allRows = snapshot.docs.map((document) => {
-        const data = document.data() as Record<string, any>;
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const response = await fetch('/api/advertisements/my-ads', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load advertisements: ${response.statusText}`);
+      }
+      const payload = await response.json();
+      const rows = (payload.data?.data || []).map((data: any) => {
         const status = String(data.status || data.approvalStatus || 'pending').toLowerCase() as OwnerAdvertisement['status'];
 
         // Legacy/backfill-safe extraction of common owner fields from older documents
@@ -147,7 +155,7 @@ export default function AdvertisementPage() {
         const candidateEditedAt = data.editedAt || data.lastEditedAt || null;
 
         return {
-          id: document.id,
+          id: data.id,
           name: String(data.name || ''),
           mobileNumber: String(data.mobileNumber || ''),
           category: String(data.category || ''),
@@ -168,11 +176,6 @@ export default function AdvertisementPage() {
           editedByEmail: candidateEditedByEmail,
           editedAt: candidateEditedAt,
         } as OwnerAdvertisement;
-      });
-
-      const rows = allRows.filter((item) => {
-        const matchesEmail = currentUser?.email && normalizeKey(item.ownerEmail) === normalizeKey(currentUser.email);
-        return Boolean(matchesEmail);
       });
 
       setOwnerAds(rows);

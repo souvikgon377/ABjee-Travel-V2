@@ -338,7 +338,8 @@ function toMillis(value: any) {
     if (typeof value.toDate === 'function') return value.toDate().getTime();
     if (typeof value.seconds === 'number') return (value.seconds * 1000);
   }
-  return Number(value || 0);
+  const num = Number(value || 0);
+  return num < 10_000_000_000 ? num * 1000 : num;
 }
 
 function matchesFilter(place: any, filter: string) {
