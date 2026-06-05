@@ -128,7 +128,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
     return [...items].reverse().concat([...items].reverse());
   }, [items]);
 
-  const shouldAnimate = !shouldReduceMotion && items.length > 0;
+  const shouldAnimate = !shouldReduceMotion && items.length > 4;
 
   useEffect(() => {
     let mounted = true;
@@ -191,19 +191,67 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
   return (
     <>
-      <div className="mx-auto mt-5 w-full max-w-6xl">
-        <div className="relative overflow-hidden px-1 pb-2">
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent" />
-          <motion.div
-            initial={false}
-            className="flex min-w-max gap-4"
-            animate={shouldAnimate ? { x: ['0%', '-50%'] } : undefined}
-            transition={shouldAnimate ? { duration: 18, ease: 'linear', repeat: Infinity } : undefined}
-            style={{ willChange: 'transform' }}
+      <style>{`
+        .ads-container {
+          container-type: inline-size;
+          width: 100%;
+        }
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .marquee-track-normal {
+          animation: marquee 18s linear infinite;
+        }
+        .marquee-track-normal:hover {
+          animation-play-state: paused;
+        }
+        .scrollbar-none::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-none {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        @media (min-width: 1024px) {
+          .ad-item-marquee {
+            width: calc((100cqw - 3.75rem) / 4);
+            max-width: 20rem;
+          }
+        }
+        @media (min-width: 768px) and (max-width: 1023px) {
+          .ad-item-marquee {
+            width: calc((100cqw - 2.5rem) / 3);
+            max-width: 20rem;
+          }
+        }
+        @media (min-width: 640px) and (max-width: 767px) {
+          .ad-item-marquee {
+            width: calc((100cqw - 1.25rem) / 2);
+            max-width: 20rem;
+          }
+        }
+        @media (max-width: 639px) {
+          .ad-item-marquee {
+            width: 100cqw;
+            max-width: 20rem;
+          }
+        }
+      `}</style>
+
+      <div className="ads-container mx-auto mt-5 w-full">
+        <div className={shouldAnimate ? "relative overflow-hidden px-1 pb-2" : "w-full px-1 pb-2"}>
+          <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent z-10" : "hidden"} />
+          <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent z-10" : "hidden"} />
+          <div
+            className={shouldAnimate 
+              ? "marquee-track-normal flex min-w-max gap-5" 
+              : "grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 w-full"
+            }
+            style={{ willChange: shouldAnimate ? 'transform' : 'auto' }}
           >
-          {slidingItems.map((item, index) => (
-            <div key={`${item.id}-${index}`} className="ad-item shrink-0 w-52 md:w-60 lg:w-72">
+          {(shouldAnimate ? slidingItems : items).map((item, index) => (
+            <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-full max-w-[20rem]"}>
               <button
                 type="button"
                 onClick={() => setSelectedItem(item)}
@@ -242,63 +290,8 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
               </button>
             </div>
           ))}
-          </motion.div>
-        </div>
-
-        {items.length > 1 && (
-          <div className="relative mt-4 overflow-hidden px-1 pb-2 opacity-80">
-            <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent" />
-            <motion.div
-              initial={false}
-              className="flex min-w-max gap-4"
-              animate={shouldAnimate ? { x: ['-50%', '0%'] } : undefined}
-              transition={shouldAnimate ? { duration: 18, ease: 'linear', repeat: Infinity } : undefined}
-              style={{ willChange: 'transform' }}
-            >
-              {reverseSlidingItems.map((item, index) => (
-                <div key={`reverse-${item.id}-${index}`} className="ad-item shrink-0 w-52 md:w-60 lg:w-72">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedItem(item)}
-                    className="group h-64 w-full text-left perspective-distant"
-                    aria-label={`View details for ${item.name || 'advertisement'}`}
-                  >
-                    <div className="relative h-full w-full rounded-2xl border border-white/15 shadow-lg shadow-black/20 transition-transform duration-700 ease-out transform-3d group-hover:transform-[rotateY(180deg)]">
-                      <div className="absolute inset-0 overflow-hidden rounded-2xl bg-black/20 text-white backface-hidden">
-                        <div className="relative h-full w-full">
-                          <img src={item.photoUrl} alt={item.name || 'ad'} className="h-full w-full object-cover" />
-                          <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/40 to-transparent p-4">
-                            <div className="truncate text-sm font-semibold">{item.name}</div>
-                            <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/65">Click to view details</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="absolute inset-0 rounded-2xl bg-[#121212] p-4 text-white backface-hidden transform-[rotateY(180deg)]">
-                        <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-                          <div>
-                            <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
-                          </div>
-
-                          <div className="space-y-3">
-                            {item.description ? (
-                              <p className="text-sm leading-6 text-white/80">{item.description}</p>
-                            ) : (
-                              <p className="text-sm leading-6 text-white/60">No description available for this advertisement.</p>
-                            )}
-                            <div className="h-px w-full bg-white/10" />
-                            <div className="text-xs text-white/55">Click to open the full advertisement details.</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              ))}
-            </motion.div>
           </div>
-        )}
+        </div>
       </div>
 
       <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>

@@ -1226,7 +1226,13 @@ const TourPlaces: React.FC = () => {
 
                   </div>
                   {searchResults.length > 0 ? (
-                    <AdsStrip searchTerm={activeSearchTerm || searchQuery} places={searchResults} maxItems={12} />
+                    <div className="mt-6 text-left space-y-3">
+                      <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-white/50 px-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        Featured Advertisements
+                      </h2>
+                      <AdsStrip searchTerm={activeSearchTerm || searchQuery} places={searchResults} maxItems={12} />
+                    </div>
                   ) : null}
                 </div>
                 {searchError && (
@@ -1246,7 +1252,11 @@ const TourPlaces: React.FC = () => {
                     <p className="mt-2 text-sm text-white/60">Try a different place, area, state, or country.</p>
                   </div>
                 ) : (
-                  <motion.div className="w-full" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                  <motion.div className="w-full space-y-3" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                    <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-white/50 px-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      Popular Destinations
+                    </h2>
                     <div className="grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                       {placeCards}
                     </div>
