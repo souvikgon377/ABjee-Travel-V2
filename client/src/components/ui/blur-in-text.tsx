@@ -85,11 +85,75 @@ export const BlurInText = ({
     } else if (split === 'word') {
       return text.split(' ');
     } else {
-      return text.split('');
+      return [];
     }
   };
 
   const elements = getElements();
+
+  const renderElements = () => {
+    if (split === 'letter') {
+      const words = text.split(' ');
+      let absoluteIndex = 0;
+      return words.map((word, wordIdx) => {
+        const letters = word.split('');
+        return (
+          <span key={`word-${wordIdx}`} className="inline-block whitespace-nowrap">
+            {letters.map((letter, letterIdx) => {
+              const currentIndex = absoluteIndex;
+              absoluteIndex++;
+              return (
+                <motion.span
+                  key={`letter-${letterIdx}`}
+                  className="inline-block"
+                  variants={itemVariants}
+                  transition={{
+                    delay: delay + currentIndex * stagger,
+                    duration,
+                    ease: [0.25, 0.46, 0.45, 0.94],
+                  }}
+                >
+                  {letter}
+                </motion.span>
+              );
+            })}
+            {wordIdx < words.length - 1 && (
+              <motion.span
+                key={`space-${wordIdx}`}
+                className="inline-block"
+                variants={itemVariants}
+                transition={{
+                  delay: delay + absoluteIndex * stagger,
+                  duration,
+                  ease: [0.25, 0.46, 0.45, 0.94],
+                }}
+                style={{ whiteSpace: 'pre' }}
+              >
+                {(() => {
+                  absoluteIndex++;
+                  return ' ';
+                })()}
+              </motion.span>
+            )}
+          </span>
+        );
+      });
+    }
+
+    return elements.map((element, index) => (
+      <motion.span
+        key={`${element}-${index}`}
+        className="inline-block"
+        variants={itemVariants}
+        style={{
+          whiteSpace: element === ' ' ? 'pre' : 'normal',
+        }}
+      >
+        {element}
+        {split === 'word' && index < elements.length - 1 && '\u00A0'}
+      </motion.span>
+    ));
+  };
 
   return (
     <motion.span
@@ -101,19 +165,7 @@ export const BlurInText = ({
       onMouseEnter={() => trigger === 'hover' && setIsHovering(true)}
       onMouseLeave={() => trigger === 'hover' && setIsHovering(false)}
     >
-      {elements.map((element, index) => (
-        <motion.span
-          key={`${element}-${index}`}
-          className="inline-block"
-          variants={itemVariants}
-          style={{
-            whiteSpace: element === ' ' ? 'pre' : 'normal',
-          }}
-        >
-          {element}
-          {split === 'word' && index < elements.length - 1 && '\u00A0'}
-        </motion.span>
-      ))}
+      {renderElements()}
     </motion.span>
   );
 };
