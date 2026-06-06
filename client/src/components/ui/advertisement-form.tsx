@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud } from 'lucide-react';
+import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud, ChevronsUpDown, Search, X } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { fetchAdvertisementLocations, type AdvertisementLocationOption } from '@/lib/advertisementLocations';
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 type AdvertisementStatus = 'pending' | 'approved';
 
@@ -28,13 +29,134 @@ type AdvertisementFormProps = {
 
 const AD_COLLECTION = 'advertisements';
 
+type MultiSelectChecklistProps = {
+  label: string;
+  placeholder: string;
+  options: string[];
+  selectedValues: string[];
+  onChange: (values: string[]) => void;
+  disabled?: boolean;
+};
+
+export function MultiSelectChecklist({ label, placeholder, options, selectedValues, onChange, disabled }: MultiSelectChecklistProps) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredOptions = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return options;
+    return options.filter((opt) => opt.toLowerCase().includes(q));
+  }, [options, searchQuery]);
+
+  const toggleValue = (value: string) => {
+    if (selectedValues.includes(value)) {
+      onChange(selectedValues.filter((v) => v !== value));
+    } else {
+      if (selectedValues.length >= 10) {
+        return;
+      }
+      onChange([...selectedValues, value]);
+    }
+  };
+
+  const isMaxReached = selectedValues.length >= 10;
+
+  return (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className="w-full justify-between rounded-xl bg-background border-input px-3 py-2 text-sm font-normal text-muted-foreground shadow-sm hover:bg-background/80"
+          >
+            <span className="truncate text-foreground text-left flex-1">
+              {selectedValues.length > 0
+                ? `${selectedValues.length} selected`
+                : placeholder}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-72 p-0 bg-popover overflow-hidden flex flex-col z-50">
+          <div className="flex items-center border-b px-3 py-2">
+            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+            <input
+              placeholder={`Search ${label}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex h-8 w-full rounded-md bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+          <div className="overflow-y-auto p-1 max-h-48 flex-1 space-y-1">
+            {filteredOptions.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">No options found.</div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isChecked = selectedValues.includes(opt);
+                const isDisabled = !isChecked && isMaxReached;
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => !isDisabled && toggleValue(opt)}
+                    className={`flex items-center space-x-2 rounded-lg px-2 py-1.5 text-sm cursor-pointer select-none transition-colors hover:bg-accent hover:text-accent-foreground ${
+                      isDisabled ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={isDisabled}
+                      readOnly
+                      className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-rose-600 focus:ring-rose-500 bg-background"
+                    />
+                    <span className="flex-1 truncate">{opt}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="border-t bg-muted/20 px-3 py-1.5 text-center text-xs text-muted-foreground">
+            {selectedValues.length} of 10 selected (Max 10)
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* Selected values badges below the trigger */}
+      {selectedValues.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {selectedValues.map((val) => (
+            <Badge
+              key={val}
+              variant="secondary"
+              className="flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-700 border border-rose-500/20 px-2.5 py-0.5 text-xs font-medium dark:bg-rose-500/20 dark:text-rose-300"
+            >
+              {val}
+              <button
+                type="button"
+                onClick={() => onChange(selectedValues.filter((v) => v !== val))}
+                className="rounded-full outline-none hover:bg-rose-500/20 p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const emptyState = {
   name: '',
   mobileNumber: '',
   category: '',
-  country: '',
-  state: '',
-  area: '',
+  countries: [] as string[],
+  states: [] as string[],
+  areas: [] as string[],
   description: '',
 };
 
@@ -89,6 +211,7 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
     };
   }, [photoPreview]);
 
+
   // Prefill when editing
   useEffect(() => {
     if (!initialValues) return;
@@ -97,9 +220,9 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
       name: initialValues.name ?? cur.name,
       mobileNumber: initialValues.mobileNumber ?? cur.mobileNumber,
       category: initialValues.category ?? cur.category,
-      country: initialValues.country ?? cur.country,
-      state: initialValues.state ?? cur.state,
-      area: initialValues.area ?? cur.area,
+      countries: initialValues.country ? initialValues.country.split(',').map((c: any) => c.trim()).filter(Boolean) : [],
+      states: initialValues.state ? initialValues.state.split(',').map((s: any) => s.trim()).filter(Boolean) : [],
+      areas: initialValues.area ? initialValues.area.split(',').map((a: any) => a.trim()).filter(Boolean) : [],
       description: initialValues.description ?? cur.description,
     }));
 
@@ -117,30 +240,65 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
   );
 
   const stateOptions = useMemo(
-    () => Array.from(new Set(locations.filter((location) => location.country === form.country).map((location) => location.state))).sort((left, right) => left.localeCompare(right)),
-    [form.country, locations],
+    () => Array.from(new Set(locations.filter((location) => form.countries.includes(location.country)).map((location) => location.state))).sort((left, right) => left.localeCompare(right)),
+    [form.countries, locations],
   );
 
   const areaOptions = useMemo(
-    () => Array.from(new Set(locations.filter((location) => location.country === form.country && location.state === form.state).map((location) => location.area))).sort((left, right) => left.localeCompare(right)),
-    [form.country, form.state, locations],
+    () => Array.from(new Set(locations.filter((location) => form.countries.includes(location.country) && form.states.includes(location.state)).map((location) => location.area))).sort((left, right) => left.localeCompare(right)),
+    [form.countries, form.states, locations],
   );
 
-  const updateField = (key: keyof typeof emptyState, value: string) => {
+  const updateCountries = (newCountries: string[]) => {
     setErrorMessage('');
     setSuccessMessage('');
-
     setForm((current) => {
-      if (key === 'country') {
-        return { ...current, country: value, state: '', area: '' };
-      }
+      const validStates = Array.from(new Set(locations.filter((loc) => newCountries.includes(loc.country)).map((loc) => loc.state)));
+      const newSelectedStates = current.states.filter((state) => validStates.includes(state));
 
-      if (key === 'state') {
-        return { ...current, state: value, area: '' };
-      }
+      const validAreas = Array.from(new Set(locations.filter((loc) => newCountries.includes(loc.country) && newSelectedStates.includes(loc.state)).map((loc) => loc.area)));
+      const newSelectedAreas = current.areas.filter((area) => validAreas.includes(area));
 
-      return { ...current, [key]: value };
+      return {
+        ...current,
+        countries: newCountries,
+        states: newSelectedStates,
+        areas: newSelectedAreas,
+      };
     });
+  };
+
+  const updateStates = (newStates: string[]) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    setForm((current) => {
+      const validAreas = Array.from(new Set(locations.filter((loc) => current.countries.includes(loc.country) && newStates.includes(loc.state)).map((loc) => loc.area)));
+      const newSelectedAreas = current.areas.filter((area) => validAreas.includes(area));
+
+      return {
+        ...current,
+        states: newStates,
+        areas: newSelectedAreas,
+      };
+    });
+  };
+
+  const updateAreas = (newAreas: string[]) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    setForm((current) => ({
+      ...current,
+      areas: newAreas,
+    }));
+  };
+
+  const updateField = (key: 'name' | 'mobileNumber' | 'category', value: string) => {
+    setErrorMessage('');
+    setSuccessMessage('');
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+    }));
   };
 
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -185,6 +343,8 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
     setForm(emptyState);
     setPhotoFile(null);
     setPhotoPreview('');
+    setIdFile(null);
+    setIdPreviewName('');
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -197,11 +357,17 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
       if (!form.name.trim()) throw new Error('Name is required');
       if (!form.mobileNumber.trim()) throw new Error('Mobile number is required');
       if (!form.category.trim()) throw new Error('Please select a category');
-      if (!form.country || !form.state || !form.area) throw new Error('Please select country, state, and area/locality');
+      if (form.countries.length === 0 || form.states.length === 0 || form.areas.length === 0) {
+        throw new Error('Please select at least one country, state, and area/locality');
+      }
       // In edit mode allow keeping the existing photo
       if (!photoFile && !initialValues?.photoUrl) throw new Error('Please upload one photo');
       // ID proof (PDF or image) is required
       if (!idFile && !(initialValues as any)?.idProofUrl) throw new Error('Please upload ID proof (PDF or image)');
+
+      const countryStr = form.countries.join(', ');
+      const stateStr = form.states.join(', ');
+      const areaStr = form.areas.join(', ');
 
       // If editing, update the existing document
       if (adId) {
@@ -211,9 +377,9 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           mobileNumber: form.mobileNumber.trim(),
           category: form.category.trim(),
           description: form.description ? form.description.trim() : '',
-          country: form.country,
-          state: form.state,
-          area: form.area,
+          country: countryStr,
+          state: stateStr,
+          area: areaStr,
           ownerUid: currentUser?.uid || null,
           ownerEmail: profileEmail || null,
           ownerName: currentUser?.displayName || userProfile?.displayName || form.name.trim(),
@@ -226,9 +392,9 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           (form.name.trim() !== (original.name ?? '').trim()) ||
           (form.mobileNumber.trim() !== (original.mobileNumber ?? '').trim()) ||
           (form.category.trim() !== (original.category ?? '').trim()) ||
-          (form.country !== (original.country ?? '')) ||
-          (form.state !== (original.state ?? '')) ||
-          (form.area !== (original.area ?? '')) ||
+          (countryStr !== (original.country ?? '')) ||
+          (stateStr !== (original.state ?? '')) ||
+          (areaStr !== (original.area ?? '')) ||
           (form.description?.trim() !== (original.description ?? '').trim()) ||
           Boolean(photoFile);
 
@@ -283,9 +449,9 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           mobileNumber: form.mobileNumber.trim(),
           category: form.category.trim(),
           description: form.description ? form.description.trim() : '',
-          country: form.country,
-          state: form.state,
-          area: form.area,
+          country: countryStr,
+          state: stateStr,
+          area: areaStr,
           ownerUid: currentUser?.uid || null,
           ownerEmail: profileEmail || null,
           ownerName: currentUser?.displayName || userProfile?.displayName || form.name.trim(),
@@ -417,52 +583,40 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <label className="space-y-2">
+            <label className="space-y-2 block">
               <span className="text-sm font-medium">Country</span>
-              <Select value={form.country} onValueChange={(value) => updateField('country', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select country" />
-                </SelectTrigger>
-                <SelectContent>
-                  {countryOptions.map((country) => (
-                    <SelectItem key={country} value={country}>
-                      {country}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelectChecklist
+                label="Country"
+                placeholder="Select country"
+                options={countryOptions}
+                selectedValues={form.countries}
+                onChange={updateCountries}
+                disabled={loadingLocations}
+              />
             </label>
 
-            <label className="space-y-2">
+            <label className="space-y-2 block">
               <span className="text-sm font-medium">State</span>
-              <Select value={form.state} onValueChange={(value) => updateField('state', value)} disabled={!form.country}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select state" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stateOptions.map((state) => (
-                    <SelectItem key={state} value={state}>
-                      {state}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelectChecklist
+                label="State"
+                placeholder="Select state"
+                options={stateOptions}
+                selectedValues={form.states}
+                onChange={updateStates}
+                disabled={form.countries.length === 0}
+              />
             </label>
 
-            <label className="space-y-2">
+            <label className="space-y-2 block">
               <span className="text-sm font-medium">Area / Locality</span>
-              <Select value={form.area} onValueChange={(value) => updateField('area', value)} disabled={!form.state}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select area/locality" />
-                </SelectTrigger>
-                <SelectContent>
-                  {areaOptions.map((area) => (
-                    <SelectItem key={area} value={area}>
-                      {area}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelectChecklist
+                label="Area/Locality"
+                placeholder="Select area/locality"
+                options={areaOptions}
+                selectedValues={form.areas}
+                onChange={updateAreas}
+                disabled={form.states.length === 0}
+              />
             </label>
           </div>
 
