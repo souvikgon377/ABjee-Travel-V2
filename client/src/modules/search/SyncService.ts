@@ -25,6 +25,7 @@ export interface PlaceSyncData {
   photos?: any;
   videos?: any;
   mediaCount?: number;
+  isActive?: boolean;
 }
 
 export class SyncService {

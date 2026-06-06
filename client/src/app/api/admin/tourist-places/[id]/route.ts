@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth';
+import { authenticateRequest, AuthError, requireAdmin, invalidateUserProfileCache } from '@/lib/server/auth';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { ok, fail } from '@/lib/server/http';
 import { invalidateCacheVersion } from '@/lib/server/cacheManagement';
@@ -7,6 +7,8 @@ import { SyncService } from '@/modules/search/SyncService';
 import { CacheService } from '@/modules/cache/CacheService';
 import { MetricsService } from '@/modules/analytics/MetricsService';
 import { updateSharedPlaceInCache } from '@/lib/server/sharedPlacesCache';
+import { awardPlaceRequestRebate } from '@/lib/server/rebateWallet';
+import { notificationService } from '@/services/notificationService';
 
 export const runtime = 'nodejs';
 
@@ -96,6 +98,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const docRef = adminDb.collection('touristPlaces').doc(placeId);
     const docSnap = await docRef.get();
     if (!docSnap.exists) return fail('Tourist place not found', 404);
+    const oldData = docSnap.data();
+    const isPendingRequest = oldData?.isRequested === true && oldData?.isActive === false;
+    const goingLive = isActive !== false;
 
     const updateData: any = {
       name: String(name).trim(),
@@ -113,6 +118,40 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       popularity: Number(popularity || 0),
       updatedAt: new Date(),
     };
+
+    // Clear isRequested if the place is activated (approved)
+    if (isActive !== false) {
+      updateData.isRequested = false;
+    }
+
+    // Award rebate points if the place is approved (isActive goes true) and was requested
+    if (isPendingRequest && goingLive && oldData?.requestedBy?.uid) {
+      try {
+        console.info('[AdminApproval] Awarding 5 points to requester:', oldData.requestedBy.uid);
+        await awardPlaceRequestRebate({
+          userId: oldData.requestedBy.uid,
+          placeId: placeId,
+        });
+        await invalidateUserProfileCache(oldData.requestedBy.uid);
+
+        // Send a notification to the user
+        try {
+          await notificationService.create({
+            fromUserId: 'system',
+            fromUserName: 'ABJee Travel',
+            toUserId: oldData.requestedBy.uid,
+            type: 'place_approved',
+            status: 'pending',
+            message: `Your requested tourist place "${updateData.name}" has been approved! 5 Abjee Points have been credited to your wallet.`,
+          });
+          console.info('[AdminApproval] Notification sent to requester:', oldData.requestedBy.uid);
+        } catch (notifErr) {
+          console.warn('[AdminApproval] Failed to send notification to requester:', notifErr);
+        }
+      } catch (awardErr) {
+        console.warn('[AdminApproval] Failed to award points to requester:', awardErr);
+      }
+    }
 
     const searchFields = {
       name_lower: normalizeSearchField(updateData.name),
@@ -158,6 +197,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       coverImage: updateData.coverImage,
       description: updateData.description,
       googleMapsUrl: updateData.googleMapsUrl,
+      isActive: updateData.isActive,
     });
 
     await CacheService.invalidatePattern('search:');

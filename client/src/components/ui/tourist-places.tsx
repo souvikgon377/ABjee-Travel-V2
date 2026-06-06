@@ -55,6 +55,7 @@ export interface TouristPlace {
   description: string;
   category: string;
   isActive?: boolean;
+  isRequested?: boolean;
   googleMapsUrl: string;
   coverImage: string;
   media: MediaItem[];
@@ -98,7 +99,7 @@ interface TouristPlacesListCache {
 interface TouristPlacesFilters {
   search: string;
   location: string;
-  status: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
+  status: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated' | 'requested';
 }
 
 export function formatBytes(bytes: number, decimals = 2) {
@@ -485,7 +486,7 @@ function escapeHtml(value: string): string {
 
 function normalizeDescriptionForEditor(value: string): string {
   if (!value) return '';
-  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(value);
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(value) || /&[a-z0-9#]+;/i.test(value);
   if (hasHtml) return value;
   return escapeHtml(value).replace(/\n/g, '<br>');
 }
@@ -866,6 +867,7 @@ export function TouristPlacesManager() {
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
       return Boolean(updatedAtValue && updatedAtValue >= sevenDaysAgo);
     }
+    if (status === 'requested') return place.isRequested === true;
     return true;
   }, []);
 
@@ -2242,6 +2244,7 @@ export function TouristPlacesManager() {
             <option value="photos-added">Photos Added</option>
             <option value="photos-not-added">Photos Not Added</option>
             <option value="recently-updated">Recently Updated</option>
+            <option value="requested">Places Requested</option>
           </select>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={handleApplyFilters}>

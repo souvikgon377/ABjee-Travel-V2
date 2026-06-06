@@ -36,7 +36,7 @@ function escapeHtml(value: string): string {
 
 function normalizeDescriptionForEditor(value: string): string {
   if (!value) return "";
-  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(value);
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(value) || /&[a-z0-9#]+;/i.test(value);
   if (hasHtml) return value;
   return escapeHtml(value).replace(/\n/g, "<br>");
 }

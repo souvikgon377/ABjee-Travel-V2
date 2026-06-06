@@ -12,6 +12,10 @@ vi.mock('@/lib/server/firebaseAdminFirestore', () => ({
         return {
           id: docId,
           __path: path,
+          get: async () => ({
+            exists: true,
+            data: () => ({})
+          }),
           collection: (childName: string) => ({
             doc: (childId?: string) => {
               const nestedId = childId ?? `doc-${Math.random().toString(36).slice(2, 8)}`;
@@ -69,7 +73,7 @@ vi.mock('@/lib/server/firebaseAdminFirestore', () => ({
   },
 }));
 
-import { awardReviewRebate, calculateReviewRebate } from './rebateWallet';
+import { awardReviewRebate, calculateReviewRebate, awardPlaceRequestRebate } from './rebateWallet';
 
 describe('calculateReviewRebate', () => {
   it('returns 2 points for free user with text and media', () => {
@@ -119,6 +123,18 @@ describe('awardReviewRebate', () => {
     expect(result.ABJee.textPoints).toBe(2);
     expect(result.ABJee.mediaPoints).toBe(3);
     expect(result.ABJee.totalPoints).toBe(5);
+    expect(result.wallet.availablePoints).toBe(5);
+  });
+});
+
+describe('awardPlaceRequestRebate', () => {
+  it('awards 5 points for requesting a place', async () => {
+    const result = await awardPlaceRequestRebate({
+      userId: 'user-1',
+      placeId: 'place-1',
+    });
+
+    expect(result.points).toBe(5);
     expect(result.wallet.availablePoints).toBe(5);
   });
 });

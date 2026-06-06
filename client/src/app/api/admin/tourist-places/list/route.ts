@@ -97,6 +97,44 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (filter === 'requested') {
+      const snap = await adminDb
+        .collection('touristPlaces')
+        .where('isRequested', '==', true)
+        .get();
+      let rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+
+      // Apply search & location filter in memory
+      if (search.trim()) {
+        const normSearch = search.toLowerCase();
+        rows = rows.filter((r: any) => String(r.name || '').toLowerCase().includes(normSearch));
+      }
+      if (location.trim()) {
+        const normLoc = location.toLowerCase();
+        rows = rows.filter((r: any) => 
+          [r.city, r.area, r.state, r.country]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(normLoc)
+        );
+      }
+
+      rows.sort(compareTouristPlaces);
+      const paginated = rows.slice((page - 1) * limit, page * limit);
+
+      return ok({
+        data: paginated,
+        rows: paginated,
+        total: rows.length,
+        totalCount: rows.length,
+        page,
+        hasMore: (page * limit) < rows.length,
+        source: 'firestore_requested',
+      });
+    }
+
+
     // Admin photo-status counts must be an exact partition of the collection.
     // Typesense can exclude documents where optional mediaCount is missing, so use
     // the same shared photo helper against Firestore rows for these browse filters.

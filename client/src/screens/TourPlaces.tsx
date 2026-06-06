@@ -26,6 +26,7 @@ import {
   Globe,
   Copy,
   Check,
+  Loader2,
 } from "lucide-react";
 import type { TouristPlace } from "@/components/ui/tourist-places";
 import { publicAsset } from "@/lib/publicAsset";
@@ -397,6 +398,26 @@ const TourPlaces: React.FC = () => {
   const [searchResults, setSearchResults] = useState<TouristPlace[]>([]);
   const [searchPage, setSearchPage] = useState<number>(1);
   const [searchHasMore, setSearchHasMore] = useState(false);
+
+  // Request Place Form State
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showLoginRedirect, setShowLoginRedirect] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    name: "",
+    category: "Other",
+    area: "",
+    state: "",
+    country: "India",
+    description: "",
+    googleMapsUrl: "",
+    coverImage: "",
+  });
+  const [requestCoverFile, setRequestCoverFile] = useState<File | null>(null);
+  const [requestCoverPreview, setRequestCoverPreview] = useState("");
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [requestSuccessMessage, setRequestSuccessMessage] = useState("");
+
 
 
   const [searchLoading, setSearchLoading] = useState(false);
@@ -796,6 +817,102 @@ const TourPlaces: React.FC = () => {
     if (normalized.length < 3) return;
     setActualSearchQuery(normalized);
   }, []);
+
+  const handleRequestPlaceClick = () => {
+    if (!user) {
+      setShowLoginRedirect(true);
+      return;
+    }
+    setRequestForm({
+      name: "",
+      category: "Other",
+      area: "",
+      state: "",
+      country: "India",
+      description: "",
+      googleMapsUrl: "",
+      coverImage: "",
+    });
+    setRequestCoverFile(null);
+    if (requestCoverPreview) revokeImagePreview(requestCoverPreview);
+    setRequestCoverPreview("");
+    setRequestError("");
+    setRequestSuccessMessage("");
+    setShowRequestModal(true);
+  };
+
+  const handleRequestCoverChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setRequestError("Please select a valid image file.");
+      return;
+    }
+
+    setRequestCoverFile(file);
+    if (requestCoverPreview) revokeImagePreview(requestCoverPreview);
+    setRequestCoverPreview(createImagePreview(file));
+    setRequestError("");
+  };
+
+  const handleRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestForm.name.trim() || !requestForm.state.trim() || !requestForm.country.trim()) {
+      setRequestError("Name, State, and Country are required.");
+      return;
+    }
+
+    setRequestSubmitting(true);
+    setRequestError("");
+    setRequestSuccessMessage("");
+
+    try {
+      let coverImageUrl = "";
+
+      if (requestCoverFile) {
+        const compressed = await compressImageFile(requestCoverFile, {
+          maxSizeBytes: 1024 * 1024,
+          maxDimension: 1600,
+        });
+        const uploaded = await uploadImageToR2(compressed, { folder: "tourist-places/requests/images" });
+        coverImageUrl = uploaded.url;
+      }
+
+      const response = await placesAPI.requestPlace({
+        ...requestForm,
+        coverImage: coverImageUrl,
+      });
+
+      const data = response.data?.data ?? response.data ?? {};
+      setRequestSuccessMessage(data.message || "Place requested successfully! +5 Abjee Points will be credited once approved.");
+
+      setRequestForm({
+        name: "",
+        category: "Other",
+        area: "",
+        state: "",
+        country: "India",
+        description: "",
+        googleMapsUrl: "",
+        coverImage: "",
+      });
+      setRequestCoverFile(null);
+      if (requestCoverPreview) revokeImagePreview(requestCoverPreview);
+      setRequestCoverPreview("");
+
+      setTimeout(() => {
+        setShowRequestModal(false);
+        setRequestSuccessMessage("");
+      }, 3000);
+
+    } catch (err: any) {
+      console.error("[RequestPlace] Submit error:", err);
+      setRequestError(err?.response?.data?.message || err?.message || "Failed to submit request. Please try again.");
+    } finally {
+      setRequestSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!actualSearchQuery) {
@@ -1250,6 +1367,15 @@ const TourPlaces: React.FC = () => {
                     <Search className="mb-4 h-10 w-10 text-white/50" />
                     <p className="text-lg font-semibold text-white">No places found</p>
                     <p className="mt-2 text-sm text-white/60">Try a different place, area, state, or country.</p>
+                    {activeSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={handleRequestPlaceClick}
+                        className="mt-6 inline-flex items-center justify-center rounded-full bg-rose-500 px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-rose-600"
+                      >
+                        Still Could Not Find Your Place? Add here.
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <motion.div className="w-full space-y-3" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
@@ -1273,6 +1399,19 @@ const TourPlaces: React.FC = () => {
                       className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-6 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-md transition hover:bg-white/18 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {searchLoading ? 'Loading...' : 'See More'}
+                    </button>
+                  </div>
+                )}
+
+                {!searchHasMore && searchResults.length > 0 && !searchLoading && activeSearchTerm && (
+                  <div className="flex flex-col items-center justify-center py-6 pt-2 gap-2">
+                    <p className="text-sm text-white/60">Reached the end of results.</p>
+                    <button
+                      type="button"
+                      onClick={handleRequestPlaceClick}
+                      className="inline-flex items-center justify-center rounded-full bg-rose-500 px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-rose-600"
+                    >
+                      Still Could Not Find Your Place? Add here.
                     </button>
                   </div>
                 )}
@@ -1689,6 +1828,219 @@ const TourPlaces: React.FC = () => {
               </motion.div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showLoginRedirect && (
+          <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-3xl border border-white/10 bg-[#1e2025]/90 p-6 text-center text-white shadow-2xl backdrop-blur-xl"
+            >
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/10 text-rose-500">
+                <MapPin className="h-6 w-6" />
+              </div>
+              <h3 className="text-xl font-bold">Login Required</h3>
+              <p className="mt-2 text-sm text-white/70">
+                Please login to add a new tourist place. You will get 5 Abjee Points once approved!
+              </p>
+              <div className="mt-6 flex justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLoginRedirect(false)}
+                  className="rounded-full border border-white/10 px-5 py-2 text-xs font-bold text-white hover:bg-white/5 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/auth")}
+                  className="rounded-full bg-rose-500 px-6 py-2 text-xs font-bold text-white hover:bg-rose-600 transition"
+                >
+                  Login Now
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showRequestModal && (
+          <div className="fixed inset-0 z-70 overflow-y-auto bg-black/60 p-4 backdrop-blur-xs flex items-center justify-center">
+            <motion.div
+              initial={{ y: 24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 24, opacity: 0 }}
+              className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#1e2025]/95 text-white shadow-2xl backdrop-blur-xl overflow-hidden my-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-rose-400" />
+                  <h2 className="text-lg font-bold">Suggest a New Tourist Place</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRequestModal(false)}
+                  className="p-1 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleRequestSubmit} className="p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-white/80">Place Name <span className="text-rose-400">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Lachen Monastery"
+                      value={requestForm.name}
+                      onChange={(e) => setRequestForm({ ...requestForm, name: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-white/80">Category</label>
+                    <select
+                      value={requestForm.category}
+                      onChange={(e) => setRequestForm({ ...requestForm, category: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-[#1a1c22] px-4 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 h-[42px]"
+                    >
+                      {["Other", "Temple / Religious", "Nature / Wildlife", "Beach", "Hill Station", "Historical / Heritage", "Adventure", "City / Urban"].map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-white/80">Country <span className="text-rose-400">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. India"
+                      value={requestForm.country}
+                      onChange={(e) => setRequestForm({ ...requestForm, country: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-white/80">State / Region <span className="text-rose-400">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Sikkim"
+                      value={requestForm.state}
+                      onChange={(e) => setRequestForm({ ...requestForm, state: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-xs font-semibold text-white/80">Area / City / Locality</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. North Sikkim"
+                      value={requestForm.area}
+                      onChange={(e) => setRequestForm({ ...requestForm, area: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-xs font-semibold text-white/80">Description</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Describe this beautiful tourist destination..."
+                      value={requestForm.description}
+                      onChange={(e) => setRequestForm({ ...requestForm, description: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-xs font-semibold text-white/80">Google Maps URL</label>
+                    <input
+                      type="url"
+                      placeholder="https://maps.google.com/?q=..."
+                      value={requestForm.googleMapsUrl}
+                      onChange={(e) => setRequestForm({ ...requestForm, googleMapsUrl: e.target.value })}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 md:col-span-2">
+                    <label className="text-xs font-semibold text-white/80">Cover Image</label>
+                    <div className="flex items-center gap-4">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="req-cover-image"
+                        onChange={handleRequestCoverChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById("req-cover-image")?.click()}
+                        className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold hover:bg-white/10 transition"
+                      >
+                        <ImageIcon className="mr-2 h-4 w-4" />
+                        Choose Cover Image
+                      </button>
+                      {requestCoverPreview && (
+                        <div className="relative h-12 w-16 overflow-hidden rounded-lg border border-white/10">
+                          <img src={requestCoverPreview} alt="Preview" className="h-full w-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 flex flex-col gap-3">
+                  {requestError && (
+                    <p className="text-xs font-semibold text-red-400">{requestError}</p>
+                  )}
+                  {requestSuccessMessage && (
+                    <p className="text-sm font-extrabold text-emerald-400 animate-pulse">
+                      {requestSuccessMessage}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowRequestModal(false)}
+                      disabled={requestSubmitting}
+                      className="rounded-xl border border-white/10 bg-transparent px-5 py-2.5 text-sm font-semibold hover:bg-white/5 transition disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={requestSubmitting}
+                      className="inline-flex items-center justify-center rounded-xl bg-rose-500 px-6 py-2.5 text-sm font-semibold hover:bg-rose-600 transition min-w-[120px] disabled:opacity-50 shadow-lg shadow-rose-500/20"
+                    >
+                      {requestSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Submitting...
+                        </>
+                      ) : (
+                        "Submit Request"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>

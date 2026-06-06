@@ -137,6 +137,17 @@ export const placesAPI = {
     }>;
   }) => api.post('/reviews', payload),
   deleteReview: (placeId: string, reviewId: string) => api.delete(`/reviews/${reviewId}`, { params: { placeId } }),
+  requestPlace: (data: {
+    name: string;
+    area?: string;
+    city?: string;
+    state: string;
+    country: string;
+    description?: string;
+    category?: string;
+    googleMapsUrl?: string;
+    coverImage?: string;
+  }) => api.post('/places', data),
 };
 
 export const walletAPI = {
@@ -163,7 +174,7 @@ export const adminAPI = {
   getTouristPlaceList: (params?: {
     search?: string;
     location?: string;
-    filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated';
+    filter?: 'all' | 'photos-added' | 'photos-not-added' | 'recently-updated' | 'requested';
     page?: number;
     limit?: number;
     forceRefresh?: boolean;
