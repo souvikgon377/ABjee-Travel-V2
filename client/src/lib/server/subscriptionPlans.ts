@@ -134,6 +134,7 @@ export const getConfiguredPrivateRoomLimits = async (): Promise<Record<PaidPlanT
     return {
       pro: parseLimit(limits.pro, DEFAULT_PRIVATE_ROOM_LIMITS.pro),
       premium: parseLimit(limits.premium, DEFAULT_PRIVATE_ROOM_LIMITS.premium),
+      advertizer: parseLimit(limits.advertizer, DEFAULT_PRIVATE_ROOM_LIMITS.advertizer),
     };
   } catch {
     return DEFAULT_PRIVATE_ROOM_LIMITS;

@@ -61,6 +61,16 @@ const formatTimestamp = (value: any) => {
   }
 };
 
+const formatValidityDate = (isoStr?: string) => {
+  if (!isoStr) return 'Starts upon approval';
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch {
+    return 'Invalid date';
+  }
+};
+
 export default function AdvertisementPage() {
   const { currentUser, userProfile, loading, login, signup, changePassword, logout, resetPassword } = useAuth();
   const router = useRouter();
@@ -83,6 +93,143 @@ export default function AdvertisementPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState<string | null>(null);
   const [ownerSearch, setOwnerSearch] = useState('');
+  const [pricing, setPricing] = useState({
+    currency: 'INR',
+    adMonthly: 100,
+    adQuarterly: 250,
+    adYearly: 800,
+  });
+  const [paidPlan, setPaidPlan] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/public/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!active) return;
+        if (data?.data?.pricing) {
+          setPricing({
+            currency: data.data.pricing.currency || 'INR',
+            adMonthly: Number(data.data.pricing.adMonthly) || 100,
+            adQuarterly: Number(data.data.pricing.adQuarterly) || 250,
+            adYearly: Number(data.data.pricing.adYearly) || 800,
+          });
+        }
+      })
+      .catch((err) => console.error('Failed to load public settings:', err));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser || ownerAdsLoading) return;
+    if (ownerAds.length === 0) {
+      fetch('/api/advertisements/payment/check')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success && data?.data?.paidPlan) {
+            setPaidPlan(data.data.paidPlan);
+            setPaymentId(data.data.paymentId);
+          }
+        })
+        .catch((err) => console.error('Failed to check ad payment status:', err));
+    }
+  }, [currentUser, ownerAds, ownerAdsLoading]);
+
+  const loadRazorpayScript = () => {
+    if (typeof window === 'undefined') return Promise.resolve(false);
+    if ((window as any).Razorpay) return Promise.resolve(true);
+
+    return new Promise<boolean>((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleSubscribeNow = async (plan: 'monthly' | 'quarterly' | 'yearly') => {
+    if (!currentUser) {
+      alert('Please log in to continue with the subscription payment.');
+      return;
+    }
+    setPaymentLoading(plan);
+    try {
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady) {
+        throw new Error('Unable to load Razorpay SDK. Please check your network connection.');
+      }
+
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const orderRes = await fetch('/api/advertisements/payment/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ plan }),
+      });
+
+      const orderPayload = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok || !orderPayload?.success) {
+        throw new Error(orderPayload?.message || 'Failed to initialize payment order.');
+      }
+
+      const orderData = orderPayload.data;
+      const checkout = new (window as any).Razorpay({
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'ABjee Travel',
+        description: `Advertisement ${plan} subscription`,
+        order_id: orderData.orderId,
+        handler: async (response: any) => {
+          try {
+            const verifyRes = await fetch('/api/advertisements/payment/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                ...response,
+                plan,
+              }),
+            });
+
+            const verifyPayload = await verifyRes.json().catch(() => ({}));
+            if (!verifyRes.ok || !verifyPayload?.success) {
+              throw new Error(verifyPayload?.message || 'Payment verification failed.');
+            }
+
+            setPaidPlan(plan);
+            setPaymentId(verifyPayload.data.paymentId);
+            alert(`Subscription payment completed successfully for the ${plan} plan!`);
+          } catch (verifyError: any) {
+            alert(verifyError.message || 'Verification failed. Please contact support.');
+          }
+        },
+        prefill: {
+          name: currentUser.displayName || '',
+          email: currentUser.email || '',
+        },
+        theme: {
+          color: '#e11d48',
+        },
+      });
+
+      checkout.open();
+    } catch (err: any) {
+      alert(err.message || 'Payment flow error occurred. Please try again.');
+    } finally {
+      setPaymentLoading(null);
+    }
+  };
 
   const profileEmail = useMemo(() => currentUser?.email || userProfile?.email || '', [currentUser?.email, userProfile?.email]);
   const hasPasswordProvider = useMemo(
@@ -535,49 +682,118 @@ export default function AdvertisementPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <article className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80">
-                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Starter</p>
-                  <div className="mt-2 flex items-end gap-1">
-                    <span className="text-3xl font-black text-slate-950 dark:text-white">₹499</span>
-                    <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ month</span>
+                <article className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80 flex flex-col justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Monthly Plan</p>
+                    <div className="mt-2 flex items-end gap-1">
+                      <span className="text-3xl font-black text-slate-950 dark:text-white">
+                        {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                        {pricing.adMonthly}
+                      </span>
+                      <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ month</span>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Best for a single location and one basic banner.</p>
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                      <li>• One live ad</li>
+                      <li>• Standard placement</li>
+                      <li>• Email support</li>
+                    </ul>
                   </div>
-                  <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Best for a single location and one basic banner.</p>
-                  <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                    <li>• One live ad</li>
-                    <li>• Standard placement</li>
-                    <li>• Email support</li>
-                  </ul>
+                  {ownerAds.length === 0 && (
+                    <Button
+                      type="button"
+                      disabled={paymentLoading !== null || paidPlan !== null}
+                      onClick={() => handleSubscribeNow('monthly')}
+                      className={`mt-6 w-full rounded-full font-semibold ${
+                        paidPlan === 'monthly'
+                          ? 'bg-emerald-600 hover:bg-emerald-600 text-white cursor-default'
+                          : 'bg-rose-600 hover:bg-rose-700 text-white'
+                      }`}
+                    >
+                      {paymentLoading === 'monthly'
+                        ? 'Processing...'
+                        : paidPlan === 'monthly'
+                        ? 'Subscribed ✓'
+                        : 'Subscribe Now'}
+                    </Button>
+                  )}
                 </article>
 
-                <article className="rounded-3xl border border-rose-300 bg-rose-50 p-4 shadow-lg shadow-rose-500/10 dark:border-rose-700 dark:bg-rose-950/30">
-                  <div className="inline-flex rounded-full border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
-                    Most popular
+                <article className="rounded-3xl border border-rose-300 bg-rose-50 p-4 shadow-lg shadow-rose-500/10 dark:border-rose-700 dark:bg-rose-950/30 flex flex-col justify-between">
+                  <div>
+                    <div className="inline-flex rounded-full border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
+                      Most popular
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Quarterly Plan</p>
+                    <div className="mt-2 flex items-end gap-1">
+                      <span className="text-3xl font-black text-slate-950 dark:text-white">
+                        {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                        {pricing.adQuarterly}
+                      </span>
+                      <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ 3 months</span>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">For businesses that want stronger visibility and more clicks.</p>
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                      <li>• Three active ads</li>
+                      <li>• Featured placement</li>
+                      <li>• Priority review</li>
+                    </ul>
                   </div>
-                  <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Growth</p>
-                  <div className="mt-2 flex items-end gap-1">
-                    <span className="text-3xl font-black text-slate-950 dark:text-white">₹999</span>
-                    <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ month</span>
-                  </div>
-                  <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">For businesses that want stronger visibility and more clicks.</p>
-                  <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                    <li>• Three active ads</li>
-                    <li>• Featured placement</li>
-                    <li>• Priority review</li>
-                  </ul>
+                  {ownerAds.length === 0 && (
+                    <Button
+                      type="button"
+                      disabled={paymentLoading !== null || paidPlan !== null}
+                      onClick={() => handleSubscribeNow('quarterly')}
+                      className={`mt-6 w-full rounded-full font-semibold ${
+                        paidPlan === 'quarterly'
+                          ? 'bg-emerald-600 hover:bg-emerald-600 text-white cursor-default'
+                          : 'bg-rose-600 hover:bg-rose-700 text-white'
+                      }`}
+                    >
+                      {paymentLoading === 'quarterly'
+                        ? 'Processing...'
+                        : paidPlan === 'quarterly'
+                        ? 'Subscribed ✓'
+                        : 'Subscribe Now'}
+                    </Button>
+                  )}
                 </article>
 
-                <article className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80">
-                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Premium</p>
-                  <div className="mt-2 flex items-end gap-1">
-                    <span className="text-3xl font-black text-slate-950 dark:text-white">₹1,999</span>
-                    <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ month</span>
+                <article className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80 flex flex-col justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Yearly Plan</p>
+                    <div className="mt-2 flex items-end gap-1">
+                      <span className="text-3xl font-black text-slate-950 dark:text-white">
+                        {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                        {pricing.adYearly}
+                      </span>
+                      <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ year</span>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">For full brand visibility across your target area.</p>
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                      <li>• Unlimited campaigns</li>
+                      <li>• Top placement</li>
+                      <li>• Direct support</li>
+                    </ul>
                   </div>
-                  <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">For full brand visibility across your target area.</p>
-                  <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                    <li>• Unlimited campaigns</li>
-                    <li>• Top placement</li>
-                    <li>• Direct support</li>
-                  </ul>
+                  {ownerAds.length === 0 && (
+                    <Button
+                      type="button"
+                      disabled={paymentLoading !== null || paidPlan !== null}
+                      onClick={() => handleSubscribeNow('yearly')}
+                      className={`mt-6 w-full rounded-full font-semibold ${
+                        paidPlan === 'yearly'
+                          ? 'bg-emerald-600 hover:bg-emerald-600 text-white cursor-default'
+                          : 'bg-rose-600 hover:bg-rose-700 text-white'
+                      }`}
+                    >
+                      {paymentLoading === 'yearly'
+                        ? 'Processing...'
+                        : paidPlan === 'yearly'
+                        ? 'Subscribed ✓'
+                        : 'Subscribe Now'}
+                    </Button>
+                  )}
                 </article>
               </div>
             </div>
@@ -618,6 +834,9 @@ export default function AdvertisementPage() {
             <div ref={formRef}>
             <AdvertisementForm
               submitLabel="Save changes"
+              isFirstAd={ownerAds.length === 0}
+              paidPlan={paidPlan}
+              paymentId={paymentId}
               adId={editingAd.id}
               initialValues={{
                 name: editingAd.name,
@@ -632,6 +851,7 @@ export default function AdvertisementPage() {
                 ownerName: editingAd.ownerName || undefined,
                 ownerPhoneNumber: editingAd.ownerPhoneNumber || undefined,
                 additionalIdProofs: editingAd.additionalIdProofs || [],
+                plan: (editingAd as any).plan || 'monthly',
               }}
               onSubmitted={(id) => {
                 setEditingAd(null);
@@ -646,7 +866,19 @@ export default function AdvertisementPage() {
           ) : (
             <div ref={formRef}>
               {showNewForm ? (
-                <AdvertisementForm submitLabel="Submit for Approval" defaultStatus="pending" mode="public" onSubmitted={() => void loadOwnerAds()} />
+                <AdvertisementForm 
+                  submitLabel="Submit for Approval" 
+                  isFirstAd={ownerAds.length === 0} 
+                  paidPlan={paidPlan}
+                  paymentId={paymentId}
+                  defaultStatus="pending" 
+                  mode="public" 
+                  onSubmitted={() => {
+                    setPaidPlan(null);
+                    setPaymentId(null);
+                    void loadOwnerAds();
+                  }} 
+                />
               ) : (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50/10 p-4">
                   <p className="font-semibold text-foreground">{successMessage || 'Registration sent for admin approval.'}</p>
@@ -747,6 +979,24 @@ export default function AdvertisementPage() {
                       <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-1.5">
                         <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Email</p>
                         <p className="mt-0.5 font-medium text-foreground truncate" title={item.ownerEmail || profileEmail}>{item.ownerEmail || profileEmail || '—'}</p>
+                      </div>
+
+                      <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Subscription Validity</p>
+                        <p className="mt-0.5 font-semibold text-foreground">
+                          {item.status === 'approved' ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              Valid until {formatValidityDate((item as any).subscriptionExpiresAt)}
+                            </span>
+                          ) : item.status === 'rejected' ? (
+                            <span className="text-rose-600 dark:text-rose-400">N/A</span>
+                          ) : (
+                            <span className="text-amber-600 dark:text-amber-400">Starts upon approval</span>
+                          )}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground mt-0.5 capitalize">
+                          Plan: {(item as any).plan || 'monthly'} • {(item as any).paid === true ? 'Paid' : 'Free Trial/Promo'}
+                        </p>
                       </div>
 
                       {item.description && (

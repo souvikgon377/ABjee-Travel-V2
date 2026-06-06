@@ -46,8 +46,11 @@ type RevenueSettings = {
     proYearly: number;
     premiumMonthly: number;
     premiumYearly: number;
-    advertizerMonthly?: number;
-    advertizerYearly?: number;
+    advertizerMonthly: number;
+    advertizerYearly: number;
+    adMonthly: number;
+    adQuarterly: number;
+    adYearly: number;
   };
   privateRoomLimits: {
     pro: number;
@@ -70,6 +73,9 @@ const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
     premiumYearly: 15,
     advertizerMonthly: 1000,
     advertizerYearly: 10000,
+    adMonthly: 100,
+    adQuarterly: 250,
+    adYearly: 800,
   },
   privateRoomLimits: {
     pro: 3,
@@ -238,6 +244,9 @@ export default function AdminDashboard() {
         premiumYearly: toAmount(pricing.premiumYearly, REVENUE_SETTINGS_DEFAULTS.pricing.premiumYearly),
         advertizerMonthly: toAmount(pricing.advertizerMonthly, REVENUE_SETTINGS_DEFAULTS.pricing.advertizerMonthly),
         advertizerYearly: toAmount(pricing.advertizerYearly, REVENUE_SETTINGS_DEFAULTS.pricing.advertizerYearly),
+        adMonthly: toAmount(pricing.adMonthly, REVENUE_SETTINGS_DEFAULTS.pricing.adMonthly),
+        adQuarterly: toAmount(pricing.adQuarterly, REVENUE_SETTINGS_DEFAULTS.pricing.adQuarterly),
+        adYearly: toAmount(pricing.adYearly, REVENUE_SETTINGS_DEFAULTS.pricing.adYearly),
       },
       privateRoomLimits: {
         pro: toLimit(limits.pro, REVENUE_SETTINGS_DEFAULTS.privateRoomLimits.pro),
@@ -422,6 +431,9 @@ export default function AdminDashboard() {
           premiumYearly: Number(revenueForm.pricing.premiumYearly) || 0,
           advertizerMonthly: Number(revenueForm.pricing.advertizerMonthly) || 0,
           advertizerYearly: Number(revenueForm.pricing.advertizerYearly) || 0,
+          adMonthly: Number(revenueForm.pricing.adMonthly) || 0,
+          adQuarterly: Number(revenueForm.pricing.adQuarterly) || 0,
+          adYearly: Number(revenueForm.pricing.adYearly) || 0,
         },
         privateRoomLimits: {
           pro: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.pro) || 0)),
@@ -721,7 +733,7 @@ export default function AdminDashboard() {
                 <div className="h-24 animate-pulse rounded-lg bg-muted/40" />
               ) : (
                 <>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     <div className="rounded-xl border border-border bg-background/70 p-4">
                       <h3 className="mb-3 text-sm font-semibold">Pricing Controller</h3>
                       <div className="space-y-3">
@@ -852,6 +864,51 @@ export default function AdminDashboard() {
 
                       <p className="mt-3 text-xs text-muted-foreground">
                         This controller applies to private community creation only. Joining private communities is unlimited for all users.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-background/70 p-4">
+                      <h3 className="mb-3 text-sm font-semibold">Advertisement Plan Controller</h3>
+                      <div className="space-y-3">
+                        <label className="block text-xs text-muted-foreground">
+                          Monthly Plan Price
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.adMonthly}
+                            onChange={(event) => handleRevenuePricingChange('adMonthly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Quarterly Plan Price
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.adQuarterly}
+                            onChange={(event) => handleRevenuePricingChange('adQuarterly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Yearly Plan Price
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={revenueForm.pricing.adYearly}
+                            onChange={(event) => handleRevenuePricingChange('adYearly', event.target.value)}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        This controller configures the partner registration pricing plans displayed on the Advertisement page.
                       </p>
                     </div>
                   </div>

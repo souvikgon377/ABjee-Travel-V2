@@ -55,6 +55,17 @@ export async function POST(req: NextRequest) {
 
     if (status === 'approved') {
       updates.approvedAt = serverTimestamp;
+      
+      const plan = data.plan || 'monthly';
+      const expiryDate = new Date();
+      if (plan === 'yearly') {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      } else if (plan === 'quarterly') {
+        expiryDate.setMonth(expiryDate.getMonth() + 3);
+      } else {
+        expiryDate.setMonth(expiryDate.getMonth() + 1);
+      }
+      updates.subscriptionExpiresAt = expiryDate.toISOString();
     }
 
     // Update Firestore
@@ -79,9 +90,35 @@ export async function POST(req: NextRequest) {
         ? `Partner Registration Approved - ABjee Travel`
         : `Partner Registration Rejected - ABjee Travel`;
 
-      const introText = isApproved
+      let introText = isApproved
         ? `We are pleased to inform you that your advertisement/registration "${adName}" has been approved!`
         : `We regret to inform you that your advertisement/registration "${adName}" has been rejected.`;
+
+      let introHtml = isApproved
+        ? `We are pleased to inform you that your advertisement/registration "${adName}" has been approved!`
+        : `We regret to inform you that your advertisement/registration "${adName}" has been rejected.`;
+
+      if (isApproved) {
+        const startStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+        const plan = data.plan || 'monthly';
+        const expiryDate = new Date();
+        if (plan === 'yearly') {
+          expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+        } else if (plan === 'quarterly') {
+          expiryDate.setMonth(expiryDate.getMonth() + 3);
+        } else {
+          expiryDate.setMonth(expiryDate.getMonth() + 1);
+        }
+        const endStr = expiryDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        introText += `\n\nSubscription Details:\nPlan: ${plan.toUpperCase()}\nStart Date: ${startStr}\nEnd Date: ${endStr}`;
+        introHtml += `<div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 12px; margin: 16px 0; border-radius: 4px; line-height: 1.6; margin-top: 15px;">
+          <strong>Subscription Details:</strong><br />
+          Plan: ${plan.toUpperCase()}<br />
+          Start Date: ${startStr}<br />
+          End Date: ${endStr}
+        </div>`;
+      }
 
       const commentSection = comment
         ? `\nMessage from Admin:\n"${comment}"\n`
@@ -97,7 +134,7 @@ ABjee Travel Team`;
       const html = `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
         <h2 style="color: ${isApproved ? '#10b981' : '#ef4444'}; margin-top: 0;">Registration Notification</h2>
         <p>Hello <strong>${ownerName}</strong>,</p>
-        <p>${introText}</p>
+        <p>${introHtml}</p>
         ${comment ? `<div style="background-color: #f8fafc; border-left: 4px solid ${isApproved ? '#10b981' : '#ef4444'}; padding: 12px; margin: 16px 0; border-radius: 4px;">
           <strong style="display: block; margin-bottom: 4px; color: #475569;">Message from Admin:</strong>
           <span style="font-style: italic; white-space: pre-wrap;">"${comment}"</span>

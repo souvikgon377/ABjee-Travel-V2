@@ -16,6 +16,11 @@ export interface RevenueSettingsCache {
     proYearly: number;
     premiumMonthly: number;
     premiumYearly: number;
+    advertizerMonthly?: number;
+    advertizerYearly?: number;
+    adMonthly?: number;
+    adQuarterly?: number;
+    adYearly?: number;
   };
   privateRoomLimits: {
     pro: number;

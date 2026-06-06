@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud, ChevronsUpDown, Search, X, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud, ChevronsUpDown, Search, X, Plus, Trash2, Lock } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { fetchAdvertisementLocations, type AdvertisementLocationOption } from '@/lib/advertisementLocations';
@@ -22,6 +22,9 @@ type AdvertisementFormProps = {
   defaultStatus?: AdvertisementStatus;
   mode?: 'public' | 'admin';
   onSubmitted?: (id: string) => void;
+  isFirstAd?: boolean;
+  paidPlan?: string | null;
+  paymentId?: string | null;
   // Edit mode props
   adId?: string;
   initialValues?: Partial<{
@@ -37,6 +40,7 @@ type AdvertisementFormProps = {
     ownerName?: string;
     ownerPhoneNumber?: string;
     additionalIdProofs?: Array<{ url: string; publicId: string; name: string }>;
+    plan?: string;
   }>;
 };
 
@@ -173,6 +177,7 @@ const emptyState = {
   description: '',
   ownerName: '',
   ownerPhoneNumber: '',
+  plan: 'monthly',
 };
 
 const categoryOptions = [
@@ -183,10 +188,37 @@ const categoryOptions = [
   'Travel services',
 ];
 
-export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode = 'public', onSubmitted, adId, initialValues }: AdvertisementFormProps) {
+export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode = 'public', onSubmitted, isFirstAd, paidPlan, paymentId, adId, initialValues }: AdvertisementFormProps) {
   const { currentUser, userProfile } = useAuth();
   const profileEmail = currentUser?.email || userProfile?.email || '';
   const [form, setForm] = useState(emptyState);
+  const [pricing, setPricing] = useState({
+    currency: 'INR',
+    adMonthly: 100,
+    adQuarterly: 250,
+    adYearly: 800,
+  });
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/public/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!active) return;
+        if (data?.data?.pricing) {
+          setPricing({
+            currency: data.data.pricing.currency || 'INR',
+            adMonthly: Number(data.data.pricing.adMonthly) || 100,
+            adQuarterly: Number(data.data.pricing.adQuarterly) || 250,
+            adYearly: Number(data.data.pricing.adYearly) || 800,
+          });
+        }
+      })
+      .catch((err) => console.error('Failed to load public settings:', err));
+    return () => {
+      active = false;
+    };
+  }, []);
   const [locations, setLocations] = useState<AdvertisementLocationOption[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
@@ -242,6 +274,7 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
       description: initialValues.description ?? cur.description,
       ownerName: (initialValues as any).ownerName ?? cur.ownerName,
       ownerPhoneNumber: (initialValues as any).ownerPhoneNumber ?? cur.ownerPhoneNumber,
+      plan: (initialValues as any).plan ?? cur.plan,
     }));
 
     if (initialValues.photoUrl) {
@@ -441,174 +474,200 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
       // ID proof (PDF or image) is required
       if (!idFile && !(initialValues as any)?.idProofUrl) throw new Error('Please upload ID proof (PDF or image)');
 
-      const countryStr = form.countries.join(', ');
-      const stateStr = form.states.join(', ');
-      const areaStr = form.areas.join(', ');
-
-      // If editing, update the existing document
-      if (adId) {
-        const updateFields: Record<string, any> = {
-          name: form.name.trim(),
-          email: profileEmail || null,
-          mobileNumber: form.mobileNumber.trim(),
-          category: form.category.trim(),
-          description: form.description ? form.description.trim() : '',
-          country: countryStr,
-          state: stateStr,
-          area: areaStr,
-          ownerUid: currentUser?.uid || null,
-          ownerEmail: profileEmail || null,
-          ownerName: form.ownerName.trim(),
-          ownerPhoneNumber: form.ownerPhoneNumber.trim(),
-          updatedAt: serverTimestamp(),
-        };
-        // Only mark pending / record editedBy when something actually changed
-        const original = initialValues || {};
-        const changed =
-          (form.name.trim() !== (original.name ?? '').trim()) ||
-          (form.mobileNumber.trim() !== (original.mobileNumber ?? '').trim()) ||
-          (form.category.trim() !== (original.category ?? '').trim()) ||
-          (countryStr !== (original.country ?? '')) ||
-          (stateStr !== (original.state ?? '')) ||
-          (areaStr !== (original.area ?? '')) ||
-          (form.description?.trim() !== (original.description ?? '').trim()) ||
-          (form.ownerName.trim() !== ((original as any).ownerName ?? '').trim()) ||
-          (form.ownerPhoneNumber.trim() !== ((original as any).ownerPhoneNumber ?? '').trim()) ||
-          Boolean(photoFile) ||
-          Boolean(idFile) ||
-          (additionalIds.some(item => !item.isExisting));
-
-        if (changed) {
-          updateFields.approvalStatus = 'pending';
-          updateFields.status = 'pending';
-          updateFields.approvedAt = null;
-          // Record who edited this ad
-          updateFields.editedByUid = currentUser?.uid || null;
-          updateFields.editedByEmail = profileEmail || null;
-          updateFields.editedAt = serverTimestamp();
-        }
-
-        if (photoFile) {
-          const uploadResult = await uploadImageToCloudinary(photoFile, { folder: 'advertisements' });
-          updateFields.photoUrl = uploadResult.url;
-          updateFields.photoPublicId = uploadResult.publicId;
-          updateFields.photoHash = uploadResult.hash;
-        }
-        if (idFile) {
-          const idUpload = await uploadImageToCloudinary(idFile, { folder: 'advertisements/id-proofs', allowedFormats: ['pdf','jpg','jpeg','png'] });
-          updateFields.idProofUrl = idUpload.url;
-          updateFields.idProofPublicId = idUpload.publicId;
-          updateFields.idProofHash = idUpload.hash;
-        }
-
-        const uploadedAdditionalIds: Array<{ url: string; publicId: string; name: string }> = [];
-        for (const item of additionalIds) {
-          if (item.isExisting) {
-            uploadedAdditionalIds.push({
-              url: item.url,
-              publicId: (original as any).additionalIdProofs?.find((p: any) => p.url === item.url)?.publicId || '',
-              name: item.name,
-            });
-          } else if (item.file) {
-            const uploadResult = await uploadImageToCloudinary(item.file, {
-              folder: 'advertisements/id-proofs',
-              allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'],
-            });
-            uploadedAdditionalIds.push({
-              url: uploadResult.url,
-              publicId: uploadResult.publicId,
-              name: item.name,
-            });
-          }
-        }
-        updateFields.additionalIdProofs = uploadedAdditionalIds;
-
-        await updateDoc(doc(firestoreDb, AD_COLLECTION, adId), updateFields);
-
-        // Trigger real-time Typesense sync
-        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-        await fetch('/api/advertisements/sync', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: adId, action: 'upsert' }),
-        }).catch((err) => console.error('Failed to trigger sync', err));
-
-        setSuccessMessage('Registration updated successfully.');
-        onSubmitted?.(adId);
-      } else {
-        const photoResult = await uploadImageToCloudinary(photoFile as File, { folder: 'advertisements' });
-        let idResult: any = null;
-        if (idFile) {
-          idResult = await uploadImageToCloudinary(idFile, { folder: 'advertisements/id-proofs', allowedFormats: ['pdf','jpg','jpeg','png'] });
-        }
-
-        const uploadedAdditionalIds: Array<{ url: string; publicId: string; name: string }> = [];
-        for (const item of additionalIds) {
-          if (item.file) {
-            const uploadResult = await uploadImageToCloudinary(item.file, {
-              folder: 'advertisements/id-proofs',
-              allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'],
-            });
-            uploadedAdditionalIds.push({
-              url: uploadResult.url,
-              publicId: uploadResult.publicId,
-              name: item.name,
-            });
-          }
-        }
-
-        const documentRef = await addDoc(collection(firestoreDb, AD_COLLECTION), {
-          name: form.name.trim(),
-          email: profileEmail || null,
-          mobileNumber: form.mobileNumber.trim(),
-          category: form.category.trim(),
-          description: form.description ? form.description.trim() : '',
-          country: countryStr,
-          state: stateStr,
-          area: areaStr,
-          ownerUid: currentUser?.uid || null,
-          ownerEmail: profileEmail || null,
-          ownerName: form.ownerName.trim(),
-          ownerPhoneNumber: form.ownerPhoneNumber.trim(),
-          photoUrl: photoResult.url,
-          photoPublicId: photoResult.publicId,
-          photoHash: photoResult.hash,
-          idProofUrl: idResult?.url || null,
-          idProofPublicId: idResult?.publicId || null,
-          idProofHash: idResult?.hash || null,
-          additionalIdProofs: uploadedAdditionalIds,
-          status: defaultStatus,
-          approvalStatus: defaultStatus,
-          source: mode,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          approvedAt: defaultStatus === 'approved' ? serverTimestamp() : null,
-        });
-
-        // Trigger real-time Typesense sync
-        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-        await fetch('/api/advertisements/sync', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: documentRef.id, action: 'upsert' }),
-        }).catch((err) => console.error('Failed to trigger sync', err));
-
-        setSuccessMessage(defaultStatus === 'approved' ? 'Registration saved and marked approved.' : 'Registration submitted for approval.');
-        resetForm();
-        onSubmitted?.(documentRef.id);
+      if (isFirstAd && !adId && !paidPlan) {
+        throw new Error('Please purchase a subscription plan to post your advertisement.');
       }
+
+      await executeSubmit(Boolean(paidPlan));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to submit Registration');
-    } finally {
       setSubmitting(false);
     }
   };
+
+  const executeSubmit = async (paid = false) => {
+    const countryStr = form.countries.join(', ');
+    const stateStr = form.states.join(', ');
+    const areaStr = form.areas.join(', ');
+
+    // If editing, update the existing document
+    if (adId) {
+      const updateFields: Record<string, any> = {
+        name: form.name.trim(),
+        email: profileEmail || null,
+        mobileNumber: form.mobileNumber.trim(),
+        category: form.category.trim(),
+        description: form.description ? form.description.trim() : '',
+        country: countryStr,
+        state: stateStr,
+        area: areaStr,
+        ownerUid: currentUser?.uid || null,
+        ownerEmail: profileEmail || null,
+        ownerName: form.ownerName.trim(),
+        ownerPhoneNumber: form.ownerPhoneNumber.trim(),
+        plan: paidPlan || form.plan || 'monthly',
+        updatedAt: serverTimestamp(),
+      };
+      // Only mark pending / record editedBy when something actually changed
+      const original = initialValues || {};
+      const changed =
+        (form.name.trim() !== (original.name ?? '').trim()) ||
+        (form.mobileNumber.trim() !== (original.mobileNumber ?? '').trim()) ||
+        (form.category.trim() !== (original.category ?? '').trim()) ||
+        (countryStr !== (original.country ?? '')) ||
+        (stateStr !== (original.state ?? '')) ||
+        (areaStr !== (original.area ?? '')) ||
+        (form.description?.trim() !== (original.description ?? '').trim()) ||
+        (form.ownerName.trim() !== ((original as any).ownerName ?? '').trim()) ||
+        (form.ownerPhoneNumber.trim() !== ((original as any).ownerPhoneNumber ?? '').trim()) ||
+        (form.plan !== ((original as any).plan ?? 'monthly')) ||
+        Boolean(photoFile) ||
+        Boolean(idFile) ||
+        (additionalIds.some(item => !item.isExisting));
+
+      if (changed) {
+        updateFields.approvalStatus = 'pending';
+        updateFields.status = 'pending';
+        updateFields.approvedAt = null;
+        // Record who edited this ad
+        updateFields.editedByUid = currentUser?.uid || null;
+        updateFields.editedByEmail = profileEmail || null;
+        updateFields.editedAt = serverTimestamp();
+      }
+
+      if (photoFile) {
+        const uploadResult = await uploadImageToCloudinary(photoFile, { folder: 'advertisements' });
+        updateFields.photoUrl = uploadResult.url;
+        updateFields.photoPublicId = uploadResult.publicId;
+        updateFields.photoHash = uploadResult.hash;
+      }
+      if (idFile) {
+        const idUpload = await uploadImageToCloudinary(idFile, { folder: 'advertisements/id-proofs', allowedFormats: ['pdf','jpg','jpeg','png'] });
+        updateFields.idProofUrl = idUpload.url;
+        updateFields.idProofPublicId = idUpload.publicId;
+        updateFields.idProofHash = idUpload.hash;
+      }
+
+      const uploadedAdditionalIds: Array<{ url: string; publicId: string; name: string }> = [];
+      for (const item of additionalIds) {
+        if (item.isExisting) {
+          uploadedAdditionalIds.push({
+            url: item.url,
+            publicId: (original as any).additionalIdProofs?.find((p: any) => p.url === item.url)?.publicId || '',
+            name: item.name,
+          });
+        } else if (item.file) {
+          const uploadResult = await uploadImageToCloudinary(item.file, {
+            folder: 'advertisements/id-proofs',
+            allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'],
+          });
+          uploadedAdditionalIds.push({
+            url: uploadResult.url,
+            publicId: uploadResult.publicId,
+            name: item.name,
+          });
+        }
+      }
+      updateFields.additionalIdProofs = uploadedAdditionalIds;
+
+      await updateDoc(doc(firestoreDb, AD_COLLECTION, adId), updateFields);
+
+      // Trigger real-time Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: adId, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger sync', err));
+
+      setSuccessMessage('Registration updated successfully.');
+      onSubmitted?.(adId);
+    } else {
+      const photoResult = await uploadImageToCloudinary(photoFile as File, { folder: 'advertisements' });
+      let idResult: any = null;
+      if (idFile) {
+        idResult = await uploadImageToCloudinary(idFile, { folder: 'advertisements/id-proofs', allowedFormats: ['pdf','jpg','jpeg','png'] });
+      }
+
+      const uploadedAdditionalIds: Array<{ url: string; publicId: string; name: string }> = [];
+      for (const item of additionalIds) {
+        if (item.file) {
+          const uploadResult = await uploadImageToCloudinary(item.file, {
+            folder: 'advertisements/id-proofs',
+            allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'],
+          });
+          uploadedAdditionalIds.push({
+            url: uploadResult.url,
+            publicId: uploadResult.publicId,
+            name: item.name,
+          });
+        }
+      }
+
+      const plan = paidPlan || form.plan || 'monthly';
+      const expiryDate = new Date();
+      if (plan === 'yearly') {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      } else if (plan === 'quarterly') {
+        expiryDate.setMonth(expiryDate.getMonth() + 3);
+      } else {
+        expiryDate.setMonth(expiryDate.getMonth() + 1);
+      }
+
+      const documentRef = await addDoc(collection(firestoreDb, AD_COLLECTION), {
+        name: form.name.trim(),
+        email: profileEmail || null,
+        mobileNumber: form.mobileNumber.trim(),
+        category: form.category.trim(),
+        description: form.description ? form.description.trim() : '',
+        country: countryStr,
+        state: stateStr,
+        area: areaStr,
+        ownerUid: currentUser?.uid || null,
+        ownerEmail: profileEmail || null,
+        ownerName: form.ownerName.trim(),
+        ownerPhoneNumber: form.ownerPhoneNumber.trim(),
+        photoUrl: photoResult.url,
+        photoPublicId: photoResult.publicId,
+        photoHash: photoResult.hash,
+        idProofUrl: idResult?.url || null,
+        idProofPublicId: idResult?.publicId || null,
+        idProofHash: idResult?.hash || null,
+        additionalIdProofs: uploadedAdditionalIds,
+        status: defaultStatus,
+        approvalStatus: defaultStatus,
+        source: mode,
+        plan,
+        paid: paid || Boolean(paidPlan) || defaultStatus === 'approved',
+        subscriptionExpiresAt: defaultStatus === 'approved' ? expiryDate.toISOString() : null,
+        razorpayPaymentId: paymentId || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        approvedAt: defaultStatus === 'approved' ? serverTimestamp() : null,
+      });
+
+      // Trigger real-time Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: documentRef.id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger sync', err));
+
+      setSuccessMessage(defaultStatus === 'approved' ? 'Registration saved and marked approved.' : 'Registration submitted for approval.');
+      resetForm();
+      onSubmitted?.(documentRef.id);
+    }
+    setSubmitting(false);
+  };
+
+  const isLocked = isFirstAd && !adId && !paidPlan;
 
   return (
     <Card className="border-white/10 bg-white/90 shadow-2xl shadow-rose-500/10 backdrop-blur dark:bg-slate-950/80">
@@ -628,7 +687,19 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-5 p-5 sm:p-6">
+      <CardContent className="space-y-5 p-5 sm:p-6 relative overflow-hidden">
+        {isLocked && (
+          <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-md p-6 text-center select-none">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-500/20 border border-rose-500/35 text-rose-500 mb-4 shadow-lg shadow-rose-500/20 animate-pulse">
+              <Lock className="h-8 w-8" />
+            </div>
+            <h4 className="text-xl font-bold text-white tracking-wide">Subscribe Now to Post Your Advertisement</h4>
+            <p className="text-sm text-slate-300 mt-2 max-w-xs">
+              Choose one of our premium placement plans above to unlock this registration form.
+            </p>
+          </div>
+        )}
+
         {loadingLocations ? (
           <div className="flex items-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -648,6 +719,26 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
             {successMessage}
           </div>
         ) : null}
+
+        {paidPlan && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 flex items-start gap-2.5">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold capitalize">Active Subscription: {paidPlan} Plan</p>
+              <p className="text-xs text-emerald-600/90 dark:text-emerald-400/90 mt-1 leading-relaxed">
+                Your payment was successfully verified!
+                <br />
+                Validity: <strong>{new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</strong> to <strong>{(() => {
+                  const d = new Date();
+                  if (paidPlan === 'yearly') d.setFullYear(d.getFullYear() + 1);
+                  else if (paidPlan === 'quarterly') d.setMonth(d.getMonth() + 3);
+                  else d.setMonth(d.getMonth() + 1);
+                  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+                })()}</strong> (Will activate upon admin approval).
+              </p>
+            </div>
+          </div>
+        )}
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
@@ -766,6 +857,8 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
                 disabled={form.states.length === 0}
               />
             </label>
+
+
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">

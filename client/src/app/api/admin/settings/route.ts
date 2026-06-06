@@ -17,6 +17,9 @@ const DEFAULT_PRICING = {
   premiumYearly: 15,
   advertizerMonthly: 1000,
   advertizerYearly: 10000,
+  adMonthly: 100,
+  adQuarterly: 250,
+  adYearly: 800,
 };
 const DEFAULT_PRIVATE_ROOM_LIMITS = {
   pro: 3,
@@ -62,6 +65,9 @@ const normalizePricing = (value: unknown) => {
     premiumYearly: normalizeAmount(raw.premiumYearly, DEFAULT_PRICING.premiumYearly),
     advertizerMonthly: normalizeAmount(raw.advertizerMonthly, DEFAULT_PRICING.advertizerMonthly),
     advertizerYearly: normalizeAmount(raw.advertizerYearly, DEFAULT_PRICING.advertizerYearly),
+    adMonthly: normalizeAmount(raw.adMonthly, DEFAULT_PRICING.adMonthly),
+    adQuarterly: normalizeAmount(raw.adQuarterly, DEFAULT_PRICING.adQuarterly),
+    adYearly: normalizeAmount(raw.adYearly, DEFAULT_PRICING.adYearly),
   };
 };
 

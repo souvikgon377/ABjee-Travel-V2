@@ -46,10 +46,17 @@ export async function GET() {
   try {
     const snapshot = await withTimeout(adminDb.collection('admin_settings').doc('system').get(), 'public settings') as any;
     const raw = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    const pricing = raw.pricing && typeof raw.pricing === 'object' ? (raw.pricing as Record<string, unknown>) : {};
 
     const settings = {
       homePageEnabled: raw.homePageEnabled === true,
       bookingCategoriesEnabled: raw.bookingCategoriesEnabled !== false,
+      pricing: {
+        currency: typeof pricing.currency === 'string' && pricing.currency.trim() ? pricing.currency.trim().toUpperCase() : 'INR',
+        adMonthly: Number(pricing.adMonthly) || 100,
+        adQuarterly: Number(pricing.adQuarterly) || 250,
+        adYearly: Number(pricing.adYearly) || 800,
+      },
     };
 
     return ok(settings, 200);
@@ -62,6 +69,12 @@ export async function GET() {
       {
         homePageEnabled: false,
         bookingCategoriesEnabled: true,
+        pricing: {
+          currency: 'INR',
+          adMonthly: 100,
+          adQuarterly: 250,
+          adYearly: 800,
+        },
         _fallback: true,
       },
       200,
