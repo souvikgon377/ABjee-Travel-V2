@@ -26,6 +26,7 @@ type OwnerAdvertisement = {
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   createdAt?: any;
   updatedAt?: any;
+  subscriptionExpiresAt?: string;
   ownerUid?: string | null;
   ownerEmail?: string | null;
   ownerName?: string | null;
@@ -68,6 +69,15 @@ const formatValidityDate = (isoStr?: string) => {
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   } catch {
     return 'Invalid date';
+  }
+};
+
+const isExpired = (isoStr?: string) => {
+  if (!isoStr) return false;
+  try {
+    return new Date(isoStr).getTime() < Date.now();
+  } catch {
+    return false;
   }
 };
 
@@ -985,9 +995,15 @@ export default function AdvertisementPage() {
                         <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Subscription Validity</p>
                         <p className="mt-0.5 font-semibold text-foreground">
                           {item.status === 'approved' ? (
-                            <span className="text-emerald-600 dark:text-emerald-400">
-                              Valid until {formatValidityDate((item as any).subscriptionExpiresAt)}
-                            </span>
+                            isExpired(item.subscriptionExpiresAt) ? (
+                              <span className="text-rose-600 dark:text-rose-400 font-bold uppercase tracking-wider text-xs">
+                                Expired
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                Valid until {formatValidityDate(item.subscriptionExpiresAt)}
+                              </span>
+                            )
                           ) : item.status === 'rejected' ? (
                             <span className="text-rose-600 dark:text-rose-400">N/A</span>
                           ) : (

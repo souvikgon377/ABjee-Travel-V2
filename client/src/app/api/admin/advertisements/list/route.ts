@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       page,
       limit,
       forceRefresh,
+      includeExpired: true,
     });
 
     return ok({

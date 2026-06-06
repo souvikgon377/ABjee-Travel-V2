@@ -415,6 +415,7 @@ export class SyncService {
         approvalStatus: data.approvalStatus || 'pending',
         createdAt: this.toTimestamp(data.createdAt),
         approvedAt: data.approvedAt ? this.toTimestamp(data.approvedAt) : null,
+        subscriptionExpiresAt: data.subscriptionExpiresAt ? this.toTimestamp(data.subscriptionExpiresAt) : 4102444800,
       };
     }
 

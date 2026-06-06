@@ -36,6 +36,7 @@ type AdItem = {
   updatedAt?: any;
   rating?: number;
   comments?: any[];
+  subscriptionExpiresAt?: string;
 };
 
 type AdsStripProps = {
@@ -240,10 +241,24 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
             createdAt: data.createdAt,
             approvedAt: data.approvedAt,
             updatedAt: data.updatedAt,
+            subscriptionExpiresAt: typeof data.subscriptionExpiresAt === 'string' ? data.subscriptionExpiresAt : '',
           };
         });
 
-        const approvedRows = rows.filter((row) => row.photoUrl && (row.status === 'approved' || row.approvalStatus === 'approved'));
+        const approvedRows = rows.filter((row) => {
+          const isApproved = row.photoUrl && (row.status === 'approved' || row.approvalStatus === 'approved');
+          if (!isApproved) return false;
+          if (row.subscriptionExpiresAt) {
+            try {
+              if (new Date(row.subscriptionExpiresAt).getTime() < Date.now()) {
+                return false;
+              }
+            } catch (e) {
+              // ignore invalid dates
+            }
+          }
+          return true;
+        });
         const matchedRows = approvedRows.filter((row) => adMatchesSearch(row, searchTerm, places));
         
         // Show ONLY matched rows if there is a search filter applied. Do not fall back to all approved rows.

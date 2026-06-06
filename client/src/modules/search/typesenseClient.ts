@@ -210,6 +210,7 @@ export const advertisementsSchema = {
     { name: 'createdAt', type: 'int64' as const, optional: true },
     { name: 'updatedAt', type: 'int64' as const },
     { name: 'approvedAt', type: 'int64' as const, optional: true },
+    { name: 'subscriptionExpiresAt', type: 'int64' as const, optional: true },
   ],
   default_sorting_field: 'updatedAt',
 };

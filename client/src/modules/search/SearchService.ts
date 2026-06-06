@@ -58,6 +58,7 @@ export interface AdvertisementSearchOptions {
   category?: string;
   ownerEmail?: string;
   forceRefresh?: boolean;
+  includeExpired?: boolean;
 }
 
 /**
@@ -327,8 +328,9 @@ export class SearchService {
     const status = options.status || 'all';
     const category = options.category || 'all';
     const ownerEmail = options.ownerEmail ? String(options.ownerEmail).trim() : '';
+    const includeExpired = options.includeExpired ?? false;
     const cacheKey = await this.buildVersionedCacheKey(
-      this.buildScopedCacheKey('advertisements', { query, page, limit, status, category, ownerEmail })
+      this.buildScopedCacheKey('advertisements', { query, page, limit, status, category, ownerEmail, includeExpired })
     );
 
     this.logSearchOperation('[SearchService:Advertisements] Search started', {
@@ -360,6 +362,10 @@ export class SearchService {
         if (ownerEmail) {
           filters.push(`ownerEmail:=\`${ownerEmail}\``);
         }
+        if (!includeExpired) {
+          const nowSeconds = Math.floor(Date.now() / 1000);
+          filters.push(`subscriptionExpiresAt:>=${nowSeconds}`);
+        }
 
         const params: any = {
           q: query || '*',
@@ -381,7 +387,17 @@ export class SearchService {
 
         const tsResult = await client.collections(ADVERTISEMENTS_COLLECTION).documents().search(params);
         TypesenseBreaker.recordSuccess();
-        const rows = tsResult.hits?.map((hit: any) => hit.document) || [];
+        let rows = tsResult.hits?.map((hit: any) => hit.document) || [];
+        if (!includeExpired) {
+          const nowMs = Date.now();
+          rows = rows.filter((row: any) => {
+            if (row.subscriptionExpiresAt) {
+              const expiryMs = row.subscriptionExpiresAt * 1000;
+              return expiryMs >= nowMs;
+            }
+            return true;
+          });
+        }
         const result: SearchResult = {
           results: rows,
           totalCount: tsResult.found || rows.length,
@@ -438,6 +454,17 @@ export class SearchService {
     const filteredRows = rows.filter((row: any) => {
       if (status !== 'all' && String(row.status || 'pending').toLowerCase() !== status.toLowerCase()) return false;
       if (category !== 'all' && String(row.category || '').toLowerCase() !== category.toLowerCase()) return false;
+      
+      if (!includeExpired && row.subscriptionExpiresAt) {
+        try {
+          if (new Date(row.subscriptionExpiresAt).getTime() < Date.now()) {
+            return false;
+          }
+        } catch (e) {
+          // ignore invalid dates
+        }
+      }
+
       if (!normalizedQuery) return true;
       return [
         row.name,
