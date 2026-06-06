@@ -17,9 +17,10 @@ const buildLocations = (rows: LocationRow[]) => {
   for (const row of rows) {
     const country = normalize(row.country);
     const state = normalize(row.state);
-    const area = normalize(row.area);
+    // Use area if available, otherwise fall back to state (some countries only have country+state)
+    const area = normalize(row.area) || state;
 
-    if (!country || !state || !area) continue;
+    if (!country || !state) continue;
 
     const key = `${country.toLowerCase()}|${state.toLowerCase()}|${area.toLowerCase()}`;
     if (!deduped.has(key)) {
@@ -38,22 +39,50 @@ const buildLocations = (rows: LocationRow[]) => {
 
 export async function GET() {
   try {
-    // 1. Try Typesense if enabled (extremely fast, direct query)
+    // 1. Try Typesense if enabled — fetch all pages in parallel (2140+ docs)
     if (TYPESENSE_ENABLED) {
       try {
-        const tsResult = await client.collections('tourist_places').documents().search({
+        const pageSize = 250;
+
+        // Fetch page 1 first to learn the total count
+        const firstPage = await client.collections('tourist_places').documents().search({
           q: '*',
           query_by: 'name',
           filter_by: 'isActive:=true',
-          per_page: 250,
+          per_page: pageSize,
+          page: 1,
           include_fields: 'country,state,city,area',
         });
-        
-        const tsRows = tsResult.hits?.map((hit: any) => ({
+
+        const totalFound: number = (firstPage as any).found ?? 0;
+        const totalPages = Math.ceil(totalFound / pageSize);
+
+        // Fetch remaining pages in parallel
+        const remainingPages = totalPages > 1
+          ? await Promise.all(
+              Array.from({ length: totalPages - 1 }, (_, i) =>
+                client.collections('tourist_places').documents().search({
+                  q: '*',
+                  query_by: 'name',
+                  filter_by: 'isActive:=true',
+                  per_page: pageSize,
+                  page: i + 2,
+                  include_fields: 'country,state,city,area',
+                })
+              )
+            )
+          : [];
+
+        const allHits = [
+          ...(firstPage.hits || []),
+          ...remainingPages.flatMap((r) => r.hits || []),
+        ] as any[];
+
+        const tsRows: LocationRow[] = allHits.map((hit) => ({
           country: hit.document.country || '',
           state: hit.document.state || '',
           area: hit.document.area || hit.document.city || '',
-        })) || [];
+        }));
 
         const typesenseLocations = buildLocations(tsRows);
         if (typesenseLocations.length > 0) {
