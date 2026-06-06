@@ -24,6 +24,7 @@ type AdvertisementDoc = {
   photoPublicId?: string | null;
   idProofPublicId?: string | null;
   idProofHash?: string | null;
+  additionalIdProofs?: Array<{ url: string; publicId: string; name: string }>;
   ownerEmail?: string | null;
   ownerName?: string | null;
   ownerPhoneNumber?: string | null;
@@ -82,6 +83,7 @@ export function AdvertisementsManager() {
   const [editIdPreviewName, setEditIdPreviewName] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [comments, setComments] = useState<Record<string, string>>({});
 
   const loadItems = async () => {
     setLoading(true);
@@ -118,6 +120,11 @@ export function AdvertisementsManager() {
           idProofUrl: typeof data.idProofUrl === 'string' ? data.idProofUrl : (typeof data.id_proof_url === 'string' ? data.id_proof_url : null),
           idProofPublicId: typeof data.idProofPublicId === 'string' ? data.idProofPublicId : (typeof data.id_proof_public_id === 'string' ? data.id_proof_public_id : null),
           idProofHash: typeof data.idProofHash === 'string' ? data.idProofHash : (typeof data.id_proof_hash === 'string' ? data.id_proof_hash : null),
+          additionalIdProofs: data.additionalIdProofs
+            ? (typeof data.additionalIdProofs === 'string'
+              ? (data.additionalIdProofs.startsWith('[') ? JSON.parse(data.additionalIdProofs) : [])
+              : data.additionalIdProofs)
+            : [],
           ownerEmail: candidateEmail,
           ownerName: candidateName,
           ownerPhoneNumber: candidatePhone,
@@ -301,6 +308,9 @@ export function AdvertisementsManager() {
         country: editingItem.country,
         state: editingItem.state,
         area: editingItem.area,
+        ownerName: editingItem.ownerName ? editingItem.ownerName.trim() : '',
+        ownerPhoneNumber: editingItem.ownerPhoneNumber ? editingItem.ownerPhoneNumber.trim() : '',
+        category: editingItem.category || null,
         ...photoData,
         ...idData,
         approvalStatus: normalizeApprovalStatus((items.find((item) => item.id === editingItem.id)?.status || 'pending') as AdvertisementDoc['status']),
@@ -359,54 +369,65 @@ export function AdvertisementsManager() {
     }
   };
 
-  const approveItem = async (id: string) => {
+  const approveItem = async (id: string, comment?: string) => {
     setActionId(id);
     try {
-      await updateDoc(doc(firestoreDb, AD_COLLECTION, id), {
-        status: 'approved',
-        approvalStatus: 'approved',
-        approvedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      // Trigger real-time Typesense sync
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-      await fetch('/api/advertisements/sync', {
+      const response = await fetch('/api/admin/advertisements/status', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ id, action: 'upsert' }),
-      }).catch((err) => console.error('Failed to trigger approve sync', err));
+        body: JSON.stringify({ id, status: 'approved', comment: comment || '' }),
+      });
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}));
+        throw new Error(errPayload.message || 'Failed to approve registration.');
+      }
+
+      setComments((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
 
       await loadItems();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to approve Registration');
     } finally {
       setActionId(null);
     }
   };
 
-  const rejectItem = async (id: string) => {
+  const rejectItem = async (id: string, comment?: string) => {
     setActionId(id);
     try {
-      await updateDoc(doc(firestoreDb, AD_COLLECTION, id), {
-        status: 'rejected',
-        approvalStatus: 'rejected',
-        updatedAt: serverTimestamp(),
-      });
-
-      // Trigger real-time Typesense sync
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-      await fetch('/api/advertisements/sync', {
+      const response = await fetch('/api/admin/advertisements/status', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ id, action: 'upsert' }),
-      }).catch((err) => console.error('Failed to trigger reject sync', err));
+        body: JSON.stringify({ id, status: 'rejected', comment: comment || '' }),
+      });
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}));
+        throw new Error(errPayload.message || 'Failed to reject registration.');
+      }
+
+      setComments((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
 
       await loadItems();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to reject Registration');
     } finally {
       setActionId(null);
     }
@@ -523,19 +544,46 @@ export function AdvertisementsManager() {
                     {item.idProofUrl ? (
                       <div className="mt-2 text-sm">
                         <div className="text-xs text-muted-foreground">ID Proof</div>
-                        <a href={item.idProofUrl} target="_blank" rel="noreferrer" className="underline text-foreground">View / Download</a>
+                        <a href={item.idProofUrl} target="_blank" rel="noreferrer" className="underline text-rose-500 hover:text-rose-600">View / Download</a>
                       </div>
                     ) : null}
 
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" onClick={() => approveItem(item.id)} disabled={actionId === item.id} className="gap-2">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {actionId === item.id ? 'Updating...' : 'Approve'}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={() => rejectItem(item.id)} disabled={actionId === item.id} className="gap-2">
-                        <XCircle className="h-4 w-4" />
-                        Reject
-                      </Button>
+                    {item.additionalIdProofs && item.additionalIdProofs.length > 0 ? (
+                      <div className="mt-2 text-sm">
+                        <div className="text-xs text-muted-foreground">Additional ID Proofs</div>
+                        <div className="flex flex-col gap-1 mt-1">
+                          {item.additionalIdProofs.map((p, idx) => (
+                            <a key={idx} href={p.url} target="_blank" rel="noreferrer" className="underline text-rose-500 hover:text-rose-600 block truncate max-w-xs">
+                              {p.name || `Document ${idx + 1}`}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-3 space-y-2">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground block mb-1">
+                          Comment / Reason (optional, sent via email)
+                        </label>
+                        <textarea
+                          placeholder="Provide a comment or reason for approval/rejection..."
+                          value={comments[item.id] || ''}
+                          onChange={(e) => setComments(prev => ({ ...prev, [item.id]: e.target.value }))}
+                          className="w-full text-xs p-2 rounded-lg border border-border bg-slate-950/20 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                          rows={2}
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" onClick={() => approveItem(item.id, comments[item.id])} disabled={actionId === item.id} className="gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          {actionId === item.id ? 'Updating...' : 'Approve'}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => rejectItem(item.id, comments[item.id])} disabled={actionId === item.id} className="gap-2">
+                          <XCircle className="h-4 w-4" />
+                          Reject
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -615,11 +663,15 @@ export function AdvertisementsManager() {
                 </label>
                 <label className="space-y-2">
                   <span className="text-sm font-medium">Owner Email</span>
-                  <Input value={editingItem.ownerEmail || ''} readOnly />
+                  <Input value={editingItem.ownerEmail || ''} readOnly className="opacity-70" />
                 </label>
                 <label className="space-y-2">
                   <span className="text-sm font-medium">Owner Name</span>
-                  <Input value={editingItem.ownerName || ''} readOnly />
+                  <Input value={editingItem.ownerName || ''} onChange={(event) => updateEditField('ownerName', event.target.value)} />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm font-medium">Owner Phone Number</span>
+                  <Input value={editingItem.ownerPhoneNumber || ''} onChange={(event) => updateEditField('ownerPhoneNumber', event.target.value)} />
                 </label>
                 <label className="space-y-2">
                   <span className="text-sm font-medium">Category</span>
@@ -699,13 +751,27 @@ export function AdvertisementsManager() {
                 <div className="mt-1 text-xs text-muted-foreground">Approval status: <span className="capitalize">{item.approvalStatus || item.status}</span></div>
                 {item.ownerEmail ? <div className="mt-2 text-sm">Owner email: <span className="font-medium">{item.ownerEmail}</span></div> : null}
                 {item.ownerName ? <div className="mt-1 text-sm">Owner name: <span className="font-medium">{item.ownerName}</span></div> : null}
+                {item.ownerPhoneNumber ? <div className="mt-1 text-sm">Owner phone: <span className="font-medium">{item.ownerPhoneNumber}</span></div> : null}
                 {item.category ? <div className="mt-1 text-sm">Category: <span className="font-medium">{item.category}</span></div> : null}
                 {item.editedByEmail ? <div className="mt-1 text-sm">Last edited by: <span className="font-medium">{item.editedByEmail}</span> at <span className="font-medium">{item.editedAt ? toDate(item.editedAt).toLocaleString() : ''}</span></div> : null}
                 {item.approvedAt ? <div className="mt-1 text-sm">Approved at: <span className="font-medium">{toDate(item.approvedAt).toLocaleString()}</span></div> : null}
                 {item.idProofUrl ? (
                   <div className="mt-2 text-sm">
                     <div className="text-xs text-muted-foreground">ID Proof</div>
-                    <a href={item.idProofUrl} target="_blank" rel="noreferrer" className="underline text-foreground">View / Download</a>
+                    <a href={item.idProofUrl} target="_blank" rel="noreferrer" className="underline text-rose-500 hover:text-rose-600">View / Download</a>
+                  </div>
+                ) : null}
+
+                {item.additionalIdProofs && item.additionalIdProofs.length > 0 ? (
+                  <div className="mt-2 text-sm">
+                    <div className="text-xs text-muted-foreground">Additional ID Proofs</div>
+                    <div className="flex flex-col gap-1 mt-1">
+                      {item.additionalIdProofs.map((p, idx) => (
+                        <a key={idx} href={p.url} target="_blank" rel="noreferrer" className="underline text-rose-500 hover:text-rose-600 block truncate max-w-xs">
+                          {p.name || `Document ${idx + 1}`}
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-2">

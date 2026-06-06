@@ -56,6 +56,7 @@ export interface AdvertisementSearchOptions {
   limit?: number;
   status?: string;
   category?: string;
+  ownerEmail?: string;
   forceRefresh?: boolean;
 }
 
@@ -325,8 +326,9 @@ export class SearchService {
     const query = String(options.query || '').trim();
     const status = options.status || 'all';
     const category = options.category || 'all';
+    const ownerEmail = options.ownerEmail ? String(options.ownerEmail).trim() : '';
     const cacheKey = await this.buildVersionedCacheKey(
-      this.buildScopedCacheKey('advertisements', { query, page, limit, status, category })
+      this.buildScopedCacheKey('advertisements', { query, page, limit, status, category, ownerEmail })
     );
 
     this.logSearchOperation('[SearchService:Advertisements] Search started', {
@@ -335,6 +337,7 @@ export class SearchService {
       limit,
       status,
       category,
+      ownerEmail: ownerEmail || '(empty)',
       cacheKey,
       typesenseEnabled: TYPESENSE_ENABLED,
       redisAvailable: this.isRedisAvailable(),
@@ -353,6 +356,9 @@ export class SearchService {
         }
         if (category !== 'all') {
           filters.push(`category:=${category}`);
+        }
+        if (ownerEmail) {
+          filters.push(`ownerEmail:=\`${ownerEmail}\``);
         }
 
         const params: any = {
@@ -408,29 +414,47 @@ export class SearchService {
 
     // Cap Firestore reads to avoid large collection scans.
     const fetchLimit = Math.min(this.MAX_FIRESTORE_LIMIT, Math.max(this.SAFE_QUERY_LIMIT, page * limit));
-    const snap = await adminDb.collection('advertisements').orderBy('createdAt', 'desc').limit(fetchLimit).get();
+    let queryRef: any = adminDb.collection('advertisements');
+    let snap;
+    if (ownerEmail) {
+      queryRef = queryRef.where('ownerEmail', '==', ownerEmail);
+      snap = await queryRef.limit(fetchLimit).get();
+    } else {
+      snap = await queryRef.orderBy('createdAt', 'desc').limit(fetchLimit).get();
+    }
+
     const normalizedQuery = this.normalizeText(query);
-    const rows = snap.docs
-      .map((doc: any) => ({ id: doc.id, ...doc.data() }))
-      .filter((row: any) => {
-        if (status !== 'all' && String(row.status || 'pending').toLowerCase() !== status.toLowerCase()) return false;
-        if (category !== 'all' && String(row.category || '').toLowerCase() !== category.toLowerCase()) return false;
-        if (!normalizedQuery) return true;
-        return [
-          row.name,
-          row.mobileNumber,
-          row.country,
-          row.state,
-          row.area,
-          row.category,
-          row.description,
-        ].some((value) => this.normalizeText(value).includes(normalizedQuery));
+    let rows = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
+    // In-memory sort by createdAt desc if querying by ownerEmail
+    if (ownerEmail) {
+      rows.sort((a: any, b: any) => {
+        const timeA = this.toTimestamp(a.createdAt);
+        const timeB = this.toTimestamp(b.createdAt);
+        return timeB - timeA;
       });
+    }
+
+    const filteredRows = rows.filter((row: any) => {
+      if (status !== 'all' && String(row.status || 'pending').toLowerCase() !== status.toLowerCase()) return false;
+      if (category !== 'all' && String(row.category || '').toLowerCase() !== category.toLowerCase()) return false;
+      if (!normalizedQuery) return true;
+      return [
+        row.name,
+        row.mobileNumber,
+        row.country,
+        row.state,
+        row.area,
+        row.category,
+        row.description,
+      ].some((value) => this.normalizeText(value).includes(normalizedQuery));
+    });
+
     const startIdx = (page - 1) * limit;
     const result: SearchResult = {
-      results: rows.slice(startIdx, startIdx + limit),
-      totalCount: rows.length,
-      hasMore: rows.length > startIdx + limit,
+      results: filteredRows.slice(startIdx, startIdx + limit),
+      totalCount: filteredRows.length,
+      hasMore: filteredRows.length > startIdx + limit,
       source: 'firestore',
       latencyMs: Date.now() - tStart,
       method: 'bounded-advertisements-fallback',
@@ -1399,5 +1423,20 @@ export class SearchService {
       l1Keys,
       cachedQueries: l1Keys.length,
     };
+  }
+
+  private static toTimestamp(value: any): number {
+    if (!value) return 0;
+    if (typeof value === 'number') {
+      return value > 10_000_000_000 ? Math.floor(value / 1000) : value;
+    }
+    if (value.seconds) return value.seconds;
+    if (value.toDate && typeof value.toDate === 'function') {
+      return Math.floor(value.toDate().getTime() / 1000);
+    }
+    if (value instanceof Date) return Math.floor(value.getTime() / 1000);
+    const parsed = Date.parse(value);
+    if (!isNaN(parsed)) return Math.floor(parsed / 1000);
+    return 0;
   }
 }

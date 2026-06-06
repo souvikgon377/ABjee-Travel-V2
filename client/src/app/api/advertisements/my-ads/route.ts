@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await SearchService.searchAdvertisements({
-      query: currentUser.email, // Search by owner email
+      ownerEmail: currentUser.email, // Filter specifically by owner email
       status: 'all', // Owner can see pending, approved, and rejected
       limit: 100,
     });

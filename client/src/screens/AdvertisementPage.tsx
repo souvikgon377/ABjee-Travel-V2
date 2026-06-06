@@ -31,6 +31,8 @@ type OwnerAdvertisement = {
   ownerName?: string | null;
   ownerPhoneNumber?: string | null;
   photoUrl?: string | null;
+  idProofUrl?: string | null;
+  additionalIdProofs?: Array<{ url: string; publicId: string; name: string }> | null;
   editedByUid?: string | null;
   editedByEmail?: string | null;
   editedAt?: any;
@@ -172,6 +174,12 @@ export default function AdvertisementPage() {
           ownerName: candidateName,
           ownerPhoneNumber: candidatePhone,
           photoUrl: typeof data.photoUrl === 'string' ? data.photoUrl : (typeof data.imageUrl === 'string' ? data.imageUrl : null),
+          idProofUrl: typeof data.idProofUrl === 'string' ? data.idProofUrl : (typeof data.id_proof_url === 'string' ? data.id_proof_url : null),
+          additionalIdProofs: data.additionalIdProofs
+            ? (typeof data.additionalIdProofs === 'string'
+              ? (data.additionalIdProofs.startsWith('[') ? JSON.parse(data.additionalIdProofs) : [])
+              : data.additionalIdProofs)
+            : [],
           editedByUid: candidateEditedByUid,
           editedByEmail: candidateEditedByEmail,
           editedAt: candidateEditedAt,
@@ -617,6 +625,10 @@ export default function AdvertisementPage() {
                 area: editingAd.area,
                 description: editingAd.description,
                 photoUrl: editingAd.photoUrl || undefined,
+                idProofUrl: editingAd.idProofUrl || undefined,
+                ownerName: editingAd.ownerName || undefined,
+                ownerPhoneNumber: editingAd.ownerPhoneNumber || undefined,
+                additionalIdProofs: editingAd.additionalIdProofs || [],
               }}
               onSubmitted={(id) => {
                 setEditingAd(null);

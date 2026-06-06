@@ -277,9 +277,9 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
                       <div className="space-y-3">
                         {item.description ? (
-                          <p className="text-sm leading-6 text-white/80">{item.description}</p>
+                          <p className="text-sm leading-5 text-white/80 line-clamp-3 overflow-hidden">{item.description}</p>
                         ) : (
-                          <p className="text-sm leading-6 text-white/60">No description available for this advertisement.</p>
+                          <p className="text-sm leading-5 text-white/60">No description available for this advertisement.</p>
                         )}
                         <div className="h-px w-full bg-white/10" />
                         <div className="text-xs text-white/55">Click to open the full advertisement details.</div>
@@ -328,12 +328,10 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                 <div className="grid gap-3 sm:grid-cols-2">
                   <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Not available'} />
                   <DetailRow icon={<Phone className="h-4 w-4" />} label="Mobile number" value={selectedItem.mobileNumber || 'Not available'} />
-                  <DetailRow icon={<User className="h-4 w-4" />} label="Owner name" value={selectedItem.ownerName || 'Not available'} />
                   <DetailRow icon={<Tag className="h-4 w-4" />} label="Email" value={selectedItem.ownerEmail || 'Not available'} />
                   <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Created" value={formatDateTime(selectedItem.createdAt)} />
                   <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Updated" value={formatDateTime(selectedItem.updatedAt)} />
                   <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Approved" value={formatDateTime(selectedItem.approvedAt)} />
-                  <DetailRow icon={<User className="h-4 w-4" />} label="Owner phone" value={selectedItem.ownerPhoneNumber || 'Not available'} />
                 </div>
 
                 <div className="space-y-2">

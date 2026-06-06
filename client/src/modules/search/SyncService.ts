@@ -406,6 +406,8 @@ export class SyncService {
         idProofUrl: data.idProofUrl || '',
         idProofPublicId: data.idProofPublicId || '',
         idProofHash: data.idProofHash || '',
+        additionalIdProofs: data.additionalIdProofs ? (typeof data.additionalIdProofs === 'string' ? data.additionalIdProofs : JSON.stringify(data.additionalIdProofs)) : '[]',
+        adminComment: data.adminComment || '',
         ownerEmail: data.ownerEmail || '',
         ownerName: data.ownerName || '',
         ownerPhoneNumber: data.ownerPhoneNumber || '',

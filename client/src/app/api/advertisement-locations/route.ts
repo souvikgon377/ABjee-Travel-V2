@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { getSharedPlacesCache } from '@/lib/server/sharedPlacesCache';
+import client, { TYPESENSE_ENABLED } from '@/modules/search/typesenseClient';
 
 type LocationRow = {
   country: string;
@@ -37,6 +38,39 @@ const buildLocations = (rows: LocationRow[]) => {
 
 export async function GET() {
   try {
+    // 1. Try Typesense if enabled (extremely fast, direct query)
+    if (TYPESENSE_ENABLED) {
+      try {
+        const tsResult = await client.collections('tourist_places').documents().search({
+          q: '*',
+          query_by: 'name',
+          filter_by: 'isActive:=true',
+          per_page: 250,
+          include_fields: 'country,state,city,area',
+        });
+        
+        const tsRows = tsResult.hits?.map((hit: any) => ({
+          country: hit.document.country || '',
+          state: hit.document.state || '',
+          area: hit.document.area || hit.document.city || '',
+        })) || [];
+
+        const typesenseLocations = buildLocations(tsRows);
+        if (typesenseLocations.length > 0) {
+          return NextResponse.json({
+            success: true,
+            data: {
+              locations: typesenseLocations,
+              source: 'typesense' as const,
+            },
+          });
+        }
+      } catch (tsError) {
+        console.warn('[advertisement-locations] Typesense query failed, falling back:', tsError);
+      }
+    }
+
+    // 2. Fall back to sharedPlacesCache
     const cached = await getSharedPlacesCache();
     const cacheRows = buildLocations(
       (cached.places || []).map((place) => ({
@@ -56,6 +90,7 @@ export async function GET() {
       });
     }
 
+    // 3. Fall back to Firestore (limit 500)
     const snapshot = await adminDb.collection('touristPlaces').limit(500).get();
     const firestoreRows = buildLocations(
       snapshot.docs.map((doc) => {

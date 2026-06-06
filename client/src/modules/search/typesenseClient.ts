@@ -200,6 +200,8 @@ export const advertisementsSchema = {
     { name: 'idProofUrl', type: 'string' as const, optional: true },
     { name: 'idProofPublicId', type: 'string' as const, optional: true },
     { name: 'idProofHash', type: 'string' as const, optional: true },
+    { name: 'additionalIdProofs', type: 'string' as const, optional: true },
+    { name: 'adminComment', type: 'string' as const, optional: true },
     { name: 'ownerEmail', type: 'string' as const, optional: true },
     { name: 'ownerName', type: 'string' as const, optional: true },
     { name: 'ownerPhoneNumber', type: 'string' as const, optional: true },

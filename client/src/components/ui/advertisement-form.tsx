@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud, ChevronsUpDown, Search, X } from 'lucide-react';
+import { CheckCircle2, ImagePlus, Loader2, Mail, Phone, Sparkles, UploadCloud, ChevronsUpDown, Search, X, Plus, Trash2 } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { fetchAdvertisementLocations, type AdvertisementLocationOption } from '@/lib/advertisementLocations';
@@ -24,7 +24,20 @@ type AdvertisementFormProps = {
   onSubmitted?: (id: string) => void;
   // Edit mode props
   adId?: string;
-  initialValues?: Partial<{ name: string; mobileNumber: string; category: string; country: string; state: string; area: string; description: string; photoUrl?: string }>;
+  initialValues?: Partial<{
+    name: string;
+    mobileNumber: string;
+    category: string;
+    country: string;
+    state: string;
+    area: string;
+    description: string;
+    photoUrl?: string;
+    idProofUrl?: string;
+    ownerName?: string;
+    ownerPhoneNumber?: string;
+    additionalIdProofs?: Array<{ url: string; publicId: string; name: string }>;
+  }>;
 };
 
 const AD_COLLECTION = 'advertisements';
@@ -158,6 +171,8 @@ const emptyState = {
   states: [] as string[],
   areas: [] as string[],
   description: '',
+  ownerName: '',
+  ownerPhoneNumber: '',
 };
 
 const categoryOptions = [
@@ -177,6 +192,7 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [idFile, setIdFile] = useState<File | null>(null);
   const [idPreviewName, setIdPreviewName] = useState<string>('');
+  const [additionalIds, setAdditionalIds] = useState<Array<{ file: File | null; url: string; name: string; isExisting: boolean }>>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -224,6 +240,8 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
       states: initialValues.state ? initialValues.state.split(',').map((s: any) => s.trim()).filter(Boolean) : [],
       areas: initialValues.area ? initialValues.area.split(',').map((a: any) => a.trim()).filter(Boolean) : [],
       description: initialValues.description ?? cur.description,
+      ownerName: (initialValues as any).ownerName ?? cur.ownerName,
+      ownerPhoneNumber: (initialValues as any).ownerPhoneNumber ?? cur.ownerPhoneNumber,
     }));
 
     if (initialValues.photoUrl) {
@@ -232,7 +250,27 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
     if ((initialValues as any).idProofUrl) {
       setIdPreviewName((initialValues as any).idProofUrl || '');
     }
+    if ((initialValues as any).additionalIdProofs) {
+      const existing = ((initialValues as any).additionalIdProofs || []).map((p: any) => ({
+        file: null,
+        url: p.url,
+        name: p.name || p.url.split('/').pop() || 'Existing ID proof',
+        isExisting: true,
+      }));
+      setAdditionalIds(existing);
+    }
   }, [initialValues]);
+
+  // Prefill currentUser info for new registrations
+  useEffect(() => {
+    if (!adId && currentUser) {
+      setForm((cur) => ({
+        ...cur,
+        ownerName: cur.ownerName || currentUser.displayName || userProfile?.displayName || '',
+        ownerPhoneNumber: cur.ownerPhoneNumber || (currentUser as any).phoneNumber || (userProfile as any).phoneNumber || '',
+      }));
+    }
+  }, [currentUser, userProfile, adId]);
 
   const countryOptions = useMemo(
     () => Array.from(new Set(locations.map((location) => location.country))).sort((left, right) => left.localeCompare(right)),
@@ -345,6 +383,42 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
     setPhotoPreview('');
     setIdFile(null);
     setIdPreviewName('');
+    setAdditionalIds([]);
+  };
+
+  const addAdditionalIdSlot = () => {
+    if (additionalIds.length >= 3) return;
+    setAdditionalIds((prev) => [...prev, { file: null, url: '', name: '', isExisting: false }]);
+  };
+
+  const removeAdditionalIdSlot = (index: number) => {
+    setAdditionalIds((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAdditionalIdFileChange = (index: number, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMessage('Additional document file size must be under 5MB');
+      event.target.value = '';
+      return;
+    }
+
+    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!allowedExtensions.includes(fileExtension)) {
+      setErrorMessage('Allowed formats: PDF, JPG, PNG, or JPEG');
+      event.target.value = '';
+      return;
+    }
+
+    setErrorMessage('');
+    setAdditionalIds((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, file, name: file.name } : item
+      )
+    );
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -356,6 +430,8 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
     try {
       if (!form.name.trim()) throw new Error('Name is required');
       if (!form.mobileNumber.trim()) throw new Error('Mobile number is required');
+      if (!form.ownerName.trim()) throw new Error("Owner's name is required");
+      if (!form.ownerPhoneNumber.trim()) throw new Error("Owner's phone number is required");
       if (!form.category.trim()) throw new Error('Please select a category');
       if (form.countries.length === 0 || form.states.length === 0 || form.areas.length === 0) {
         throw new Error('Please select at least one country, state, and area/locality');
@@ -382,8 +458,8 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           area: areaStr,
           ownerUid: currentUser?.uid || null,
           ownerEmail: profileEmail || null,
-          ownerName: currentUser?.displayName || userProfile?.displayName || form.name.trim(),
-          ownerPhoneNumber: (currentUser as any)?.phoneNumber || (userProfile as any)?.phoneNumber || null,
+          ownerName: form.ownerName.trim(),
+          ownerPhoneNumber: form.ownerPhoneNumber.trim(),
           updatedAt: serverTimestamp(),
         };
         // Only mark pending / record editedBy when something actually changed
@@ -396,7 +472,11 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           (stateStr !== (original.state ?? '')) ||
           (areaStr !== (original.area ?? '')) ||
           (form.description?.trim() !== (original.description ?? '').trim()) ||
-          Boolean(photoFile);
+          (form.ownerName.trim() !== ((original as any).ownerName ?? '').trim()) ||
+          (form.ownerPhoneNumber.trim() !== ((original as any).ownerPhoneNumber ?? '').trim()) ||
+          Boolean(photoFile) ||
+          Boolean(idFile) ||
+          (additionalIds.some(item => !item.isExisting));
 
         if (changed) {
           updateFields.approvalStatus = 'pending';
@@ -421,6 +501,28 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           updateFields.idProofHash = idUpload.hash;
         }
 
+        const uploadedAdditionalIds: Array<{ url: string; publicId: string; name: string }> = [];
+        for (const item of additionalIds) {
+          if (item.isExisting) {
+            uploadedAdditionalIds.push({
+              url: item.url,
+              publicId: (original as any).additionalIdProofs?.find((p: any) => p.url === item.url)?.publicId || '',
+              name: item.name,
+            });
+          } else if (item.file) {
+            const uploadResult = await uploadImageToCloudinary(item.file, {
+              folder: 'advertisements/id-proofs',
+              allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'],
+            });
+            uploadedAdditionalIds.push({
+              url: uploadResult.url,
+              publicId: uploadResult.publicId,
+              name: item.name,
+            });
+          }
+        }
+        updateFields.additionalIdProofs = uploadedAdditionalIds;
+
         await updateDoc(doc(firestoreDb, AD_COLLECTION, adId), updateFields);
 
         // Trigger real-time Typesense sync
@@ -443,6 +545,21 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           idResult = await uploadImageToCloudinary(idFile, { folder: 'advertisements/id-proofs', allowedFormats: ['pdf','jpg','jpeg','png'] });
         }
 
+        const uploadedAdditionalIds: Array<{ url: string; publicId: string; name: string }> = [];
+        for (const item of additionalIds) {
+          if (item.file) {
+            const uploadResult = await uploadImageToCloudinary(item.file, {
+              folder: 'advertisements/id-proofs',
+              allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'],
+            });
+            uploadedAdditionalIds.push({
+              url: uploadResult.url,
+              publicId: uploadResult.publicId,
+              name: item.name,
+            });
+          }
+        }
+
         const documentRef = await addDoc(collection(firestoreDb, AD_COLLECTION), {
           name: form.name.trim(),
           email: profileEmail || null,
@@ -454,14 +571,15 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
           area: areaStr,
           ownerUid: currentUser?.uid || null,
           ownerEmail: profileEmail || null,
-          ownerName: currentUser?.displayName || userProfile?.displayName || form.name.trim(),
-          ownerPhoneNumber: (currentUser as any)?.phoneNumber || (userProfile as any)?.phoneNumber || null,
+          ownerName: form.ownerName.trim(),
+          ownerPhoneNumber: form.ownerPhoneNumber.trim(),
           photoUrl: photoResult.url,
           photoPublicId: photoResult.publicId,
           photoHash: photoResult.hash,
           idProofUrl: idResult?.url || null,
           idProofPublicId: idResult?.publicId || null,
           idProofHash: idResult?.hash || null,
+          additionalIdProofs: uploadedAdditionalIds,
           status: defaultStatus,
           approvalStatus: defaultStatus,
           source: mode,
@@ -582,6 +700,36 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
             </label>
           </div>
 
+          <div className="border-t border-border/60 pt-4">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4">Owner Info</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 block">
+                <span className="text-sm font-medium">Owner's Name</span>
+                <Input
+                  value={form.ownerName}
+                  onChange={(event) => setForm((cur) => ({ ...cur, ownerName: event.target.value }))}
+                  placeholder="Owner's Name"
+                />
+              </label>
+
+              <label className="space-y-2 block">
+                <span className="text-sm font-medium">Owner's Phone Number</span>
+                <div className="relative">
+                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={form.ownerPhoneNumber}
+                    onChange={(event) => setForm((cur) => ({ ...cur, ownerPhoneNumber: event.target.value }))}
+                    placeholder="Owner's Phone Number"
+                    className="pl-9"
+                    inputMode="tel"
+                  />
+                </div>
+              </label>
+            </div>
+          </div>
+
+        <div className="border-t border-border/60 pt-4">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4">Advertisement Info</h3>
           <div className="grid gap-4 md:grid-cols-3">
             <label className="space-y-2 block">
               <span className="text-sm font-medium">Country</span>
@@ -641,10 +789,12 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
                     className="mt-4 h-44 w-full rounded-xl object-cover"
                   />
                 ) : null}
-                <div className="mt-4">
+                <div className="mt-4 space-y-4">
                   <label className="space-y-2 block">
                     <span className="text-sm font-medium">ID Proof (required)</span>
-                    <p className="text-xs text-muted-foreground">Upload a government ID proof (PDF, JPG, PNG, or JPEG).</p>
+                    <p className="text-xs text-muted-foreground">
+                      Upload a government ID proof (PDF, JPG, PNG, or JPEG). Only Upload the photo id and other business related documents issued by the goverment
+                    </p>
                     <Input
                       type="file"
                       accept=".pdf,image/png,image/jpeg,image/jpg"
@@ -655,12 +805,69 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
                   {idPreviewName ? (
                     <div className="mt-2 text-sm">
                       {idPreviewName.startsWith('http') ? (
-                        <a href={idPreviewName} target="_blank" rel="noreferrer" className="underline text-foreground">{idPreviewName}</a>
+                        <a href={idPreviewName} target="_blank" rel="noreferrer" className="underline text-rose-500 hover:text-rose-600">{idPreviewName}</a>
                       ) : (
                         <span className="text-foreground">{idPreviewName}</span>
                       )}
                     </div>
                   ) : null}
+
+                  {/* Additional ID proofs */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Additional Documents (Optional, Max 3, under 5MB each)
+                      </span>
+                      {additionalIds.length < 3 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addAdditionalIdSlot}
+                          className="h-7 w-7 rounded-full p-0 flex items-center justify-center border-rose-500/30 text-rose-500 hover:bg-rose-500/10"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {additionalIds.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/5 p-2.5 dark:bg-white/5">
+                        <div className="flex-1">
+                          {item.isExisting ? (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs underline text-rose-500 hover:text-rose-600 truncate block max-w-xs sm:max-w-md"
+                            >
+                              {item.name}
+                            </a>
+                          ) : item.file ? (
+                            <span className="text-xs text-foreground truncate block max-w-xs sm:max-w-md">
+                              {item.name}
+                            </span>
+                          ) : (
+                            <Input
+                              type="file"
+                              accept=".pdf,image/png,image/jpeg,image/jpg"
+                              onChange={(e) => handleAdditionalIdFileChange(idx, e)}
+                              className="h-8 text-xs px-2 py-1"
+                            />
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeAdditionalIdSlot(idx)}
+                          className="h-7 w-7 rounded-full p-0 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </label>
@@ -695,12 +902,13 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
               </div>
             </div>
           </div>
+        </div>
 
-          <Button type="submit" disabled={submitting || loadingLocations} className="w-full gap-2 sm:w-auto">
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {submitLabel}
-          </Button>
-        </form>
+        <Button type="submit" disabled={submitting || loadingLocations} className="w-full gap-2 sm:w-auto">
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {submitLabel}
+        </Button>
+      </form>
       </CardContent>
     </Card>
   );
