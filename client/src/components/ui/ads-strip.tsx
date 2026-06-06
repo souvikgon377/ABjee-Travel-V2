@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query } from 'firebase/firestore';
-import { CalendarDays, MapPin, Phone, Tag, User } from 'lucide-react';
+import { collection, getDocs, query, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { CalendarDays, MapPin, Phone, Tag, User, Star, MessageSquare } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import type { TouristPlace } from '@/components/ui/tourist-places';
@@ -14,6 +14,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 type AdItem = {
   id: string;
@@ -33,6 +34,8 @@ type AdItem = {
   createdAt?: any;
   approvedAt?: any;
   updatedAt?: any;
+  rating?: number;
+  comments?: any[];
 };
 
 type AdsStripProps = {
@@ -117,6 +120,65 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
   const [items, setItems] = useState<AdItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<AdItem | null>(null);
   const shouldReduceMotion = useReducedMotion();
+  const { currentUser } = useAuth();
+
+  const [adRating, setAdRating] = useState<number>(5);
+  const [adComments, setAdComments] = useState<any[]>([]);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [commentPosting, setCommentPosting] = useState(false);
+
+  useEffect(() => {
+    if (selectedItem) {
+      setAdRating(selectedItem.rating || 5);
+      setAdComments(selectedItem.comments || []);
+    }
+  }, [selectedItem]);
+
+  const handleRate = async (newRating: number) => {
+    if (!selectedItem) return;
+    try {
+      setAdRating(newRating);
+      const docRef = doc(firestoreDb, 'advertisements', selectedItem.id);
+      await updateDoc(docRef, { rating: newRating });
+      selectedItem.rating = newRating;
+    } catch (err) {
+      console.error('Failed to save rating:', err);
+    }
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem || !newCommentText.trim()) return;
+
+    setCommentPosting(true);
+    try {
+      const commentPayload = {
+        id: Math.random().toString(36).substring(2, 9),
+        userName: currentUser?.displayName || currentUser?.email || 'Anonymous Traveler',
+        text: newCommentText.trim(),
+        createdAt: new Date().toISOString(),
+      };
+
+      const docRef = doc(firestoreDb, 'advertisements', selectedItem.id);
+      await updateDoc(docRef, {
+        comments: arrayUnion(commentPayload),
+      });
+
+      setAdComments((prev) => [...prev, commentPayload]);
+
+      if (!selectedItem.comments) {
+        selectedItem.comments = [];
+      }
+      selectedItem.comments.push(commentPayload);
+
+      setNewCommentText('');
+    } catch (err) {
+      console.error('Failed to post comment:', err);
+      alert('Failed to post comment. Please try again.');
+    } finally {
+      setCommentPosting(false);
+    }
+  };
 
   const slidingItems = useMemo(() => {
     if (items.length === 0) return [];
@@ -315,8 +377,11 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
               <div className="space-y-5 p-5 sm:p-6">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="border-green-500/60 bg-green-500/10 text-green-300">
-                    {selectedItem.approvalStatus || selectedItem.status || 'approved'}
+                  <Badge variant="outline" className="border-green-500/60 bg-green-500/10 text-green-300 capitalize">
+                    {(() => {
+                      const status = selectedItem.approvalStatus || selectedItem.status || 'approved';
+                      return status === 'approved' ? 'verified' : status;
+                    })()}
                   </Badge>
                   {selectedItem.category && (
                     <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80">
@@ -327,11 +392,36 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Not available'} />
+                  
+                  {/* Rating Card */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col justify-between">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+                      Rating
+                    </div>
+                    <div className="mt-2 flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          onClick={() => handleRate(star)}
+                          className="focus:outline-none transition-transform active:scale-95 text-white"
+                          type="button"
+                        >
+                          <Star
+                            className={`h-5 w-5 ${
+                              star <= adRating
+                                ? 'fill-amber-400 text-amber-400'
+                                : 'text-white/20'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                      <span className="ml-2 text-xs text-white/60">({adRating}.0)</span>
+                    </div>
+                  </div>
+
                   <DetailRow icon={<Phone className="h-4 w-4" />} label="Mobile number" value={selectedItem.mobileNumber || 'Not available'} />
                   <DetailRow icon={<Tag className="h-4 w-4" />} label="Email" value={selectedItem.ownerEmail || 'Not available'} />
-                  <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Created" value={formatDateTime(selectedItem.createdAt)} />
-                  <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Updated" value={formatDateTime(selectedItem.updatedAt)} />
-                  <DetailRow icon={<CalendarDays className="h-4 w-4" />} label="Approved" value={formatDateTime(selectedItem.approvedAt)} />
                 </div>
 
                 <div className="space-y-2">
@@ -339,6 +429,44 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-white/80">
                     {selectedItem.description || 'No description available for this advertisement.'}
                   </p>
+                </div>
+
+                {/* Comment Section under description */}
+                <div className="space-y-4 pt-4 border-t border-white/10">
+                  <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/55">Comments & Reviews</h4>
+                  
+                  <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                    {adComments.length === 0 ? (
+                      <p className="text-xs text-white/45 italic">No comments posted yet. Be the first to write a comment!</p>
+                    ) : (
+                      adComments.map((c: any) => (
+                        <div key={c.id} className="rounded-xl border border-white/5 bg-white/5 p-3 space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-white/50">
+                            <span className="font-semibold text-white/80">{c.userName}</span>
+                            <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+                          </div>
+                          <p className="text-xs text-white/90 leading-relaxed">{c.text}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <form onSubmit={handlePostComment} className="flex gap-2 items-start mt-2">
+                    <textarea
+                      value={newCommentText}
+                      onChange={(e) => setNewCommentText(e.target.value)}
+                      placeholder="Write a comment..."
+                      rows={2}
+                      className="flex-1 rounded-xl border border-white/10 bg-[#1e1e1e] p-2.5 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-rose-500/50 focus:border-rose-500/50 resize-none"
+                    />
+                    <Button
+                      type="submit"
+                      disabled={!newCommentText.trim() || commentPosting}
+                      className="shrink-0 rounded-xl bg-rose-600 text-white hover:bg-rose-700 h-9 px-3 text-xs"
+                    >
+                      {commentPosting ? 'Posting...' : 'Post'}
+                    </Button>
+                  </form>
                 </div>
 
                 <div className="flex justify-end">
