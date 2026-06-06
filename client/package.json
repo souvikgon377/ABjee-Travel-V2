@@ -42,7 +42,7 @@
     "@types/canvas-confetti": "^1.9.0",
     "@upstash/redis": "^1.37.0",
     "@vercel/speed-insights": "^1.0.4",
-    "axios": "^1.13.3",
+    "axios": "^1.17.0",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "cobe": "^0.6.4",
