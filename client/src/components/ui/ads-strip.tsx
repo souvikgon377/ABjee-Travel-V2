@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query, doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { CalendarDays, MapPin, Phone, Tag, User, Star, MessageSquare } from 'lucide-react';
+import { collection, getDocs, query, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { CalendarDays, MapPin, Phone, Tag, User, Star, MessageSquare, Trash2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import type { TouristPlace } from '@/components/ui/tourist-places';
@@ -122,14 +122,14 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
   const shouldReduceMotion = useReducedMotion();
   const { currentUser } = useAuth();
 
-  const [adRating, setAdRating] = useState<number>(5);
+  const [adRating, setAdRating] = useState<number>(0);
   const [adComments, setAdComments] = useState<any[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
   const [commentPosting, setCommentPosting] = useState(false);
 
   useEffect(() => {
     if (selectedItem) {
-      setAdRating(selectedItem.rating || 5);
+      setAdRating(selectedItem.rating || 0);
       setAdComments(selectedItem.comments || []);
     }
   }, [selectedItem]);
@@ -143,6 +143,22 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       selectedItem.rating = newRating;
     } catch (err) {
       console.error('Failed to save rating:', err);
+    }
+  };
+
+  const handleDeleteComment = async (commentToDelete: any) => {
+    if (!selectedItem) return;
+    try {
+      const docRef = doc(firestoreDb, 'advertisements', selectedItem.id);
+      await updateDoc(docRef, {
+        comments: arrayRemove(commentToDelete)
+      });
+      const updatedComments = adComments.filter((c) => c.id !== commentToDelete.id);
+      setAdComments(updatedComments);
+      selectedItem.comments = updatedComments;
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+      alert('Failed to delete comment.');
     }
   };
 
@@ -324,8 +340,25 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   <div className="absolute inset-0 overflow-hidden rounded-2xl bg-black/20 text-white backface-hidden">
                     <div className="relative h-full w-full">
                       <img src={item.photoUrl} alt={item.name || 'ad'} className="h-full w-full object-cover" />
-                      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/40 to-transparent p-4">
+                      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/40 to-transparent p-4 space-y-1">
                         <div className="truncate text-sm font-semibold">{item.name}</div>
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-3 w-3 ${
+                                star <= (item.rating || 0)
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-white/20'
+                              }`}
+                            />
+                          ))}
+                          {item.rating ? (
+                            <span className="text-[10px] text-white/70 ml-1">({item.rating}.0)</span>
+                          ) : (
+                            <span className="text-[10px] text-white/40 ml-1">(No ratings)</span>
+                          )}
+                        </div>
                         <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/65">Click to view details</div>
                       </div>
                     </div>
@@ -335,6 +368,18 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                     <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
                       <div>
                         <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
+                        <div className="flex items-center gap-0.5 mt-1.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-3.5 w-3.5 ${
+                                star <= (item.rating || 0)
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-white/20'
+                              }`}
+                            />
+                          ))}
+                        </div>
                       </div>
 
                       <div className="space-y-3">
@@ -416,7 +461,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                           />
                         </button>
                       ))}
-                      <span className="ml-2 text-xs text-white/60">({adRating}.0)</span>
+                      <span className="ml-2 text-xs text-white/60">({adRating || '0'}.0)</span>
                     </div>
                   </div>
 
@@ -443,7 +488,17 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                         <div key={c.id} className="rounded-xl border border-white/5 bg-white/5 p-3 space-y-1">
                           <div className="flex items-center justify-between text-[11px] text-white/50">
                             <span className="font-semibold text-white/80">{c.userName}</span>
-                            <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+                            <div className="flex items-center gap-2">
+                              <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteComment(c)}
+                                className="text-white/40 hover:text-red-400 transition-colors p-0.5"
+                                title="Delete comment"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                           <p className="text-xs text-white/90 leading-relaxed">{c.text}</p>
                         </div>
