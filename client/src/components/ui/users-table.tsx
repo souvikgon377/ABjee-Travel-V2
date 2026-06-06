@@ -36,9 +36,10 @@ interface UsersTableProps {
   externalRoleFilter?: string;
   /** Status filter driven externally from the header Filter button */
   externalStatusFilter?: string;
+  externalSearchQuery?: string;
 }
 
-export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter, externalStatusFilter }: UsersTableProps) => {
+export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter, externalStatusFilter, externalSearchQuery }: UsersTableProps) => {
   const [_users, _setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUserActions, setShowUserActions] = useState(false);
@@ -49,6 +50,13 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
   const [currentPage, setCurrentPage] = useState(1);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchQuery(externalSearchQuery);
+      setCurrentPage(1);
+    }
+  }, [externalSearchQuery]);
 
   // Load all users from Firestore (same collection the Overview card reads)
   const fetchUsers = useCallback(async () => {

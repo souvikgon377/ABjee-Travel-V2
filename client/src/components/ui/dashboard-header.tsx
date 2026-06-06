@@ -174,6 +174,7 @@ interface DashboardHeaderProps {
   currentView: string;
   activeFilters: DashboardFilters;
   onFilterChange: (filters: DashboardFilters) => void;
+  onViewChange?: (view: string) => void;
 }
 
 function countActiveFilters(f: DashboardFilters, view: string): number {
@@ -189,6 +190,25 @@ function countActiveFilters(f: DashboardFilters, view: string): number {
   return count;
 }
 
+const NAVIGATION_TARGETS = [
+  { title: 'Dashboard Overview', view: 'dashboard' },
+  { title: 'Users Management', view: 'users' },
+  { title: 'About Page Editor', view: 'about-page' },
+  { title: 'Analytics Chart', view: 'analytics' },
+  { title: 'Bookings Monitoring', view: 'bookings' },
+  { title: 'Recent Activity Stream', view: 'activity' },
+  { title: 'Chat Communities', view: 'chatrooms' },
+  { title: 'Trip Stories Room', view: 'trip-stories' },
+  { title: 'Tourist Places Manager', view: 'tourist-places' },
+  { title: 'Travel Itineraries', view: 'travel-itinerary' },
+  { title: 'Animated Offers', view: 'offers' },
+  { title: 'Advertisements Board', view: 'advertisements' },
+  { title: 'Reviews & Comments', view: 'place-feedback' },
+  { title: 'Revenue Stats', view: 'revenue' },
+  { title: 'ABJee Wallet Panel', view: 'abjee-wallet' },
+  { title: 'System Settings', view: 'settings' }
+];
+
 export const DashboardHeader = memo(
   ({
     searchQuery,
@@ -203,10 +223,34 @@ export const DashboardHeader = memo(
     currentView,
     activeFilters,
     onFilterChange,
+    onViewChange,
   }: DashboardHeaderProps) => {
     const router = useRouter();
     const [filterOpen, setFilterOpen] = useState(false);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
+    const suggestions = useMemo(() => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return [];
+      return NAVIGATION_TARGETS.filter(item => 
+        item.title.toLowerCase().includes(q) && item.view !== currentView
+      );
+    }, [searchQuery, currentView]);
+
+    const handleSuggestionClick = (view: string) => {
+      if (onViewChange) {
+        onViewChange(view);
+      }
+      onSearchChange('');
+      setShowSuggestions(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && suggestions.length > 0) {
+        handleSuggestionClick(suggestions[0].view);
+      }
+    };
     const [notificationLoading, setNotificationLoading] = useState(false);
     const [notificationError, setNotificationError] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -492,15 +536,42 @@ export const DashboardHeader = memo(
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-2"
           >
-            {/* Search Input */}
             <div className="relative hidden md:block">
               <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
               <Input
                 placeholder="Search..."
                 value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
+                onChange={(e) => {
+                  onSearchChange(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => {
+                  setTimeout(() => setShowSuggestions(false), 200);
+                }}
+                onKeyDown={handleKeyDown}
                 className="w-64 pl-10"
               />
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 z-50 mt-1 w-64 rounded-lg border border-border bg-popover p-1 shadow-lg">
+                  <div className="px-2 py-1.5 text-[10px] uppercase font-semibold text-muted-foreground">
+                    Jump to view
+                  </div>
+                  {suggestions.map((item) => (
+                    <button
+                      key={item.view}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSuggestionClick(item.view);
+                      }}
+                      className="w-full text-left rounded-md px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Desktop Actions */}

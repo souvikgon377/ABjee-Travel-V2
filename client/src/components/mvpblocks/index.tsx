@@ -3,7 +3,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import {
   Users,
   Activity,
-  DollarSign,
+  IndianRupee,
   Eye,
   Database,
   TicketPercent,
@@ -34,7 +34,7 @@ import { motion } from 'framer-motion';
 // ── Static stat shape (reset between fetches) ──────────────────────────────
 const STAT_DEFAULTS = [
   { title: 'Total Users',      value: '0',  change: '+0%', changeType: 'positive' as const, icon: Users,       color: 'text-blue-500',   bgColor: 'bg-blue-500/10'   },
-  { title: 'Revenue',          value: '$0', change: '+0%', changeType: 'positive' as const, icon: DollarSign,  color: 'text-green-500',  bgColor: 'bg-green-500/10'  },
+  { title: 'Revenue',          value: '₹0', change: '+0%', changeType: 'positive' as const, icon: IndianRupee,  color: 'text-green-500',  bgColor: 'bg-green-500/10'  },
   { title: 'Active Sessions',  value: '0',  change: '+0%', changeType: 'positive' as const, icon: Activity,    color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
   { title: 'Page Views',       value: '0',  change: '+0%', changeType: 'negative' as const, icon: Eye,         color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
 ];
@@ -96,7 +96,7 @@ function buildStatsFromSnapshot(snapshot: DashboardStatsCache) {
     },
     {
       ...STAT_DEFAULTS[1],
-      value: `$${snapshot.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      value: `₹${snapshot.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       change: snapshot.paidTxnCount > 0 ? `${snapshot.paidTxnCount} paid txns` : '+0%',
     },
     {
@@ -648,6 +648,7 @@ export default function AdminDashboard() {
                 refreshTrigger={usersTableRefresh}
                 externalRoleFilter={activeFilters.userRole}
                 externalStatusFilter={activeFilters.userStatus}
+                externalSearchQuery={searchQuery}
               />
             </Suspense>
           </div>
@@ -1000,7 +1001,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             <Suspense fallback={<SectionLoader />}>
-              <RecentActivity />
+              <RecentActivity externalSearchQuery={searchQuery} />
             </Suspense>
           </div>
         );
@@ -1043,7 +1044,7 @@ export default function AdminDashboard() {
             </div>
 
             <Suspense fallback={<SectionLoader />}>
-              <ChatRoomsTable />
+              <ChatRoomsTable externalSearchQuery={searchQuery} />
             </Suspense>
           </div>
         );
@@ -1051,14 +1052,14 @@ export default function AdminDashboard() {
       case 'trip-stories':
         return (
           <Suspense fallback={<SectionLoader />}>
-            <TripStoriesAdminPanel />
+            <TripStoriesAdminPanel externalSearchQuery={searchQuery} />
           </Suspense>
         );
 
       case 'tourist-places':
         return (
           <Suspense fallback={<SectionLoader />}>
-            <TouristPlacesManager />
+            <TouristPlacesManager externalSearchQuery={searchQuery} />
           </Suspense>
         );
 
@@ -1072,7 +1073,7 @@ export default function AdminDashboard() {
       case 'travel-itinerary':
         return (
           <Suspense fallback={<SectionLoader />}>
-            <AdminTravelItenary />
+            <AdminTravelItenary externalSearchQuery={searchQuery} />
           </Suspense>
         );
 
@@ -1105,7 +1106,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             <Suspense fallback={<SectionLoader />}>
-              <AdvertisementsManager />
+              <AdvertisementsManager externalSearchQuery={searchQuery} />
             </Suspense>
           </div>
         );
@@ -1194,6 +1195,7 @@ export default function AdminDashboard() {
           currentView={currentView}
           activeFilters={activeFilters}
           onFilterChange={handleFilterChange}
+          onViewChange={setCurrentView}
         />
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 pt-0 sm:gap-4 sm:p-4">

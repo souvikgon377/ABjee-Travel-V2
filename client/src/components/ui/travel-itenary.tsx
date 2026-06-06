@@ -142,7 +142,11 @@ const getTravelItemImage = (item: TravelItem): string => {
 	return '';
 };
 
-export default function AdminTravelItenary() {
+interface AdminTravelItenaryProps {
+	externalSearchQuery?: string;
+}
+
+export default function AdminTravelItenary({ externalSearchQuery }: AdminTravelItenaryProps = {}) {
 	const [existingItineraries, setExistingItineraries] = useState<TravelItem[]>([]);
 	const [itinerarySearchInput, setItinerarySearchInput] = useState('');
 	const [countryFilterInput, setCountryFilterInput] = useState('');
@@ -150,6 +154,19 @@ export default function AdminTravelItenary() {
 		search: '',
 		country: '',
 	});
+
+	useEffect(() => {
+		if (externalSearchQuery !== undefined) {
+			setItinerarySearchInput(externalSearchQuery);
+			const nextFilters: TravelListFilters = {
+				search: externalSearchQuery.trim(),
+				country: countryFilterInput.trim(),
+			};
+			setAppliedFilters(nextFilters);
+			setItineraryPage(1);
+			void fetchItineraries({ reset: true, filters: nextFilters });
+		}
+	}, [externalSearchQuery]);
 	const [loadingItineraries, setLoadingItineraries] = useState(true);
 	const [loadingMoreItineraries, setLoadingMoreItineraries] = useState(false);
 	const [hasMoreItineraries, setHasMoreItineraries] = useState(false);

@@ -70,12 +70,22 @@ const toDate = (value: any) => {
   return new Date(value);
 };
 
-export function AdvertisementsManager() {
+interface AdvertisementsManagerProps {
+  externalSearchQuery?: string;
+}
+
+export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsManagerProps = {}) {
   const [items, setItems] = useState<AdvertisementDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchQuery(externalSearchQuery);
+    }
+  }, [externalSearchQuery]);
   const [editingItem, setEditingItem] = useState<AdvertisementEditState | null>(null);
   const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
   const [editPhotoPreview, setEditPhotoPreview] = useState('');

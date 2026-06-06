@@ -147,6 +147,7 @@ function normalizeRoom(id: string, raw: any) {
 
 interface ChatRoomsTableProps {
   refreshTrigger?: number;
+  externalSearchQuery?: string;
 }
 
 const ROOMS_PER_PAGE = 10;
@@ -158,7 +159,7 @@ const CARD_VARIANTS = {
   exit:    { opacity: 0, y: -8 },
 } as const;
 
-export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => {
+export const ChatRoomsTable = memo(({ refreshTrigger, externalSearchQuery }: ChatRoomsTableProps) => {
   // Cache of all normalized rooms — filter/search/page never trigger RTDB re-fetch
   const allRoomsRef = useRef<any[]>([]);
   // Refs for current filter state — fetchRooms reads from these, avoiding stale-closure deps
@@ -175,6 +176,13 @@ export const ChatRoomsTable = memo(({ refreshTrigger }: ChatRoomsTableProps) => 
   const [showActionsDialog, setShowActionsDialog] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchQuery(externalSearchQuery);
+      setCurrentPage(1);
+    }
+  }, [externalSearchQuery]);
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);

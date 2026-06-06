@@ -26,7 +26,7 @@ import {
   Database,
   Settings,
   Zap,
-  DollarSign,
+  IndianRupee,
   Moon,
   Sun,
   Home,
@@ -53,7 +53,7 @@ const menuItems = [
   { title: 'Advertisements', icon: Megaphone, view: 'advertisements' },
   { title: 'Reviews & Comments', icon: MessageSquare, view: 'place-feedback' },
   { title: 'Revenue', icon: Zap, view: 'revenue' },
-  { title: 'ABJee Wallet', icon: DollarSign, view: 'abjee-wallet' },
+  { title: 'ABJee Wallet', icon: IndianRupee, view: 'abjee-wallet' },
   { title: 'Settings', icon: Settings, view: 'settings' },
 ];
 

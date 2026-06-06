@@ -123,11 +123,22 @@ const TRIP_STORIES_CACHE_TTL_MS = 5 * 60 * 1000;
 const TRIP_STORIES_PAGE_SIZE = 40;
 const TRIP_STORIES_COMMENTS_PAGE_SIZE = 80;
 
-export function TripStoriesAdminPanel() {
+interface TripStoriesAdminPanelProps {
+  externalSearchQuery?: string;
+}
+
+export function TripStoriesAdminPanel({ externalSearchQuery }: TripStoriesAdminPanelProps = {}) {
   const [stories, setStories] = useState<TripStoryAdminRow[]>([]);
   const [comments, setComments] = useState<TripStoryCommentRow[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchInput(externalSearchQuery);
+      setAppliedSearch(externalSearchQuery.trim());
+    }
+  }, [externalSearchQuery]);
   const [activeActionFilter, setActiveActionFilter] = useState<ActionFilter>('all');
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [commentsLoading, setCommentsLoading] = useState(true);

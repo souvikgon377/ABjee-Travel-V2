@@ -775,8 +775,12 @@ function GalleryModal({
   );
 }
 
+interface TouristPlacesManagerProps {
+  externalSearchQuery?: string;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
-export function TouristPlacesManager() {
+export function TouristPlacesManager({ externalSearchQuery }: TouristPlacesManagerProps = {}) {
   const [places, setPlaces] = useState<TouristPlace[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [cityInput, setCityInput] = useState('');
@@ -786,6 +790,21 @@ export function TouristPlacesManager() {
     location: '',
     status: 'all',
   });
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchInput(externalSearchQuery);
+      const nextFilters: TouristPlacesFilters = {
+        search: externalSearchQuery.trim(),
+        location: cityInput.trim(),
+        status: statusInput,
+      };
+      lastAppliedFilterKeyRef.current = buildFilterCacheKey(nextFilters);
+      setAppliedFilters(nextFilters);
+      lastDocRef.current = null;
+      void fetchPlaces({ reset: true, filters: nextFilters });
+    }
+  }, [externalSearchQuery]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [scanningFilters, setScanningFilters] = useState(false);

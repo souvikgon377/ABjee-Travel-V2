@@ -34,10 +34,20 @@ function getDisplayName(profile: UserProfile): string {
   return profile.displayName || profile.username || profile.email || 'Unknown user';
 }
 
-export const RecentActivity = memo(() => {
+interface RecentActivityProps {
+  externalSearchQuery?: string;
+}
+
+export const RecentActivity = memo(({ externalSearchQuery }: RecentActivityProps = {}) => {
   const [activities, setActivities] = useState<ActivityType[]>([]);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchQuery(externalSearchQuery);
+    }
+  }, [externalSearchQuery]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 

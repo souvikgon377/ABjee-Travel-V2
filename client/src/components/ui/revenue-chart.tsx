@@ -139,7 +139,7 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
                 {/* Tooltip */}
                 <div className="border-border bg-popover absolute -top-16 left-1/2 z-10 -translate-x-1/2 transform rounded-lg border px-3 py-2 text-sm whitespace-nowrap opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                   <div className="font-medium">
-                    ${item.value.toLocaleString()}
+                    ₹{item.value.toLocaleString('en-IN')}
                   </div>
                   <div
                     className={`text-xs ${item.growth > 0 ? 'text-green-500' : 'text-red-500'}`}
@@ -161,7 +161,7 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
       <div className="border-border/50 grid grid-cols-3 gap-4 border-t pt-4">
         <div className="text-center">
           <div className="text-2xl font-bold text-green-500">
-            ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-muted-foreground text-xs">Total Revenue</div>
         </div>
@@ -173,7 +173,7 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-purple-500">
-            ${avgRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{avgRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-muted-foreground text-xs">Average</div>
         </div>
