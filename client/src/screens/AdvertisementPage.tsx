@@ -488,8 +488,9 @@ export default function AdvertisementPage() {
           </div>
         </div>
       )}
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
-        <section className="space-y-6 rounded-4xl border border-white/20 bg-white/80 p-6 shadow-2xl shadow-rose-500/10 backdrop-blur dark:border-white/10 dark:bg-slate-950/70">
+      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-stretch">
+        <section className="flex flex-col space-y-6 rounded-4xl border border-white/20 bg-white/80 p-6 shadow-2xl shadow-rose-500/10 backdrop-blur dark:border-white/10 dark:bg-slate-950/70">
           <div className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
             <Sparkles className="h-3.5 w-3.5" />
             New Registration Request
@@ -581,32 +582,34 @@ export default function AdvertisementPage() {
               </div>
             </div>
 
-          <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-100">
-            If you are an admin, open the dashboard to approve submissions or add a live Registration directly.
-          </div>
+          <div className="mt-auto space-y-4">
+            <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-100">
+              If you are an admin, open the dashboard to approve submissions or add a live Registration directly.
+            </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Button asChild className="gap-2 rounded-full">
-              <Link href="/admin">
-                Open Admin Dashboard
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="rounded-full">
-              <Link href="/">Back to Home</Link>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:opacity-90"
-              onClick={() => {
-                setAccessGranted(false);
-                // Do not sign the user out globally
-                router.push('/advertisement');
-              }}
-            >
-              Exit Registration
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild className="gap-2 rounded-full">
+                <Link href="/admin">
+                  Open Admin Dashboard
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-full">
+                <Link href="/">Back to Home</Link>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:opacity-90"
+                onClick={() => {
+                  setAccessGranted(false);
+                  // Do not sign the user out globally
+                  router.push('/advertisement');
+                }}
+              >
+                Exit Registration
+              </Button>
+            </div>
           </div>
         </section>
 
@@ -657,6 +660,8 @@ export default function AdvertisementPage() {
             </div>
           )}
 
+        </div>
+      </div>
           <section className="space-y-5 rounded-4xl border border-white/20 bg-white/85 p-6 shadow-2xl shadow-rose-500/10 backdrop-blur dark:border-white/10 dark:bg-slate-950/75">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -701,93 +706,79 @@ export default function AdvertisementPage() {
                   : 'You have not submitted any advertisements yet.'}
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredOwnerAds.map((item) => (
-                  <article key={item.id} className="overflow-hidden rounded-3xl border border-border/70 bg-background/80 shadow-lg">
-                      <div
-                        className="flex items-start justify-between gap-3 border-b border-border/60 p-4"
-                        style={item.photoUrl ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.45), rgba(15,23,42,0.25)), url(${item.photoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
-                      >
-                      <div>
-                        <h3 className="text-lg font-bold text-foreground">{item.name}</h3>
-                        <p className="text-sm text-muted-foreground">{item.area}, {item.state}, {item.country}</p>
+                  <article key={item.id} className="overflow-hidden rounded-2xl border border-border/70 bg-background/80 shadow-md flex flex-col">
+                    {/* Header with photo background */}
+                    <div
+                      className="relative flex items-start justify-between gap-2 p-3 min-h-[160px]"
+                      style={item.photoUrl ? { backgroundImage: `linear-gradient(rgba(15,23,42,0.55), rgba(15,23,42,0.35)), url(${item.photoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`text-sm font-bold leading-tight truncate ${item.photoUrl ? 'text-white' : 'text-foreground'}`}>{item.name}</h3>
+                        <p className={`text-xs mt-0.5 truncate ${item.photoUrl ? 'text-white/80' : 'text-muted-foreground'}`}>{[item.area, item.state, item.country].filter(Boolean).join(', ')}</p>
                       </div>
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
                           item.status === 'approved'
-                            ? 'border border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            ? 'border border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
                             : item.status === 'rejected'
-                              ? 'border border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                              : 'border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                              ? 'border border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                              : 'border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
                         }`}
                       >
                         {item.status}
                       </span>
                     </div>
 
-                      <div className="grid gap-3 p-4 text-sm text-muted-foreground">
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Mobile</p>
-                          <p className="mt-1 font-medium text-foreground">{item.mobileNumber || item.ownerPhoneNumber || '—'}</p>
+                    {/* Body */}
+                    <div className="flex flex-col gap-2 p-3 text-xs flex-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-1.5">
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Mobile</p>
+                          <p className="mt-0.5 font-medium text-foreground truncate">{item.mobileNumber || item.ownerPhoneNumber || '—'}</p>
                         </div>
-                        <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Email</p>
-                          <p className="mt-1 font-medium text-foreground wrap-break-word" title={item.ownerEmail || profileEmail}>{item.ownerEmail || profileEmail || '—'}</p>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Owner</p>
-                          <p className="mt-1 font-medium text-foreground">{item.ownerName || '—'}</p>
-                        </div>
-                        <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Location</p>
-                          <p className="mt-1 font-medium text-foreground">{item.area}, {item.state}, {item.country}</p>
+                        <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-1.5">
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Owner</p>
+                          <p className="mt-0.5 font-medium text-foreground truncate">{item.ownerName || '—'}</p>
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-border/70 bg-muted/20 p-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Description</p>
-                        <p className="mt-1 text-sm text-foreground/90">{item.description || 'No description provided'}</p>
+                      <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-1.5">
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Email</p>
+                        <p className="mt-0.5 font-medium text-foreground truncate" title={item.ownerEmail || profileEmail}>{item.ownerEmail || profileEmail || '—'}</p>
                       </div>
 
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="text-xs text-muted-foreground">
-                          <p>Created: <span className="font-medium text-foreground">{formatTimestamp(item.createdAt)}</span></p>
+                      {item.description && (
+                        <div className="rounded-xl border border-border/60 bg-muted/20 px-2 py-1.5">
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Description</p>
+                          <p className="mt-0.5 text-foreground/90 line-clamp-2">{item.description}</p>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          <p>Updated: <span className="font-medium text-foreground">{formatTimestamp(item.updatedAt)}</span></p>
-                        </div>
-                      </div>
-                      {item.editedByEmail ? (
-                        <div className="text-xs text-muted-foreground mt-2">
-                          <p>Last edited by: <span className="font-medium text-foreground">{item.editedByEmail}</span> at <span className="font-medium text-foreground">{formatTimestamp(item.editedAt)}</span></p>
-                        </div>
-                      ) : null}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock3 className="h-3.5 w-3.5" />
-                        Approval status is tracked in the badge above.
+                      )}
+
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-auto pt-1">
+                        <span>Created: <span className="text-foreground">{formatTimestamp(item.createdAt)}</span></span>
+                        <span>Updated: <span className="text-foreground">{formatTimestamp(item.updatedAt)}</span></span>
                       </div>
                     </div>
-                    <div className="flex items-center justify-end gap-2 border-t border-border/60 p-3">
-                      {(currentUser && (normalizeKey(item.ownerEmail || '') === normalizeKey(currentUser.email) || (item.ownerUid && currentUser.uid && item.ownerUid === currentUser.uid))) && (
+
+                    {/* Footer */}
+                    {(currentUser && (normalizeKey(item.ownerEmail || '') === normalizeKey(currentUser.email) || (item.ownerUid && currentUser.uid && item.ownerUid === currentUser.uid))) && (
+                      <div className="border-t border-border/60 p-2 flex justify-end">
                         <button
                           type="button"
                           onClick={() => setEditingAd(item)}
-                          className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                          className="rounded-full bg-rose-500 px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
                         >
                           Edit
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
             )}
           </section>
-        </div>
       </div>
     </main>
   );
