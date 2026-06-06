@@ -1485,8 +1485,11 @@ export default function TravelItenaryDisplay() {
 
 	useEffect(() => {
 		if (showAiGenerator) {
-			generatorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			document.body.style.overflow = 'hidden';
+		} else {
+			document.body.style.overflow = '';
 		}
+		return () => { document.body.style.overflow = ''; };
 	}, [showAiGenerator]);
 
 	const loadItineraries = useCallback(async () => {
@@ -1817,16 +1820,32 @@ export default function TravelItenaryDisplay() {
 				)}
 
 				<AnimatePresence>
-					{!search.loading && search.hasSearched && search.results.length === 0 && !search.error && showAiGenerator && (
-						<motion.section
-							ref={generatorRef}
-							initial={{ opacity: 0, y: 20, height: 0 }}
-							animate={{ opacity: 1, y: 0, height: 'auto' }}
-							exit={{ opacity: 0, y: 20, height: 0 }}
-							className="mb-8 overflow-hidden"
+					{showAiGenerator && (
+						<motion.div
+							key="ai-modal"
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+							exit={{ opacity: 0 }}
+							className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+							onClick={(e) => { if (e.target === e.currentTarget) setShowAiGenerator(false); }}
 						>
-							<Card className="overflow-hidden border border-border bg-card/80 shadow-lg shadow-black/5">
-								<div className="p-6 md:p-8 space-y-4 bg-linear-to-br from-rose-500/10 via-background to-orange-500/10">
+							<motion.div
+								initial={{ opacity: 0, scale: 0.92, y: 24 }}
+								animate={{ opacity: 1, scale: 1, y: 0 }}
+								exit={{ opacity: 0, scale: 0.92, y: 24 }}
+								transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+								className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border bg-card shadow-2xl shadow-rose-500/20"
+							>
+								{/* Close button */}
+								<button
+									type="button"
+									onClick={() => setShowAiGenerator(false)}
+									className="absolute top-4 right-4 z-10 rounded-full bg-muted/80 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+								>
+									<X className="h-4 w-4" />
+								</button>
+
+								<div className="p-6 md:p-8 space-y-4 bg-linear-to-br from-rose-500/10 via-background to-orange-500/10 rounded-3xl">
 									<div className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-200">
 										Abjee AI Itinerary Generator
 									</div>
@@ -1851,11 +1870,12 @@ export default function TravelItenaryDisplay() {
 												{isGenerating ? 'Generating...' : 'Generate Itinerary'}
 											</Button>
 											<Button type="button" variant="outline" className="rounded-xl" onClick={() => setGeminiForm(DEFAULT_GEMINI_FORM)}>Clear</Button>
+											<Button type="button" variant="ghost" className="rounded-xl text-muted-foreground" onClick={() => setShowAiGenerator(false)}>Cancel</Button>
 										</div>
 									</form>
 								</div>
-							</Card>
-						</motion.section>
+							</motion.div>
+						</motion.div>
 					)}
 				</AnimatePresence>
 
