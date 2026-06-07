@@ -3186,7 +3186,7 @@ const ChatRoomsList: React.FC = () => {
                         <span className="text-sm font-semibold text-rose-700 dark:text-rose-300">
                           {paidMember
                             ? `Private Community Creation: ${userCreatedPrivateRoomsCount}/${Number.isFinite(privateRoomAllowance.maxAllowed) ? privateRoomAllowance.maxAllowed : 'Unlimited'} (Joining is unlimited)`
-                            : 'Private Community Creation Locked (Paid Plan Required). Joining is unlimited.'
+                            : 'Private Community Creation Locked (Pro Plan Required). Joining is unlimited.'
                           }
                         </span>
                       </div>

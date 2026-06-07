@@ -203,8 +203,12 @@ export async function GET(req: NextRequest) {
       }
 
       case "razorpay-payments": {
-        const { snap, hasMore, nextCursor } = await fetchCollectionPage("subscriptionPayments", cursor, limit);
-        const rows = snap.docs.map((doc) => {
+        const [subResult, adResult] = await Promise.all([
+          fetchCollectionPage("subscriptionPayments", cursor, limit),
+          fetchCollectionPage("advertisementPayments", cursor, limit),
+        ]);
+        const allDocs = [...subResult.snap.docs, ...adResult.snap.docs];
+        const rows = allDocs.map((doc) => {
           const p = doc.data() as Record<string, any>;
           const amount = typeof p.amountInPaise === "number"
             ? p.amountInPaise / 100
@@ -214,7 +218,7 @@ export async function GET(req: NextRequest) {
             orderId: p.orderId ?? doc.id,
             paymentId: p.razorpayPaymentId ?? "",
             userId: p.userId ?? "",
-            planType: p.planType ?? "",
+            planType: p.planType ?? p.plan ?? "",
             interval: p.interval ?? "",
             status: p.status ?? "",
             amount,
@@ -224,7 +228,18 @@ export async function GET(req: NextRequest) {
             updatedAt: p.updatedAt ?? "",
           };
         });
-        return ok({ rows, nextCursor, hasMore, capped: true });
+
+        const sortedRows = rows.sort((a, b) => {
+          const timeA = new Date(a.createdAt || 0).getTime();
+          const timeB = new Date(b.createdAt || 0).getTime();
+          return timeB - timeA;
+        });
+
+        const slicedRows = sortedRows.slice(0, limit);
+        const hasMore = subResult.hasMore || adResult.hasMore;
+        const nextCursor = hasMore ? (subResult.nextCursor || adResult.nextCursor || null) : null;
+
+        return ok({ rows: slicedRows, nextCursor, hasMore, capped: true });
       }
 
       case "reviews-comments": {

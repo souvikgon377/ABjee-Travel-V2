@@ -1324,7 +1324,7 @@ function TravelDetailModal({
 											<p className="mt-2 text-xs text-muted-foreground leading-relaxed">
 												{canDownload
 													? `Included in your ${subscriptionLabel} plan.`
-													: 'This feature is available for Paid and Premium members only.'}
+													: 'This feature is available for Pro and Premium members only.'}
 											</p>
 											{!canDownload && (
 												<a
@@ -1455,8 +1455,8 @@ export default function TravelItenaryDisplay() {
 	const canDownloadItinerary = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
 	const subscriptionLabel = useMemo(() => {
 		if (subscriptionInfo.type === 'premium') return 'Premium';
-		if (subscriptionInfo.type === 'pro') return 'Paid';
-		return 'Paid';
+		if (subscriptionInfo.type === 'pro') return 'Pro';
+		return 'Pro';
 	}, [subscriptionInfo.type]);
 
 	const [search, setSearch] = useState<SearchState>({

@@ -105,17 +105,27 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   thisMonth.setHours(0, 0, 0, 0);
 
   // users: count() = 1 read regardless of collection size (vs limit(1000) = 1000 reads)
-  const [usersCountResult, statusResult, pageViewsResult, paymentsResult, subscriptionsResult] =
-    await Promise.allSettled([
-      withTimeout(adminDb.collection("users").count().get(), "users-count"),
-      withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get() as any, "status"),
-      withTimeout(getAdminRtdb().ref("analytics/pageViews").get() as any, "pageViews"),
-      withTimeout(
-        adminDb.collection("subscriptionPayments").limit(500).get(),
-        "subscriptionPayments",
-      ),
-      withTimeout(adminDb.collection("subscriptions").limit(500).get(), "subscriptions"),
-    ]);
+  const [
+    usersCountResult,
+    statusResult,
+    pageViewsResult,
+    paymentsResult,
+    adPaymentsResult,
+    subscriptionsResult,
+  ] = await Promise.allSettled([
+    withTimeout(adminDb.collection("users").count().get(), "users-count"),
+    withTimeout(getAdminRtdb().ref("status").limitToFirst(500).get() as any, "status"),
+    withTimeout(getAdminRtdb().ref("analytics/pageViews").get() as any, "pageViews"),
+    withTimeout(
+      adminDb.collection("subscriptionPayments").limit(500).get(),
+      "subscriptionPayments",
+    ),
+    withTimeout(
+      adminDb.collection("advertisementPayments").limit(500).get(),
+      "advertisementPayments",
+    ),
+    withTimeout(adminDb.collection("subscriptions").limit(500).get(), "subscriptions"),
+  ]);
 
   const totalUsers =
     usersCountResult.status === "fulfilled"
@@ -125,6 +135,7 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   const statusSnapshot = statusResult.status === "fulfilled" ? (statusResult.value as any) : null;
   const pageViewsSnapshot = pageViewsResult.status === "fulfilled" ? (pageViewsResult.value as any) : null;
   const paidPaymentsSnapshot = paymentsResult.status === "fulfilled" ? paymentsResult.value : null;
+  const paidAdPaymentsSnapshot = adPaymentsResult.status === "fulfilled" ? adPaymentsResult.value : null;
   const subscriptionsSnapshot = subscriptionsResult.status === "fulfilled" ? subscriptionsResult.value : null;
 
   const statusData = ((statusSnapshot as any)?.val() || {}) as Record<string, unknown>;
@@ -138,11 +149,13 @@ export async function fetchStatsFromFirestore(): Promise<StatsData> {
   let revenueTotal = 0;
   let revenueMonthly = 0;
 
-  const paidPaymentDocs =
-    ((paidPaymentsSnapshot as any)?.docs || []).filter((doc: any) => {
-      const payment = doc.data() as Record<string, unknown>;
-      return String(payment.status) === "paid";
-    });
+  const paidPaymentDocs = [
+    ...((paidPaymentsSnapshot as any)?.docs || []),
+    ...((paidAdPaymentsSnapshot as any)?.docs || []),
+  ].filter((doc: any) => {
+    const payment = doc.data() as Record<string, unknown>;
+    return String(payment.status) === "paid";
+  });
 
   if (paidPaymentDocs.length > 0) {
     paidPaymentDocs.forEach((doc: any) => {

@@ -41,7 +41,8 @@ export async function GET(req: NextRequest) {
       itineraries,
       notifications,
       subscriptions,
-      payments,
+      subPayments,
+      adPayments,
     ] = await Promise.all([
       safeCount("users"),
       safeCount("stories"),
@@ -50,7 +51,10 @@ export async function GET(req: NextRequest) {
       safeCount("notifications"),
       safeCount("subscriptions"),
       safeCount("subscriptionPayments"),
+      safeCount("advertisementPayments"),
     ]);
+
+    const payments = subPayments + adPayments;
 
     const footprintScore = Math.min(
       100,

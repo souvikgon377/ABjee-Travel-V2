@@ -1539,7 +1539,7 @@ const TourPlaces: React.FC = () => {
                           <>
                             <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
                             <p className="mt-1 text-[11px] text-emerald-700">
-                              Earn Rb points: Free users get 1 for text + 1 for media. Paid and Premium users get 2 for text + 3 for media. 1 Rb = Rs 1.
+                              Earn Rb points: Free users get 1 for text + 1 for media. Pro and Premium users get 2 for text + 3 for media. 1 Rb = Rs 1.
                             </p>
                             <div className="mt-3 flex items-center gap-1">
                               {[1, 2, 3, 4, 5].map((star) => (

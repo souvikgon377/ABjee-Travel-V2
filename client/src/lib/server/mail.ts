@@ -1,10 +1,5 @@
 import nodemailer from 'nodemailer';
 
-const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
-const smtpUser = process.env.SMTP_USER || 'abjeetourism@gmail.com';
-const smtpPass = process.env.SMTP_PASS || '';
-
 /**
  * Sends an email using SMTP transport.
  */
@@ -19,6 +14,11 @@ export async function sendEmail({
   text: string;
   html?: string;
 }) {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+  const smtpUser = process.env.SMTP_USER || 'abjeetourism@gmail.com';
+  const smtpPass = process.env.SMTP_PASS || '';
+
   if (!smtpPass) {
     console.warn('[MailService] SMTP_PASS is not configured. Email will not be sent.');
     return null;

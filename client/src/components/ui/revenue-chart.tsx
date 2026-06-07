@@ -4,6 +4,12 @@ import { Button } from '@/components/ui/button';
 import { BarChart3, Calendar } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 interface RevenueChartProps {
   refreshTrigger?: number;
@@ -13,17 +19,20 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
   const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [monthsFilter, setMonthsFilter] = useState<number>(6);
 
   const fetchRevenueData = useCallback(async () => {
     setLoading(true);
     setHasLoaded(true);
 
     try {
-      const paymentsSnap = await getDocs(
-        query(collection(firestoreDb, 'subscriptionPayments'), where('status', '==', 'paid')),
-      );
+      const [paymentsSnap, adPaymentsSnap] = await Promise.all([
+        getDocs(query(collection(firestoreDb, 'subscriptionPayments'), where('status', '==', 'paid'))),
+        getDocs(query(collection(firestoreDb, 'advertisementPayments'), where('status', '==', 'paid'))),
+      ]);
       const revenueByMonth: Record<string, number> = {};
-      paymentsSnap.forEach((doc) => {
+
+      const processPaymentDoc = (doc: any) => {
         const payment = doc.data() as Record<string, any>;
         const amountFromPaise = typeof payment.amountInPaise === 'number' ? payment.amountInPaise / 100 : null;
         const amount = typeof amountFromPaise === 'number'
@@ -35,13 +44,16 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
           : (payment.createdAt?.toDate?.() ?? (payment.createdAt ? new Date(payment.createdAt) : new Date()));
         const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
         revenueByMonth[key] = (revenueByMonth[key] || 0) + amount;
-      });
+      };
+
+      paymentsSnap.forEach(processPaymentDoc);
+      adPaymentsSnap.forEach(processPaymentDoc);
 
       const lastSix: { month: string; value: number; monthKey: string }[] = [];
       const baseMonth = new Date();
       baseMonth.setDate(1);
 
-      for (let i = 5; i >= 0; i--) {
+      for (let i = monthsFilter - 1; i >= 0; i--) {
         const d = new Date(baseMonth);
         d.setMonth(baseMonth.getMonth() - i);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -62,10 +74,9 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [monthsFilter]);
 
   useEffect(() => {
-    if (!refreshTrigger) return;
     void fetchRevenueData();
   }, [fetchRevenueData, refreshTrigger]);
 
@@ -116,10 +127,25 @@ export const RevenueChart = memo(({ refreshTrigger = 0 }: RevenueChartProps) => 
             Monthly revenue performance
           </p>
         </div>
-        <Button variant="outline" size="sm">
-          <Calendar className="mr-2 h-4 w-4" />
-          Last 6 months
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Calendar className="mr-2 h-4 w-4" />
+              Last {monthsFilter} months
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setMonthsFilter(3)}>
+              Last 3 months
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setMonthsFilter(6)}>
+              Last 6 months
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setMonthsFilter(12)}>
+              Last 12 months
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Fixed Chart Area */}

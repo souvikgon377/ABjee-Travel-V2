@@ -45,7 +45,7 @@ const DEFAULT_PLANS = [
   },
   {
     id: 'pro',
-    name: 'Paid',
+    name: 'Pro',
     icon: Zap,
     price: {
       monthly: 2,

@@ -1240,8 +1240,12 @@ async function fetchSectionData(
     }
 
     case 'razorpay-payments': {
-      const snap = await getDocs(collection(firestoreDb, 'subscriptionPayments'));
-      return snap.docs.map((d) => {
+      const [snap, adSnap] = await Promise.all([
+        getDocs(collection(firestoreDb, 'subscriptionPayments')),
+        getDocs(collection(firestoreDb, 'advertisementPayments')),
+      ]);
+      const allDocs = [...snap.docs, ...adSnap.docs];
+      return allDocs.map((d) => {
         const p = d.data() as Record<string, any>;
         const amount = typeof p.amountInPaise === 'number'
           ? p.amountInPaise / 100
@@ -1252,7 +1256,7 @@ async function fetchSectionData(
           orderId: p.orderId ?? d.id,
           paymentId: p.razorpayPaymentId ?? '',
           userId: p.userId ?? '',
-          planType: p.planType ?? '',
+          planType: p.planType ?? p.plan ?? '',
           interval: p.interval ?? '',
           status: p.status ?? '',
           amount,

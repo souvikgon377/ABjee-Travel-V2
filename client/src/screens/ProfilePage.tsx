@@ -161,7 +161,7 @@ export default function ProfilePage() {
       return 'Free';
     }
 
-    return subscriptionInfo.type === 'premium' ? 'Premium' : 'Paid';
+    return subscriptionInfo.type === 'premium' ? 'Premium' : 'Pro';
   }, [subscriptionInfo.type]);
 
   const subscriptionValidityLabel = useMemo(() => {
