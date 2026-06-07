@@ -64,6 +64,73 @@ const formatDateTime = (value: any) => {
   return new Date(value).toLocaleString();
 };
 
+const PLACE_COUNTRY_MAPPING: Record<string, string> = {
+  // United States
+  'grand canyon': 'united states',
+  'san francisco': 'united states',
+  'new york': 'united states',
+  'los angeles': 'united states',
+  'chicago': 'united states',
+  'houston': 'united states',
+  'phoenix': 'united states',
+  'philadelphia': 'united states',
+  'san antonio': 'united states',
+  'san diego': 'united states',
+  'dallas': 'united states',
+  'san jose': 'united states',
+  'austin': 'united states',
+  'jacksonville': 'united states',
+  'fort worth': 'united states',
+  'columbus': 'united states',
+  'charlotte': 'united states',
+  'seattle': 'united states',
+  'denver': 'united states',
+  'washington': 'united states',
+  'boston': 'united states',
+  'las vegas': 'united states',
+  'arizona': 'united states',
+  'california': 'united states',
+  'texas': 'united states',
+  'florida': 'united states',
+  'nevada': 'united states',
+  'colorado': 'united states',
+
+  // Australia
+  'melbourne': 'australia',
+  'sydney': 'australia',
+  'brisbane': 'australia',
+  'perth': 'australia',
+  'adelaide': 'australia',
+  'gold coast': 'australia',
+  'canberra': 'australia',
+  'hobart': 'australia',
+  'darwin': 'australia',
+  'victoria': 'australia',
+  'new south wales': 'australia',
+  'queensland': 'australia',
+  'western australia': 'australia',
+  'south australia': 'australia',
+  'tasmania': 'australia',
+
+  // India
+  'delhi': 'india',
+  'mumbai': 'india',
+  'kolkata': 'india',
+  'chennai': 'india',
+  'bangalore': 'india',
+  'bengaluru': 'india',
+  'hyderabad': 'india',
+  'pune': 'india',
+  'goa': 'india',
+  'kerala': 'india',
+  'rajasthan': 'india',
+  'west bengal': 'india',
+  'sikkim': 'india',
+  'darjeeling': 'india',
+  'assam': 'india',
+  'kabul': 'afghanistan',
+};
+
 export const getAdMatchScore = (item: AdItem, searchTerm: string, places: TouristPlace[]) => {
   const term = normalize(searchTerm);
 
@@ -105,6 +172,19 @@ export const getAdMatchScore = (item: AdItem, searchTerm: string, places: Touris
       score += 6;
     }
     if (adCountries.some(country => country.includes(term) || term.includes(country))) {
+      matched = true;
+      score += 4;
+    }
+
+    // Heuristic country matching for queries like "Grand Canyon" mapping to "United States"
+    let heuristicCountry = '';
+    for (const [place, country] of Object.entries(PLACE_COUNTRY_MAPPING)) {
+      if (term.includes(place) || place.includes(term)) {
+        heuristicCountry = country;
+        break;
+      }
+    }
+    if (heuristicCountry && adCountries.includes(heuristicCountry)) {
       matched = true;
       score += 4;
     }

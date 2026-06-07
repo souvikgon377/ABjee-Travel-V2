@@ -430,7 +430,16 @@ export class SyncService {
       return value > 10_000_000_000 ? Math.floor(value / 1000) : value;
     }
     if (value.seconds) return value.seconds;
+    if (value.toDate && typeof value.toDate === 'function') {
+      return Math.floor(value.toDate().getTime() / 1000);
+    }
     if (value instanceof Date) return Math.floor(value.getTime() / 1000);
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      if (!isNaN(parsed)) {
+        return Math.floor(parsed / 1000);
+      }
+    }
     return Math.floor(Date.now() / 1000);
   }
 }

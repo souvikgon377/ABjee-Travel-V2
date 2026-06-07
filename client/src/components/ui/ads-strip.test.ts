@@ -82,6 +82,13 @@ describe('AdsStrip Relevance and Location Matching tests', () => {
     expect(indiaAdResult.matched).toBe(false);
   });
 
+  it('should match Grand Canyon to United States targeting ads even when places array is empty (heuristic mapping)', () => {
+    // Grand Canyon ad targets 'United States'. Grand Canyon maps to 'United States' via PLACE_COUNTRY_MAPPING.
+    const result = getAdMatchScore(mockAds[1], 'Grand Canyon', []);
+    expect(result.matched).toBe(true);
+    expect(result.score).toBe(27); // matches name (+10), description (+5), area (+8), and heuristic country (+4)
+  });
+
   it('should match multiple targeted states and areas correctly', () => {
     const places: TouristPlace[] = [
       {
