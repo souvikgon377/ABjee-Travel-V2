@@ -416,6 +416,8 @@ export class SyncService {
         createdAt: this.toTimestamp(data.createdAt),
         approvedAt: data.approvedAt ? this.toTimestamp(data.approvedAt) : null,
         subscriptionExpiresAt: data.subscriptionExpiresAt ? this.toTimestamp(data.subscriptionExpiresAt) : 4102444800,
+        rating: typeof data.rating === 'number' ? data.rating : 0,
+        comments: data.comments ? (typeof data.comments === 'string' ? data.comments : JSON.stringify(data.comments)) : '[]',
       };
     }
 

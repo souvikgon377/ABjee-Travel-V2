@@ -41,9 +41,11 @@ export async function POST(req: NextRequest) {
 
       const isAdmin = currentUser.role === 'admin';
 
-      if (!isOwner && !isAdmin) {
-        console.warn(`[Advertisements:Sync] Unauthorized attempt to sync ${id} by user ${currentUser.email}`);
-        return fail('Unauthorized to sync this advertisement', 403);
+      // General sync/upsert is allowed for any authenticated user (needed for rating/reviews)
+      // Delete or other actions still require owner or admin
+      if (!isOwner && !isAdmin && action === 'delete') {
+        console.warn(`[Advertisements:Sync] Unauthorized attempt to sync delete for ${id} by user ${currentUser.email}`);
+        return fail('Unauthorized to delete this advertisement from search index', 403);
       }
 
       await SyncService.syncAdvertisement(data);

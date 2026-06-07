@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth } from '@/lib/firebase';
 
 type AdItem = {
   id: string;
@@ -37,6 +38,7 @@ type AdItem = {
   rating?: number;
   comments?: any[];
   subscriptionExpiresAt?: string;
+  score?: number;
 };
 
 type AdsStripProps = {
@@ -45,7 +47,7 @@ type AdsStripProps = {
   places?: TouristPlace[];
 };
 
-const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
+export const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
 
 const getTime = (value: any) => {
   if (!value) return 0;
@@ -62,59 +64,105 @@ const formatDateTime = (value: any) => {
   return new Date(value).toLocaleString();
 };
 
-const adMatchesSearch = (item: AdItem, searchTerm: string, places: TouristPlace[]) => {
+export const getAdMatchScore = (item: AdItem, searchTerm: string, places: TouristPlace[]) => {
   const term = normalize(searchTerm);
-
-  if (!term && places.length === 0) {
-    return true;
-  }
 
   const adName = normalize(item.name);
   const adCategory = normalize(item.category);
   const adDesc = normalize(item.description);
-  const adArea = normalize(item.area);
-  const adState = normalize(item.state);
-  const adCountry = normalize(item.country);
+  const adAreaStr = normalize(item.area);
+  const adStateStr = normalize(item.state);
+  const adCountryStr = normalize(item.country);
+
+  let matched = false;
+  let score = 0;
+
+  // Split comma-separated targeting lists
+  const adAreas = adAreaStr.split(',').map(s => s.trim()).filter(Boolean);
+  const adStates = adStateStr.split(',').map(s => s.trim()).filter(Boolean);
+  const adCountries = adCountryStr.split(',').map(s => s.trim()).filter(Boolean);
 
   // 1. Direct search term match on any ad fields (e.g. searching "Bike rental" or "Kolkata")
   if (term) {
-    const isDirectMatch = 
-      adName.includes(term) ||
-      adCategory.includes(term) ||
-      adDesc.includes(term) ||
-      adArea.includes(term) ||
-      adState.includes(term) ||
-      adCountry.includes(term);
-    if (isDirectMatch) return true;
+    if (adName.includes(term)) {
+      matched = true;
+      score += 10;
+    }
+    if (adCategory.includes(term)) {
+      matched = true;
+      score += 8;
+    }
+    if (adDesc.includes(term)) {
+      matched = true;
+      score += 5;
+    }
+    if (adAreas.some(area => area.includes(term) || term.includes(area))) {
+      matched = true;
+      score += 8;
+    }
+    if (adStates.some(state => state.includes(term) || term.includes(state))) {
+      matched = true;
+      score += 6;
+    }
+    if (adCountries.some(country => country.includes(term) || term.includes(country))) {
+      matched = true;
+      score += 4;
+    }
   }
 
   // 2. Location-based match from the searched tourist places
   if (places.length > 0) {
-    return places.some((place) => {
+    let placeMatchScore = 0;
+    let placeMatched = false;
+
+    places.forEach((place) => {
       const placeCountry = normalize(place.country);
       const placeState = normalize(place.state);
       const placeCity = normalize(place.city);
       const placeArea = normalize(place.area);
 
       // Match Country
-      const countryMatch = Boolean(adCountry && placeCountry && adCountry === placeCountry);
+      const countryMatch = Boolean(placeCountry && adCountries.includes(placeCountry));
+      if (countryMatch) {
+        placeMatched = true;
+        placeMatchScore = Math.max(placeMatchScore, 1);
+      }
 
       // Match State
-      const stateMatch = Boolean(adState && placeState && adState === placeState);
+      const stateMatch = Boolean(placeState && adStates.includes(placeState));
+      if (stateMatch) {
+        placeMatched = true;
+        placeMatchScore = Math.max(placeMatchScore, 3);
+      }
 
       // Match Location (Area / City)
-      const areaMatch = Boolean(adArea && (
-        adArea === placeArea ||
-        adArea === placeCity ||
-        (placeArea && placeArea.includes(adArea)) ||
-        (placeCity && placeCity.includes(adArea))
-      ));
-
-      return countryMatch || stateMatch || areaMatch;
+      const areaMatch = adAreas.some(adArea => {
+        if (!adArea) return false;
+        return (
+          adArea === placeArea ||
+          adArea === placeCity ||
+          (placeArea && placeArea.includes(adArea)) ||
+          (placeCity && placeCity.includes(adArea))
+        );
+      });
+      if (areaMatch) {
+        placeMatched = true;
+        placeMatchScore = Math.max(placeMatchScore, 5);
+      }
     });
+
+    if (placeMatched) {
+      matched = true;
+      score += placeMatchScore;
+    }
   }
 
-  return false;
+  // If no search term and no places, it matches everything by default with score 0
+  if (!term && places.length === 0) {
+    matched = true;
+  }
+
+  return { matched, score };
 };
 
 export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }: AdsStripProps) {
@@ -142,6 +190,17 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       const docRef = doc(firestoreDb, 'advertisements', selectedItem.id);
       await updateDoc(docRef, { rating: newRating });
       selectedItem.rating = newRating;
+
+      // Trigger Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: selectedItem.id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger sync for rating', err));
     } catch (err) {
       console.error('Failed to save rating:', err);
     }
@@ -157,6 +216,17 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       const updatedComments = adComments.filter((c) => c.id !== commentToDelete.id);
       setAdComments(updatedComments);
       selectedItem.comments = updatedComments;
+
+      // Trigger Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: selectedItem.id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger sync for delete comment', err));
     } catch (err) {
       console.error('Failed to delete comment:', err);
       alert('Failed to delete comment.');
@@ -189,6 +259,17 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       selectedItem.comments.push(commentPayload);
 
       setNewCommentText('');
+
+      // Trigger Typesense sync
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      await fetch('/api/advertisements/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: selectedItem.id, action: 'upsert' }),
+      }).catch((err) => console.error('Failed to trigger sync for comment', err));
     } catch (err) {
       console.error('Failed to post comment:', err);
       alert('Failed to post comment. Please try again.');
@@ -242,6 +323,18 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
             approvedAt: data.approvedAt,
             updatedAt: data.updatedAt,
             subscriptionExpiresAt: typeof data.subscriptionExpiresAt === 'string' ? data.subscriptionExpiresAt : '',
+            rating: typeof data.rating === 'number' ? data.rating : (Number(data.rating) || 0),
+            comments: (() => {
+              if (typeof data.comments === 'string') {
+                try {
+                  return JSON.parse(data.comments);
+                } catch (e) {
+                  console.error('Failed to parse comments JSON:', e);
+                  return [];
+                }
+              }
+              return Array.isArray(data.comments) ? data.comments : [];
+            })(),
           };
         });
 
@@ -259,15 +352,35 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
           }
           return true;
         });
-        const matchedRows = approvedRows.filter((row) => adMatchesSearch(row, searchTerm, places));
+        const scoredItems = approvedRows.map((row) => {
+          const { matched, score } = getAdMatchScore(row, searchTerm, places);
+          return { row, matched, score };
+        });
+
+        const matchedRows = scoredItems
+          .filter((item) => item.matched)
+          .map((item) => ({ ...item.row, score: item.score }));
         
         // Show ONLY matched rows if there is a search filter applied. Do not fall back to all approved rows.
         const hasFilter = Boolean(normalize(searchTerm) || places.length > 0);
-        const nextItems = hasFilter ? matchedRows : approvedRows;
+        const nextItems = hasFilter 
+          ? matchedRows 
+          : approvedRows.map(row => ({ ...row, score: 0 }));
 
         setItems(
           nextItems
-            .sort((left, right) => getTime(right.approvedAt || right.updatedAt) - getTime(left.approvedAt || left.updatedAt))
+            .sort((left, right) => {
+              // 1. Sort by match/relevance score descending
+              const scoreDiff = (right.score || 0) - (left.score || 0);
+              if (scoreDiff !== 0) return scoreDiff;
+
+              // 2. Sort by star ratings descending
+              const ratingDiff = (right.rating || 0) - (left.rating || 0);
+              if (ratingDiff !== 0) return ratingDiff;
+
+              // 3. Fallback to newest approved/updated first
+              return getTime(right.approvedAt || right.updatedAt) - getTime(left.approvedAt || left.updatedAt);
+            })
             .slice(0, maxItems)
         );
       } catch {
