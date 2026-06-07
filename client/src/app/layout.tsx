@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { publicAsset } from "@/lib/publicAsset";
@@ -76,6 +77,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <SpeedInsights />
+          <Analytics />
         </Providers>
       </body>
     </html>
