@@ -1766,7 +1766,7 @@ const ChatRoomsList: React.FC = () => {
         >
           <h1 className="text-3xl md:text-5xl font-bold">
             <BlurInText
-              text="How Would You Like to Spend Your Time?"
+              text="Traveller's Best Place to Explore"
               blurAmount={12}
               duration={1}
               stagger={0.02}
@@ -1823,10 +1823,10 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2 drop-shadow-lg">
-                      Explore Your Interest
+                      Explore Tourist Places
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base drop-shadow-md">
-                      Discover communities that match your passions and travel style
+                      Top Travel destinations around the World. Review from Travellers.
                     </p>
                   </div>
                 </div>
@@ -1879,10 +1879,10 @@ const ChatRoomsList: React.FC = () => {
                       className="text-2xl font-bold text-gray-100 dark:text-white mb-2 drop-shadow-2xl"
                       whileHover={{ scale: 1.05 }}
                     >
-                      Communicate with Fellow Travellers
+                      Connect with Fellow Travellers
                     </motion.h3>
                     <p className="text-gray-300 dark:text-white/95 text-base drop-shadow-lg font-medium">
-                      Connect and share experiences with travelers worldwide ???
+                      Plan trip together and share experiences with Travellers worldwide.
                     </p>
                   </div>
                 </div>
@@ -1976,10 +1976,10 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2">
-                      Make a Perfect Travel Itenary
+                      Make a Perfect Travel Itenerary
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
-                      Collaborate with others to create unforgettable journeys
+                      Get the Best Travel Itinarary as per your choice.
                     </p>
                   </div>
                 </div>
@@ -2022,10 +2022,10 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2 drop-shadow-lg">
-                      Explore Your Interest
+                      Explore Tourist Places
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base drop-shadow-md">
-                      Discover communities that match your passions and travel style
+                      Top Travel destinations around the World. Review from Travellers.
                     </p>
                   </div>
                 </div>
@@ -2080,10 +2080,10 @@ const ChatRoomsList: React.FC = () => {
                       className="text-2xl font-bold text-white dark:text-white mb-2 drop-shadow-2xl"
                       whileHover={{ scale: 1.05 }}
                     >
-                      Communicate with Fellow Travellers
+                      Connect with Fellow Travellers
                     </motion.h3>
                     <p className="text-gray-300 dark:text-white/95 text-base drop-shadow-lg font-medium">
-                      Connect and share experiences with travelers worldwide ???
+                      Plan trip together and share experiences with Travellers worldwide.
                     </p>
                   </div>
                 </div>
@@ -2183,10 +2183,10 @@ const ChatRoomsList: React.FC = () => {
                   </motion.div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-100 dark:text-white mb-2">
-                      Make a Perfect Travel Itenary
+                      Make a Perfect Travel Itenerary
                     </h3>
                     <p className="text-gray-300 dark:text-white/90 text-base">
-                      Collaborate with others to create unforgettable journeys
+                      Get the Best Travel Itinarary as per your choice.
                     </p>
                   </div>
                 </div>
