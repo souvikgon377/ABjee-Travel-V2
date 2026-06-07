@@ -307,16 +307,18 @@ export async function POST(req: NextRequest) {
     // Send email to the user
     try {
       const userDoc = await adminDb.collection('users').doc(userId).get();
-      const userEmail = (userDoc.exists ? userDoc.data()?.email : '') || '';
+      const userData = userDoc.exists ? userDoc.data() : null;
+      const userEmail = userData?.email || '';
       if (userEmail) {
+        const recipientName = (userData?.firstName || userData?.displayName || 'Traveler').trim();
         const planName = planType.toUpperCase();
         const startStr = startDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
         const endStr = endDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
         const emailSubject = `Subscription Activated - ABjee Travel`;
-        const emailText = `Hello,\n\nThank you for subscribing to our ${planName} plan (${interval})!\n\nYour payment of ₹${finalAmount} has been successfully verified.\n\nSubscription Details:\n- Plan: ${planName}\n- Term: ${interval.toUpperCase()}\n- Start Date: ${startStr}\n- End Date: ${endStr}\n\nEnjoy planning your trips with ABjee Travel!\n\nRegards,\nABjee Travel Team`;
+        const emailText = `Hello ${recipientName},\n\nThank you for subscribing to our ${planName} plan (${interval})!\n\nYour payment of ₹${finalAmount} has been successfully verified.\n\nSubscription Details:\n- Plan: ${planName}\n- Term: ${interval.toUpperCase()}\n- Start Date: ${startStr}\n- End Date: ${endStr}\n\nEnjoy planning your trips with ABjee Travel!\n\nRegards,\nABjee Travel Team`;
         const emailHtml = `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
           <h2 style="color: #10b981; margin-top: 0;">Subscription Activated</h2>
-          <p>Hello,</p>
+          <p>Hello ${recipientName},</p>
           <p>Thank you for subscribing to our <strong>${planName}</strong> plan (<strong>${interval.toUpperCase()}</strong>)! Your payment has been successfully verified.</p>
           <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 12px; margin: 16px 0; border-radius: 4px;">
             <strong>Subscription Details:</strong><br />
