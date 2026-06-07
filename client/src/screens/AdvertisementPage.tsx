@@ -836,17 +836,17 @@ export default function AdvertisementPage() {
                 <article className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80 flex flex-col justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Monthly Plan</p>
-                    <div className="mt-2 flex items-end gap-1">
-                      <span className="text-3xl font-black text-slate-950 dark:text-white">
+                    <div className="mt-2 flex items-end gap-1 flex-nowrap">
+                      <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
                         {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
                         {pricing.adMonthly}
                       </span>
-                      <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ month</span>
+                      <span className="pb-1 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">/ month</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.monthly}</p>
-                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-4">
                       {adFeatures.adMonthlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
-                        <li key={idx}>• {feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                        <li key={idx}>{feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
                       ))}
                     </ul>
                   </div>
@@ -876,17 +876,17 @@ export default function AdvertisementPage() {
                       Most popular
                     </div>
                     <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Quarterly Plan</p>
-                    <div className="mt-2 flex items-end gap-1">
-                      <span className="text-3xl font-black text-slate-950 dark:text-white">
+                    <div className="mt-2 flex items-end gap-1 flex-nowrap">
+                      <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
                         {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
                         {pricing.adQuarterly}
                       </span>
-                      <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ 3 months</span>
+                      <span className="pb-1 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">/ 3 months</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.quarterly}</p>
-                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-4">
                       {adFeatures.adQuarterlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
-                        <li key={idx}>• {feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                        <li key={idx}>{feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
                       ))}
                     </ul>
                   </div>
@@ -913,17 +913,17 @@ export default function AdvertisementPage() {
                 <article className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/80 flex flex-col justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Yearly Plan</p>
-                    <div className="mt-2 flex items-end gap-1">
-                      <span className="text-3xl font-black text-slate-950 dark:text-white">
+                    <div className="mt-2 flex items-end gap-1 flex-nowrap">
+                      <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
                         {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
                         {pricing.adYearly}
                       </span>
-                      <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ year</span>
+                      <span className="pb-1 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">/ year</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.yearly}</p>
-                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-4">
                       {adFeatures.adYearlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
-                        <li key={idx}>• {feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                        <li key={idx}>{feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
                       ))}
                     </ul>
                   </div>
