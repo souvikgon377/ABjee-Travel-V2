@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { ArrowRight, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, Megaphone, Search, ShieldCheck, Sparkles } from 'lucide-react';
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { auth } from '@/lib/firebase';
+import confetti from 'canvas-confetti';
 
 type OwnerAdvertisement = {
   id: string;
@@ -130,7 +131,21 @@ export default function AdvertisementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [accessGranted, setAccessGranted] = useState(false);
+  const [accessGranted, setAccessGranted] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('ad_access_granted') === 'true';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (!loading && !currentUser) {
+      setAccessGranted(false);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('ad_access_granted');
+      }
+    }
+  }, [currentUser, loading]);
   const [ownerAds, setOwnerAds] = useState<OwnerAdvertisement[]>([]);
   const [ownerAdsLoading, setOwnerAdsLoading] = useState(false);
   const [ownerAdsError, setOwnerAdsError] = useState('');
@@ -167,6 +182,16 @@ export default function AdvertisementPage() {
     adQuarterlyFeatures: 'Three active ads\nFeatured placement\nPriority review',
     adYearlyFeatures: 'Unlimited campaigns\nTop placement\nDirect support',
   });
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponPreviewByPlan, setCouponPreviewByPlan] = useState<Record<string, {
+    discountPercent: number;
+    discountAmount: number;
+    finalAmount: number;
+    currency: string;
+  }>>({});
 
   useEffect(() => {
     let active = true;
@@ -214,10 +239,15 @@ export default function AdvertisementPage() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser) return;
-    fetch('/api/advertisements/payment/check')
-      .then((res) => res.json())
-      .then((data) => {
+    const checkPayment = async () => {
+      try {
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        const res = await fetch('/api/advertisements/payment/check', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await res.json();
         if (data?.success && data?.data?.paidPlan) {
           setPaidPlan(data.data.paidPlan);
           setPaymentId(data.data.paymentId);
@@ -229,9 +259,110 @@ export default function AdvertisementPage() {
           setPaymentVerifiedAt(null);
           setPaymentCreatedAt(null);
         }
-      })
-      .catch((err) => console.error('Failed to check ad payment status:', err));
+      } catch (err) {
+        console.error('Failed to check ad payment status:', err);
+      }
+    };
+    void checkPayment();
   }, [currentUser]);
+
+  const triggerPaymentFireworks = useCallback(() => {
+    const duration = 5 * 1000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 };
+
+    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+    const interval = window.setInterval(() => {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        window.clearInterval(interval);
+        return;
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+      });
+
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+      });
+    }, 250);
+  }, []);
+
+  const validateCouponForCurrentFrequency = useCallback(async (rawCouponCode: string) => {
+    const normalizedCode = rawCouponCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setAppliedCoupon(null);
+      setCouponPreviewByPlan({});
+      setCouponError(null);
+      return false;
+    }
+
+    setApplyingCoupon(true);
+    setCouponError(null);
+
+    try {
+      const plansList = ['monthly', 'quarterly', 'yearly'];
+      const previews: Record<string, {
+        discountPercent: number;
+        discountAmount: number;
+        finalAmount: number;
+        currency: string;
+      }> = {};
+
+      await Promise.all(
+        plansList.map(async (plan) => {
+          const res = await fetch('/api/advertisements/payment/coupon/validate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              promoCode: normalizedCode,
+              plan,
+            }),
+          });
+
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || !payload?.success) {
+            return;
+          }
+
+          previews[plan] = {
+            discountPercent: Number(payload.data.discountPercent || 0),
+            discountAmount: Number(payload.data.discountAmount || 0),
+            finalAmount: Number(payload.data.finalAmount || 0),
+            currency: String(payload.data.currency || 'INR'),
+          };
+        }),
+      );
+
+      if (Object.keys(previews).length === 0) {
+        throw new Error('Coupon is not valid for any advertisement plans.');
+      }
+
+      setAppliedCoupon(normalizedCode);
+      setCouponPreviewByPlan(previews);
+      setCouponInput(normalizedCode);
+      setCouponError(null);
+      return true;
+    } catch (error: any) {
+      setAppliedCoupon(null);
+      setCouponPreviewByPlan({});
+      setCouponError(error?.message || 'Unable to validate coupon right now.');
+      return false;
+    } finally {
+      setApplyingCoupon(false);
+    }
+  }, []);
 
   const loadRazorpayScript = () => {
     if (typeof window === 'undefined') return Promise.resolve(false);
@@ -254,19 +385,60 @@ export default function AdvertisementPage() {
     }
     setPaymentLoading(plan);
     try {
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+
+      // Direct zero-amount coupon redemption
+      if (appliedCoupon && couponPreviewByPlan[plan]?.finalAmount === 0) {
+        const redeemRes = await fetch('/api/advertisements/payment/coupon/redeem', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            promoCode: appliedCoupon,
+            plan,
+          }),
+        });
+
+        const redeemPayload = await redeemRes.json().catch(() => ({}));
+        if (!redeemRes.ok || !redeemPayload?.success) {
+          throw new Error(redeemPayload?.message || 'Failed to redeem coupon.');
+        }
+
+        // Confetti explosion
+        triggerPaymentFireworks();
+
+        setPaidPlan(plan);
+        setPaymentId(redeemPayload.data.paymentId);
+        fetch('/api/advertisements/payment/check')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.success && data?.data?.paidPlan) {
+              setPaidPlan(data.data.paidPlan);
+              setPaymentId(data.data.paymentId);
+              setPaymentVerifiedAt(data.data.verifiedAt);
+              setPaymentCreatedAt(data.data.createdAt);
+            }
+          })
+          .catch((err) => console.error('Failed to sync plan state:', err));
+
+        alert(`Subscription activated successfully using coupon ${appliedCoupon}!`);
+        return;
+      }
+
       const scriptReady = await loadRazorpayScript();
       if (!scriptReady) {
         throw new Error('Unable to load Razorpay SDK. Please check your network connection.');
       }
 
-      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
       const orderRes = await fetch('/api/advertisements/payment/order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, promoCode: appliedCoupon }),
       });
 
       const orderPayload = await orderRes.json().catch(() => ({}));
@@ -575,6 +747,9 @@ export default function AdvertisementPage() {
         }
       }
 
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('ad_access_granted', 'true');
+      }
       setAccessGranted(true);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Failed to continue. Please try again.');
@@ -776,6 +951,9 @@ export default function AdvertisementPage() {
               type="button"
               onClick={() => {
                 setAccessGranted(false);
+                if (typeof window !== 'undefined') {
+                  sessionStorage.removeItem('ad_access_granted');
+                }
                 // Do not sign the user out of the whole site — only exit the Registration flow
                 router.push('/advertisement');
               }}
@@ -837,10 +1015,23 @@ export default function AdvertisementPage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Monthly Plan</p>
                     <div className="mt-2 flex items-end gap-1 flex-nowrap">
-                      <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
-                        {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
-                        {pricing.adMonthly}
-                      </span>
+                      {couponPreviewByPlan.monthly !== undefined && couponPreviewByPlan.monthly.finalAmount < pricing.adMonthly ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
+                            {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                            {couponPreviewByPlan.monthly.finalAmount}
+                          </span>
+                          <span className="text-sm text-slate-400 line-through">
+                            {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                            {pricing.adMonthly}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
+                          {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                          {pricing.adMonthly}
+                        </span>
+                      )}
                       <span className="pb-1 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">/ month</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.monthly}</p>
@@ -877,10 +1068,23 @@ export default function AdvertisementPage() {
                     </div>
                     <p className="mt-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Quarterly Plan</p>
                     <div className="mt-2 flex items-end gap-1 flex-nowrap">
-                      <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
-                        {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
-                        {pricing.adQuarterly}
-                      </span>
+                      {couponPreviewByPlan.quarterly !== undefined && couponPreviewByPlan.quarterly.finalAmount < pricing.adQuarterly ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
+                            {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                            {couponPreviewByPlan.quarterly.finalAmount}
+                          </span>
+                          <span className="text-sm text-slate-400 line-through">
+                            {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                            {pricing.adQuarterly}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
+                          {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                          {pricing.adQuarterly}
+                        </span>
+                      )}
                       <span className="pb-1 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">/ 3 months</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.quarterly}</p>
@@ -914,10 +1118,23 @@ export default function AdvertisementPage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Yearly Plan</p>
                     <div className="mt-2 flex items-end gap-1 flex-nowrap">
-                      <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
-                        {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
-                        {pricing.adYearly}
-                      </span>
+                      {couponPreviewByPlan.yearly !== undefined && couponPreviewByPlan.yearly.finalAmount < pricing.adYearly ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
+                            {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                            {couponPreviewByPlan.yearly.finalAmount}
+                          </span>
+                          <span className="text-sm text-slate-400 line-through">
+                            {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                            {pricing.adYearly}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-2xl font-black text-slate-950 dark:text-white whitespace-nowrap">
+                          {pricing.currency === 'INR' ? '₹' : pricing.currency + ' '}
+                          {pricing.adYearly}
+                        </span>
+                      )}
                       <span className="pb-1 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">/ year</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.yearly}</p>
@@ -947,6 +1164,66 @@ export default function AdvertisementPage() {
                   )}
                 </article>
               </div>
+
+              {/* Coupon Code input */}
+              <div className="w-full max-w-md rounded-2xl border border-rose-100 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                <form
+                  className="flex flex-col gap-3 sm:flex-row sm:items-end"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const success = await validateCouponForCurrentFrequency(couponInput);
+                    if (success) {
+                      confetti({
+                        particleCount: 80,
+                        spread: 60,
+                        origin: { y: 0.8 }
+                      });
+                    }
+                  }}
+                >
+                  <div className="w-full space-y-1">
+                    <Label htmlFor="adCouponInput" className="text-xs font-semibold text-slate-500 dark:text-slate-400">Have a coupon code?</Label>
+                    <Input
+                      id="adCouponInput"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="Enter coupon code"
+                      className="uppercase"
+                    />
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      type="submit"
+                      disabled={applyingCoupon}
+                    >
+                      {applyingCoupon ? 'Applying...' : 'Apply'}
+                    </Button>
+                    {appliedCoupon && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setAppliedCoupon(null);
+                          setCouponPreviewByPlan({});
+                          setCouponInput('');
+                          setCouponError(null);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </form>
+                {appliedCoupon && (
+                  <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 animate-pulse">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Coupon {appliedCoupon} applied to eligible ad plans.
+                  </p>
+                )}
+                {couponError && (
+                  <p className="mt-2 text-xs font-medium text-rose-600 dark:text-rose-450">{couponError}</p>
+                )}
+              </div>
             </div>
 
           <div className="mt-auto space-y-4">
@@ -970,6 +1247,9 @@ export default function AdvertisementPage() {
                 className="rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:opacity-90"
                 onClick={() => {
                   setAccessGranted(false);
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.removeItem('ad_access_granted');
+                  }
                   // Do not sign the user out globally
                   router.push('/advertisement');
                 }}

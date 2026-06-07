@@ -2,7 +2,7 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 import type { PaidPlanType } from '@/lib/server/subscriptionPlans';
 
 type Interval = 'monthly' | 'yearly';
-type CouponAppliesTo = 'all' | PaidPlanType;
+type CouponAppliesTo = 'all' | PaidPlanType | 'partners' | 'monthly' | 'quarterly' | 'yearly';
 
 type CouponDoc = {
   code?: string;

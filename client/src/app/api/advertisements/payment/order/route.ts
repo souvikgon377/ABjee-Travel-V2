@@ -5,6 +5,8 @@ import { adminDb } from '@/lib/server/firebaseAdminFirestore';
 
 export const runtime = 'nodejs';
 
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
 const getRazorpayAuthHeader = () => {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -29,6 +31,8 @@ export async function POST(req: NextRequest) {
       return fail('Invalid plan selection', 400);
     }
 
+    const promoCode = String(body.promoCode || '').trim().toUpperCase();
+
     const snapshot = await adminDb.collection('admin_settings').doc('system').get();
     const raw = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
     const pricing = raw.pricing && typeof raw.pricing === 'object' ? (raw.pricing as Record<string, unknown>) : {};
@@ -38,16 +42,62 @@ export async function POST(req: NextRequest) {
     const adQuarterly = Number(pricing.adQuarterly) || 250;
     const adYearly = Number(pricing.adYearly) || 800;
 
-    let amount = 0;
+    let baseAmount = 0;
     if (plan === 'yearly') {
-      amount = adYearly;
+      baseAmount = adYearly;
     } else if (plan === 'quarterly') {
-      amount = adQuarterly;
+      baseAmount = adQuarterly;
     } else {
-      amount = adMonthly;
+      baseAmount = adMonthly;
     }
 
-    const amountInPaise = Math.round(amount * 100);
+    let discountPercent = 0;
+    let discountAmount = 0;
+    let finalAmount = baseAmount;
+
+    if (promoCode) {
+      const couponDoc = await adminDb.collection('coupons').doc(promoCode).get();
+      let couponData = couponDoc.exists ? couponDoc.data() : null;
+
+      if (!couponData) {
+        const fallbackSnapshot = await adminDb
+          .collection('coupons')
+          .where('code', '==', promoCode)
+          .limit(1)
+          .get();
+
+        if (!fallbackSnapshot.empty) {
+          couponData = fallbackSnapshot.docs[0].data();
+        }
+      }
+
+      if (!couponData || couponData.isActive === false) {
+        return fail('Invalid or inactive coupon code', 400);
+      }
+
+      const now = Date.now();
+      const validFrom = typeof couponData.validFrom === 'number' ? couponData.validFrom : null;
+      const validUntil = typeof couponData.validUntil === 'number' ? couponData.validUntil : null;
+
+      if (validFrom !== null && now < validFrom) {
+        return fail('Coupon is not active yet', 400);
+      }
+
+      if (validUntil !== null && now > validUntil) {
+        return fail('Coupon is expired', 400);
+      }
+
+      const appliesTo = couponData.appliesTo;
+      if (appliesTo !== 'partners' && appliesTo !== plan) {
+        return fail('Coupon is not valid for this plan', 400);
+      }
+
+      discountPercent = Math.max(0, Math.min(100, round2(Number(couponData.discountPercent || 0))));
+      discountAmount = round2((baseAmount * discountPercent) / 100);
+      finalAmount = Math.max(0, round2(baseAmount - discountAmount));
+    }
+
+    const amountInPaise = Math.round(finalAmount * 100);
     if (!Number.isFinite(amountInPaise) || amountInPaise <= 0) {
       return fail('Invalid payment amount calculated', 400);
     }
@@ -73,7 +123,7 @@ export async function POST(req: NextRequest) {
           userId: user.id,
           type: 'advertisement',
           plan,
-          amount: String(amount),
+          amount: String(finalAmount),
         },
       }),
     });
@@ -91,7 +141,11 @@ export async function POST(req: NextRequest) {
       orderId: orderPayload.id,
       userId: user.id,
       plan,
-      amount,
+      amount: finalAmount,
+      baseAmount,
+      discountPercent,
+      discountAmount,
+      promoCode: promoCode || null,
       currency,
       status: 'created',
       createdAt: new Date().toISOString(),

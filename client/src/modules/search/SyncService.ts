@@ -418,6 +418,8 @@ export class SyncService {
         subscriptionExpiresAt: data.subscriptionExpiresAt ? this.toTimestamp(data.subscriptionExpiresAt) : 4102444800,
         rating: typeof data.rating === 'number' ? data.rating : 0,
         comments: data.comments ? (typeof data.comments === 'string' ? data.comments : JSON.stringify(data.comments)) : '[]',
+        plan: data.plan || 'monthly',
+        paid: data.paid === true,
       };
     }
 

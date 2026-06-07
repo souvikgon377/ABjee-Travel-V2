@@ -12,16 +12,20 @@ export async function GET(req: NextRequest) {
       .collection('advertisementPayments')
       .where('userId', '==', user.id)
       .where('status', '==', 'paid')
-      .orderBy('createdAt', 'desc')
-      .limit(1)
       .get();
 
     if (snapshot.empty) {
       return ok({ paidPlan: null, paymentId: null, verifiedAt: null, createdAt: null });
     }
 
-    const doc = snapshot.docs[0];
-    const data = doc.data();
+    const docs = snapshot.docs.map(doc => doc.data());
+    docs.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    const data = docs[0];
     return ok({
       paidPlan: data.plan || null,
       paymentId: data.razorpayPaymentId || null,

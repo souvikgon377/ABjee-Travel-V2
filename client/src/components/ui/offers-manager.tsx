@@ -27,7 +27,7 @@ type OfferDoc = {
 
 type OfferForm = Omit<OfferDoc, 'id' | 'updatedAt' | 'createdAt'>;
 
-type CouponAppliesTo = 'all' | 'pro' | 'premium';
+type CouponAppliesTo = 'all' | 'pro' | 'premium' | 'partners' | 'monthly' | 'quarterly' | 'yearly';
 
 type CouponDoc = {
   id: string;
@@ -383,9 +383,13 @@ export function OffersManager() {
                 value={couponForm.appliesTo}
                 onChange={(e) => setCouponForm((prev) => ({ ...prev, appliesTo: e.target.value as CouponAppliesTo }))}
               >
-                <option value="all">All Paid Plans</option>
-                <option value="pro">Paid</option>
-                <option value="premium">Premium</option>
+                <option value="all">All Paid Plans (Traveler)</option>
+                <option value="pro">Pro (Traveler)</option>
+                <option value="premium">Premium (Traveler)</option>
+                <option value="partners">Partner Registration (All Ad Plans)</option>
+                <option value="monthly">Ad Monthly</option>
+                <option value="quarterly">Ad Quarterly</option>
+                <option value="yearly">Ad Yearly</option>
               </select>
             </div>
             <div className="flex items-end gap-3">
@@ -453,9 +457,13 @@ export function OffersManager() {
                     value={coupon.appliesTo || 'all'}
                     onChange={(e) => setCoupons((prev) => prev.map((c) => (c.id === coupon.id ? { ...c, appliesTo: e.target.value as CouponAppliesTo } : c)))}
                   >
-                    <option value="all">All Paid Plans</option>
-                    <option value="pro">Paid</option>
-                    <option value="premium">Premium</option>
+                    <option value="all">All Paid Plans (Traveler)</option>
+                    <option value="pro">Pro (Traveler)</option>
+                    <option value="premium">Premium (Traveler)</option>
+                    <option value="partners">Partner Registration (All Ad Plans)</option>
+                    <option value="monthly">Ad Monthly</option>
+                    <option value="quarterly">Ad Quarterly</option>
+                    <option value="yearly">Ad Yearly</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">

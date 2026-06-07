@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
 
     const userEmail = user.email || '';
     if (userEmail) {
+      const recipientName = (user.firstName || user.displayName || 'Traveler').trim();
       const startStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
       const expiryDate = new Date();
       if (plan === 'yearly') {
@@ -115,10 +116,10 @@ export async function POST(req: NextRequest) {
       const endStr = expiryDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 
       const emailSubject = `Advertisement Subscription Confirmed - ABjee Travel`;
-      const emailText = `Hello,\n\nThank you for subscribing to our Advertisement ${plan.toUpperCase()} plan!\n\nYour payment has been successfully verified.\n\nSubscription Details:\n- Plan: ${plan.toUpperCase()}\n- Start Date: ${startStr}\n- End Date: ${endStr}\n\nNote: Your subscription validity period will officially start when your advertisement registration is approved by the admin.\n\nRegards,\nABjee Travel Team`;
+      const emailText = `Hello ${recipientName},\n\nThank you for subscribing to our Advertisement ${plan.toUpperCase()} plan!\n\nYour payment has been successfully verified.\n\nSubscription Details:\n- Plan: ${plan.toUpperCase()}\n- Start Date: ${startStr}\n- End Date: ${endStr}\n\nNote: Your subscription validity period will officially start when your advertisement registration is approved by the admin.\n\nRegards,\nABjee Travel Team`;
       const emailHtml = `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px;">
         <h2 style="color: #10b981; margin-top: 0;">Subscription Confirmed</h2>
-        <p>Hello,</p>
+        <p>Hello ${recipientName},</p>
         <p>Thank you for subscribing to our Advertisement <strong>${plan.toUpperCase()}</strong> plan! Your payment has been successfully verified.</p>
         <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 12px; margin: 16px 0; border-radius: 4px;">
           <strong>Subscription Details:</strong><br />
