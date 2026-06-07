@@ -26,10 +26,23 @@ const DEFAULT_PRIVATE_ROOM_LIMITS = {
   premium: 10,
   advertizer: 0,
 };
+const DEFAULT_AD_LIMITS = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: -1, // -1 means unlimited
+};
+const DEFAULT_AD_DESCRIPTIONS = {
+  monthly: 'Best for a single location and one basic banner.',
+  quarterly: 'For businesses that want stronger visibility and more clicks.',
+  yearly: 'For full brand visibility across your target area.',
+};
 const DEFAULT_FEATURES = {
   proFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nExpose private rooms for join requests\nPriority support',
   premiumFeatures: 'Create or join up to 3 private rooms (monthly)\nCreate or join up to 10 private rooms (yearly)\nPrivate room access included\nAdvanced member tools\nPriority assistance',
   advertizerFeatures: 'Advertisers plan: Submit ads for approval, priority placement options, analytics dashboard',
+  adMonthlyFeatures: 'One live ad\nStandard placement\nEmail support',
+  adQuarterlyFeatures: 'Three active ads\nFeatured placement\nPriority review',
+  adYearlyFeatures: 'Unlimited campaigns\nTop placement\nDirect support',
 };
 
 const normalizeBoolean = (value: unknown, defaultValue = false) =>
@@ -81,6 +94,24 @@ const normalizePrivateRoomLimits = (value: unknown) => {
   };
 };
 
+const normalizeAdLimits = (value: unknown) => {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  return {
+    monthly: normalizeLimit(raw.monthly, DEFAULT_AD_LIMITS.monthly),
+    quarterly: normalizeLimit(raw.quarterly, DEFAULT_AD_LIMITS.quarterly),
+    yearly: typeof raw.yearly === 'number' && raw.yearly === -1 ? -1 : normalizeLimit(raw.yearly, DEFAULT_AD_LIMITS.yearly),
+  };
+};
+
+const normalizeAdDescriptions = (value: unknown) => {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  return {
+    monthly: typeof raw.monthly === 'string' && raw.monthly.trim() ? raw.monthly.trim() : DEFAULT_AD_DESCRIPTIONS.monthly,
+    quarterly: typeof raw.quarterly === 'string' && raw.quarterly.trim() ? raw.quarterly.trim() : DEFAULT_AD_DESCRIPTIONS.quarterly,
+    yearly: typeof raw.yearly === 'string' && raw.yearly.trim() ? raw.yearly.trim() : DEFAULT_AD_DESCRIPTIONS.yearly,
+  };
+};
+
 const normalizeFeatures = (value: unknown) => {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 
@@ -88,6 +119,9 @@ const normalizeFeatures = (value: unknown) => {
     proFeatures: typeof raw.proFeatures === 'string' && raw.proFeatures.trim() ? raw.proFeatures.trim() : DEFAULT_FEATURES.proFeatures,
     premiumFeatures: typeof raw.premiumFeatures === 'string' && raw.premiumFeatures.trim() ? raw.premiumFeatures.trim() : DEFAULT_FEATURES.premiumFeatures,
     advertizerFeatures: typeof raw.advertizerFeatures === 'string' && raw.advertizerFeatures.trim() ? raw.advertizerFeatures.trim() : DEFAULT_FEATURES.advertizerFeatures,
+    adMonthlyFeatures: typeof raw.adMonthlyFeatures === 'string' && raw.adMonthlyFeatures.trim() ? raw.adMonthlyFeatures.trim() : DEFAULT_FEATURES.adMonthlyFeatures,
+    adQuarterlyFeatures: typeof raw.adQuarterlyFeatures === 'string' && raw.adQuarterlyFeatures.trim() ? raw.adQuarterlyFeatures.trim() : DEFAULT_FEATURES.adQuarterlyFeatures,
+    adYearlyFeatures: typeof raw.adYearlyFeatures === 'string' && raw.adYearlyFeatures.trim() ? raw.adYearlyFeatures.trim() : DEFAULT_FEATURES.adYearlyFeatures,
   };
 };
 
@@ -96,6 +130,8 @@ const normalizeSettingsPayload = (data: Record<string, unknown>) => ({
   bookingCategoriesEnabled: normalizeBoolean(data.bookingCategoriesEnabled, true),
   pricing: normalizePricing(data.pricing),
   privateRoomLimits: normalizePrivateRoomLimits(data.privateRoomLimits),
+  adLimits: normalizeAdLimits(data.adLimits),
+  adDescriptions: normalizeAdDescriptions(data.adDescriptions),
   features: normalizeFeatures(data.features),
 });
 
@@ -123,6 +159,8 @@ const DEFAULT_SETTINGS_PAYLOAD = {
   bookingCategoriesEnabled: true,
   pricing: { ...DEFAULT_PRICING },
   privateRoomLimits: { ...DEFAULT_PRIVATE_ROOM_LIMITS },
+  adLimits: { ...DEFAULT_AD_LIMITS },
+  adDescriptions: { ...DEFAULT_AD_DESCRIPTIONS },
   features: { ...DEFAULT_FEATURES },
 };
 
@@ -181,6 +219,14 @@ export async function PUT(req: NextRequest) {
 
     if (Object.prototype.hasOwnProperty.call(body, 'features')) {
       updates.features = normalizeFeatures(body.features);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'adLimits')) {
+      updates.adLimits = normalizeAdLimits(body.adLimits);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'adDescriptions')) {
+      updates.adDescriptions = normalizeAdDescriptions(body.adDescriptions);
     }
 
     await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).set(updates, { merge: true });

@@ -57,10 +57,23 @@ type RevenueSettings = {
     premium: number;
     advertizer?: number;
   };
+  adLimits?: {
+    monthly: number;
+    quarterly: number;
+    yearly: number;
+  };
+  adDescriptions?: {
+    monthly: string;
+    quarterly: string;
+    yearly: string;
+  };
   features?: {
     proFeatures: string;
     premiumFeatures: string;
     advertizerFeatures?: string;
+    adMonthlyFeatures?: string;
+    adQuarterlyFeatures?: string;
+    adYearlyFeatures?: string;
   };
 };
 
@@ -81,9 +94,22 @@ const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
     pro: 3,
     premium: 10,
   },
+  adLimits: {
+    monthly: 1,
+    quarterly: 3,
+    yearly: -1,
+  },
+  adDescriptions: {
+    monthly: 'Best for a single location and one basic banner.',
+    quarterly: 'For businesses that want stronger visibility and more clicks.',
+    yearly: 'For full brand visibility across your target area.',
+  },
   features: {
     proFeatures: 'Create up to 3 private communities (monthly)\nCreate up to 10 private communities (yearly)\nUnlimited private community joining\nExpose private rooms for join requests\nPriority support',
     premiumFeatures: 'Create up to 10 private communities (monthly)\nCreate up to 20 private communities (yearly)\nUnlimited private community joining\nAdvanced member tools\nPriority assistance',
+    adMonthlyFeatures: 'One live ad\nStandard placement\nEmail support',
+    adQuarterlyFeatures: 'Three active ads\nFeatured placement\nPriority review',
+    adYearlyFeatures: 'Unlimited campaigns\nTop placement\nDirect support',
   },
 };
 
@@ -224,6 +250,8 @@ export default function AdminDashboard() {
     const raw = value && typeof value === 'object' ? (value as Record<string, any>) : {};
     const pricing = raw.pricing && typeof raw.pricing === 'object' ? raw.pricing : {};
     const limits = raw.privateRoomLimits && typeof raw.privateRoomLimits === 'object' ? raw.privateRoomLimits : {};
+    const adLimits = raw.adLimits && typeof raw.adLimits === 'object' ? raw.adLimits : {};
+    const adDescriptions = raw.adDescriptions && typeof raw.adDescriptions === 'object' ? raw.adDescriptions : {};
     const features = raw.features && typeof raw.features === 'object' ? raw.features : {};
 
     const toAmount = (candidate: unknown, fallback: number) => {
@@ -252,10 +280,23 @@ export default function AdminDashboard() {
         pro: toLimit(limits.pro, REVENUE_SETTINGS_DEFAULTS.privateRoomLimits.pro),
         premium: toLimit(limits.premium, REVENUE_SETTINGS_DEFAULTS.privateRoomLimits.premium),
       },
+      adLimits: {
+        monthly: toLimit(adLimits.monthly, REVENUE_SETTINGS_DEFAULTS.adLimits?.monthly ?? 1),
+        quarterly: toLimit(adLimits.quarterly, REVENUE_SETTINGS_DEFAULTS.adLimits?.quarterly ?? 3),
+        yearly: typeof adLimits.yearly === 'number' && adLimits.yearly === -1 ? -1 : toLimit(adLimits.yearly, REVENUE_SETTINGS_DEFAULTS.adLimits?.yearly ?? -1),
+      },
+      adDescriptions: {
+        monthly: typeof adDescriptions.monthly === 'string' && adDescriptions.monthly.trim() ? adDescriptions.monthly.trim() : REVENUE_SETTINGS_DEFAULTS.adDescriptions?.monthly || '',
+        quarterly: typeof adDescriptions.quarterly === 'string' && adDescriptions.quarterly.trim() ? adDescriptions.quarterly.trim() : REVENUE_SETTINGS_DEFAULTS.adDescriptions?.quarterly || '',
+        yearly: typeof adDescriptions.yearly === 'string' && adDescriptions.yearly.trim() ? adDescriptions.yearly.trim() : REVENUE_SETTINGS_DEFAULTS.adDescriptions?.yearly || '',
+      },
       features: {
         proFeatures: typeof features.proFeatures === 'string' && features.proFeatures.trim() ? features.proFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.proFeatures || '',
         premiumFeatures: typeof features.premiumFeatures === 'string' && features.premiumFeatures.trim() ? features.premiumFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.premiumFeatures || '',
         advertizerFeatures: typeof features.advertizerFeatures === 'string' && features.advertizerFeatures.trim() ? features.advertizerFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.advertizerFeatures || '',
+        adMonthlyFeatures: typeof features.adMonthlyFeatures === 'string' && features.adMonthlyFeatures.trim() ? features.adMonthlyFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.adMonthlyFeatures || '',
+        adQuarterlyFeatures: typeof features.adQuarterlyFeatures === 'string' && features.adQuarterlyFeatures.trim() ? features.adQuarterlyFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.adQuarterlyFeatures || '',
+        adYearlyFeatures: typeof features.adYearlyFeatures === 'string' && features.adYearlyFeatures.trim() ? features.adYearlyFeatures.trim() : REVENUE_SETTINGS_DEFAULTS.features?.adYearlyFeatures || '',
       },
     };
   }, []);
@@ -440,10 +481,23 @@ export default function AdminDashboard() {
           premium: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.premium) || 0)),
           advertizer: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.advertizer) || 0)),
         },
+        adLimits: {
+          monthly: Number(revenueForm.adLimits?.monthly) ?? 1,
+          quarterly: Number(revenueForm.adLimits?.quarterly) ?? 3,
+          yearly: Number(revenueForm.adLimits?.yearly) ?? -1,
+        },
+        adDescriptions: {
+          monthly: revenueForm.adDescriptions?.monthly || '',
+          quarterly: revenueForm.adDescriptions?.quarterly || '',
+          yearly: revenueForm.adDescriptions?.yearly || '',
+        },
         features: {
           proFeatures: revenueForm.features?.proFeatures || '',
           premiumFeatures: revenueForm.features?.premiumFeatures || '',
           advertizerFeatures: revenueForm.features?.advertizerFeatures || '',
+          adMonthlyFeatures: revenueForm.features?.adMonthlyFeatures || '',
+          adQuarterlyFeatures: revenueForm.features?.adQuarterlyFeatures || '',
+          adYearlyFeatures: revenueForm.features?.adYearlyFeatures || '',
         },
       };
 
@@ -884,6 +938,50 @@ export default function AdminDashboard() {
                         </label>
 
                         <label className="block text-xs text-muted-foreground">
+                          Monthly Plan Ads Limit
+                          <input
+                            type="number"
+                            min={-1}
+                            step="1"
+                            value={revenueForm.adLimits?.monthly ?? 1}
+                            onChange={(event) => {
+                              const val = Number(event.target.value);
+                              setRevenueForm(prev => ({
+                                ...prev,
+                                adLimits: {
+                                  monthly: val,
+                                  quarterly: prev.adLimits?.quarterly ?? 3,
+                                  yearly: prev.adLimits?.yearly ?? -1,
+                                }
+                              }));
+                            }}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Monthly Card Description
+                          <input
+                            value={revenueForm.adDescriptions?.monthly ?? ''}
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              setRevenueForm(prev => ({
+                                ...prev,
+                                adDescriptions: {
+                                  monthly: val,
+                                  quarterly: prev.adDescriptions?.quarterly || '',
+                                  yearly: prev.adDescriptions?.yearly || '',
+                                }
+                              }));
+                            }}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            placeholder="Best for a single location and one basic banner."
+                          />
+                        </label>
+
+                        <div className="border-t border-border my-2 pt-2" />
+
+                        <label className="block text-xs text-muted-foreground">
                           Quarterly Plan Price
                           <input
                             type="number"
@@ -896,6 +994,50 @@ export default function AdminDashboard() {
                         </label>
 
                         <label className="block text-xs text-muted-foreground">
+                          Quarterly Plan Ads Limit
+                          <input
+                            type="number"
+                            min={-1}
+                            step="1"
+                            value={revenueForm.adLimits?.quarterly ?? 3}
+                            onChange={(event) => {
+                              const val = Number(event.target.value);
+                              setRevenueForm(prev => ({
+                                ...prev,
+                                adLimits: {
+                                  monthly: prev.adLimits?.monthly ?? 1,
+                                  quarterly: val,
+                                  yearly: prev.adLimits?.yearly ?? -1,
+                                }
+                              }));
+                            }}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Quarterly Card Description
+                          <input
+                            value={revenueForm.adDescriptions?.quarterly ?? ''}
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              setRevenueForm(prev => ({
+                                ...prev,
+                                adDescriptions: {
+                                  monthly: prev.adDescriptions?.monthly || '',
+                                  quarterly: val,
+                                  yearly: prev.adDescriptions?.yearly || '',
+                                }
+                              }));
+                            }}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            placeholder="For businesses that want stronger visibility and more clicks."
+                          />
+                        </label>
+
+                        <div className="border-t border-border my-2 pt-2" />
+
+                        <label className="block text-xs text-muted-foreground">
                           Yearly Plan Price
                           <input
                             type="number"
@@ -906,10 +1048,52 @@ export default function AdminDashboard() {
                             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                           />
                         </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Yearly Plan Ads Limit (use -1 for unlimited)
+                          <input
+                            type="number"
+                            min={-1}
+                            step="1"
+                            value={revenueForm.adLimits?.yearly ?? -1}
+                            onChange={(event) => {
+                              const val = Number(event.target.value);
+                              setRevenueForm(prev => ({
+                                ...prev,
+                                adLimits: {
+                                  monthly: prev.adLimits?.monthly ?? 1,
+                                  quarterly: prev.adLimits?.quarterly ?? 3,
+                                  yearly: val,
+                                }
+                              }));
+                            }}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs text-muted-foreground">
+                          Yearly Card Description
+                          <input
+                            value={revenueForm.adDescriptions?.yearly ?? ''}
+                            onChange={(event) => {
+                              const val = event.target.value;
+                              setRevenueForm(prev => ({
+                                ...prev,
+                                adDescriptions: {
+                                  monthly: prev.adDescriptions?.monthly || '',
+                                  quarterly: prev.adDescriptions?.quarterly || '',
+                                  yearly: val,
+                                }
+                              }));
+                            }}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            placeholder="For full brand visibility across your target area."
+                          />
+                        </label>
                       </div>
 
                       <p className="mt-3 text-xs text-muted-foreground">
-                        This controller configures the partner registration pricing plans displayed on the Advertisement page.
+                        This controller configures the partner registration pricing plans and allowed ad limits displayed on the Advertisement page.
                       </p>
                     </div>
                   </div>
@@ -946,6 +1130,7 @@ export default function AdminDashboard() {
                           onChange={(event) => setRevenueForm((prev) => ({
                             ...prev,
                             features: {
+                              ...prev.features,
                               proFeatures: prev.features?.proFeatures || '',
                               premiumFeatures: prev.features?.premiumFeatures || '',
                               advertizerFeatures: event.target.value,
@@ -954,6 +1139,63 @@ export default function AdminDashboard() {
                           rows={4}
                           className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                           placeholder="Advertisers plan: Submit ads for approval, priority placement options, analytics dashboard"
+                        />
+                      </label>
+
+                      <label className="block text-xs text-muted-foreground">
+                        Ad Monthly Plan Features (one per line)
+                        <textarea
+                          value={revenueForm.features?.adMonthlyFeatures || ''}
+                          onChange={(event) => setRevenueForm((prev) => ({
+                            ...prev,
+                            features: {
+                              ...prev.features,
+                              proFeatures: prev.features?.proFeatures || '',
+                              premiumFeatures: prev.features?.premiumFeatures || '',
+                              adMonthlyFeatures: event.target.value,
+                            },
+                          }))}
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          placeholder="One live ad&#10;Standard placement&#10;Email support"
+                        />
+                      </label>
+
+                      <label className="block text-xs text-muted-foreground">
+                        Ad Quarterly Plan Features (one per line)
+                        <textarea
+                          value={revenueForm.features?.adQuarterlyFeatures || ''}
+                          onChange={(event) => setRevenueForm((prev) => ({
+                            ...prev,
+                            features: {
+                              ...prev.features,
+                              proFeatures: prev.features?.proFeatures || '',
+                              premiumFeatures: prev.features?.premiumFeatures || '',
+                              adQuarterlyFeatures: event.target.value,
+                            },
+                          }))}
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          placeholder="Three active ads&#10;Featured placement&#10;Priority review"
+                        />
+                      </label>
+
+                      <label className="block text-xs text-muted-foreground">
+                        Ad Yearly Plan Features (one per line)
+                        <textarea
+                          value={revenueForm.features?.adYearlyFeatures || ''}
+                          onChange={(event) => setRevenueForm((prev) => ({
+                            ...prev,
+                            features: {
+                              ...prev.features,
+                              proFeatures: prev.features?.proFeatures || '',
+                              premiumFeatures: prev.features?.premiumFeatures || '',
+                              adYearlyFeatures: event.target.value,
+                            },
+                          }))}
+                          rows={4}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          placeholder="Unlimited campaigns&#10;Top placement&#10;Direct support"
                         />
                       </label>
                     </div>

@@ -57,6 +57,21 @@ export async function GET() {
         adQuarterly: Number(pricing.adQuarterly) || 250,
         adYearly: Number(pricing.adYearly) || 800,
       },
+      adLimits: {
+        monthly: Number((raw.adLimits as any)?.monthly) ?? 1,
+        quarterly: Number((raw.adLimits as any)?.quarterly) ?? 3,
+        yearly: Number((raw.adLimits as any)?.yearly) ?? -1,
+      },
+      adDescriptions: {
+        monthly: String((raw.adDescriptions as any)?.monthly || '').trim() || 'Best for a single location and one basic banner.',
+        quarterly: String((raw.adDescriptions as any)?.quarterly || '').trim() || 'For businesses that want stronger visibility and more clicks.',
+        yearly: String((raw.adDescriptions as any)?.yearly || '').trim() || 'For full brand visibility across your target area.',
+      },
+      features: {
+        adMonthlyFeatures: typeof (raw.features as any)?.adMonthlyFeatures === 'string' ? (raw.features as any).adMonthlyFeatures : 'One live ad\nStandard placement\nEmail support',
+        adQuarterlyFeatures: typeof (raw.features as any)?.adQuarterlyFeatures === 'string' ? (raw.features as any).adQuarterlyFeatures : 'Three active ads\nFeatured placement\nPriority review',
+        adYearlyFeatures: typeof (raw.features as any)?.adYearlyFeatures === 'string' ? (raw.features as any).adYearlyFeatures : 'Unlimited campaigns\nTop placement\nDirect support',
+      },
     };
 
     return ok(settings, 200);
@@ -74,6 +89,21 @@ export async function GET() {
           adMonthly: 100,
           adQuarterly: 250,
           adYearly: 800,
+        },
+        adLimits: {
+          monthly: 1,
+          quarterly: 3,
+          yearly: -1,
+        },
+        adDescriptions: {
+          monthly: 'Best for a single location and one basic banner.',
+          quarterly: 'For businesses that want stronger visibility and more clicks.',
+          yearly: 'For full brand visibility across your target area.',
+        },
+        features: {
+          adMonthlyFeatures: 'One live ad\nStandard placement\nEmail support',
+          adQuarterlyFeatures: 'Three active ads\nFeatured placement\nPriority review',
+          adYearlyFeatures: 'Unlimited campaigns\nTop placement\nDirect support',
         },
         _fallback: true,
       },

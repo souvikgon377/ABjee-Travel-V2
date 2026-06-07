@@ -42,6 +42,9 @@ type AdvertisementFormProps = {
     additionalIdProofs?: Array<{ url: string; publicId: string; name: string }>;
     plan?: string;
   }>;
+  activeAdCount?: number;
+  adLimit?: number;
+  isSubscriptionExpired?: boolean;
 };
 
 const AD_COLLECTION = 'advertisements';
@@ -188,7 +191,20 @@ const categoryOptions = [
   'Travel services',
 ];
 
-export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode = 'public', onSubmitted, isFirstAd, paidPlan, paymentId, adId, initialValues }: AdvertisementFormProps) {
+export function AdvertisementForm({
+  submitLabel,
+  defaultStatus = 'pending',
+  mode = 'public',
+  onSubmitted,
+  isFirstAd,
+  paidPlan,
+  paymentId,
+  adId,
+  initialValues,
+  activeAdCount,
+  adLimit,
+  isSubscriptionExpired,
+}: AdvertisementFormProps) {
   const { currentUser, userProfile } = useAuth();
   const profileEmail = currentUser?.email || userProfile?.email || '';
   const [form, setForm] = useState(emptyState);
@@ -474,8 +490,16 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
       // ID proof (PDF or image) is required
       if (!idFile && !(initialValues as any)?.idProofUrl) throw new Error('Please upload ID proof (PDF or image)');
 
-      if (isFirstAd && !adId && !paidPlan) {
-        throw new Error('Please purchase a subscription plan to post your advertisement.');
+      if (!adId) {
+        if (isSubscriptionExpired) {
+          throw new Error('Your subscription has expired. Please subscribe to a plan to post new advertisements.');
+        }
+        if (adLimit !== undefined && activeAdCount !== undefined && adLimit !== -1 && activeAdCount >= adLimit) {
+          throw new Error('Ad limit reached for your active plan. Please upgrade or renew to post more advertisements.');
+        }
+        if (isFirstAd && !paidPlan) {
+          throw new Error('Please purchase a subscription plan to post your advertisement.');
+        }
       }
 
       await executeSubmit(Boolean(paidPlan));
@@ -667,7 +691,32 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
     setSubmitting(false);
   };
 
-  const isLocked = isFirstAd && !adId && !paidPlan;
+  const isLocked = !adId && (
+    (isFirstAd && !paidPlan) ||
+    isSubscriptionExpired ||
+    (adLimit !== undefined && activeAdCount !== undefined && adLimit !== -1 && activeAdCount >= adLimit)
+  );
+
+  const getLockOverlayDetails = () => {
+    if (isSubscriptionExpired) {
+      return {
+        title: "Subscription Expired",
+        description: "Your active subscription has expired. Please choose a placement plan above to renew and post advertisements.",
+      };
+    }
+    if (adLimit !== undefined && activeAdCount !== undefined && adLimit !== -1 && activeAdCount >= adLimit) {
+      return {
+        title: "Advertisement Limit Reached",
+        description: "You have reached the limit of your active subscription plan. Please upgrade or renew your plan to post more advertisements.",
+      };
+    }
+    return {
+      title: "Subscribe Now to Post Your Advertisement",
+      description: "Choose one of our premium placement plans above to unlock this registration form.",
+    };
+  };
+
+  const lockDetails = getLockOverlayDetails();
 
   return (
     <Card className="border-white/10 bg-white/90 shadow-2xl shadow-rose-500/10 backdrop-blur dark:bg-slate-950/80">
@@ -693,9 +742,9 @@ export function AdvertisementForm({ submitLabel, defaultStatus = 'pending', mode
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-500/20 border border-rose-500/35 text-rose-500 mb-4 shadow-lg shadow-rose-500/20 animate-pulse">
               <Lock className="h-8 w-8" />
             </div>
-            <h4 className="text-xl font-bold text-white tracking-wide">Subscribe Now to Post Your Advertisement</h4>
+            <h4 className="text-xl font-bold text-white tracking-wide">{lockDetails.title}</h4>
             <p className="text-sm text-slate-300 mt-2 max-w-xs">
-              Choose one of our premium placement plans above to unlock this registration form.
+              {lockDetails.description}
             </p>
           </div>
         )}

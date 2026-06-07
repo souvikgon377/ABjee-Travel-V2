@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       .get();
 
     if (snapshot.empty) {
-      return ok({ paidPlan: null, paymentId: null });
+      return ok({ paidPlan: null, paymentId: null, verifiedAt: null, createdAt: null });
     }
 
     const doc = snapshot.docs[0];
@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
     return ok({
       paidPlan: data.plan || null,
       paymentId: data.razorpayPaymentId || null,
+      verifiedAt: data.verifiedAt || null,
+      createdAt: data.createdAt || null,
     });
   } catch (error: any) {
     if (error instanceof AuthError) {

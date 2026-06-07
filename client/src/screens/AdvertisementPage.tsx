@@ -37,6 +37,8 @@ type OwnerAdvertisement = {
   editedByUid?: string | null;
   editedByEmail?: string | null;
   editedAt?: any;
+  plan?: string;
+  paid?: boolean;
 };
 
 const normalizeKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
@@ -55,27 +57,63 @@ const formatTimestamp = (value: any) => {
       return new Date((value as any).seconds * 1000).toLocaleString();
     }
     const n = Number(value);
-    if (!Number.isNaN(n)) return new Date(n).toLocaleString();
+    if (!Number.isNaN(n)) {
+      const ms = n < 10000000000 ? n * 1000 : n;
+      return new Date(ms).toLocaleString();
+    }
     return String(value);
   } catch {
     return '';
   }
 };
 
-const formatValidityDate = (isoStr?: string) => {
+const formatValidityDate = (isoStr?: string | number) => {
   if (!isoStr) return 'Starts upon approval';
   try {
-    const d = new Date(isoStr);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    const n = Number(isoStr);
+    if (!Number.isNaN(n)) {
+      const ms = n < 10000000000 ? n * 1000 : n;
+      if (Math.floor(ms / 1000) === 4102444800) {
+        return 'Starts upon approval';
+      }
+      return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    return new Date(isoStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   } catch {
     return 'Invalid date';
   }
 };
 
-const isExpired = (isoStr?: string) => {
+const isExpired = (isoStr?: string | number) => {
   if (!isoStr) return false;
   try {
+    const n = Number(isoStr);
+    if (!Number.isNaN(n)) {
+      const ms = n < 10000000000 ? n * 1000 : n;
+      if (Math.floor(ms / 1000) === 4102444800) {
+        return false;
+      }
+      return ms < Date.now();
+    }
     return new Date(isoStr).getTime() < Date.now();
+  } catch {
+    return false;
+  }
+};
+
+const isSubscriptionActive = (plan: string | null, verifiedAt: string | null, createdAt: string | null) => {
+  if (!plan) return false;
+  const dateStr = verifiedAt || createdAt;
+  if (!dateStr) return true; // legacy support
+  try {
+    const time = new Date(dateStr).getTime();
+    const now = Date.now();
+    let durationMs = 0;
+    if (plan === 'monthly') durationMs = 30 * 24 * 60 * 60 * 1000;
+    else if (plan === 'quarterly') durationMs = 90 * 24 * 60 * 60 * 1000;
+    else if (plan === 'yearly') durationMs = 365 * 24 * 60 * 60 * 1000;
+    else return false;
+    return time + durationMs > now;
   } catch {
     return false;
   }
@@ -112,6 +150,23 @@ export default function AdvertisementPage() {
   const [paidPlan, setPaidPlan] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [paymentLoading, setPaymentLoading] = useState<string | null>(null);
+  const [paymentVerifiedAt, setPaymentVerifiedAt] = useState<string | null>(null);
+  const [paymentCreatedAt, setPaymentCreatedAt] = useState<string | null>(null);
+  const [adLimits, setAdLimits] = useState({
+    monthly: 1,
+    quarterly: 3,
+    yearly: -1,
+  });
+  const [adDescriptions, setAdDescriptions] = useState({
+    monthly: 'Best for a single location and one basic banner.',
+    quarterly: 'For businesses that want stronger visibility and more clicks.',
+    yearly: 'For full brand visibility across your target area.',
+  });
+  const [adFeatures, setAdFeatures] = useState({
+    adMonthlyFeatures: 'One live ad\nStandard placement\nEmail support',
+    adQuarterlyFeatures: 'Three active ads\nFeatured placement\nPriority review',
+    adYearlyFeatures: 'Unlimited campaigns\nTop placement\nDirect support',
+  });
 
   useEffect(() => {
     let active = true;
@@ -119,13 +174,37 @@ export default function AdvertisementPage() {
       .then((res) => res.json())
       .then((data) => {
         if (!active) return;
-        if (data?.data?.pricing) {
-          setPricing({
-            currency: data.data.pricing.currency || 'INR',
-            adMonthly: Number(data.data.pricing.adMonthly) || 100,
-            adQuarterly: Number(data.data.pricing.adQuarterly) || 250,
-            adYearly: Number(data.data.pricing.adYearly) || 800,
-          });
+        if (data?.data) {
+          const d = data.data;
+          if (d.pricing) {
+            setPricing({
+              currency: d.pricing.currency || 'INR',
+              adMonthly: Number(d.pricing.adMonthly) || 100,
+              adQuarterly: Number(d.pricing.adQuarterly) || 250,
+              adYearly: Number(d.pricing.adYearly) || 800,
+            });
+          }
+          if (d.adLimits) {
+            setAdLimits({
+              monthly: Number(d.adLimits.monthly) ?? 1,
+              quarterly: Number(d.adLimits.quarterly) ?? 3,
+              yearly: Number(d.adLimits.yearly) ?? -1,
+            });
+          }
+          if (d.adDescriptions) {
+            setAdDescriptions({
+              monthly: String(d.adDescriptions.monthly || '').trim() || 'Best for a single location and one basic banner.',
+              quarterly: String(d.adDescriptions.quarterly || '').trim() || 'For businesses that want stronger visibility and more clicks.',
+              yearly: String(d.adDescriptions.yearly || '').trim() || 'For full brand visibility across your target area.',
+            });
+          }
+          if (d.features) {
+            setAdFeatures({
+              adMonthlyFeatures: typeof d.features.adMonthlyFeatures === 'string' ? d.features.adMonthlyFeatures : 'One live ad\nStandard placement\nEmail support',
+              adQuarterlyFeatures: typeof d.features.adQuarterlyFeatures === 'string' ? d.features.adQuarterlyFeatures : 'Three active ads\nFeatured placement\nPriority review',
+              adYearlyFeatures: typeof d.features.adYearlyFeatures === 'string' ? d.features.adYearlyFeatures : 'Unlimited campaigns\nTop placement\nDirect support',
+            });
+          }
         }
       })
       .catch((err) => console.error('Failed to load public settings:', err));
@@ -135,19 +214,24 @@ export default function AdvertisementPage() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser || ownerAdsLoading) return;
-    if (ownerAds.length === 0) {
-      fetch('/api/advertisements/payment/check')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.success && data?.data?.paidPlan) {
-            setPaidPlan(data.data.paidPlan);
-            setPaymentId(data.data.paymentId);
-          }
-        })
-        .catch((err) => console.error('Failed to check ad payment status:', err));
-    }
-  }, [currentUser, ownerAds, ownerAdsLoading]);
+    if (!currentUser) return;
+    fetch('/api/advertisements/payment/check')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data?.data?.paidPlan) {
+          setPaidPlan(data.data.paidPlan);
+          setPaymentId(data.data.paymentId);
+          setPaymentVerifiedAt(data.data.verifiedAt);
+          setPaymentCreatedAt(data.data.createdAt);
+        } else {
+          setPaidPlan(null);
+          setPaymentId(null);
+          setPaymentVerifiedAt(null);
+          setPaymentCreatedAt(null);
+        }
+      })
+      .catch((err) => console.error('Failed to check ad payment status:', err));
+  }, [currentUser]);
 
   const loadRazorpayScript = () => {
     if (typeof window === 'undefined') return Promise.resolve(false);
@@ -219,6 +303,17 @@ export default function AdvertisementPage() {
 
             setPaidPlan(plan);
             setPaymentId(verifyPayload.data.paymentId);
+            fetch('/api/advertisements/payment/check')
+              .then((res) => res.json())
+              .then((data) => {
+                if (data?.success && data?.data?.paidPlan) {
+                  setPaidPlan(data.data.paidPlan);
+                  setPaymentId(data.data.paymentId);
+                  setPaymentVerifiedAt(data.data.verifiedAt);
+                  setPaymentCreatedAt(data.data.createdAt);
+                }
+              })
+              .catch((err) => console.error('Failed to sync plan state:', err));
             alert(`Subscription payment completed successfully for the ${plan} plan!`);
           } catch (verifyError: any) {
             alert(verifyError.message || 'Verification failed. Please contact support.');
@@ -240,6 +335,49 @@ export default function AdvertisementPage() {
       setPaymentLoading(null);
     }
   };
+
+  const activeAdCount = useMemo(() => {
+    return ownerAds.filter((ad) => ad.status !== 'rejected').length;
+  }, [ownerAds]);
+
+  const activeAdPlanDetails = useMemo(() => {
+    const approvedAds = ownerAds.filter(
+      (ad) => ad.status === 'approved' && !isExpired(ad.subscriptionExpiresAt)
+    );
+    if (approvedAds.length === 0) return null;
+    return approvedAds[0];
+  }, [ownerAds]);
+
+  const effectivePaidPlan = useMemo(() => {
+    if (paidPlan) return paidPlan;
+    return activeAdPlanDetails?.plan || null;
+  }, [paidPlan, activeAdPlanDetails]);
+
+  const isPlanActive = useMemo(() => {
+    if (paidPlan) {
+      return isSubscriptionActive(paidPlan, paymentVerifiedAt, paymentCreatedAt);
+    }
+    return activeAdPlanDetails !== null;
+  }, [paidPlan, paymentVerifiedAt, paymentCreatedAt, activeAdPlanDetails]);
+
+  const currentPlanLimit = useMemo(() => {
+    if (!isPlanActive || !effectivePaidPlan) return 0;
+    const plan = effectivePaidPlan.toLowerCase();
+    if (plan === 'monthly') return adLimits.monthly;
+    if (plan === 'quarterly') return adLimits.quarterly;
+    if (plan === 'yearly') return adLimits.yearly;
+    return 0;
+  }, [isPlanActive, effectivePaidPlan, adLimits]);
+
+  const isLimitReached = useMemo(() => {
+    if (!isPlanActive) return true;
+    if (currentPlanLimit === -1) return false;
+    return activeAdCount >= currentPlanLimit;
+  }, [isPlanActive, currentPlanLimit, activeAdCount]);
+
+  const showSubscriptionButtons = useMemo(() => {
+    return !isPlanActive || isLimitReached;
+  }, [isPlanActive, isLimitReached]);
 
   const profileEmail = useMemo(() => currentUser?.email || userProfile?.email || '', [currentUser?.email, userProfile?.email]);
   const hasPasswordProvider = useMemo(
@@ -340,6 +478,9 @@ export default function AdvertisementPage() {
           editedByUid: candidateEditedByUid,
           editedByEmail: candidateEditedByEmail,
           editedAt: candidateEditedAt,
+          subscriptionExpiresAt: data.subscriptionExpiresAt || null,
+          plan: data.plan || 'monthly',
+          paid: data.paid === true,
         } as OwnerAdvertisement;
       });
 
@@ -702,27 +843,27 @@ export default function AdvertisementPage() {
                       </span>
                       <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ month</span>
                     </div>
-                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Best for a single location and one basic banner.</p>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.monthly}</p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                      <li>• One live ad</li>
-                      <li>• Standard placement</li>
-                      <li>• Email support</li>
+                      {adFeatures.adMonthlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
+                        <li key={idx}>• {feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                      ))}
                     </ul>
                   </div>
-                  {ownerAds.length === 0 && (
+                  {(showSubscriptionButtons || effectivePaidPlan === 'monthly') && (
                     <Button
                       type="button"
-                      disabled={paymentLoading !== null || paidPlan !== null}
+                      disabled={paymentLoading !== null || (isPlanActive && effectivePaidPlan === 'monthly')}
                       onClick={() => handleSubscribeNow('monthly')}
                       className={`mt-6 w-full rounded-full font-semibold ${
-                        paidPlan === 'monthly'
+                        isPlanActive && effectivePaidPlan === 'monthly'
                           ? 'bg-emerald-600 hover:bg-emerald-600 text-white cursor-default'
                           : 'bg-rose-600 hover:bg-rose-700 text-white'
                       }`}
                     >
                       {paymentLoading === 'monthly'
                         ? 'Processing...'
-                        : paidPlan === 'monthly'
+                        : isPlanActive && effectivePaidPlan === 'monthly'
                         ? 'Subscribed ✓'
                         : 'Subscribe Now'}
                     </Button>
@@ -742,27 +883,27 @@ export default function AdvertisementPage() {
                       </span>
                       <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ 3 months</span>
                     </div>
-                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">For businesses that want stronger visibility and more clicks.</p>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.quarterly}</p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                      <li>• Three active ads</li>
-                      <li>• Featured placement</li>
-                      <li>• Priority review</li>
+                      {adFeatures.adQuarterlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
+                        <li key={idx}>• {feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                      ))}
                     </ul>
                   </div>
-                  {ownerAds.length === 0 && (
+                  {(showSubscriptionButtons || effectivePaidPlan === 'quarterly') && (
                     <Button
                       type="button"
-                      disabled={paymentLoading !== null || paidPlan !== null}
+                      disabled={paymentLoading !== null || (isPlanActive && effectivePaidPlan === 'quarterly')}
                       onClick={() => handleSubscribeNow('quarterly')}
                       className={`mt-6 w-full rounded-full font-semibold ${
-                        paidPlan === 'quarterly'
+                        isPlanActive && effectivePaidPlan === 'quarterly'
                           ? 'bg-emerald-600 hover:bg-emerald-600 text-white cursor-default'
                           : 'bg-rose-600 hover:bg-rose-700 text-white'
                       }`}
                     >
                       {paymentLoading === 'quarterly'
                         ? 'Processing...'
-                        : paidPlan === 'quarterly'
+                        : isPlanActive && effectivePaidPlan === 'quarterly'
                         ? 'Subscribed ✓'
                         : 'Subscribe Now'}
                     </Button>
@@ -779,27 +920,27 @@ export default function AdvertisementPage() {
                       </span>
                       <span className="pb-1 text-sm text-slate-500 dark:text-slate-400">/ year</span>
                     </div>
-                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">For full brand visibility across your target area.</p>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.yearly}</p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                      <li>• Unlimited campaigns</li>
-                      <li>• Top placement</li>
-                      <li>• Direct support</li>
+                      {adFeatures.adYearlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
+                        <li key={idx}>• {feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                      ))}
                     </ul>
                   </div>
-                  {ownerAds.length === 0 && (
+                  {(showSubscriptionButtons || effectivePaidPlan === 'yearly') && (
                     <Button
                       type="button"
-                      disabled={paymentLoading !== null || paidPlan !== null}
+                      disabled={paymentLoading !== null || (isPlanActive && effectivePaidPlan === 'yearly')}
                       onClick={() => handleSubscribeNow('yearly')}
                       className={`mt-6 w-full rounded-full font-semibold ${
-                        paidPlan === 'yearly'
+                        isPlanActive && effectivePaidPlan === 'yearly'
                           ? 'bg-emerald-600 hover:bg-emerald-600 text-white cursor-default'
                           : 'bg-rose-600 hover:bg-rose-700 text-white'
                       }`}
                     >
                       {paymentLoading === 'yearly'
                         ? 'Processing...'
-                        : paidPlan === 'yearly'
+                        : isPlanActive && effectivePaidPlan === 'yearly'
                         ? 'Subscribed ✓'
                         : 'Subscribe Now'}
                     </Button>
@@ -845,9 +986,12 @@ export default function AdvertisementPage() {
             <AdvertisementForm
               submitLabel="Save changes"
               isFirstAd={ownerAds.length === 0}
-              paidPlan={paidPlan}
+              paidPlan={effectivePaidPlan}
               paymentId={paymentId}
               adId={editingAd.id}
+              activeAdCount={activeAdCount}
+              adLimit={currentPlanLimit}
+              isSubscriptionExpired={effectivePaidPlan ? !isPlanActive : false}
               initialValues={{
                 name: editingAd.name,
                 mobileNumber: editingAd.mobileNumber,
@@ -879,8 +1023,11 @@ export default function AdvertisementPage() {
                 <AdvertisementForm 
                   submitLabel="Submit for Approval" 
                   isFirstAd={ownerAds.length === 0} 
-                  paidPlan={paidPlan}
+                  paidPlan={effectivePaidPlan}
                   paymentId={paymentId}
+                  activeAdCount={activeAdCount}
+                  adLimit={currentPlanLimit}
+                  isSubscriptionExpired={effectivePaidPlan ? !isPlanActive : false}
                   defaultStatus="pending" 
                   mode="public" 
                   onSubmitted={() => {
@@ -892,10 +1039,16 @@ export default function AdvertisementPage() {
               ) : (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50/10 p-4">
                   <p className="font-semibold text-foreground">{successMessage || 'Registration sent for admin approval.'}</p>
-                  <div className="mt-3 flex gap-2">
-                    <button type="button" className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowNewForm(true)}>
-                      Create another ad
-                    </button>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {isLimitReached ? (
+                      <p className="text-sm text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                        You have reached the advertisement limit of your plan. Please upgrade or extend your subscription to post more ads.
+                      </p>
+                    ) : (
+                      <button type="button" className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white w-max" onClick={() => setShowNewForm(true)}>
+                        Create another ad
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
