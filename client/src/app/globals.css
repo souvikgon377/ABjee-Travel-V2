@@ -206,6 +206,7 @@ html {
 body {
   /* Keep root layout stable for fixed-position popups (Razorpay, overlays). */
   -webkit-backface-visibility: visible;
+  backface-visibility: visible;
 }
 
 html.payment-modal-open,

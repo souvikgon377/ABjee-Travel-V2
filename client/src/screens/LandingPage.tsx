@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { MessageCircle, Users, Camera, Map, X } from 'lucide-react'
+import { MessageCircle, Users, Camera, Map as MapIcon, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { publicAsset } from '@/lib/publicAsset'
 
@@ -49,7 +49,7 @@ const landingHighlights = [
     description: 'Browse destination plans with top places, restaurants, hotels, media, and travel maps.',
     href: '/travel-destinations',
     cta: 'Plan Your Trip',
-    icon: Map,
+    icon: MapIcon,
   },
 ]
 

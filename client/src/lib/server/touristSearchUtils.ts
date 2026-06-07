@@ -29,7 +29,7 @@ export type SearchResult = {
   total: number;
   page: number;
   hasMore: boolean;
-  source: 'redis-incremental' | 'redis' | 'snapshot' | 'short-circuit';
+  source: 'redis-incremental' | 'redis' | 'snapshot' | 'short-circuit' | 'memory' | 'typesense' | 'firestore' | 'error';
   cacheStatus: 'hit' | 'miss' | 'error';
   latencyMs: number;
 };
