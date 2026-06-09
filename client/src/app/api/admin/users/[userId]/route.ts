@@ -4,6 +4,7 @@ import { fail, ok } from "@/lib/server/http";
 import { userService } from "@/services/userService";
 import { hybridUpdatePartial } from "@/lib/server/hybridCache";
 import { checkAdminRateLimit } from "@/lib/server/rateLimiter";
+import { SyncService } from "@/modules/search/SyncService";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
     if (body.subscription !== undefined) updates.subscription = body.subscription;
     if (body.displayName !== undefined) updates.displayName = body.displayName;
     if (body.city !== undefined) updates.city = body.city;
+    if (body.country !== undefined) updates.country = body.country;
     if (body.phoneNumber !== undefined) updates.phone = body.phoneNumber;
 
     if (body.email !== undefined) {
@@ -60,6 +62,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
     // 2. Perform database update
     const user = await userService.update(userId, updates);
     if (!user) return fail("User not found or update failed", 404);
+
+    // Sync updated user to Typesense search index
+    try {
+      await SyncService.syncUser(user);
+    } catch (syncErr) {
+      console.warn(`[Admin:UpdateUser] Typesense sync failed for user ${userId}:`, syncErr);
+    }
     
     // 3. Auto-invalidate auth cache for this user so changes reflect instantly
     if (user.firebaseUid) {

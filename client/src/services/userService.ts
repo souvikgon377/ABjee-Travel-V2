@@ -30,6 +30,7 @@ const createUserData = (data: AnyObj): AnyObj => {
     address: data.address || "",
     city: data.city || "",
     zipCode: data.zipCode || "",
+    country: data.country || "",
     avatar: data.avatar || null,
     bio: data.bio || "",
     phone: data.phone || null,

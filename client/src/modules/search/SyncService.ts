@@ -367,6 +367,9 @@ export class SyncService {
         lastName: data.lastName || '',
         username: data.username || '',
         photoURL: data.photoURL || data.avatar || data.profileImage || '',
+        city: data.city || '',
+        zipCode: data.zipCode || '',
+        country: data.country || '',
       };
     }
 

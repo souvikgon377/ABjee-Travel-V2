@@ -18,6 +18,7 @@
     "worker:search-sync": "tsx --env-file=.env scripts/worker.ts",
     "init:typesense": "tsx --env-file=.env scripts/init-typesense.ts",
     "backfill:typesense": "tsx --env-file=.env scripts/backfill-typesense.ts",
+    "backfill:users-and-ads": "tsx --env-file=.env scripts/backfill-users-and-ads.ts",
     "export:touristPlaces": "tsx --env-file=.env scripts/export-touristPlaces-json.ts",
     "export:touristPlaceSearch": "tsx --env-file=.env scripts/export-touristPlaceSearch-v1-json.ts"
   },

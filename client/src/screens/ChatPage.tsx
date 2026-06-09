@@ -108,29 +108,10 @@ const STATIC_VIDEO_V4 = publicAsset('/v4.mp4');
 const PENDING_PRIVATE_JOIN_ROOMS_KEY = 'abjee:pending-private-join-rooms';
 
 const getCountryFromUserData = (data: Record<string, unknown>): string => {
-  const location = data.location && typeof data.location === 'object'
-    ? (data.location as Record<string, unknown>)
-    : undefined;
-
-  const address = data.address && typeof data.address === 'object'
-    ? (data.address as Record<string, unknown>)
-    : undefined;
-
-  const preferredDestinations = Array.isArray(data.preferredDestinations)
-    ? data.preferredDestinations
-    : [];
-
-  const fromPreferredDestination = preferredDestinations.find(
-    (item): item is string => typeof item === 'string' && item.trim().length > 0
-  );
-
   const candidate = [
     data.country,
     data.nationality,
     data.currentCountry,
-    location?.country,
-    address?.country,
-    fromPreferredDestination,
   ].find((item): item is string => typeof item === 'string' && item.trim().length > 0);
 
   return candidate ? candidate.trim() : '';

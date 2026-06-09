@@ -28,6 +28,7 @@ import {
   User,
   Mail,
   MapPin,
+  Globe,
   Phone,
   Shield,
   Ban,
@@ -50,6 +51,7 @@ export const UserActionsDialog = memo(
       displayName: '',
       role: 'user',
       city: '',
+      country: '',
       phoneNumber: '',
       isActive: true,
     });
@@ -74,6 +76,7 @@ export const UserActionsDialog = memo(
           displayName: user.displayName || '',
           role: user.role || 'user',
           city: user.city || '',
+          country: user.country || '',
           phoneNumber: user.phoneNumber || '',
           isActive: user.isActive ?? true,
         });
@@ -190,6 +193,21 @@ export const UserActionsDialog = memo(
                       name="city"
                       type="text"
                       value={formData.city}
+                      onChange={handleChange}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-country">Country</Label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-country"
+                      name="country"
+                      type="text"
+                      value={formData.country}
                       onChange={handleChange}
                       className="pl-10"
                     />

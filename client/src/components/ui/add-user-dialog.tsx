@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { adminAPI } from '@/lib/api';
-import { Mail, User, MapPin, Phone } from 'lucide-react';
+import { Mail, User, MapPin, Globe, Phone } from 'lucide-react';
 
 interface AddUserDialogProps {
   open: boolean;
@@ -34,6 +34,7 @@ export const AddUserDialog = memo(
       displayName: '',
       role: 'user',
       city: '',
+      country: '',
       phoneNumber: '',
     });
 
@@ -50,6 +51,7 @@ export const AddUserDialog = memo(
           displayName: '',
           role: 'user',
           city: '',
+          country: '',
           phoneNumber: '',
         });
 
@@ -152,6 +154,22 @@ export const AddUserDialog = memo(
                     type="text"
                     placeholder="New York"
                     value={formData.city}
+                    onChange={handleChange}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="country">Country</Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="country"
+                    name="country"
+                    type="text"
+                    placeholder="United States"
+                    value={formData.country}
                     onChange={handleChange}
                     className="pl-10"
                   />

@@ -21,6 +21,7 @@ type ProfileFormData = {
   city: string;
   address: string;
   zipCode: string;
+  country: string;
   bio: string;
   travelInterestsText: string;
   preferredDestinationsText: string;
@@ -35,6 +36,7 @@ type SavedProfileDetails = {
   city: string;
   address: string;
   zipCode: string;
+  country: string;
   bio: string;
   travelInterests: string;
   preferredDestinations: string;
@@ -60,6 +62,7 @@ const emptyForm: ProfileFormData = {
   city: '',
   address: '',
   zipCode: '',
+  country: '',
   bio: '',
   travelInterestsText: '',
   preferredDestinationsText: '',
@@ -103,6 +106,7 @@ export default function ProfilePage() {
     city: user?.city?.trim() || 'Not added yet',
     address: user?.address?.trim() || 'Not added yet',
     zipCode: user?.zipCode?.trim() || 'Not added yet',
+    country: user?.country?.trim() || 'Not added yet',
     bio: user?.bio?.trim() || 'Not added yet',
     travelInterests: arrayToCsv(user?.travelInterests) || 'Not added yet',
     preferredDestinations: arrayToCsv(user?.preferredDestinations) || 'Not added yet',
@@ -259,6 +263,7 @@ export default function ProfilePage() {
         city: user?.city || '',
         address: user?.address || '',
         zipCode: user?.zipCode || '',
+        country: user?.country || '',
         bio: user?.bio || '',
         travelInterestsText: arrayToCsv(user?.travelInterests),
         preferredDestinationsText: arrayToCsv(user?.preferredDestinations),
@@ -295,6 +300,7 @@ export default function ProfilePage() {
           city: userProfile?.city || '',
           address: userProfile?.address || '',
           zipCode: userProfile?.zipCode || '',
+          country: userProfile?.country || '',
           subscription: (userProfile as any)?.subscription,
         };
         hydrateForm(fallbackUser);
@@ -357,19 +363,20 @@ export default function ProfilePage() {
     const effectiveFirstName = formData.firstName.trim() || userProfile?.firstName?.trim() || derivedNamesFromGoogle.firstName;
     const effectiveLastName = formData.lastName.trim() || userProfile?.lastName?.trim() || derivedNamesFromGoogle.lastName;
 
-    if (isOnboarding) {
-      const missingLabels: string[] = [];
+    const missingLabels: string[] = [];
+    if (!formData.city.trim()) missingLabels.push('City');
+    if (!formData.zipCode.trim()) missingLabels.push('Zip Code');
+    if (!formData.country.trim()) missingLabels.push('Country');
 
+    if (isOnboarding) {
       if (!effectiveFirstName) missingLabels.push('First Name');
       if (!effectiveLastName) missingLabels.push('Last Name');
-      if (!formData.city.trim()) missingLabels.push('City');
       if (!formData.address.trim()) missingLabels.push('Address');
-      if (!formData.zipCode.trim()) missingLabels.push('Zip Code');
+    }
 
-      if (missingLabels.length > 0) {
-        setError(`Please complete required fields: ${missingLabels.join(', ')}`);
-        return;
-      }
+    if (missingLabels.length > 0) {
+      setError(`Please complete required fields: ${missingLabels.join(', ')}`);
+      return;
     }
 
     const hasPasswordInput = formData.password.trim().length > 0 || formData.confirmPassword.trim().length > 0;
@@ -409,6 +416,7 @@ export default function ProfilePage() {
         city: formData.city.trim(),
         address: formData.address.trim(),
         zipCode: formData.zipCode.trim(),
+        country: formData.country.trim(),
         bio: formData.bio.trim(),
         travelInterests: csvToArray(formData.travelInterestsText),
         preferredDestinations: csvToArray(formData.preferredDestinationsText),
@@ -442,6 +450,7 @@ export default function ProfilePage() {
         city: profilePayload.city || prev.city,
         address: profilePayload.address || prev.address,
         zipCode: profilePayload.zipCode || prev.zipCode,
+        country: profilePayload.country || prev.country,
         bio: profilePayload.bio || prev.bio,
         travelInterests: arrayToCsv(profilePayload.travelInterests) || prev.travelInterests,
         preferredDestinations: arrayToCsv(profilePayload.preferredDestinations) || prev.preferredDestinations,
@@ -650,6 +659,10 @@ export default function ProfilePage() {
                   <p className="text-muted-foreground">Zip Code</p>
                   <p className="font-medium text-foreground">{savedProfileDetails.zipCode}</p>
                 </div>
+                <div>
+                  <p className="text-muted-foreground">Country</p>
+                  <p className="font-medium text-foreground">{savedProfileDetails.country}</p>
+                </div>
                 <div className="md:col-span-2">
                   <p className="text-muted-foreground">Address</p>
                   <p className="font-medium text-foreground">{savedProfileDetails.address}</p>
@@ -707,12 +720,16 @@ export default function ProfilePage() {
                 <Input id="lastName" name="lastName" value={formData.lastName} onChange={handleInputChange} maxLength={50} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
+                <Label htmlFor="city">City <span className="text-rose-500">*</span></Label>
                 <Input id="city" name="city" value={formData.city} onChange={handleInputChange} maxLength={80} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="zipCode">Zip Code</Label>
+                <Label htmlFor="zipCode">Zip Code <span className="text-rose-500">*</span></Label>
                 <Input id="zipCode" name="zipCode" value={formData.zipCode} onChange={handleInputChange} maxLength={20} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="country">Country <span className="text-rose-500">*</span></Label>
+                <Input id="country" name="country" value={formData.country} onChange={handleInputChange} maxLength={80} />
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="address">Address</Label>

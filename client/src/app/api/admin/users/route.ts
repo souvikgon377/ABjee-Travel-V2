@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     requireAdmin(currentUser);
 
     const body = await req.json() as Record<string, unknown>;
-    const { email, displayName, role = "user", city, phoneNumber } = body;
+    const { email, displayName, role = "user", city, phoneNumber, country } = body;
 
     if (!email || !displayName) return fail("Email and display name are required", 400);
 
@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       displayName: String(displayName),
       role: String(role),
       city: String(city || ""),
+      country: String(country || ""),
       phone: String(phoneNumber || ""),
       isActive: true,
       status: "active",
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
       email: userData.email,
       role: userData.role,
       status: userData.status,
+      country: userData.country,
       updatedAt: userData.updatedAt,
     });
     await SearchService.invalidateSearchCache("user-created");

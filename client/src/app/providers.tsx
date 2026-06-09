@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/mvpblocks/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PageViewTracker } from "@/components/PageViewTracker";
 import { ModernDialogHost } from "@/components/ui/modern-dialog-host";
+import { ProfileCompletionCheck } from "@/components/ProfileCompletionCheck";
 import { modernAlert } from "@/lib/modernDialog";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -205,6 +206,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <AuthProvider>
         <PageViewTracker />
+        <ProfileCompletionCheck />
         {children}
         <ModernDialogHost />
       </AuthProvider>

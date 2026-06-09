@@ -14,6 +14,7 @@ const allowedUpdates = [
   "address",
   "city",
   "zipCode",
+  "country",
   "avatar",
   "photoURL",
   "profileImage",

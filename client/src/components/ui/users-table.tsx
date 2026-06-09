@@ -29,6 +29,18 @@ import { modernConfirm } from '@/lib/modernDialog';
 
 const USERS_PER_PAGE = 10;
 
+const formatUserDate = (createdAt: any) => {
+  if (!createdAt) return 'N/A';
+  if (typeof createdAt.toDate === 'function') {
+    return createdAt.toDate().toLocaleDateString();
+  }
+  if (createdAt.seconds !== undefined) {
+    return new Date(createdAt.seconds * 1000).toLocaleDateString();
+  }
+  const d = new Date(createdAt);
+  return isNaN(d.getTime()) ? 'N/A' : d.toLocaleDateString();
+};
+
 interface UsersTableProps {
   onAddUser: () => void;
   refreshTrigger?: number;
@@ -276,6 +288,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
                         width={40}
                         height={40}
                         className="rounded-full"
+                        referrerPolicy="no-referrer"
                       />
                       <div
                         className={`border-background absolute -right-1 -bottom-1 h-3 w-3 rounded-full border-2 ${
@@ -304,10 +317,12 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
                           <Mail className="h-3 w-3" />
                           <span className="truncate">{user.email}</span>
                         </div>
-                        {user.city && (
+                        {(user.city || user.country) && (
                           <div className="flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
-                            <span>{user.city}</span>
+                            <span>
+                              {[user.city, user.country].filter(Boolean).join(', ')}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -317,7 +332,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
                   <div className="ml-auto flex items-center gap-3">
                     <div className="text-muted-foreground flex items-center gap-1 text-xs">
                       <Calendar className="h-3 w-3" />
-                      <span>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</span>
+                      <span>{formatUserDate(user.createdAt)}</span>
                     </div>
 
                     <Button 

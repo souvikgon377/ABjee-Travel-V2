@@ -74,6 +74,7 @@ interface UserProfile {
   address?: string;
   city?: string;
   zipCode?: string;
+  country?: string;
   username?: string;
   role?: string;
   subscription?: Record<string, unknown>;
@@ -138,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       address: profile.address,
       city: profile.city,
       zipCode: profile.zipCode,
+      country: profile.country,
       username: profile.username,
       role: profile.role,
       subscription:
