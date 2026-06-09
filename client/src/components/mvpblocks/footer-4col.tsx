@@ -41,7 +41,7 @@ const data = {
     name: 'ABjee Travel',
     description:
       'Discover the world with ABjee Travel, meet fellow travellors, share thoughts and much more.',
-    logo: publicAsset('/logo.jpg'),
+    logo: publicAsset('/bimi-logo.svg'),
   },
 };
 

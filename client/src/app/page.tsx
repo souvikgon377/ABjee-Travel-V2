@@ -84,7 +84,7 @@ export default async function RootPage() {
     "@type": "Organization",
     name: "ABjee Travel",
     url: siteUrl,
-    logo: publicAsset('/logo.jpg'),
+    logo: publicAsset('/bimi-logo.svg'),
   };
 
   return (

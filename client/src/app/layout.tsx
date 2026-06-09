@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     images: [publicAsset('/logo.jpg')],
   },
   manifest: "/manifest.json",
-  icons: { icon: publicAsset('/logo.jpg'), apple: publicAsset('/logo.jpg') },
+  icons: { icon: publicAsset('/bimi-logo.svg'), apple: publicAsset('/bimi-logo.svg') },
 };
 
 export const viewport: Viewport = {

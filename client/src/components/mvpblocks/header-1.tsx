@@ -854,7 +854,7 @@ export default function Header1() {
                 )}
                 <div className="relative z-1 flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden shrink-0">
                   <Image
-                    src={publicAsset('/logo.jpg')}
+                    src={publicAsset('/bimi-logo.svg')}
                     alt="ABjee Travel"
                     width={32}
                     height={32}
