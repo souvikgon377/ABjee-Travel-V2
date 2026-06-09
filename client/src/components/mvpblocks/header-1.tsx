@@ -836,7 +836,7 @@ export default function Header1() {
             >
               <Link
                 href="/"
-                className={`relative flex items-center space-x-2 rounded-xl px-1.5 py-1 ${isPaidSubscriber ? 'bg-linear-to-r from-amber-100/75 via-yellow-50/70 to-orange-100/70 dark:from-amber-900/25 dark:via-yellow-950/20 dark:to-orange-900/20' : ''}`}
+                className={`relative flex items-center space-x-2 rounded-xl py-1 ${isPaidSubscriber ? 'pl-1.5 pr-3 bg-linear-to-r from-amber-100/75 via-yellow-50/70 to-orange-100/70 dark:from-amber-900/25 dark:via-yellow-950/20 dark:to-orange-900/20' : 'px-1.5'}`}
               >
                 {isPaidSubscriber && (
                   <motion.div
@@ -878,7 +878,7 @@ export default function Header1() {
                   ABjee Travel
                 </span>
                 {isPaidSubscriber && (
-                  <span className="hidden items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-[0_0_14px_rgba(251,191,36,0.24)] xl:inline-flex">
+                  <span className="hidden items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 pl-2.5 pr-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-[0_0_14px_rgba(251,191,36,0.24)] shrink-0 xl:inline-flex">
                     <Crown className="h-3 w-3" />
                     Premium
                   </span>
@@ -995,11 +995,11 @@ export default function Header1() {
                     </AnimatePresence>
                   </div>
 
-                  <div className="text-right hidden xl:block">
-                    <p className="text-sm font-medium text-foreground">
+                  <div className="text-right hidden xl:flex flex-col justify-center h-10 select-none">
+                    <p className="text-sm font-semibold text-foreground leading-tight">
                       {userDisplayName}
                     </p>
-                    <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground leading-tight mt-0.5">
                       <span>Welcome back!</span>
                       {isPaidSubscriber && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 font-semibold text-amber-700 shadow-[0_0_12px_rgba(251,191,36,0.2)]">
@@ -1039,7 +1039,7 @@ export default function Header1() {
                   }}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="inline-flex h-9 w-9 xl:h-auto xl:w-auto items-center justify-center rounded-full border-2 border-rose-500 text-sm font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white shrink-0"
+                  className="inline-flex h-9 w-9 xl:h-auto xl:w-auto items-center justify-center rounded-full border-2 border-rose-500 text-sm font-medium text-rose-500 transition-all duration-200 hover:bg-rose-500 hover:text-white shrink-0 xl:px-4 xl:py-2"
                   title="Logout"
                 >
                   <LogOut className="h-4 w-4" />

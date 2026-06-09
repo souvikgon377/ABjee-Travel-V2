@@ -1279,7 +1279,7 @@ const TourPlaces: React.FC = () => {
                       setActualSearchQuery("");
                       setSelectedPlace(null);
                     }}
-                    className="absolute right-24 top-1/2 -translate-y-1/2 rounded-full bg-gray-200 p-1 text-gray-500 hover:bg-rose-100 hover:text-rose-500 sm:right-28"
+                    className="absolute right-20 top-1/2 -translate-y-1/2 rounded-full bg-gray-200 text-gray-500 hover:bg-rose-100 hover:text-rose-500 min-h-0 min-w-0 w-6 h-6 flex items-center justify-center sm:right-[104px]"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

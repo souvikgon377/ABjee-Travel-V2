@@ -250,6 +250,15 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
   const [selectedItem, setSelectedItem] = useState<AdItem | null>(null);
   const shouldReduceMotion = useReducedMotion();
   const { currentUser } = useAuth();
+  const [isOneColumn, setIsOneColumn] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 639px)');
+    const onChange = () => setIsOneColumn(mql.matches);
+    mql.addEventListener('change', onChange);
+    setIsOneColumn(mql.matches);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
 
   const [adRating, setAdRating] = useState<number>(0);
   const [adComments, setAdComments] = useState<any[]>([]);
@@ -368,7 +377,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
     return [...items].reverse().concat([...items].reverse());
   }, [items]);
 
-  const shouldAnimate = !shouldReduceMotion && items.length > 4;
+  const shouldAnimate = !shouldReduceMotion && (items.length > 4 || (items.length > 1 && isOneColumn));
 
   useEffect(() => {
     let mounted = true;
@@ -526,18 +535,18 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       `}</style>
 
       <div className="ads-container mx-auto mt-5 w-full">
-        <div className={shouldAnimate ? "relative overflow-hidden px-1 pb-2" : "w-full px-1 pb-2"}>
+        <div className="relative w-full overflow-hidden px-1 pb-2">
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent z-10" : "hidden"} />
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent z-10" : "hidden"} />
           <div
             className={shouldAnimate 
               ? "marquee-track-normal flex min-w-max gap-5" 
-              : "grid grid-cols-1 justify-items-center gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 w-full"
+              : "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full snap-x snap-mandatory sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:justify-items-center"
             }
             style={{ willChange: shouldAnimate ? 'transform' : 'auto' }}
           >
           {(shouldAnimate ? slidingItems : items).map((item, index) => (
-            <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-full max-w-[20rem]"}>
+            <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"}>
               <button
                 type="button"
                 onClick={() => setSelectedItem(item)}
