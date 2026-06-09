@@ -2237,7 +2237,7 @@ const ChatRoomsList: React.FC = () => {
                           <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 z-10 group-focus-within:text-rose-400 transition-colors duration-300" />
                           <input
                             type="text"
-                            placeholder="Search by place, area, state, or country"
+                            placeholder={isMobile ? "Search" : "Search your Place"}
                             value={searchDestination}
                             onChange={(e) => setSearchDestination(e.target.value)}
                             className="w-full pl-12 pr-10 sm:pl-14 sm:pr-12 py-3.5 sm:py-4 rounded-full bg-white/95 backdrop-blur-xl text-gray-900 placeholder-gray-400 text-sm sm:text-base focus:outline-none shadow-2xl shadow-black/40 transition-all duration-300 focus:bg-white"

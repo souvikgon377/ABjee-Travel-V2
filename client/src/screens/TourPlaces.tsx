@@ -1254,7 +1254,7 @@ const TourPlaces: React.FC = () => {
                 <Search className="absolute left-5 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by place, area, state, or country"
+                  placeholder={isMobile ? "Search" : "Search your Place"}
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                   onKeyDown={(e) => {
@@ -1262,7 +1262,7 @@ const TourPlaces: React.FC = () => {
                       handleSearchTrigger(searchInput);
                     }
                   }}
-                  className="w-full rounded-full bg-white/95 py-3.5 pl-12 pr-28 text-sm text-gray-900 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-gray-400 focus:outline-none sm:py-4 sm:pl-14 sm:pr-32 sm:text-base"
+                  className={`w-full rounded-full bg-white/95 py-3.5 pl-12 text-sm text-gray-900 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-gray-400 focus:outline-none sm:py-4 sm:pl-14 sm:pr-32 sm:text-base ${searchInput ? 'pr-[108px]' : 'pr-[76px]'}`}
                 />
                 <button
                   type="button"
@@ -1312,7 +1312,7 @@ const TourPlaces: React.FC = () => {
                   Where do you want to go?
                 </h1>
                 <p className="mt-2 max-w-xl text-sm text-white/70 sm:text-base">
-                  Search by place, area, state, or country
+                  Search your Place
                 </p>
 
                 <div className="mt-8 flex flex-wrap justify-center gap-3">
