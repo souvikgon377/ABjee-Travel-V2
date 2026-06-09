@@ -1249,26 +1249,56 @@ const ChatRoomsList: React.FC = () => {
     }
   }, [isVideoPlaying]);
 
+  const handleAuthCheck = useCallback(async (actionName: string) => {
+    const confirmed = await modernConfirm(
+      `Please login to access ${actionName}.`,
+      {
+        title: 'Login Required',
+        confirmText: 'Login Now',
+        cancelText: 'Cancel'
+      }
+    );
+    if (confirmed) {
+      router.push('/auth');
+    }
+  }, [router]);
+
   const scrollToCommunityRooms = useCallback(() => {
+    if (!user) {
+      void handleAuthCheck('Connect with Fellow Travellers');
+      return;
+    }
     setTimeout(() => {
       communityRoomsRef.current?.scrollIntoView({
         behavior: 'smooth',
         block: 'start'
       });
     }, 100);
-  }, []);
+  }, [user, handleAuthCheck]);
 
   const scrollToExploreOutdoors = useCallback(() => {
+    if (!user) {
+      void handleAuthCheck('Explore Tourist Places');
+      return;
+    }
     router.push('/tourplaces');
-  }, [router]);
+  }, [router, user, handleAuthCheck]);
 
   const openTripStories = useCallback(() => {
+    if (!user) {
+      void handleAuthCheck('Trip Stories');
+      return;
+    }
     router.push('/trip-stories');
-  }, [router]);
+  }, [router, user, handleAuthCheck]);
 
   const openTravelItinerary = useCallback(() => {
+    if (!user) {
+      void handleAuthCheck('Make a Perfect Travel Itinerary');
+      return;
+    }
     router.push('/travel-destinations');
-  }, [router]);
+  }, [router, user, handleAuthCheck]);
 
   // Load chat communities
   useEffect(() => {
