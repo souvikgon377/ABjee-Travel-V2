@@ -524,7 +524,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Failed to update profile');
       }
 
-      const { data: updatedUser } = await response.json();
+      const resJson = await response.json();
+      const updatedUser = resJson.data?.user;
       setUserProfile(normalizeUserProfile(updatedUser));
     } catch (error) {
       if ((process.env.NODE_ENV === "development")) {
