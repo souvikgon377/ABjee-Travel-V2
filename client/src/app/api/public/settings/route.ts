@@ -83,7 +83,7 @@ export async function GET() {
     return ok(
       {
         homePageEnabled: false,
-        bookingCategoriesEnabled: true,
+        bookingCategoriesEnabled: false,
         pricing: {
           currency: 'INR',
           adMonthly: 100,

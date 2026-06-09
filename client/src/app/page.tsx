@@ -63,7 +63,8 @@ export default async function RootPage() {
     if ((error as any)?.digest?.startsWith('NEXT_REDIRECT')) {
       throw error;
     }
-    // Fail open and keep homepage available if settings cannot be read.
+    // Fail closed and redirect to /community if settings cannot be read.
+    redirect('/community');
   }
 
   const webSiteSchema = {

@@ -28,6 +28,7 @@ export default async function HomeRoute() {
       throw error;
     }
     // Fail closed if the setting cannot be read.
+    redirect('/community');
   }
 
   return <HomePage />;

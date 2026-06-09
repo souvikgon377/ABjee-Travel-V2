@@ -159,7 +159,7 @@ export default function BookingCategories() {
       } catch (error) {
         console.error('Failed to load booking categories setting:', error);
         if (isMounted) {
-          setBookingCategoriesEnabled(true);
+          setBookingCategoriesEnabled(false);
         }
       } finally {
         if (isMounted) {
