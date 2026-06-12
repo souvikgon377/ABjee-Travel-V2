@@ -465,7 +465,7 @@ export default function SimplePricing() {
 
           const currentScrollY = window.scrollY;
           triggerPaymentFireworks();
-          setPaymentConfirmation('Coupon applied successfully. Your subscription is now active.');
+          setPaymentConfirmation('Coupon applied successfully. Your subscription is now active, and a confirmation email has been sent to you.');
           void refreshUserProfile?.();
           requestAnimationFrame(() => {
             window.scrollTo({ top: currentScrollY, behavior: 'auto' });
@@ -530,7 +530,7 @@ export default function SimplePricing() {
 
         const currentScrollY = window.scrollY;
         triggerPaymentFireworks();
-        setPaymentConfirmation('RB points redeemed successfully. Your subscription is now active.');
+        setPaymentConfirmation('RB points redeemed successfully. Your subscription is now active, and a confirmation email has been sent to you.');
         void refreshUserProfile?.();
         requestAnimationFrame(() => {
           window.scrollTo({ top: currentScrollY, behavior: 'auto' });
@@ -577,7 +577,7 @@ export default function SimplePricing() {
 
             const currentScrollY = window.scrollY;
             triggerPaymentFireworks();
-            setPaymentConfirmation('Payment confirmed successfully. Your subscription is now active.');
+            setPaymentConfirmation('Payment confirmed successfully. Your subscription is now active, and a confirmation email has been sent to you.');
             requestAnimationFrame(() => {
               window.scrollTo({ top: currentScrollY, behavior: 'auto' });
             });

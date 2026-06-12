@@ -157,7 +157,11 @@ export default function ProfilePage() {
     return imagePreviewUrl || resolveAvatarUrl(userProfile, currentUser as Record<string, unknown> | null | undefined) || '';
   }, [imagePreviewUrl, userProfile, currentUser]);
 
-  const subscriptionInfo = useMemo(() => getSubscriptionInfo(subscriptionSourceProfile), [subscriptionSourceProfile]);
+  const subscriptionInfo = useMemo(() => {
+    const infoFromSource = getSubscriptionInfo(subscriptionSourceProfile);
+    const infoFromContext = getSubscriptionInfo(userProfile);
+    return hasPaidAccess(infoFromContext) ? infoFromContext : infoFromSource;
+  }, [subscriptionSourceProfile, userProfile]);
   const isPaidSubscription = useMemo(() => hasPaidAccess(subscriptionInfo), [subscriptionInfo]);
 
   const subscriptionTypeLabel = useMemo(() => {

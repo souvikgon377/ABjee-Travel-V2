@@ -21,9 +21,10 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
-import { collection, query, orderBy, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { UserActionsDialog } from '@/components/ui/user-actions-dialog';
+import { adminAPI } from '@/lib/api';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { modernConfirm } from '@/lib/modernDialog';
 
@@ -167,7 +168,7 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
     if (!confirmed)
       return;
     try {
-      await deleteDoc(doc(firestoreDb, 'users', user.id));
+      await adminAPI.deleteUser(user.id);
       await fetchUsers();
       if ((process.env.NODE_ENV === "development")) console.log('User deleted:', user.id);
     } catch (err: any) {

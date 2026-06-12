@@ -15,14 +15,14 @@ export const SUBSCRIPTION_PLANS: Record<PaidPlanType, SubscriptionPlanConfig> = 
   pro: {
     type: 'pro',
     name: 'Paid Plan',
-    price: { amount: 2, currency: 'INR', interval: 'monthly' },
-    yearlyPrice: { amount: 15, currency: 'INR', interval: 'yearly' },
+    price: { amount: 0, currency: 'INR', interval: 'monthly' },
+    yearlyPrice: { amount: 0, currency: 'INR', interval: 'yearly' },
   },
   premium: {
     type: 'premium',
     name: 'Premium Plan',
-    price: { amount: 2, currency: 'INR', interval: 'monthly' },
-    yearlyPrice: { amount: 15, currency: 'INR', interval: 'yearly' },
+    price: { amount: 0, currency: 'INR', interval: 'monthly' },
+    yearlyPrice: { amount: 0, currency: 'INR', interval: 'yearly' },
   },
   advertizer: {
     type: 'advertizer',

@@ -49,15 +49,21 @@ const parseMaybeDate = (value: unknown): Date | null => {
   }
 
   if (typeof value === 'object') {
-    const candidate = value as { seconds?: unknown; toDate?: () => Date };
+    const candidate = value as { seconds?: unknown; _seconds?: unknown; toDate?: () => Date };
 
     if (typeof candidate.toDate === 'function') {
       const parsed = candidate.toDate();
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
 
-    if (typeof candidate.seconds === 'number') {
-      const parsed = new Date(candidate.seconds * 1000);
+    const seconds = typeof candidate.seconds === 'number'
+      ? candidate.seconds
+      : typeof candidate._seconds === 'number'
+        ? candidate._seconds
+        : null;
+
+    if (seconds !== null) {
+      const parsed = new Date(seconds * 1000);
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
   }

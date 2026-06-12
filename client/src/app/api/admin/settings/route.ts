@@ -11,10 +11,10 @@ const SETTINGS_DOC_ID = 'system';
 const DEFAULT_CURRENCY = 'INR';
 const DEFAULT_PRICING = {
   currency: DEFAULT_CURRENCY,
-  proMonthly: 2,
-  proYearly: 15,
-  premiumMonthly: 2,
-  premiumYearly: 15,
+  proMonthly: 0,
+  proYearly: 0,
+  premiumMonthly: 0,
+  premiumYearly: 0,
   advertizerMonthly: 1000,
   advertizerYearly: 10000,
   adMonthly: 100,

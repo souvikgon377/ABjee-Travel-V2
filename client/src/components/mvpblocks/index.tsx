@@ -80,10 +80,10 @@ type RevenueSettings = {
 const REVENUE_SETTINGS_DEFAULTS: RevenueSettings = {
   pricing: {
     currency: 'INR',
-    proMonthly: 2,
-    proYearly: 15,
-    premiumMonthly: 2,
-    premiumYearly: 15,
+    proMonthly: 0,
+    proYearly: 0,
+    premiumMonthly: 0,
+    premiumYearly: 0,
     advertizerMonthly: 1000,
     advertizerYearly: 10000,
     adMonthly: 100,

@@ -1,9 +1,16 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const nodemailer = require('nodemailer');
 
-const smtpHost = 'smtp.gmail.com';
-const smtpPort = 465;
-const smtpUser = 'abjeetourism@gmail.com';
-const smtpPass = 'tkwuqnadpbeknled';
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+const smtpUser = process.env.SMTP_USER || 'abjeetourism@gmail.com';
+const smtpPass = process.env.SMTP_PASS;
+
+if (!smtpPass) {
+  console.error('ERROR: SMTP_PASS environment variable is not set in .env file.');
+  process.exit(1);
+}
 
 const transporter = nodemailer.createTransport({
   host: smtpHost,

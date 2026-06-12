@@ -28,7 +28,7 @@ type UserProfileCacheEntry = {
 };
 
 const AUTH_USER_REDIS_TTL = 15 * 60;       // 15 minutes in Redis
-const AUTH_USER_MEMORY_TTL = 5 * 60;       // 5 minutes in memory (L1)
+const AUTH_USER_MEMORY_TTL = 2;           // 2 seconds in memory (L1)
 const USER_PROFILE_CACHE_TTL_MS = AUTH_USER_MEMORY_TTL * 1000;
 const userProfileCache = new Map<string, UserProfileCacheEntry>();
 
