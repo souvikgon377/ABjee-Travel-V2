@@ -74,7 +74,16 @@ class UserService {
     const ref = this.collection.doc(uid);
     const payload = createUserData({ ...userData, firebaseUid: uid });
     await ref.set(payload);
-    return { id: uid, ...payload };
+    const result = { id: uid, ...payload };
+    try {
+      const { SyncService } = await import("@/modules/search/SyncService");
+      const { SearchService } = await import("@/modules/search/SearchService");
+      await SyncService.syncUser(result);
+      await SearchService.invalidateSearchCache("user-created");
+    } catch (err) {
+      console.error("[UserService] Failed to sync created user to Typesense:", err);
+    }
+    return result;
   }
 
   async findById(userId: string) {
@@ -108,11 +117,30 @@ class UserService {
       ...searchPatch,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    return this.findById(userId);
+    const updated = await this.findById(userId);
+    if (updated) {
+      try {
+        const { SyncService } = await import("@/modules/search/SyncService");
+        const { SearchService } = await import("@/modules/search/SearchService");
+        await SyncService.syncUser(updated);
+        await SearchService.invalidateSearchCache("user-updated");
+      } catch (err) {
+        console.error("[UserService] Failed to sync updated user to Typesense:", err);
+      }
+    }
+    return updated;
   }
 
   async delete(userId: string) {
     await this.collection.doc(userId).delete();
+    try {
+      const { SyncService } = await import("@/modules/search/SyncService");
+      const { SearchService } = await import("@/modules/search/SearchService");
+      await SyncService.delete("users", userId);
+      await SearchService.invalidateSearchCache("user-deleted");
+    } catch (err) {
+      console.error("[UserService] Failed to delete user from Typesense:", err);
+    }
     return true;
   }
 
