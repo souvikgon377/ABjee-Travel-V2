@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type AdvertisementDoc = {
   id: string;
@@ -631,119 +632,121 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
           </div>
         </CardHeader>
         <CardContent>
-          {editingItem ? (
-            <form onSubmit={saveEdit} className="mb-6 rounded-3xl border border-rose-200/40 bg-rose-500/5 p-4 shadow-sm dark:border-rose-900/30 dark:bg-rose-950/20">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold">Edit Registration</h3>
-                  <p className="text-sm text-muted-foreground">Update fields and replace the photo if needed.</p>
-                </div>
-                <Button type="button" variant="outline" onClick={closeEditor}>Cancel</Button>
-              </div>
+          <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) closeEditor(); }}>
+            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto w-full">
+              <DialogHeader>
+                <DialogTitle>Edit Registration</DialogTitle>
+                <DialogDescription>Update fields and replace the photo if needed.</DialogDescription>
+              </DialogHeader>
+              {editingItem ? (
+                <form onSubmit={saveEdit} className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Name</span>
+                      <Input value={editingItem.name} onChange={(event) => updateEditField('name', event.target.value)} />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Mobile Number</span>
+                      <Input value={editingItem.mobileNumber} onChange={(event) => updateEditField('mobileNumber', event.target.value)} />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Country</span>
+                      <Input value={editingItem.country} onChange={(event) => updateEditField('country', event.target.value)} />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">State</span>
+                      <Input value={editingItem.state} onChange={(event) => updateEditField('state', event.target.value)} />
+                    </label>
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="text-sm font-medium">Area / Locality</span>
+                      <Input value={editingItem.area} onChange={(event) => updateEditField('area', event.target.value)} />
+                    </label>
+                    <label className="space-y-2 md:col-span-2">
+                      <span className="text-sm font-medium">Description</span>
+                      <textarea
+                        value={editingItem.description}
+                        onChange={(event) => updateEditField('description', event.target.value)}
+                        rows={4}
+                        maxLength={1000}
+                        placeholder="Briefly describe your ad or offer (max 1000 chars)"
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Owner Email</span>
+                      <Input value={editingItem.ownerEmail || ''} readOnly className="opacity-70" />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Owner Name</span>
+                      <Input value={editingItem.ownerName || ''} onChange={(event) => updateEditField('ownerName', event.target.value)} />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Owner Phone Number</span>
+                      <Input value={editingItem.ownerPhoneNumber || ''} onChange={(event) => updateEditField('ownerPhoneNumber', event.target.value)} />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Category</span>
+                      <Input value={editingItem.category || ''} onChange={(e) => updateEditField('category', e.target.value)} />
+                    </label>
+                  </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Name</span>
-                  <Input value={editingItem.name} onChange={(event) => updateEditField('name', event.target.value)} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Mobile Number</span>
-                  <Input value={editingItem.mobileNumber} onChange={(event) => updateEditField('mobileNumber', event.target.value)} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Country</span>
-                  <Input value={editingItem.country} onChange={(event) => updateEditField('country', event.target.value)} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">State</span>
-                  <Input value={editingItem.state} onChange={(event) => updateEditField('state', event.target.value)} />
-                </label>
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-sm font-medium">Area / Locality</span>
-                  <Input value={editingItem.area} onChange={(event) => updateEditField('area', event.target.value)} />
-                </label>
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-sm font-medium">Description</span>
-                  <textarea
-                    value={editingItem.description}
-                    onChange={(event) => updateEditField('description', event.target.value)}
-                    rows={4}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Owner Email</span>
-                  <Input value={editingItem.ownerEmail || ''} readOnly className="opacity-70" />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Owner Name</span>
-                  <Input value={editingItem.ownerName || ''} onChange={(event) => updateEditField('ownerName', event.target.value)} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Owner Phone Number</span>
-                  <Input value={editingItem.ownerPhoneNumber || ''} onChange={(event) => updateEditField('ownerPhoneNumber', event.target.value)} />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Category</span>
-                  <Input value={editingItem.category || ''} onChange={(e) => updateEditField('category', e.target.value)} />
-                </label>
-              </div>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Replace photo</span>
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
-                        <UploadCloud className="h-4 w-4" />
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Replace photo</span>
+                      <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
+                            <UploadCloud className="h-4 w-4" />
+                          </div>
+                          <div className="text-sm text-muted-foreground">Choose a new image only if you want to replace the existing Registration photo.</div>
+                        </div>
+                        <Input type="file" accept="image/*" onChange={handleEditPhotoChange} className="mt-4" />
+                        {editPhotoPreview ? <img src={editPhotoPreview} alt="Registration preview" className="mt-4 h-44 w-full rounded-xl object-cover" /> : null}
                       </div>
-                      <div className="text-sm text-muted-foreground">Choose a new image only if you want to replace the existing Registration photo.</div>
+                    </label>
+
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Replace ID proof</span>
+                      <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
+                            <UploadCloud className="h-4 w-4" />
+                          </div>
+                          <div className="text-sm text-muted-foreground">Choose a new ID file only if you want to replace the existing proof (PDF or image).</div>
+                        </div>
+                        <Input type="file" accept=".pdf,image/png,image/jpeg,image/jpg" onChange={handleEditIdChange} className="mt-4" />
+                        {editIdPreviewName ? (
+                          <div className="mt-4 text-sm">
+                            {editIdPreviewName.startsWith('http') ? (
+                              <a href={editIdPreviewName} target="_blank" rel="noreferrer" className="underline text-foreground">{editIdPreviewName}</a>
+                            ) : (
+                              <span className="text-foreground">{editIdPreviewName}</span>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </label>
+
+                    <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+                      <div className="font-semibold text-foreground">Current record</div>
+                      <div className="mt-2 space-y-1">
+                        <div>Status: <span className="capitalize">{items.find((item) => item.id === editingItem.id)?.status || 'unknown'}</span></div>
+                        <div>ID: {editingItem.id}</div>
+                      </div>
                     </div>
-                    <Input type="file" accept="image/*" onChange={handleEditPhotoChange} className="mt-4" />
-                    {editPhotoPreview ? <img src={editPhotoPreview} alt="Registration preview" className="mt-4 h-44 w-full rounded-xl object-cover" /> : null}
                   </div>
-                </label>
 
-                <label className="space-y-2">
-                  <span className="text-sm font-medium">Replace ID proof</span>
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/70 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
-                        <UploadCloud className="h-4 w-4" />
-                      </div>
-                      <div className="text-sm text-muted-foreground">Choose a new ID file only if you want to replace the existing proof (PDF or image).</div>
-                    </div>
-                    <Input type="file" accept=".pdf,image/png,image/jpeg,image/jpg" onChange={handleEditIdChange} className="mt-4" />
-                    {editIdPreviewName ? (
-                      <div className="mt-4 text-sm">
-                        {editIdPreviewName.startsWith('http') ? (
-                          <a href={editIdPreviewName} target="_blank" rel="noreferrer" className="underline text-foreground">{editIdPreviewName}</a>
-                        ) : (
-                          <span className="text-foreground">{editIdPreviewName}</span>
-                        )}
-                      </div>
-                    ) : null}
+                  <div className="mt-6 flex flex-wrap gap-2 justify-end">
+                    <Button type="button" variant="outline" onClick={closeEditor} disabled={savingEdit}>Cancel</Button>
+                    <Button type="submit" disabled={savingEdit} className="gap-2">
+                      <PencilLine className="h-4 w-4" />
+                      {savingEdit ? 'Saving...' : 'Save changes'}
+                    </Button>
                   </div>
-                </label>
-
-                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
-                  <div className="font-semibold text-foreground">Current record</div>
-                  <div className="mt-2 space-y-1">
-                    <div>Status: <span className="capitalize">{items.find((item) => item.id === editingItem.id)?.status || 'unknown'}</span></div>
-                    <div>ID: {editingItem.id}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button type="submit" disabled={savingEdit} className="gap-2">
-                  <PencilLine className="h-4 w-4" />
-                  {savingEdit ? 'Saving...' : 'Save changes'}
-                </Button>
-                <Button type="button" variant="outline" onClick={closeEditor} disabled={savingEdit}>Cancel</Button>
-              </div>
-            </form>
-          ) : null}
+                </form>
+              ) : null}
+            </DialogContent>
+          </Dialog>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filteredItems.map((item) => (

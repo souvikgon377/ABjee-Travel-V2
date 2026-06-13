@@ -819,9 +819,9 @@ export function AdvertisementForm({
                 value={form.description}
                 onChange={(e) => setForm((cur) => ({ ...cur, description: e.target.value }))}
                 rows={3}
-                maxLength={300}
+                maxLength={1000}
                 className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-ring/30"
-                placeholder="Briefly describe your ad or offer (max 300 chars)"
+                placeholder="Briefly describe your ad or offer (max 1000 chars)"
               />
             </label>
 
@@ -915,7 +915,7 @@ export function AdvertisementForm({
               <span className="text-sm font-medium">Registration Photo</span>
               <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/20">
                     <ImagePlus className="h-5 w-5" />
                   </div>
                   <div className="flex-1">
