@@ -23,6 +23,12 @@ import { Input } from '@/components/ui/input';
 import { ConfettiButton } from '@/components/ui/confetti';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 
+const PLAN_ICONS: Record<string, React.ComponentType<any>> = {
+  hobby: Star,
+  pro: Zap,
+  enterprise: Shield,
+};
+
 const DEFAULT_PLANS = [
   {
     id: 'hobby',
@@ -1016,7 +1022,10 @@ export default function SimplePricing() {
                           : 'bg-secondary text-foreground',
                       )}
                     >
-                      <plan.icon className="h-4 w-4" />
+                      {(() => {
+                        const IconComponent = PLAN_ICONS[plan.id] || Star;
+                        return <IconComponent className="h-4 w-4" />;
+                      })()}
                     </div>
                     <CardTitle
                       className={cn(
