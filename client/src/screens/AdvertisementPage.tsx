@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { auth } from '@/lib/firebase';
 import confetti from 'canvas-confetti';
+import { modernConfirm } from '@/lib/modernDialog';
 
 type OwnerAdvertisement = {
   id: string;
@@ -144,8 +145,25 @@ export default function AdvertisementPage() {
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('ad_access_granted');
       }
+
+      const showLoginPopup = async () => {
+        const confirmed = await modernConfirm(
+          'Please login to access Partner Registration.',
+          {
+            title: 'Login Required',
+            confirmText: 'Login Now',
+            cancelText: 'Cancel'
+          }
+        );
+        if (confirmed) {
+          router.push('/auth');
+        } else {
+          router.push('/');
+        }
+      };
+      void showLoginPopup();
     }
-  }, [currentUser, loading]);
+  }, [currentUser, loading, router]);
   const [ownerAds, setOwnerAds] = useState<OwnerAdvertisement[]>([]);
   const [ownerAdsLoading, setOwnerAdsLoading] = useState(false);
   const [ownerAdsError, setOwnerAdsError] = useState('');

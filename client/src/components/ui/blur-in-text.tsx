@@ -112,6 +112,7 @@ export const BlurInText = ({
                     duration,
                     ease: [0.25, 0.46, 0.45, 0.94],
                   }}
+                  style={{ willChange: 'filter, transform, opacity' }}
                 >
                   {letter}
                 </motion.span>
@@ -127,7 +128,7 @@ export const BlurInText = ({
                   duration,
                   ease: [0.25, 0.46, 0.45, 0.94],
                 }}
-                style={{ whiteSpace: 'pre' }}
+                style={{ whiteSpace: 'pre', willChange: 'filter, transform, opacity' }}
               >
                 {(() => {
                   absoluteIndex++;
@@ -147,6 +148,7 @@ export const BlurInText = ({
         variants={itemVariants}
         style={{
           whiteSpace: element === ' ' ? 'pre' : 'normal',
+          willChange: 'filter, transform, opacity',
         }}
       >
         {element}

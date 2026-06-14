@@ -1875,8 +1875,8 @@ const ChatRoomsList: React.FC = () => {
               text="Traveller's Best Place to Explore"
               blurAmount={12}
               duration={1}
-              stagger={0.02}
-              split="letter"
+              stagger={0.08}
+              split="word"
               trigger="mount"
               className="text-rose-600 dark:text-rose-400"
             />
