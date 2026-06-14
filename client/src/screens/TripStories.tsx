@@ -1198,8 +1198,8 @@ function SubmitStoryForm({
     authorEmail: initialData?.authorEmail ?? userProfile?.email ?? currentUser?.email ?? '',
     destination: initialData?.destination ?? '',
     title: initialData?.title ?? '',
-    description: initialData?.description ?? '',
-    fullStory: initialData?.fullStory ?? '',
+    description: initialData?.description || initialData?.fullStory || '',
+    fullStory: '',
     tripHighlights: initialData?.tripHighlights ?? '',
     dayByDay: initialData?.dayByDay ?? '',
     bestPlaces: initialData?.bestPlaces ?? '',
@@ -1448,11 +1448,9 @@ function SubmitStoryForm({
 
             {/* Description */}
             {[
-              { name: 'description', label: 'Short Preview Description *', rows: 2, placeholder: 'A brief summary of your trip...' },
-              { name: 'fullStory', label: 'Full Story / Introduction', rows: 4, placeholder: 'Tell us everything about your adventure...' },
+              { name: 'description', label: 'Short Preview Description / Introduction *', rows: 4, placeholder: 'Tell us everything about your adventure / A brief summary of your trip...' },
               { name: 'tripHighlights', label: 'Trip Highlights', rows: 2, placeholder: 'e.g. Pangong Lake, Nubra Valley...' },
               { name: 'dayByDay', label: 'Day-by-Day Experience', rows: 4, placeholder: 'Day 1: Arrival...\nDay 2: ...' },
-              { name: 'bestPlaces', label: 'Best Places Visited', rows: 2, placeholder: 'Top locations you loved...' },
               { name: 'localFood', label: 'Local Food Experience', rows: 2, placeholder: 'Local dishes you tried and loved...' },
               { name: 'travelTips', label: 'Travel Tips', rows: 3, placeholder: 'Tips for future travelers...' },
             ].map(field => (

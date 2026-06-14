@@ -90,6 +90,7 @@ export const TRAVEL_DESTINATIONS_COLLECTION = 'travel_destinations';
 export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
 export const ADVERTISEMENTS_COLLECTION = 'advertisements';
 export const ADMIN_SETTINGS_COLLECTION = 'admin_settings';
+export const TRIP_STORIES_COLLECTION = 'trip_stories';
 
 type TypesenseSchemaField = {
   name: string;
@@ -241,6 +242,41 @@ export const adminSettingsSchema = {
   default_sorting_field: 'updatedAt',
 };
 
+/**
+ * Schema for trip stories
+ */
+export const tripStoriesSchema = {
+  name: TRIP_STORIES_COLLECTION,
+  fields: [
+    { name: 'title', type: 'string' as const },
+    { name: 'title_lower', type: 'string' as const, optional: true },
+    { name: 'destination', type: 'string' as const },
+    { name: 'destination_lower', type: 'string' as const, optional: true },
+    { name: 'authorName', type: 'string' as const },
+    { name: 'authorEmail', type: 'string' as const, optional: true },
+    { name: 'authorId', type: 'string' as const, optional: true },
+    { name: 'coverImage', type: 'string' as const, optional: true },
+    { name: 'description', type: 'string' as const },
+    { name: 'description_lower', type: 'string' as const, optional: true },
+    { name: 'fullStory', type: 'string' as const, optional: true },
+    { name: 'tripHighlights', type: 'string' as const, optional: true },
+    { name: 'dayByDay', type: 'string' as const, optional: true },
+    { name: 'localFood', type: 'string' as const, optional: true },
+    { name: 'travelTips', type: 'string' as const, optional: true },
+    { name: 'duration', type: 'string' as const, optional: true },
+    { name: 'budget', type: 'string' as const, optional: true },
+    { name: 'travelType', type: 'string' as const, optional: true },
+    { name: 'startDate', type: 'string' as const, optional: true },
+    { name: 'endDate', type: 'string' as const, optional: true },
+    { name: 'likes', type: 'string[]' as const, optional: true },
+    { name: 'commentCount', type: 'int32' as const, optional: true },
+    { name: 'featured', type: 'bool' as const, optional: true },
+    { name: 'createdAt', type: 'int64' as const, optional: true },
+    { name: 'updatedAt', type: 'int64' as const },
+  ],
+  default_sorting_field: 'updatedAt',
+};
+
 // ─── Health Check ─────────────────────────────────────────────────────────────
 
 /**
@@ -287,7 +323,7 @@ export async function initializeTypesense() {
     return [];
   }
 
-  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema, advertisementsSchema, adminSettingsSchema];
+  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema, advertisementsSchema, adminSettingsSchema, tripStoriesSchema];
   const results: { name: string; status: 'created' | 'updated' | 'exists' | 'error'; message?: string }[] = [];
 
   for (const schema of schemas) {
