@@ -373,7 +373,7 @@ const PlaceCard: React.FC<{
 const ChatRoomsList: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, refreshUserProfile } = useAuth();
   const isMobile = useIsMobile();
 
   const [rooms, setRooms] = useState<ChatRoomType[]>([]);
@@ -1104,6 +1104,13 @@ const ChatRoomsList: React.FC = () => {
 
   const submitPlaceReview = async () => {
     if (!selectedPlace?.id || reviewRating < 1 || reviewRating > 5) return;
+
+    const hasAlreadyReviewed = selectedPlaceReviewList.some((r) => r.userId === user?.uid);
+    if (hasAlreadyReviewed) {
+      setUserMediaError("You have already submitted a review for this place.");
+      return;
+    }
+
     setReviewSubmitting(true);
     setUserMediaUploading(userMediaFiles.length > 0);
     setUserMediaError('');
@@ -1129,19 +1136,24 @@ const ChatRoomsList: React.FC = () => {
         reviewMedia.push(reviewMediaItem);
       }
 
-      await addDoc(collection(firestoreDb, 'touristPlaces', selectedPlace.id, 'reviews'), {
+      await placesAPI.createReview({
+        placeId: selectedPlace.id,
         text: reviewText,
         rating: reviewRating,
-        author: user?.displayName ?? user?.email ?? 'Traveller',
-        userId: user?.uid ?? 'anonymous',
-        avatarUrl: currentUserAvatar,
-        media: reviewMedia,
-        createdAt: serverTimestamp(),
+        media: reviewMedia.map((m) => ({
+          url: m.url,
+          publicId: m.publicId,
+          type: m.type as 'image' | 'video',
+          caption: m.caption,
+        })),
       });
       setReviewInput('');
       setReviewRating(0);
       userMediaFiles.forEach((item) => revokeImagePreview(item.preview));
       setUserMediaFiles([]);
+      if (typeof refreshUserProfile === 'function') {
+        void refreshUserProfile();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to post review.';
       setUserMediaError(message);
@@ -2790,84 +2802,96 @@ const ChatRoomsList: React.FC = () => {
                                               </div>
                                             </div>
 
-                                            <div className="mt-4 rounded-xl border border-white/70 bg-white/80 p-3 sm:p-4 space-y-3">
-                                              <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
-                                              <div className="flex items-center gap-1">
-                                                {[1, 2, 3, 4, 5].map((star) => (
-                                                  <button
-                                                    key={star}
-                                                    type="button"
-                                                    onClick={() => setReviewRating(star)}
-                                                    className="p-1 rounded hover:bg-amber-100 transition-colors"
-                                                    aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
-                                                  >
-                                                    <Star className={`h-5 w-5 ${star <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
-                                                  </button>
-                                                ))}
-                                                <span className="text-xs text-gray-500 ml-2">
-                                                  {reviewRating > 0 ? `${reviewRating}/5 selected` : 'Tap stars to rate'}
-                                                </span>
-                                              </div>
-                                              <input
-                                                type="text"
-                                                value={reviewInput}
-                                                onChange={(e) => setReviewInput(e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter') submitPlaceReview(); }}
-                                                placeholder="Write your review (optional)..."
-                                                className="w-full min-w-0 text-sm text-gray-900 placeholder:text-gray-500 border border-gray-200 rounded-full px-3 py-2 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
-                                              />
-                                              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                                                <label className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-rose-200 text-sm font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors">
-                                                  <Upload className="h-4 w-4 mr-1.5" />
-                                                  Choose Files
-                                                  <input
-                                                    type="file"
-                                                    accept="image/*,video/*"
-                                                    multiple
-                                                    onChange={handleUserMediaFileChange}
-                                                    className="hidden"
-                                                  />
-                                                </label>
-                                              </div>
-                                              <p className="text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
-
-                                              {userMediaFiles.length > 0 && (
-                                                <div>
-                                                  <p className="text-xs text-gray-600 mb-2">{userMediaFiles.length} file{userMediaFiles.length > 1 ? 's' : ''} selected</p>
-                                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                                    {userMediaFiles.map((item, index) => (
-                                                      <motion.div
-                                                        key={`${item.file.name}-${index}`}
-                                                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                        whileHover={{ y: -2, scale: 1.02 }}
-                                                        transition={{ duration: 0.25, delay: index * 0.04 }}
-                                                        className="group rounded-xl overflow-hidden border border-rose-100 bg-white shadow-sm transition-shadow hover:shadow-md"
-                                                      >
-                                                        {item.file.type.startsWith('video/') ? (
-                                                          <video src={item.preview} className="h-24 w-full object-cover bg-black transition-transform duration-500 group-hover:scale-[1.03]" controls playsInline preload="metadata" />
-                                                        ) : (
-                                                          <img src={item.preview} alt="Selected media preview" className="w-full h-24 object-cover" />
-                                                        )}
-                                                      </motion.div>
-                                                    ))}
-                                                  </div>
+                                            {selectedPlaceReviewList.some((r) => r.userId === user?.uid) ? (
+                                              <div className="mt-4 rounded-xl border border-white/70 bg-white/80 p-6 text-center">
+                                                <div className="inline-flex mb-2 rounded-full bg-emerald-50 p-2 text-emerald-500">
+                                                  <Star className="h-5 w-5 text-emerald-500 fill-emerald-500" />
                                                 </div>
-                                              )}
-
-                                              {userMediaError && <p className="text-xs text-red-600">{userMediaError}</p>}
-
-                                              <div className="pt-1">
-                                                <button
-                                                  type="button"
-                                                  onClick={submitPlaceReview}
-                                                  disabled={reviewSubmitting || userMediaUploading || reviewRating === 0}
-                                                  className="w-full sm:w-auto px-4 py-2 rounded-full bg-rose-500 hover:bg-rose-600 disabled:opacity-40 text-white text-sm font-semibold transition-colors"
-                                                >
-                                                  {reviewSubmitting || userMediaUploading ? 'Posting...' : 'Post Review + Media'}
-                                                </button>
+                                                <p className="text-sm font-bold text-gray-800">Review Submitted</p>
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                  You have already submitted a review for this place. Thank you!
+                                                </p>
                                               </div>
-                                            </div>
+                                            ) : (
+                                              <div className="mt-4 rounded-xl border border-white/70 bg-white/80 p-3 sm:p-4 space-y-3">
+                                                <p className="text-xs font-semibold text-gray-600">Rate, review, and attach photos/videos</p>
+                                                <div className="flex items-center gap-1">
+                                                  {[1, 2, 3, 4, 5].map((star) => (
+                                                    <button
+                                                      key={star}
+                                                      type="button"
+                                                      onClick={() => setReviewRating(star)}
+                                                      className="p-1 rounded hover:bg-amber-100 transition-colors"
+                                                      aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                                                    >
+                                                      <Star className={`h-5 w-5 ${star <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`} />
+                                                    </button>
+                                                  ))}
+                                                  <span className="text-xs text-gray-500 ml-2">
+                                                    {reviewRating > 0 ? `${reviewRating}/5 selected` : 'Tap stars to rate'}
+                                                  </span>
+                                                </div>
+                                                <input
+                                                  type="text"
+                                                  value={reviewInput}
+                                                  onChange={(e) => setReviewInput(e.target.value)}
+                                                  onKeyDown={(e) => { if (e.key === 'Enter') submitPlaceReview(); }}
+                                                  placeholder="Write your review (optional)..."
+                                                  className="w-full min-w-0 text-sm text-gray-900 placeholder:text-gray-500 border border-gray-200 rounded-full px-3 py-2 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200"
+                                                />
+                                                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                                                  <label className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-white border border-rose-200 text-sm font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors">
+                                                    <Upload className="h-4 w-4 mr-1.5" />
+                                                    Choose Files
+                                                    <input
+                                                      type="file"
+                                                      accept="image/*,video/*"
+                                                      multiple
+                                                      onChange={handleUserMediaFileChange}
+                                                      className="hidden"
+                                                    />
+                                                  </label>
+                                                </div>
+                                                <p className="text-[11px] text-gray-500">Selected files will be posted with this review text when you tap Post Review.</p>
+
+                                                {userMediaFiles.length > 0 && (
+                                                  <div>
+                                                    <p className="text-xs text-gray-600 mb-2">{userMediaFiles.length} file{userMediaFiles.length > 1 ? 's' : ''} selected</p>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                      {userMediaFiles.map((item, index) => (
+                                                        <motion.div
+                                                          key={`${item.file.name}-${index}`}
+                                                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                                                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                          whileHover={{ y: -2, scale: 1.02 }}
+                                                          transition={{ duration: 0.25, delay: index * 0.04 }}
+                                                          className="group rounded-xl overflow-hidden border border-rose-100 bg-white shadow-sm transition-shadow hover:shadow-md"
+                                                        >
+                                                          {item.file.type.startsWith('video/') ? (
+                                                            <video src={item.preview} className="h-24 w-full object-cover bg-black transition-transform duration-500 group-hover:scale-[1.03]" controls playsInline preload="metadata" />
+                                                          ) : (
+                                                            <img src={item.preview} alt="Selected media preview" className="w-full h-24 object-cover" />
+                                                          )}
+                                                        </motion.div>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {userMediaError && <p className="text-xs text-red-600">{userMediaError}</p>}
+
+                                                <div className="pt-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={submitPlaceReview}
+                                                    disabled={reviewSubmitting || userMediaUploading || reviewRating === 0}
+                                                    className="w-full sm:w-auto px-4 py-2 rounded-full bg-rose-500 hover:bg-rose-600 disabled:opacity-40 text-white text-sm font-semibold transition-colors"
+                                                  >
+                                                    {reviewSubmitting || userMediaUploading ? 'Posting...' : 'Post Review + Media'}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
 
                                             <div className="mt-4 space-y-2 max-h-52 overflow-y-auto pr-1">
                                               {selectedPlaceReviewList.length === 0 && (

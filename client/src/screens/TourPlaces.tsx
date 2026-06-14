@@ -380,7 +380,7 @@ PlaceCard.displayName = "PlaceCard";
 
 const TourPlaces: React.FC = () => {
   const router = useRouter();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, refreshUserProfile } = useAuth();
   const isMobile = useIsMobile();
   const handledPlaceParamRef = useRef<string | null>(null);
   const lastSearchTermRef = useRef<string>("");
@@ -1067,9 +1067,14 @@ const TourPlaces: React.FC = () => {
     const hasContent = reviewText.trim().length > 0 || reviewMediaFiles.length > 0 || reviewRating > 0;
     if (!selectedPlace?.id || !hasContent) return;
 
+    const hasAlreadyReviewed = selectedPlaceReviewList.some((r) => r.userId === user?.uid);
+    if (hasAlreadyReviewed) {
+      setReviewUploadError("You have already submitted a review for this place.");
+      return;
+    }
+
     setReviewSubmitting(true);
     setReviewUploadError("");
-
     try {
       const reviewTextValue = reviewText.trim();
       const reviewMedia = [] as Array<{
@@ -1132,6 +1137,9 @@ const TourPlaces: React.FC = () => {
       }
 
       await loadPlaceReviews(selectedPlace.id, { refresh: true });
+      if (typeof refreshUserProfile === "function") {
+        void refreshUserProfile();
+      }
 
       setReviewText("");
       setReviewRating(0);
@@ -1534,6 +1542,16 @@ const TourPlaces: React.FC = () => {
                             >
                               Login Now
                             </button>
+                          </div>
+                        ) : selectedPlaceReviewList.some((r) => r.userId === user?.uid) ? (
+                          <div className="flex flex-col items-center justify-center py-4 text-center">
+                            <div className="mb-3 rounded-full bg-emerald-50 p-3 text-emerald-500">
+                              <Star className="h-6 w-6 text-emerald-500 fill-emerald-500" />
+                            </div>
+                            <h4 className="text-sm font-bold text-gray-800">Review Submitted</h4>
+                            <p className="mt-1 max-w-sm text-xs font-medium text-gray-500">
+                              You have already submitted a review for this place. Thank you!
+                            </p>
                           </div>
                         ) : (
                           <>

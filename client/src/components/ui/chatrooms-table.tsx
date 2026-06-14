@@ -34,6 +34,7 @@ import {
   Tag,
   Shield,
   ArrowUpRight,
+  Eraser,
 } from 'lucide-react';
 import { AddChatRoomDialog } from '@/components/ui/add-chatroom-dialog';
 import { ChatRoomActionsDialog } from '@/components/ui/chatroom-actions-dialog';
@@ -302,6 +303,24 @@ export const ChatRoomsTable = memo(({ refreshTrigger, externalSearchQuery }: Cha
     }
   }, [fetchRooms]);
 
+  const handleClearChatRoom = useCallback(async (room: any) => {
+    const confirmed = await modernConfirm(`Clear all messages in "${room.name}"? This action cannot be undone.`, {
+      title: 'Clear Chat Messages',
+      confirmText: 'Clear All',
+      cancelText: 'Cancel',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await remove(ref(database, `chatrooms/${room.id}/messages`));
+      await remove(ref(database, `chatrooms/${room.id}/lastMessage`));
+      fetchRooms();
+    } catch (err: any) {
+      console.error('Failed to clear chat:', err);
+      alert('Failed to clear chat: ' + (err.message || err));
+    }
+  }, [fetchRooms]);
+
   const handleSearch       = useCallback((v: string) => { setSearchQuery(v); setCurrentPage(1); }, []);
   const handleTypeFilter   = useCallback((v: string) => { setTypeFilter(v);   setCurrentPage(1); }, []);
   const handleStatusFilter = useCallback((v: string) => { setStatusFilter(v); setCurrentPage(1); }, []);
@@ -383,6 +402,7 @@ export const ChatRoomsTable = memo(({ refreshTrigger, externalSearchQuery }: Cha
                   room={room}
                   onManage={handleRoomClick}
                   onDelete={handleDeleteRoom}
+                  onClearChat={handleClearChatRoom}
                 />
               ))}
             </AnimatePresence>
@@ -447,9 +467,10 @@ interface RoomCardProps {
   room: any;
   onManage: (room: any) => void;
   onDelete: (room: any) => void;
+  onClearChat: (room: any) => void;
 }
 
-const RoomCard = memo(({ room, onManage, onDelete }: RoomCardProps) => {
+const RoomCard = memo(({ room, onManage, onDelete, onClearChat }: RoomCardProps) => {
   const typeColor  = useMemo(() => getTypeColor(room.type),       [room.type]);
   const visibilityColor = useMemo(() => getVisibilityColor(room.visibility), [room.visibility]);
   const avatarColor = useMemo(() => getRoomAvatarColor(room.name || ''), [room.name]);
@@ -517,6 +538,14 @@ const RoomCard = memo(({ room, onManage, onDelete }: RoomCardProps) => {
 
         {/* Actions */}
         <div className="shrink-0 flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm"
+            onClick={() => onClearChat(room)}
+            className="text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 h-8 w-8 p-0"
+            title="Clear Chat Messages"
+          >
+            <Eraser className="h-4 w-4" />
+          </Button>
           {!(((room.name || '').trim().toLowerCase() === 'general community chat') ||
             ((room.name || '').trim().toLowerCase() === 'general chat') ||
             ((room.name || '').trim().toLowerCase().startsWith('general chat')) ||

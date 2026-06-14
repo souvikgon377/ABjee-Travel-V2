@@ -38,6 +38,7 @@ interface Comment {
   createdAt: any;
   userId?: string;
   userEmail?: string;
+  userAvatar?: string;
 }
 
 interface StoryPhoto {
@@ -589,7 +590,7 @@ function StoryModal({
   const isOwner =
     (!!currentUserId && !!story.authorId && currentUserId === story.authorId) ||
     (!!currentUserEmail && !!story.authorEmail && currentUserEmail.toLowerCase() === story.authorEmail.toLowerCase());
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, refreshUserProfile } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentName, setCommentName] = useState(userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User');
@@ -657,21 +658,45 @@ function StoryModal({
     const trimName = commentName.trim();
     const trimText = newComment.trim();
     if (!trimName || !trimText) return;
+
+    const hasAlreadyCommented = comments.some(c => c.userId === currentUserId);
+    if (hasAlreadyCommented) {
+      alert('You have already submitted a comment for this story.');
+      return;
+    }
+
     setSubmittingComment(true);
     try {
-      await addDoc(collection(firestoreDb, `stories/${story.id}/comments`), {
-        userName: trimName,
-        text: trimText,
-        createdAt: serverTimestamp(),
-        userId: currentUserId || null,
-        userEmail: currentUserEmail || null,
+      const token = currentUser ? await currentUser.getIdToken() : '';
+      const response = await fetch('/api/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          targetId: story.id,
+          targetType: 'story',
+          text: trimText,
+          userName: trimName,
+        }),
       });
-      // Increment comment count on story doc if it exists
-      try {
-        const storyRef = doc(firestoreDb, 'stories', story.id);
-        await updateDoc(storyRef, { commentCount: (story.commentCount || 0) + 1 });
-      } catch { /* sample stories won't have a doc */ }
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to post comment');
+      }
+
       setNewComment('');
+      try {
+        if (typeof refreshUserProfile === 'function') {
+          await refreshUserProfile();
+        }
+      } catch (e) {
+        console.warn('Failed to refresh user profile:', e);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Something went wrong while posting comment.');
     } finally {
       setSubmittingComment(false);
     }
@@ -685,11 +710,26 @@ function StoryModal({
     });
     if (!confirmed) return;
     try {
-      await deleteDoc(doc(firestoreDb, `stories/${story.id}/comments`, commentId));
+      const token = currentUser ? await currentUser.getIdToken() : '';
+      const response = await fetch(`/api/comments?commentId=${commentId}&targetId=${story.id}&targetType=story`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete comment');
+      }
+
       try {
-        const storyRef = doc(firestoreDb, 'stories', story.id);
-        await updateDoc(storyRef, { commentCount: Math.max(0, (story.commentCount || 1) - 1) });
-      } catch { /* ignore */ }
+        if (typeof refreshUserProfile === 'function') {
+          await refreshUserProfile();
+        }
+      } catch (e) {
+        console.warn('Failed to refresh user profile:', e);
+      }
     } catch (err: any) {
       await modernAlert('Failed to delete comment: ' + err.message, 'Error');
     }
@@ -1051,10 +1091,15 @@ function StoryModal({
 
                   {/* Add comment */}
                   {currentUser ? (
-                    <div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
-                      <div className="text-xs text-muted-foreground px-1">
-                        Commenting as <span className="font-semibold text-foreground">{userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User'}</span>
+                    comments.some(c => c.userId === currentUserId) ? (
+                      <div className="bg-muted/60 rounded-2xl p-6 mb-4 text-center border border-border">
+                        <p className="text-sm text-muted-foreground">You have already submitted a comment for this story.</p>
                       </div>
+                    ) : (
+                      <div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
+                        <div className="text-xs text-muted-foreground px-1">
+                          Commenting as <span className="font-semibold text-foreground">{userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User'}</span>
+                        </div>
                       <textarea
                         placeholder="Share your thoughts about this story..."
                         value={newComment}
@@ -1068,10 +1113,10 @@ function StoryModal({
                         className="flex items-center gap-2 px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-opacity"
                       >
                         <Send className="w-4 h-4" />
-                        {submittingComment ? 'Posting...' : 'Post Comment'}
                       </button>
                     </div>
-                  ) : (
+                  )
+                ) : (
                     <div className="bg-muted/60 rounded-2xl p-6 mb-4 text-center border border-border">
                       <p className="text-sm text-muted-foreground mb-3">You must be signed in to post a comment.</p>
                       <button
@@ -1093,9 +1138,17 @@ function StoryModal({
                       return (
                         <div key={comment.id} className="bg-card rounded-xl p-4 border border-border/40">
                           <div className="flex items-center gap-2 mb-2">
-                            <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
-                              {comment.userName[0]?.toUpperCase()}
-                            </div>
+                            {comment.userAvatar ? (
+                              <img
+                                src={comment.userAvatar}
+                                alt={comment.userName}
+                                className="w-7 h-7 rounded-full object-cover border border-border/40"
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                                {comment.userName[0]?.toUpperCase()}
+                              </div>
+                            )}
                             <span className="font-semibold text-sm text-foreground">{comment.userName}</span>
                             
                             <div className="flex items-center gap-2 ml-auto">

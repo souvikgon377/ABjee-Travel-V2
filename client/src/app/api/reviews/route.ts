@@ -6,6 +6,7 @@ import { RateLimitService } from '@/modules/auth/RateLimitService';
 import { MetricsService } from '@/modules/analytics/MetricsService';
 import { awardReviewRebate } from '@/lib/server/rebateWallet';
 import { FieldValue, adminDb } from '@/lib/server/firebaseAdminFirestore';
+import { notificationService } from '@/services/notificationService';
 
 const getReviewsCacheKey = (placeId: string) => `reviews_${placeId}`;
 
@@ -210,6 +211,12 @@ export async function POST(req: NextRequest) {
       return fail('Authenticated user profile is missing an id.', 401);
     }
 
+    const reviewsRef = adminDb.collection('touristPlaces').doc(placeId).collection('reviews');
+    const existingReviews = await reviewsRef.where('userId', '==', currentFirebaseUid || currentUserId).limit(1).get();
+    if (!existingReviews.empty) {
+      return fail('You have already submitted a review for this place.', 400);
+    }
+
     const payload = {
       text: String(body.text || '').trim(),
       rating,
@@ -267,6 +274,32 @@ export async function POST(req: NextRequest) {
     );
 
     await MetricsService.increment('admin_write_success');
+
+    if (created && created.ABJee && created.ABJee.totalPoints > 0) {
+      try {
+        let placeName = 'a tourist place';
+        const placeDoc = await adminDb.collection('touristPlaces').doc(placeId).get();
+        if (placeDoc.exists) {
+          placeName = placeDoc.data()?.name || 'a tourist place';
+        }
+
+        await notificationService.create({
+          toUserId: currentFirebaseUid || currentUserId,
+          type: 'points_received',
+          message: `You earned ${created.ABJee.totalPoints} Abjee point${created.ABJee.totalPoints === 1 ? '' : 's'} for reviewing "${placeName}".`,
+          details: {
+            action: 'points_received',
+            points: created.ABJee.totalPoints,
+            textPoints: created.ABJee.textPoints,
+            mediaPoints: created.ABJee.mediaPoints,
+            placeId,
+            placeName,
+          },
+        });
+      } catch (notiError) {
+        console.warn('[ReviewsAPI] Failed to create notification for points received:', notiError);
+      }
+    }
 
     return ok({
       id: created.reviewId,

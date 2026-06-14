@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { ref, get, update } from 'firebase/database';
+import { ref, get, update, remove } from 'firebase/database';
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore';
 import { database } from '@/lib/firebase';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -29,6 +29,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
 import { useRouter } from 'next/navigation';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
+import { modernConfirm } from '@/lib/modernDialog';
 
 // ─── Pure helpers (outside component) ───────────────────────────────
 
@@ -284,6 +285,33 @@ export const ChatRoomActionsDialog = memo(
         setLoadingMessages(false);
       }
     }, [room?.id]);
+
+    const handleClearChat = useCallback(async () => {
+      if (!room?.id) return;
+      const confirmed = await modernConfirm(
+        `Are you sure you want to clear all chat messages in "${room.name}"? This action cannot be undone.`,
+        {
+          title: 'Clear Chat Messages',
+          confirmText: 'Clear All',
+          cancelText: 'Cancel',
+          destructive: true,
+        }
+      );
+      if (!confirmed) return;
+
+      setLoadingMessages(true);
+      try {
+        await remove(ref(database, `chatrooms/${room.id}/messages`));
+        await remove(ref(database, `chatrooms/${room.id}/lastMessage`));
+        setMessages([]);
+        onRoomUpdated();
+      } catch (err: any) {
+        console.error('Failed to clear chat:', err);
+        alert('Failed to clear chat: ' + (err.message || err));
+      } finally {
+        setLoadingMessages(false);
+      }
+    }, [room?.id, room?.name, onRoomUpdated]);
 
     const handleTabChange = useCallback((tab: string) => {
       setActiveTab(tab);
@@ -733,9 +761,22 @@ export const ChatRoomActionsDialog = memo(
                 <p className="text-xs text-muted-foreground">
                   {loadingMessages ? 'Loading…' : messages.length > 0 ? `${messages.length} messages (newest first)` : 'Messages'}
                 </p>
-                <Button variant="ghost" size="sm" onClick={fetchMessages} disabled={loadingMessages} className="h-7 w-7 p-0">
-                  <RefreshCw className={`h-3.5 w-3.5 ${loadingMessages ? 'animate-spin' : ''}`} />
-                </Button>
+                <div className="flex items-center gap-2">
+                  {messages.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleClearChat}
+                      disabled={loadingMessages}
+                      className="h-8 text-xs px-3 font-semibold"
+                    >
+                      Clear Chat
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={fetchMessages} disabled={loadingMessages} className="h-8 w-8 p-0">
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingMessages ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
               </div>
               {loadingMessages ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">

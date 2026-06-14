@@ -210,6 +210,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     }).then(async (response) => {
       if (!response.ok) {
+        if (response.status === 404) {
+          return null; // Gracefully handle 404 so Next.js doesn't pop an error overlay
+        }
         throw new Error(`Failed to fetch profile: ${response.status}`);
       }
       const data = await response.json();

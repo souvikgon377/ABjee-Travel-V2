@@ -600,9 +600,13 @@ export default function ProfilePage() {
               ) : walletHistoryGroups.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No ABJee activity yet.</p>
               ) : (
-                <div className="space-y-4">
+                <div 
+                  className="relative h-[300px] overflow-y-auto overscroll-contain touch-pan-y flex flex-col gap-4 pr-2 pb-2" 
+                  onWheel={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                >
                   {walletHistoryGroups.map((group) => (
-                    <div key={group.monthKey} className="rounded-lg border bg-background p-3">
+                    <div key={group.monthKey} className="rounded-lg border bg-background p-3 shrink-0">
                       <p className="mb-2 text-sm font-semibold text-foreground">{group.monthKey}</p>
                       <div className="space-y-2">
                         {group.rows.map((entry) => (
@@ -617,7 +621,15 @@ export default function ProfilePage() {
                                       ? 'Wallet redemption'
                                       : entry.type === 'trip_story_reward'
                                         ? 'Travel story reward'
-                                        : 'Wallet activity'}
+                                        : entry.type === 'trip_story_comment_reward'
+                                          ? 'Story comment reward'
+                                          : entry.type === 'itinerary_comment_reward'
+                                            ? 'Itinerary comment reward'
+                                            : entry.type === 'trip_story_comment_reversal'
+                                              ? 'Story comment reversed'
+                                              : entry.type === 'itinerary_comment_reversal'
+                                                ? 'Itinerary comment reversed'
+                                                : 'Wallet activity'}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {entry.type === 'review_rebate'
@@ -626,12 +638,30 @@ export default function ProfilePage() {
                                     ? `Removed Text ${entry.textPoints || 0} + Media ${entry.mediaPoints || 0}`
                                   : entry.type === 'trip_story_reward'
                                     ? 'Awarded for sharing a story'
+                                  : entry.type === 'trip_story_comment_reward'
+                                    ? 'Awarded for commenting on a story'
+                                  : entry.type === 'itinerary_comment_reward'
+                                    ? 'Awarded for commenting on an itinerary'
+                                  : entry.type === 'trip_story_comment_reversal'
+                                    ? 'Reversed points for deleted comment'
+                                  : entry.type === 'itinerary_comment_reversal'
+                                    ? 'Reversed points for deleted comment'
                                     : `Redeemed Rs ${entry.points}`}
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className={`font-semibold ${entry.type === 'wallet_redemption' || entry.type === 'review_rebate_reversal' ? 'text-rose-600' : 'text-emerald-700'}`}>
-                                {entry.type === 'wallet_redemption' || entry.type === 'review_rebate_reversal'
+                              <p className={`font-semibold ${
+                                entry.type === 'wallet_redemption' ||
+                                entry.type === 'review_rebate_reversal' ||
+                                entry.type === 'trip_story_comment_reversal' ||
+                                entry.type === 'itinerary_comment_reversal'
+                                  ? 'text-rose-600'
+                                  : 'text-emerald-700'
+                              }`}>
+                                {entry.type === 'wallet_redemption' ||
+                                entry.type === 'review_rebate_reversal' ||
+                                entry.type === 'trip_story_comment_reversal' ||
+                                entry.type === 'itinerary_comment_reversal'
                                   ? `-Rs ${Math.abs(entry.rupees)}`
                                   : `+Rs ${entry.rupees}`}
                               </p>

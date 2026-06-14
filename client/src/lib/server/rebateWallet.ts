@@ -509,4 +509,108 @@ export const awardTripStoryRebate = async (input: {
   return result;
 };
 
+export const awardCommentRebate = async (input: {
+  userId: string;
+  targetId: string;
+  targetType: "story" | "itinerary";
+  commentText: string;
+}) => {
+  const userRef = await resolveUserDocumentRef(input.userId);
+  const walletTransactionRef = userRef.collection("walletTransactions").doc();
+
+  const result = await adminDb.runTransaction(async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists) {
+      throw new Error("User profile not found.");
+    }
+
+    const userData = userSnap.data() as AnyObject;
+    const wallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
+    
+    const ABJee = calculateReviewRebate({
+      subscription: userData.subscription as AnyObject | undefined,
+      text: input.commentText,
+      mediaCount: 0,
+    });
+
+    const updatedWallet: WalletState = {
+      availablePoints: wallet.availablePoints + ABJee.totalPoints,
+      lifetimeEarnedPoints: wallet.lifetimeEarnedPoints + ABJee.totalPoints,
+      lifetimeRedeemedPoints: wallet.lifetimeRedeemedPoints,
+      lifetimeRedeemedRupees: wallet.lifetimeRedeemedRupees,
+      monthly: wallet.monthly,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    transaction.set(userRef, { wallet: updatedWallet, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    if (ABJee.totalPoints > 0) {
+      transaction.set(walletTransactionRef, {
+        type: input.targetType === "story" ? "trip_story_comment_reward" : "itinerary_comment_reward",
+        targetId: input.targetId,
+        points: ABJee.totalPoints,
+        rupees: ABJee.totalPoints * REBATE_POINT_VALUE_IN_RUPEES,
+        monthKey: wallet.monthly.monthKey,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    return {
+      points: ABJee.totalPoints,
+      wallet: updatedWallet,
+      ABJee,
+    };
+  });
+
+  return result;
+};
+
+export const reverseCommentRebate = async (input: {
+  userId: string;
+  targetId: string;
+  targetType: "story" | "itinerary";
+  pointsToDeduct: number;
+}) => {
+  if (input.pointsToDeduct <= 0) return { points: 0 };
+  const userRef = await resolveUserDocumentRef(input.userId);
+  const walletTransactionRef = userRef.collection("walletTransactions").doc();
+
+  const result = await adminDb.runTransaction(async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists) {
+      throw new Error("User profile not found.");
+    }
+
+    const userData = userSnap.data() as AnyObject;
+    const wallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
+    
+    const updatedWallet: WalletState = {
+      availablePoints: Math.max(0, wallet.availablePoints - input.pointsToDeduct),
+      lifetimeEarnedPoints: Math.max(0, wallet.lifetimeEarnedPoints - input.pointsToDeduct),
+      lifetimeRedeemedPoints: wallet.lifetimeRedeemedPoints,
+      lifetimeRedeemedRupees: wallet.lifetimeRedeemedRupees,
+      monthly: wallet.monthly,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    transaction.set(userRef, { wallet: updatedWallet, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    transaction.set(walletTransactionRef, {
+      type: input.targetType === "story" ? "trip_story_comment_reversal" : "itinerary_comment_reversal",
+      targetId: input.targetId,
+      points: -input.pointsToDeduct,
+      rupees: -input.pointsToDeduct * REBATE_POINT_VALUE_IN_RUPEES,
+      monthKey: wallet.monthly.monthKey,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      points: -input.pointsToDeduct,
+      wallet: updatedWallet,
+    };
+  });
+
+  return result;
+};
+
 
