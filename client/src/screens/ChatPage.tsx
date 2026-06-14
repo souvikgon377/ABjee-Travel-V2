@@ -809,35 +809,37 @@ const ChatRoomsList: React.FC = () => {
 
     const loadOwnerProfiles = async () => {
       const nextMap: Record<string, CommunityOwnerProfile> = {};
-      const chunkSize = 10;
-      const chunks: string[][] = [];
 
-      for (let i = 0; i < creatorIds.length; i += chunkSize) {
-        chunks.push(creatorIds.slice(i, i + chunkSize));
-      }
-
-      await Promise.allSettled(
-        chunks.map(async (chunk) => {
-          const usersQuery = query(collection(firestoreDb, 'users'), where('__name__', 'in', chunk));
-          const usersSnap = await getDocs(usersQuery);
-
-          usersSnap.forEach((userDoc) => {
-            const data = userDoc.data() as Record<string, unknown>;
-            const firstName = typeof data.firstName === 'string' ? data.firstName.trim() : '';
-            const lastName = typeof data.lastName === 'string' ? data.lastName.trim() : '';
-            const displayName = typeof data.displayName === 'string' ? data.displayName.trim() : '';
-            const username = typeof data.username === 'string' ? data.username.trim() : '';
-            const email = typeof data.email === 'string' ? data.email.trim() : '';
+      // Use server API with Firebase Auth fallback
+      try {
+        const response = await fetch('/api/users/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: creatorIds }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const users = data.users || {};
+          for (const [uid, userData] of Object.entries(users) as [string, any][]) {
+            const firstName = typeof userData.firstName === 'string' ? userData.firstName.trim() : '';
+            const lastName = typeof userData.lastName === 'string' ? userData.lastName.trim() : '';
+            const displayName = typeof userData.displayName === 'string' ? userData.displayName.trim() : '';
+            const username = typeof userData.username === 'string' ? userData.username.trim() : '';
+            const email = typeof userData.email === 'string' ? userData.email.trim() : '';
             const emailHandle = email.includes('@') ? email.split('@')[0] : email;
-            const resolvedName = displayName || `${firstName} ${lastName}`.trim() || username || emailHandle || `User ${userDoc.id.slice(0, 6)}`;
+            const resolvedName = displayName || `${firstName} ${lastName}`.trim() || username || emailHandle || `User ${uid.slice(0, 6)}`;
 
-            nextMap[userDoc.id] = {
+            nextMap[uid] = {
               displayName: resolvedName,
-              avatarUrl: resolveAvatarUrl(data) || '',
+              avatarUrl: userData.avatar || '',
             };
-          });
-        })
-      );
+          }
+        }
+      } catch (e) {
+        if ((process.env.NODE_ENV === "development")) {
+          console.error('Failed to batch fetch owner profiles', e);
+        }
+      }
 
       creatorIds.forEach((creatorId) => {
         if (!nextMap[creatorId]) {

@@ -134,19 +134,34 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
         }
         
         let updated = false;
-        const participants = Array.isArray(room.participants) ? room.participants : [];
+        const rawParticipants = room.participants;
+        const participants: string[] = Array.isArray(rawParticipants)
+          ? rawParticipants
+          : rawParticipants && typeof rawParticipants === 'object'
+            ? Object.values(rawParticipants)
+            : [];
         if (participants.includes(userId)) {
           updates[`chatrooms/${roomId}/participants`] = participants.filter((uid: string) => uid !== userId);
           updated = true;
         }
         
-        const pendingInvites = Array.isArray(room.pendingInvites) ? room.pendingInvites : [];
+        const rawPendingInvites = room.pendingInvites;
+        const pendingInvites: string[] = Array.isArray(rawPendingInvites)
+          ? rawPendingInvites
+          : rawPendingInvites && typeof rawPendingInvites === 'object'
+            ? Object.values(rawPendingInvites)
+            : [];
         if (pendingInvites.includes(userId)) {
           updates[`chatrooms/${roomId}/pendingInvites`] = pendingInvites.filter((uid: string) => uid !== userId);
           updated = true;
         }
         
-        const joinRequests = Array.isArray(room.joinRequests) ? room.joinRequests : [];
+        const rawJoinRequests = room.joinRequests;
+        const joinRequests: string[] = Array.isArray(rawJoinRequests)
+          ? rawJoinRequests
+          : rawJoinRequests && typeof rawJoinRequests === 'object'
+            ? Object.values(rawJoinRequests)
+            : [];
         if (joinRequests.includes(userId)) {
           updates[`chatrooms/${roomId}/joinRequests`] = joinRequests.filter((uid: string) => uid !== userId);
           updated = true;

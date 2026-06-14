@@ -301,6 +301,9 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="truncate text-sm font-medium">{user.displayName || user.email}</h4>
+                        {user.username && (
+                          <span className="text-xs text-muted-foreground">@{user.username}</span>
+                        )}
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-medium ${
                             user.role === 'admin'
@@ -317,6 +320,9 @@ export const UsersTable = memo(({ onAddUser, refreshTrigger, externalRoleFilter,
                         <div className="flex items-center gap-1">
                           <Mail className="h-3 w-3" />
                           <span className="truncate">{user.email}</span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-70">
+                          <span className="font-mono text-[10px] tracking-wider bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded">ID: {user.id}</span>
                         </div>
                         {(user.city || user.country) && (
                           <div className="flex items-center gap-1">

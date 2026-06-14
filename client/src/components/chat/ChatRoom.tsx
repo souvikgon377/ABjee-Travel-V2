@@ -804,18 +804,28 @@ const ChatRoom = () => {
     const loadCommunityMembers = async () => {
       setCommunityMembersLoading(true);
       try {
-        const response = await usersAPI.searchUsers({ q: '', limit: 500 });
-        const users = (response.data?.data?.users || []).map((rawUser: any) => ({
-          ...rawUser,
-          id: String(rawUser?._id || rawUser?.id || '').trim(),
-        }));
-
-        const indexedUsers = users
-          .filter((candidate: any) => candidate.id)
-          .reduce((acc: Record<string, any>, candidate: any) => {
-            acc[candidate.id] = candidate;
-            return acc;
-          }, {} as Record<string, any>);
+        const missingIds = participantIds.filter((id) => !communityUserIndex[id]);
+        
+        let indexedUsers: Record<string, any> = {};
+        
+        if (missingIds.length > 0) {
+          try {
+            // Use server API with Firebase Auth fallback for robust name resolution
+            const response = await fetch('/api/users/batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids: missingIds }),
+            });
+            if (response.ok) {
+              const data = await response.json();
+              indexedUsers = data.users || {};
+            }
+          } catch (e) {
+            if ((process.env.NODE_ENV === "development")) {
+              console.error('Failed to batch fetch users', e);
+            }
+          }
+        }
 
         if (!isCancelled) {
           setCommunityUserIndex((prev) => ({ ...prev, ...indexedUsers }));
@@ -2214,47 +2224,25 @@ const ChatRoom = () => {
                   const trimmedFirstName = member.firstName?.trim() || '';
                   const trimmedLastName = member.lastName?.trim() || '';
                   const trimmedUsername = member.username?.trim() || '';
-                  const trimmedEmail = member.email?.trim() || '';
-                  const hasProfileDetails = Boolean(trimmedFirstName || trimmedLastName || trimmedUsername || trimmedEmail);
+                  const fullName = [trimmedFirstName, trimmedLastName].filter(Boolean).join(' ');
+                  const displayTitle = fullName || member.displayName;
+                  
                   return (
                     <div key={member.id} className="flex items-start justify-between gap-3 px-3 py-3">
                       <div className="flex min-w-0 items-start gap-2.5">
                         <Avatar className="h-9 w-9 shrink-0">
-                          <AvatarImage src={memberAvatar || undefined} alt={member.displayName} />
+                          <AvatarImage src={memberAvatar || undefined} alt={displayTitle} />
                           <AvatarFallback>
-                            {member.displayName.charAt(0).toUpperCase()}
+                            {displayTitle.charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0 space-y-1">
-                          <p className="truncate text-sm font-semibold">{member.displayName}</p>
-                          {trimmedFirstName ? (
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="truncate text-sm font-semibold">{displayTitle}</p>
+                          {trimmedUsername && (
                             <p className="truncate text-xs text-muted-foreground">
-                              First Name: {trimmedFirstName}
+                              @{trimmedUsername}
                             </p>
-                          ) : null}
-                          {trimmedLastName ? (
-                            <p className="truncate text-xs text-muted-foreground">
-                              Last Name: {trimmedLastName}
-                            </p>
-                          ) : null}
-                          {trimmedUsername ? (
-                            <p className="truncate text-xs text-muted-foreground">
-                              Username: @{trimmedUsername}
-                            </p>
-                          ) : null}
-                          {trimmedEmail ? (
-                            <p className="truncate text-xs text-muted-foreground">
-                              Email: {trimmedEmail}
-                            </p>
-                          ) : null}
-                          {!hasProfileDetails ? (
-                            <p className="truncate text-xs text-muted-foreground">
-                              Profile details are unavailable for this account.
-                            </p>
-                          ) : null}
-                          <p className="truncate text-xs text-muted-foreground">
-                            User ID: {member.id}
-                          </p>
+                          )}
                         </div>
                       </div>
                       <div className="shrink-0 pt-0.5">
