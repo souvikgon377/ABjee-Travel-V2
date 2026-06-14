@@ -471,6 +471,9 @@ export default function SimplePricing() {
           }
 
           const currentScrollY = window.scrollY;
+          if (typeof window !== 'undefined' && (window as any).gtag) {
+            (window as any).gtag('event', 'conversion', { 'send_to': 'AW-11019498535/HI0BCK3-oIEYEKfowIYp' });
+          }
           triggerPaymentFireworks();
           setPaymentConfirmation('Coupon applied successfully. Your subscription is now active, and a confirmation email has been sent to you.');
           void refreshUserProfile?.();
@@ -536,6 +539,9 @@ export default function SimplePricing() {
         }
 
         const currentScrollY = window.scrollY;
+        if (typeof window !== 'undefined' && (window as any).gtag) {
+          (window as any).gtag('event', 'conversion', { 'send_to': 'AW-11019498535/HI0BCK3-oIEYEKfowIYp' });
+        }
         triggerPaymentFireworks();
         setPaymentConfirmation('RB points redeemed successfully. Your subscription is now active, and a confirmation email has been sent to you.');
         void refreshUserProfile?.();
@@ -583,6 +589,9 @@ export default function SimplePricing() {
             }
 
             const currentScrollY = window.scrollY;
+            if (typeof window !== 'undefined' && (window as any).gtag) {
+              (window as any).gtag('event', 'conversion', { 'send_to': 'AW-11019498535/HI0BCK3-oIEYEKfowIYp' });
+            }
             triggerPaymentFireworks();
             setPaymentConfirmation('Payment confirmed successfully. Your subscription is now active, and a confirmation email has been sent to you.');
             requestAnimationFrame(() => {
