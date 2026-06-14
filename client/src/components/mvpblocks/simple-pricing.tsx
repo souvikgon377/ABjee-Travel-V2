@@ -165,6 +165,7 @@ export default function SimplePricing() {
   const [frequency, setFrequency] = useState<string>('monthly');
   const [mounted, setMounted] = useState(false);
   const [plans, setPlans] = useState(DEFAULT_PLANS);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
   const [paymentConfirmation, setPaymentConfirmation] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState('');
@@ -678,6 +679,8 @@ export default function SimplePricing() {
       } catch (error) {
         console.error('Failed to fetch pricing plans:', error);
         // Keep using default plans if fetch fails
+      } finally {
+        setLoadingPlans(false);
       }
     };
 
@@ -1006,7 +1009,9 @@ export default function SimplePricing() {
                   <CardDescription className="mt-3 space-y-2">
                     <p className="text-sm">{plan.description}</p>
                     <div className="pt-2">
-                      {typeof plan.price[
+                      {loadingPlans ? (
+                        <div className="h-9 w-32 animate-pulse rounded-md bg-muted" />
+                      ) : typeof plan.price[
                         frequency as keyof typeof plan.price
                       ] === 'number' ? (
                         <>
@@ -1100,7 +1105,7 @@ export default function SimplePricing() {
                         : 'hover:border-primary/30 hover:bg-primary/5 hover:text-primary',
                     )}
                     onClick={() => handleSubscribe(plan.id)}
-                    disabled={processingPlan === plan.id || isCurrentPlan}
+                    disabled={loadingPlans || processingPlan === plan.id || isCurrentPlan}
                   >
                     {processingPlan === plan.id ? 'Processing...' : isCurrentPlan ? 'You are subscribed' : plan.cta}
                     <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />

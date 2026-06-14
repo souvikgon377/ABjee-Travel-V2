@@ -521,14 +521,19 @@ function TravelDetailModal({
 	subscriptionLabel: string;
 	onClose: () => void;
 }) {
+	const { currentUser, userProfile } = useAuth();
 	const [liked, setLiked] = useState(false);
 	const [likes, setLikes] = useState(Math.max(1, result.places.length - 1));
 	const [copied, setCopied] = useState(false);
-	const [commentName, setCommentName] = useState('');
+	const [commentName, setCommentName] = useState(userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User');
 	const [commentText, setCommentText] = useState('');
 	const [isWindowExpanded, setIsWindowExpanded] = useState(false);
 	const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 	const modalContentRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		setCommentName(userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User');
+	}, [userProfile, currentUser]);
 
 	const routePoints: Array<{ name: string; lat?: number; lng?: number }> = Array.isArray(result.routePoints)
 		? result.routePoints.reduce<Array<{ name: string; lat?: number; lng?: number }>>((acc, point) => {
@@ -1420,25 +1425,33 @@ function TravelDetailModal({
 
 								<section>
 									<h3 className="text-xl font-bold text-foreground mb-3 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-indigo-500" /> Comments</h3>
-									<div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
-										<input
-											type="text"
-											placeholder="Your name"
-											value={commentName}
-											onChange={e => setCommentName(e.target.value)}
-											className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/40"
-										/>
-										<textarea
-											placeholder="Share your thoughts about this itinerary..."
-											value={commentText}
-											onChange={e => setCommentText(e.target.value)}
-											rows={4}
-											className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/40"
-										/>
-										<Button disabled={!commentName.trim() || !commentText.trim()} className="rounded-xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">
-											<Send className="w-4 h-4 mr-2" /> Post Comment
-										</Button>
-									</div>
+									{currentUser ? (
+										<div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
+											<div className="text-xs text-muted-foreground px-1">
+												Commenting as <span className="font-semibold text-foreground">{userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User'}</span>
+											</div>
+											<textarea
+												placeholder="Share your thoughts about this itinerary..."
+												value={commentText}
+												onChange={e => setCommentText(e.target.value)}
+												rows={4}
+												className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+											/>
+											<Button disabled={!commentName.trim() || !commentText.trim()} className="rounded-xl bg-linear-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600">
+												<Send className="w-4 h-4 mr-2" /> Post Comment
+											</Button>
+										</div>
+									) : (
+										<div className="bg-muted/60 rounded-2xl p-6 mb-4 text-center border border-border">
+											<p className="text-sm text-muted-foreground mb-3">You must be signed in to post a comment.</p>
+											<Button
+												onClick={() => window.location.href = '/auth'}
+												className="px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity"
+											>
+												Sign In to Comment
+											</Button>
+										</div>
+									)}
 								</section>
 							</div>
 						</div>

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { FieldValue, adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { ok, fail } from '@/lib/server/http';
+import { awardTripStoryRebate } from '@/lib/server/rebateWallet';
 
 export const runtime = 'nodejs';
 
@@ -53,12 +54,23 @@ export async function POST(req: NextRequest) {
     };
 
     const docRef = await adminDb.collection('stories').add(story);
+
+    const authorId = String(body.authorId || '').trim();
+    if (authorId) {
+      try {
+        await awardTripStoryRebate({ userId: authorId, storyId: docRef.id });
+      } catch (walletErr) {
+        console.error('[TripStoriesAPI] Failed to award wallet rebate:', walletErr);
+      }
+    }
+
     return ok({
       id: docRef.id,
       ...story,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }, 201);
+
   } catch (error) {
     console.error('[TripStoriesAPI] POST Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to submit story.';

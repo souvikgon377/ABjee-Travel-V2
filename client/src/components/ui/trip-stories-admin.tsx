@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Flame,
   Clock3,
+  Trash2,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +26,13 @@ import {
   orderBy,
   query,
   startAfter,
+  deleteDoc,
+  doc,
+  updateDoc,
+  increment,
 } from 'firebase/firestore';
+import { modernConfirm, modernAlert } from '@/lib/modernDialog';
+
 
 interface TripStoryAdminRow {
   id: string;
@@ -132,6 +139,44 @@ export function TripStoriesAdminPanel({ externalSearchQuery }: TripStoriesAdminP
   const [comments, setComments] = useState<TripStoryCommentRow[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
+
+  const handleDeleteStory = async (storyId: string) => {
+    const confirmed = await modernConfirm('Are you sure you want to delete this story?', {
+      title: 'Confirm Deletion',
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteDoc(doc(firestoreDb, 'stories', storyId));
+      setStories((prev) => prev.filter((s) => s.id !== storyId));
+    } catch (error: any) {
+      await modernAlert('Failed to delete story: ' + error.message, 'Error');
+    }
+  };
+
+  const handleDeleteComment = async (comment: TripStoryCommentRow) => {
+    const confirmed = await modernConfirm('Are you sure you want to delete this comment?', {
+      title: 'Confirm Deletion',
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteDoc(doc(firestoreDb, `stories/${comment.storyId}/comments`, comment.id));
+      try {
+        await updateDoc(doc(firestoreDb, 'stories', comment.storyId), {
+          commentCount: increment(-1),
+        });
+      } catch (err) {
+        console.warn('Could not decrement story comment count:', err);
+      }
+      setComments((prev) => prev.filter((c) => c.id !== comment.id));
+    } catch (error: any) {
+      await modernAlert('Failed to delete comment: ' + error.message, 'Error');
+    }
+  };
+
 
   useEffect(() => {
     if (externalSearchQuery !== undefined) {
@@ -790,6 +835,14 @@ export function TripStoriesAdminPanel({ externalSearchQuery }: TripStoriesAdminP
                           <MessageCircle className="h-3.5 w-3.5" />
                           {story.commentCount}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteStory(story.id)}
+                          className="rounded-full p-1 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                          title="Delete story"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                     <div className="mt-2 text-xs text-muted-foreground">
@@ -920,7 +973,17 @@ export function TripStoriesAdminPanel({ externalSearchQuery }: TripStoriesAdminP
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-foreground">{comment.userName}</p>
-                    <p className="text-xs text-muted-foreground">{formatDateTime(comment.createdAt)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">{formatDateTime(comment.createdAt)}</p>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteComment(comment)}
+                        className="rounded-full p-1 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                        title="Delete comment"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{comment.text}</p>
                   <p className="mt-1 text-xs text-muted-foreground">

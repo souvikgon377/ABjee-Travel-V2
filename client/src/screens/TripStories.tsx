@@ -1,7 +1,7 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,6 +21,7 @@ import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
 import { buildAbjeeShareText } from '@/lib/socialShare';
+import { modernConfirm, modernAlert } from '@/lib/modernDialog';
 
 // --------------------------- Types ---------------------------
 
@@ -35,6 +36,8 @@ interface Comment {
   userName: string;
   text: string;
   createdAt: any;
+  userId?: string;
+  userEmail?: string;
 }
 
 interface StoryPhoto {
@@ -225,119 +228,7 @@ const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=800&q=80',
 ];
 
-const SAMPLE_STORIES: TripStory[] = [
-  {
-    id: 'sample-1',
-    title: 'Mystical Ladakh: A Journey to the Roof of the World',
-    destination: 'Ladakh, India',
-    authorName: 'Arjun Sharma',
-    coverImage: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=900&q=80',
-    description: 'An unforgettable 10-day adventure through the highest motorable roads on earth, ancient monasteries and surreal landscapes.',
-    fullStory: 'The moment our flight descended into Leh, I knew this trip would be like nothing I had ever experienced before...',
-    tripHighlights: 'Pangong Lake, Nubra Valley, Magnetic Hill, Hemis Monastery',
-    dayByDay: 'Day 1: Leh Acclimatization\nDay 2: Local sightseeing\nDay 3-4: Nubra Valley via Khardung La\nDay 5-7: Pangong Tso\nDay 8-9: Tso Moriri\nDay 10: Departure',
-    bestPlaces: 'Pangong Lake, Nubra Valley sand dunes, Hemis National Park',
-    localFood: 'Thukpa, Momos, Skyu, Butter Tea - must-try dishes that warmed our souls at 11,500 ft',
-    travelTips: 'Acclimatize for at least 2 days. Carry altitude sickness medicine. Book accommodation in advance during summer.',
-    startDate: '2025-08-01',
-    endDate: '2025-08-10',
-    duration: '10 Days',
-    budget: 'Rs 45,000',
-    travelType: 'Solo',
-    photos: [
-      { url: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?w=600&q=80', caption: 'Pangong Lake at sunrise' },
-      { url: 'https://images.unsplash.com/photo-1580181900688-8b64e3c8c4fd?w=600&q=80', caption: 'Nubra Valley camel safari' },
-      { url: 'https://images.unsplash.com/photo-1571401835393-8c98277a6b56?w=600&q=80', caption: 'Khardung La Pass' },
-    ],
-    videos: [{ url: 'https://youtube.com/watch?v=dQw4w9WgXcQ', platform: 'youtube', embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ' }],
-    likes: [],
-    commentCount: 12,
-    createdAt: { toDate: () => new Date('2025-08-15') },
-    featured: true,
-    lat: 34.1526,
-    lng: 77.5771,
-  },
-  {
-    id: 'sample-2',
-    title: 'Kerala Backwaters: A Houseboat Dream',
-    destination: 'Alleppey, Kerala',
-    authorName: 'Priya Nair',
-    coverImage: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&q=80',
-    description: 'Drifting through emerald canals, savoring fish curry, and watching the golden sunset from our private houseboat.',
-    duration: '5 Days',
-    budget: 'Rs 22,000',
-    travelType: 'Couple',
-    photos: [],
-    videos: [],
-    likes: [],
-    commentCount: 7,
-    startDate: '2025-12-20',
-    endDate: '2025-12-25',
-    createdAt: { toDate: () => new Date('2025-12-26') },
-    lat: 9.4981,
-    lng: 76.3388,
-  },
-  {
-    id: 'sample-3',
-    title: 'Rajasthan Royal Road Trip',
-    destination: 'Jaipur - Udaipur - Jodhpur',
-    authorName: 'Rohit Meena',
-    coverImage: 'https://images.unsplash.com/photo-1599408572904-e0cf8dd6ada6?w=800&q=80',
-    description: 'An epic family road trip through the Land of Kings - palaces, deserts, camels, and colours you can\'t believe.',
-    duration: '8 Days',
-    budget: 'Rs 60,000',
-    travelType: 'Family',
-    photos: [],
-    videos: [],
-    likes: [],
-    commentCount: 18,
-    startDate: '2026-01-05',
-    endDate: '2026-01-13',
-    createdAt: { toDate: () => new Date('2026-01-14') },
-    lat: 26.9124,
-    lng: 75.7873,
-  },
-  {
-    id: 'sample-4',
-    title: 'Coorg Coffee Trail',
-    destination: 'Coorg, Karnataka',
-    authorName: 'Sneha Doshi',
-    coverImage: 'https://images.unsplash.com/photo-1619963647249-9b32b36ad40c?w=800&q=80',
-    description: 'Misty mornings, cascading waterfalls, and the intoxicating aroma of fresh coffee - Coorg is a quiet paradise.',
-    duration: '3 Days',
-    budget: 'Rs 12,000',
-    travelType: 'Group',
-    photos: [],
-    videos: [],
-    likes: [],
-    commentCount: 5,
-    startDate: '2026-02-14',
-    endDate: '2026-02-16',
-    createdAt: { toDate: () => new Date('2026-02-17') },
-    lat: 12.3375,
-    lng: 75.8069,
-  },
-  {
-    id: 'sample-5',
-    title: 'Spiti Valley Expedition',
-    destination: 'Spiti, Himachal Pradesh',
-    authorName: 'Vikram Singh',
-    coverImage: 'https://images.unsplash.com/photo-1585123388867-3bfe6dd4bdbf?w=800&q=80',
-    description: 'The cold desert of Spiti Valley is where time stands still - ancient forts, vibrant monasteries, and starry nights.',
-    duration: '7 Days',
-    budget: 'Rs 35,000',
-    travelType: 'Group',
-    photos: [],
-    videos: [],
-    likes: [],
-    commentCount: 9,
-    startDate: '2025-09-10',
-    endDate: '2025-09-17',
-    createdAt: { toDate: () => new Date('2025-09-20') },
-    lat: 32.2460,
-    lng: 78.0683,
-  },
-];
+const SAMPLE_STORIES: TripStory[] = [];
 
 // ----------------------- Sub-components ----------------------
 
@@ -380,7 +271,7 @@ function StoryCard({
 
   return (
     <motion.div
-      className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border border-border cursor-pointer"
+      className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex flex-col border border-border cursor-pointer h-full"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4 }}
@@ -442,7 +333,7 @@ function StoryCard({
             <Clock className="w-3 h-3" /> {story.duration}
           </span>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <DollarSign className="w-3 h-3" /> {story.budget}
+            <DollarSign className="w-3 h-3" /> {story.budget?.startsWith('$') ? story.budget.slice(1).trim() : story.budget}
           </span>
         </div>
 
@@ -511,7 +402,7 @@ function FeaturedStoryCard({
         <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-transparent" />
 
         <div className="absolute top-5 left-5 bg-linear-to-r from-rose-500 to-orange-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
-          <Star className="w-3 h-3 fill-white" /> Featured Story
+          <Star className="w-3 h-3 fill-white" /> Best Story of the Month
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
@@ -530,7 +421,7 @@ function FeaturedStoryCard({
               <span className="text-gray-200 text-sm">{story.authorName}</span>
             </div>
             <span className="flex items-center gap-1 text-gray-300 text-sm"><Clock className="w-4 h-4" />{story.duration}</span>
-            <span className="flex items-center gap-1 text-gray-300 text-sm"><DollarSign className="w-4 h-4" />{story.budget}</span>
+            <span className="flex items-center gap-1 text-gray-300 text-sm"><DollarSign className="w-4 h-4" />{story.budget?.startsWith('$') ? story.budget.slice(1).trim() : story.budget}</span>
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${TRAVEL_TYPE_COLORS[story.travelType]}`}>{story.travelType}</span>
           </div>
 
@@ -698,9 +589,10 @@ function StoryModal({
   const isOwner =
     (!!currentUserId && !!story.authorId && currentUserId === story.authorId) ||
     (!!currentUserEmail && !!story.authorEmail && currentUserEmail.toLowerCase() === story.authorEmail.toLowerCase());
+  const { currentUser, userProfile } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [commentName, setCommentName] = useState('');
+  const [commentName, setCommentName] = useState(userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User');
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -709,6 +601,10 @@ function StoryModal({
   const [heroIdx, setHeroIdx] = useState(0);
   const [heroDir, setHeroDir] = useState(1);
   const [isWindowExpanded, setIsWindowExpanded] = useState(false);
+
+  useEffect(() => {
+    setCommentName(userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User');
+  }, [userProfile, currentUser]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -767,6 +663,8 @@ function StoryModal({
         userName: trimName,
         text: trimText,
         createdAt: serverTimestamp(),
+        userId: currentUserId || null,
+        userEmail: currentUserEmail || null,
       });
       // Increment comment count on story doc if it exists
       try {
@@ -776,6 +674,24 @@ function StoryModal({
       setNewComment('');
     } finally {
       setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    const confirmed = await modernConfirm('Are you sure you want to delete your comment?', {
+      title: 'Confirm Deletion',
+      confirmText: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await deleteDoc(doc(firestoreDb, `stories/${story.id}/comments`, commentId));
+      try {
+        const storyRef = doc(firestoreDb, 'stories', story.id);
+        await updateDoc(storyRef, { commentCount: Math.max(0, (story.commentCount || 1) - 1) });
+      } catch { /* ignore */ }
+    } catch (err: any) {
+      await modernAlert('Failed to delete comment: ' + err.message, 'Error');
     }
   };
 
@@ -971,14 +887,14 @@ function StoryModal({
 
                 {story.localFood && (
                   <section>
-                    <h2 className="text-xl font-bold text-foreground mb-3">ðŸœ Local Food Experience</h2>
+                    <h2 className="text-xl font-bold text-foreground mb-3">🍜 Local Food Experience</h2>
                     <p className="text-muted-foreground leading-relaxed">{story.localFood}</p>
                   </section>
                 )}
 
                 {story.travelTips && (
                   <section className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
-                    <h2 className="text-xl font-bold text-foreground mb-3">ðŸ’¡ Travel Tips</h2>
+                    <h2 className="text-xl font-bold text-foreground mb-3">💡 Travel Tips</h2>
                     <p className="text-muted-foreground leading-relaxed text-sm">{story.travelTips}</p>
                   </section>
                 )}
@@ -1134,50 +1050,74 @@ function StoryModal({
                   </h2>
 
                   {/* Add comment */}
-                  <div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
-                    <input
-                      type="text"
-                      placeholder="Your name"
-                      value={commentName}
-                      onChange={e => setCommentName(e.target.value)}
-                      className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/40"
-                    />
-                    <textarea
-                      placeholder="Share your thoughts about this story..."
-                      value={newComment}
-                      onChange={e => setNewComment(e.target.value)}
-                      rows={3}
-                      className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/40"
-                    />
-                    <button
-                      onClick={submitComment}
-                      disabled={submittingComment || !commentName.trim() || !newComment.trim()}
-                      className="flex items-center gap-2 px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-opacity"
-                    >
-                      <Send className="w-4 h-4" />
-                      {submittingComment ? 'Posting...' : 'Post Comment'}
-                    </button>
-                  </div>
+                  {currentUser ? (
+                    <div className="bg-muted/60 rounded-2xl p-4 mb-4 space-y-3 border border-border">
+                      <div className="text-xs text-muted-foreground px-1">
+                        Commenting as <span className="font-semibold text-foreground">{userProfile?.displayName || currentUser?.displayName || currentUser?.email || 'User'}</span>
+                      </div>
+                      <textarea
+                        placeholder="Share your thoughts about this story..."
+                        value={newComment}
+                        onChange={e => setNewComment(e.target.value)}
+                        rows={3}
+                        className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                      />
+                      <button
+                        onClick={submitComment}
+                        disabled={submittingComment || !commentName.trim() || !newComment.trim()}
+                        className="flex items-center gap-2 px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-opacity"
+                      >
+                        <Send className="w-4 h-4" />
+                        {submittingComment ? 'Posting...' : 'Post Comment'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-muted/60 rounded-2xl p-6 mb-4 text-center border border-border">
+                      <p className="text-sm text-muted-foreground mb-3">You must be signed in to post a comment.</p>
+                      <button
+                        onClick={() => window.location.href = '/auth'}
+                        className="px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity"
+                      >
+                        Sign In to Comment
+                      </button>
+                    </div>
+                  )}
 
                   {/* Comments list */}
                   <div className="space-y-3">
                     {comments.length === 0 && (
                       <p className="text-muted-foreground text-sm text-center py-6">Be the first to comment!</p>
                     )}
-                    {comments.map(comment => (
-                      <div key={comment.id} className="bg-card rounded-xl p-4 border border-border/40">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
-                            {comment.userName[0]?.toUpperCase()}
+                    {comments.map(comment => {
+                      const isCommentOwner = currentUserId && comment.userId && currentUserId === comment.userId;
+                      return (
+                        <div key={comment.id} className="bg-card rounded-xl p-4 border border-border/40">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-7 h-7 rounded-full bg-linear-to-br from-teal-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                              {comment.userName[0]?.toUpperCase()}
+                            </div>
+                            <span className="font-semibold text-sm text-foreground">{comment.userName}</span>
+                            
+                            <div className="flex items-center gap-2 ml-auto">
+                              <span className="text-xs text-muted-foreground">
+                                {comment.createdAt?.toDate?.()?.toLocaleDateString?.() || 'Just now'}
+                              </span>
+                              {isCommentOwner && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(comment.id)}
+                                  className="text-muted-foreground hover:text-red-500 transition-colors p-0.5 rounded-full hover:bg-red-500/10"
+                                  title="Delete comment"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <span className="font-semibold text-sm text-foreground">{comment.userName}</span>
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            {comment.createdAt?.toDate?.()?.toLocaleDateString?.() || 'Just now'}
-                          </span>
+                          <p className="text-muted-foreground text-sm leading-relaxed">{comment.text}</p>
                         </div>
-                        <p className="text-muted-foreground text-sm leading-relaxed">{comment.text}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               </div>
@@ -1212,7 +1152,7 @@ function StoryModal({
                       <DollarSign className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
                       <div>
                         <p className="text-xs text-muted-foreground">Approx Budget</p>
-                        <p className="text-sm font-semibold text-foreground">{story.budget}</p>
+                        <p className="text-sm font-semibold text-foreground">{story.budget?.startsWith('$') ? story.budget.slice(1).trim() : story.budget}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
@@ -1251,10 +1191,11 @@ function SubmitStoryForm({
   initialData?: TripStory;
   onProgress: (progress: number, status: string, done: boolean) => void;
 }) {
+  const { currentUser, userProfile } = useAuth();
   const isEdit = !!initialData;
   const [form, setForm] = useState({
-    authorName: initialData?.authorName ?? '',
-    authorEmail: initialData?.authorEmail ?? '',
+    authorName: initialData?.authorName ?? userProfile?.displayName ?? currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'User',
+    authorEmail: initialData?.authorEmail ?? userProfile?.email ?? currentUser?.email ?? '',
     destination: initialData?.destination ?? '',
     title: initialData?.title ?? '',
     description: initialData?.description ?? '',
@@ -1270,6 +1211,26 @@ function SubmitStoryForm({
     startDate: initialData?.startDate ?? '',
     endDate: initialData?.endDate ?? '',
   });
+
+  useEffect(() => {
+    if (!isEdit) {
+      setForm(f => ({
+        ...f,
+        authorName: f.authorName || userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User',
+        authorEmail: f.authorEmail || userProfile?.email || currentUser?.email || '',
+      }));
+    }
+  }, [userProfile, currentUser, isEdit]);
+
+  const todayStr = useMemo(() => {
+    return new Date().toISOString().split('T')[0];
+  }, []);
+
+  const twoYearsAgoStr = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 2);
+    return d.toISOString().split('T')[0];
+  }, []);
   const [videoLinks, setVideoLinks] = useState<string[]>(
     initialData?.videos?.length ? initialData.videos.map(v => v.url) : ['']
   );
@@ -1459,7 +1420,14 @@ function SubmitStoryForm({
                     placeholder={field.placeholder}
                     value={(form as any)[field.name]}
                     onChange={handleChange}
-                    className="w-full bg-muted/30 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                    min={field.type === 'date' ? twoYearsAgoStr : undefined}
+                    max={field.type === 'date' ? todayStr : undefined}
+                    disabled={field.name === 'authorName' || field.name === 'authorEmail'}
+                    className={`w-full bg-muted/30 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-rose-500/40 ${
+                      (field.name === 'authorName' || field.name === 'authorEmail')
+                        ? 'opacity-60 cursor-not-allowed bg-muted/50'
+                        : ''
+                    }`}
                   />
                 </div>
               ))}
@@ -1640,6 +1608,7 @@ function SubmitStoryForm({
 
 export default function TripStoriesPage() {
   const { currentUser } = useAuth();
+  const router = useRouter();
   const uid = currentUser?.uid || null;
   const userEmail = currentUser?.email || null;
 
@@ -1804,8 +1773,22 @@ export default function TripStoriesPage() {
     } as TripStory, ...prev]);
   };
 
-  const featured = stories.find(s => s.featured) || stories[0];
-  const gridStories = filteredStories.filter(s => s.id !== featured?.id);
+  const featured = useMemo(() => {
+    if (stories.length === 0) return null;
+    return stories.reduce((best, current) => {
+      const bestLikes = best.likes?.length || 0;
+      const currentLikes = current.likes?.length || 0;
+      if (currentLikes > bestLikes) return current;
+      if (currentLikes === bestLikes) {
+        const bestTime = best.createdAt?.toDate ? best.createdAt.toDate().getTime() : (best.createdAt ? new Date(best.createdAt).getTime() : 0);
+        const currentTime = current.createdAt?.toDate ? current.createdAt.toDate().getTime() : (current.createdAt ? new Date(current.createdAt).getTime() : 0);
+        return currentTime > bestTime ? current : best;
+      }
+      return best;
+    });
+  }, [stories]);
+
+  const gridStories = filteredStories;
 
   return (
     <div className="min-h-screen bg-linear-to-br from-rose-200 to-gray-200 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
@@ -1896,7 +1879,13 @@ export default function TripStoriesPage() {
 
             {/* Share Story button */}
             <motion.button
-              onClick={() => setShowSubmitForm(true)}
+              onClick={() => {
+                if (!currentUser) {
+                  router.push('/auth');
+                } else {
+                  setShowSubmitForm(true);
+                }
+              }}
               className="mt-5 flex items-center gap-2 mx-auto px-7 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-2xl hover:opacity-90 transition-opacity shadow-lg shadow-rose-500/25"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
@@ -2032,6 +2021,7 @@ export default function TripStoriesPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.08 }}
+                  className="h-full flex flex-col"
                 >
                   <StoryCard
                     story={story}
@@ -2052,7 +2042,13 @@ export default function TripStoriesPage() {
             <h2 className="text-white text-3xl md:text-4xl font-black mb-3">Have a Travel Story to Share?</h2>
             <p className="text-rose-100 text-lg mb-6 max-w-xl mx-auto">Inspire thousands of fellow travelers with your experience. Share your journey with the ABjee Travel community.</p>
             <motion.button
-              onClick={() => setShowSubmitForm(true)}
+              onClick={() => {
+                if (!currentUser) {
+                  router.push('/auth');
+                } else {
+                  setShowSubmitForm(true);
+                }
+              }}
               className="px-8 py-3.5 bg-white text-rose-600 font-bold rounded-2xl hover:bg-rose-50 transition-colors shadow-xl text-sm"
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.97 }}

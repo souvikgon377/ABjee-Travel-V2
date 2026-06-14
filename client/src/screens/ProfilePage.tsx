@@ -615,14 +615,18 @@ export default function ProfilePage() {
                                     ? 'Review rebate reversed'
                                     : entry.type === 'wallet_redemption'
                                       ? 'Wallet redemption'
-                                      : 'Wallet activity'}
+                                      : entry.type === 'trip_story_reward'
+                                        ? 'Travel story reward'
+                                        : 'Wallet activity'}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {entry.type === 'review_rebate'
                                   ? `Text ${entry.textPoints || 0} + Media ${entry.mediaPoints || 0}`
                                   : entry.type === 'review_rebate_reversal'
                                     ? `Removed Text ${entry.textPoints || 0} + Media ${entry.mediaPoints || 0}`
-                                  : `Redeemed Rs ${entry.points}`}
+                                  : entry.type === 'trip_story_reward'
+                                    ? 'Awarded for sharing a story'
+                                    : `Redeemed Rs ${entry.points}`}
                               </p>
                             </div>
                             <div className="text-right">
@@ -636,6 +640,7 @@ export default function ProfilePage() {
                               </p>
                             </div>
                           </div>
+
                         ))}
                       </div>
                     </div>
