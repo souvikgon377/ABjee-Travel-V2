@@ -14,7 +14,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users, Eye, EyeOff, Reply } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, ArrowDown, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users, Eye, EyeOff, Reply } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -420,8 +420,12 @@ const ChatRoom = () => {
   const videoTrimPreviewRef = useRef<HTMLVideoElement>(null);
   const [messageScrollTop, setMessageScrollTop] = useState(0);
   const [messageViewportHeight, setMessageViewportHeight] = useState(0);
+  const [messageDistanceFromBottom, setMessageDistanceFromBottom] = useState(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const messagesContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollToBottomFrameRef = useRef<number | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const messageInputTouchYRef = useRef<number | null>(null);
   const mentionListTouchYRef = useRef<number | null>(null);
@@ -2226,34 +2230,90 @@ const ChatRoom = () => {
     });
   }, [messages, user]);
 
+  const updateMessageScrollState = useCallback(() => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+
+    setMessageScrollTop(container.scrollTop);
+    setMessageViewportHeight(container.clientHeight);
+    setMessageDistanceFromBottom(Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight));
+  }, []);
+
+  const showJumpToBottom = hasMessageAccess && messageDistanceFromBottom > 48;
+
+  const scrollToLatestMessage = useCallback(() => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+
+    if (scrollToBottomFrameRef.current !== null) {
+      cancelAnimationFrame(scrollToBottomFrameRef.current);
+      scrollToBottomFrameRef.current = null;
+    }
+
+    const startScrollTop = container.scrollTop;
+    const duration = 400; // 400ms duration
+    const startTime = performance.now();
+
+    const animateScroll = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+
+      const latestContainer = messagesScrollRef.current;
+      if (!latestContainer) {
+        scrollToBottomFrameRef.current = null;
+        return;
+      }
+
+      const targetScrollTop = Math.max(0, latestContainer.scrollHeight - latestContainer.clientHeight);
+      latestContainer.scrollTop = startScrollTop + (targetScrollTop - startScrollTop) * ease;
+      updateMessageScrollState();
+
+      if (progress < 1) {
+        scrollToBottomFrameRef.current = requestAnimationFrame(animateScroll);
+      } else {
+        scrollToBottomFrameRef.current = null;
+        setMessageDistanceFromBottom(0);
+      }
+    };
+
+    scrollToBottomFrameRef.current = requestAnimationFrame(animateScroll);
+  }, [updateMessageScrollState]);
+
   useEffect(() => {
     const container = messagesScrollRef.current;
     if (!container) return;
 
     let rafId = 0;
 
-    const updateScrollState = () => {
-      setMessageScrollTop(container.scrollTop);
-      setMessageViewportHeight(container.clientHeight);
-    };
-
     const handleScroll = () => {
       if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(updateScrollState);
+      rafId = requestAnimationFrame(updateMessageScrollState);
     };
 
     const resizeObserver = new ResizeObserver(() => {
-      updateScrollState();
+      updateMessageScrollState();
     });
 
-    updateScrollState();
+    updateMessageScrollState();
     container.addEventListener('scroll', handleScroll, { passive: true });
     resizeObserver.observe(container);
+    if (messagesContentRef.current) {
+      resizeObserver.observe(messagesContentRef.current);
+    }
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
       container.removeEventListener('scroll', handleScroll);
       resizeObserver.disconnect();
+    };
+  }, [updateMessageScrollState]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollToBottomFrameRef.current !== null) {
+        cancelAnimationFrame(scrollToBottomFrameRef.current);
+      }
     };
   }, []);
 
@@ -2265,6 +2325,7 @@ const ChatRoom = () => {
         items: [] as Array<{ message: ChatMessage; index: number }>,
         topSpacer: 0,
         bottomSpacer: 0,
+        rowOffsets: [] as number[],
       };
     }
 
@@ -2274,6 +2335,7 @@ const ChatRoom = () => {
         items: source.map((message, index) => ({ message, index })),
         topSpacer: 0,
         bottomSpacer: 0,
+        rowOffsets: source.map((_, index) => index * estimateMessageRowHeight(source[index])),
       };
     }
 
@@ -2316,8 +2378,43 @@ const ChatRoom = () => {
       items: visibleItems,
       topSpacer,
       bottomSpacer,
+      rowOffsets,
     };
   }, [filteredMessages, hasMessageAccess, messageScrollTop, messageViewportHeight]);
+
+  useEffect(() => {
+    updateMessageScrollState();
+  }, [filteredMessages.length, typingUsers.length, virtualizedMessages.topSpacer, virtualizedMessages.bottomSpacer, updateMessageScrollState]);
+
+  const scrollToMessage = useCallback((messageId?: string) => {
+    const targetId = String(messageId || '').trim();
+    if (!targetId) return;
+
+    const targetIndex = filteredMessages.findIndex((message) => message.id === targetId);
+    if (targetIndex < 0) {
+      alert('Original message is not loaded yet.');
+      return;
+    }
+
+    const container = messagesScrollRef.current;
+    if (!container) return;
+
+    const existingElement = container.querySelector<HTMLElement>(`[data-message-id="${targetId}"]`);
+    if (existingElement) {
+      existingElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      const targetTop = virtualizedMessages.rowOffsets[targetIndex] ?? 0;
+      container.scrollTo({
+        top: Math.max(0, targetTop - Math.floor(container.clientHeight * 0.35)),
+        behavior: 'smooth',
+      });
+    }
+
+    setHighlightedMessageId(targetId);
+    window.setTimeout(() => {
+      setHighlightedMessageId((currentId) => (currentId === targetId ? null : currentId));
+    }, 1600);
+  }, [filteredMessages, virtualizedMessages.rowOffsets]);
 
   useEffect(() => {
     const candidateUserIds = Array.from(
@@ -3230,7 +3327,7 @@ const ChatRoom = () => {
       {/* Main Chat UI */}
       <div className="flex h-dvh bg-background overflow-hidden">
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="relative flex-1 flex flex-col min-h-0">
           {/* Header */}
           <div 
             className="border-b p-2 sm:p-3 md:p-4 flex flex-nowrap items-center gap-2 sm:gap-3 backdrop-blur-md shadow-sm shrink-0"
@@ -3370,20 +3467,23 @@ const ChatRoom = () => {
             </div>
           </div>
 
-          {/* Messages */}
-          <div 
-            data-lenis-prevent
-            ref={messagesScrollRef}
-            className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 space-y-3 sm:space-y-4 relative min-h-0"
-            style={room.backgroundImage ? {
-              backgroundImage: `url(${room.backgroundImage.url})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundAttachment: 'fixed'
-            } : undefined}
-          >
+          {/* Messages wrapper to position the jump-to-bottom button relative to the input form */}
+          <div className="flex-1 relative min-h-0 flex flex-col">
+            {/* Messages */}
+            <div 
+              data-lenis-prevent
+              ref={messagesScrollRef}
+              onScroll={updateMessageScrollState}
+              className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 space-y-3 sm:space-y-4 relative min-h-0"
+              style={room.backgroundImage ? {
+                backgroundImage: `url(${room.backgroundImage.url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundAttachment: 'fixed'
+              } : undefined}
+            >
             {/* Messages content with higher z-index */}
-            <div className="relative z-10 space-y-3 sm:space-y-4">
+            <div ref={messagesContentRef} className="relative z-10 space-y-3 sm:space-y-4">
             {!hasMessageAccess && (
               <div className="mx-auto max-w-lg rounded-xl border border-border bg-card/90 p-4 text-center shadow-sm">
                 <p className="text-sm font-semibold">Join request pending approval</p>
@@ -3444,7 +3544,12 @@ const ChatRoom = () => {
                 return (
                   <div
                     key={message.id}
-                    className={`flex touch-pan-y items-start gap-2 sm:gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
+                    data-message-id={message.id}
+                    className={`flex touch-pan-y items-start gap-2 rounded-xl transition-shadow duration-300 sm:gap-3 ${
+                      isOwnMessage ? 'flex-row-reverse' : ''
+                    } ${
+                      highlightedMessageId === message.id ? 'ring-2 ring-rose-500/70 ring-offset-2 ring-offset-background' : ''
+                    }`}
                     onPointerDown={(event) => handleMessageSwipeStart(event, message)}
                     onPointerMove={handleMessageSwipeMove}
                     onPointerUp={handleMessageSwipeEnd}
@@ -3549,14 +3654,20 @@ const ChatRoom = () => {
                               ) : (
                                 <>
                                   {message.replyTo && (
-                                    <div className="mb-1.5 border-l-2 border-current/50 bg-black/10 px-2 py-1 text-left">
+                                    <button
+                                      type="button"
+                                      onClick={() => scrollToMessage(message.replyTo?.id)}
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      className="mb-1.5 block w-full min-w-0 cursor-pointer border-l-2 border-current/50 bg-black/10 px-2 py-1 text-left transition-colors hover:bg-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/40"
+                                      title="Go to original message"
+                                    >
                                       <div className="text-[10px] sm:text-xs font-semibold opacity-80">
                                         {message.replyTo.username}
                                       </div>
                                       <div className="max-w-48 sm:max-w-64 truncate text-[10px] sm:text-xs opacity-75">
                                         {message.replyTo.text}
                                       </div>
-                                    </div>
+                                    </button>
                                   )}
 
                                   {/* Attachment Rendering */}
@@ -3771,50 +3882,65 @@ const ChatRoom = () => {
             
             <div ref={messagesEndRef} />
             </div>
+
           </div>
 
-          {/* Message Input */}
-          <form 
-            onSubmit={handleSendMessage} 
-            className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm shrink-0"
-            style={imageColors ? {
-              backgroundColor: `${imageColors.accent}20`,
-              borderTopColor: `${imageColors.primary}40`
-            } : { backgroundColor: 'hsl(var(--card) / 0.8)' }}
-          >
-            {replyingToMessage && (
-              <div
-                className="mb-2 flex w-full max-w-full min-w-0 items-start justify-between gap-2 overflow-hidden rounded-lg border-l-4 p-2 sm:mb-3 sm:p-3"
-                style={imageColors ? {
-                  backgroundColor: `${imageColors.primary}15`,
-                  borderLeftColor: imageColors.primary,
-                } : {
-                  backgroundColor: 'hsl(var(--muted))',
-                  borderLeftColor: 'hsl(var(--primary))',
-                }}
-              >
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="flex min-w-0 items-center gap-1.5 text-xs font-semibold sm:text-sm">
-                    <Reply className="h-3.5 w-3.5 shrink-0" />
-                    <span className="min-w-0 truncate">Replying to {replyingToMessage.username}</span>
-                  </div>
-                  <p className="mt-0.5 line-clamp-2 max-w-full break-words text-xs text-muted-foreground sm:text-sm">
-                    {replyingToMessage.text || (replyingToMessage.attachment ? replyingToMessage.attachment.name : 'Attachment')}
-                  </p>
+          {showJumpToBottom && (
+            <Button
+              type="button"
+              size="icon"
+              onClick={scrollToLatestMessage}
+              className="absolute bottom-4 right-4 z-30 h-10 w-10 rounded-full bg-rose-600 text-white shadow-xl ring-1 ring-white/30 transition-transform hover:scale-105 hover:bg-rose-700 sm:bottom-5 sm:right-5 md:right-6"
+              aria-label="Jump to latest messages"
+              title="Jump to latest messages"
+            >
+              <ArrowDown className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
+
+        {/* Message Input */}
+        <form 
+          onSubmit={handleSendMessage} 
+          className="border-t p-2 sm:p-3 md:p-4 backdrop-blur-md shadow-sm shrink-0"
+          style={imageColors ? {
+            backgroundColor: `${imageColors.accent}20`,
+            borderTopColor: `${imageColors.primary}40`
+          } : { backgroundColor: 'hsl(var(--card) / 0.8)' }}
+        >
+          {replyingToMessage && (
+            <div
+              className="mb-2 flex w-full max-w-full min-w-0 items-start justify-between gap-2 overflow-hidden rounded-lg border-l-4 p-2 sm:mb-3 sm:p-3"
+              style={imageColors ? {
+                backgroundColor: `${imageColors.primary}15`,
+                borderLeftColor: imageColors.primary,
+              } : {
+                backgroundColor: 'hsl(var(--muted))',
+                borderLeftColor: 'hsl(var(--primary))',
+              }}
+            >
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="flex min-w-0 items-center gap-1.5 text-xs font-semibold sm:text-sm">
+                  <Reply className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 truncate">Replying to {replyingToMessage.username}</span>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={cancelReplyToMessage}
-                  className="h-7 w-7 shrink-0 p-0"
-                  aria-label="Cancel reply"
-                  title="Cancel reply"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                <p className="mt-0.5 line-clamp-2 max-w-full break-words text-xs text-muted-foreground sm:text-sm">
+                  {replyingToMessage.text || (replyingToMessage.attachment ? replyingToMessage.attachment.name : 'Attachment')}
+                </p>
               </div>
-            )}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={cancelReplyToMessage}
+                className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10 rounded-full flex items-center justify-center transition-colors"
+                aria-label="Cancel reply"
+                title="Cancel reply"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
 
             {/* Attachment Preview */}
             {(attachmentFile || isRecording) && (
