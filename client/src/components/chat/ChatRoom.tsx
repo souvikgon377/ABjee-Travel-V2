@@ -3962,16 +3962,16 @@ const ChatRoom = () => {
                       <SmilePlus className="h-5 w-5 text-muted-foreground" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80" align="start">
-                    <div className="space-y-2">
+                  <PopoverContent className="w-[min(92vw,25rem)] overflow-hidden p-4" align="start">
+                    <div className="space-y-3 overflow-hidden">
                       <p className="text-sm font-medium">Pick an emoji</p>
-                      <div className="grid grid-cols-10 gap-2 max-h-60 overflow-y-auto">
+                      <div className="grid max-h-64 grid-cols-[repeat(auto-fit,minmax(2.25rem,1fr))] gap-2 overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
                         {EMOJI_LIST.map((emoji, index) => (
                           <button
                             key={index}
                             type="button"
                             onClick={() => insertEmoji(emoji)}
-                            className="text-2xl p-1 hover:scale-125 hover:animate-wiggle transition-transform cursor-pointer"
+                            className="flex h-9 w-9 items-center justify-center rounded-md text-2xl transition-transform hover:scale-110 hover:bg-accent hover:animate-wiggle"
                           >
                             {emoji}
                           </button>
