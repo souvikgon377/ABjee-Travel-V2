@@ -420,7 +420,10 @@ const ChatRoomsList: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
-  const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
+  const [mobilePerformanceMode, setMobilePerformanceMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 1024px)').matches;
+  });
   const featureCardHeightClass = isMobile
     ? 'h-[12rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]'
     : 'h-[18rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]';
@@ -533,7 +536,11 @@ const ChatRoomsList: React.FC = () => {
 
       // Keep rich mobile animations enabled on good networks; throttle only when
       // the user explicitly enables data saver or the connection is constrained.
-      setMobilePerformanceMode(mediaQuery.matches && (saveData || constrainedNetwork));
+      // Enable performance mode on ALL mobile devices by default.
+      // Only exempt high-end phones (≥4 GB RAM) on a fast, unrestricted connection.
+      const deviceMemory = nav.deviceMemory ?? 2;
+      const highEndMobile = deviceMemory >= 4 && !constrainedNetwork && !saveData;
+      setMobilePerformanceMode(mediaQuery.matches && !highEndMobile);
     };
 
     updatePerformanceMode();
@@ -1875,8 +1882,8 @@ const ChatRoomsList: React.FC = () => {
               text="Traveller's Best Place to Explore"
               blurAmount={12}
               duration={1}
-              stagger={0.08}
-              split="word"
+              stagger={mobilePerformanceMode ? 0 : 0.08}
+              split={mobilePerformanceMode ? 'none' : 'word'}
               trigger="mount"
               className="text-rose-600 dark:text-rose-400"
             />
@@ -1904,25 +1911,27 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-blue-500 via-cyan-500 to-teal-500 p-5 sm:p-6 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
-                <video
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop
-                  muted
-                  playsInline
-                  disableRemotePlayback
-                  disablePictureInPicture
-                  preload={shouldAutoplayRichMedia ? 'metadata' : 'auto'}
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V1} type="video/mp4" />
-                </video>
+                {!mobilePerformanceMode && (
+                  <video
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop
+                    muted
+                    playsInline
+                    disableRemotePlayback
+                    disablePictureInPicture
+                    preload={shouldAutoplayRichMedia ? 'metadata' : 'auto'}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V1} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-blue-900/60 via-cyan-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ rotate: [0, 10, -10, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                    animate={!mobilePerformanceMode ? { rotate: [0, 10, -10, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 2, repeat: Infinity, repeatDelay: 1 } : undefined}
                     className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
                   >
                     <Compass className="h-8 w-8 text-white" />
@@ -1950,15 +1959,17 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-rose-400 via-pink-400 to-red-400 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(236,72,153,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
-                <video
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V2} type="video/mp4" />
-                </video>
+                {!mobilePerformanceMode && (
+                  <video
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V2} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-rose-900/60 via-pink-900/50 to-red-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-rose-400/30 via-pink-400/20 to-red-400/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -1971,11 +1982,8 @@ const ChatRoomsList: React.FC = () => {
                 )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{
-                      scale: [1, 1.15, 1],
-                      rotate: [0, 5, -5, 0]
-                    }}
-                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    animate={!mobilePerformanceMode ? { scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 3, repeat: Infinity, repeatDelay: 0.5 } : undefined}
                     className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
                     <Users className="h-9 w-9 text-white drop-shadow-lg" />
@@ -2006,30 +2014,31 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-yellow-400 via-amber-300 to-yellow-300 p-5 sm:p-6 shadow-2xl hover:shadow-[0_20px_50px_rgba(180,83,9,0.5)] transition-all duration-500`}>
                 {/* Video Background */}
-                <video
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V3} type="video/mp4" />
-                </video>
+                {!mobilePerformanceMode && (
+                  <video
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V3} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-yellow-700/60 via-amber-700/50 to-yellow-700/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-yellow-400/30 via-amber-400/20 to-yellow-300/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <motion.div
-                  className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
-                  animate={{ x: ['-100%', '100%'] }}
-                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
-                />
+                {!mobilePerformanceMode && (
+                  <motion.div
+                    className="absolute inset-0 bg-linear-to-r from-transparent via-white/20 to-transparent"
+                    animate={{ x: ['-100%', '100%'] }}
+                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 1 }}
+                  />
+                )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{
-                      scale: [1, 1.15, 1],
-                      rotate: [0, 5, -5, 0]
-                    }}
-                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    animate={!mobilePerformanceMode ? { scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 3, repeat: Infinity, repeatDelay: 0.5 } : undefined}
                     className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
                     <Eye className="h-9 w-9 text-white drop-shadow-lg" />
@@ -2060,22 +2069,24 @@ const ChatRoomsList: React.FC = () => {
             >
               <div className={`relative ${featureCardHeightClass} rounded-3xl overflow-hidden bg-linear-to-br from-green-500 via-emerald-500 to-teal-500 p-6 sm:p-8 shadow-xl hover:shadow-2xl transition-all duration-300`}>
                 {/* Video Background */}
-                <video
-                  autoPlay={shouldAutoplayRichMedia}
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
-                >
-                  <source src={STATIC_VIDEO_V4} type="video/mp4" />
-                </video>
+                {!mobilePerformanceMode && (
+                  <video
+                    autoPlay={shouldAutoplayRichMedia}
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  >
+                    <source src={STATIC_VIDEO_V4} type="video/mp4" />
+                  </video>
+                )}
                 {/* Dark overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-br from-green-900/60 via-emerald-900/50 to-teal-900/60" />
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ rotate: [0, 5, -5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                    animate={!mobilePerformanceMode ? { rotate: [0, 5, -5, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 2, repeat: Infinity, repeatDelay: 1 } : undefined}
                     className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
                   >
                     <Calendar className="h-8 w-8 text-white" />
@@ -2120,8 +2131,8 @@ const ChatRoomsList: React.FC = () => {
                 <div className="absolute inset-0 bg-linear-to-br from-blue-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ rotate: [0, 10, -10, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                    animate={!mobilePerformanceMode ? { rotate: [0, 10, -10, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 2, repeat: Infinity, repeatDelay: 1 } : undefined}
                     className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
                   >
                     <Compass className="h-8 w-8 text-white" />
@@ -2172,11 +2183,8 @@ const ChatRoomsList: React.FC = () => {
                 )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{
-                      scale: [1, 1.15, 1],
-                      rotate: [0, 5, -5, 0]
-                    }}
-                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    animate={!mobilePerformanceMode ? { scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 3, repeat: Infinity, repeatDelay: 0.5 } : undefined}
                     className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
                     <Users className="h-9 w-9 text-white drop-shadow-lg" />
@@ -2230,11 +2238,8 @@ const ChatRoomsList: React.FC = () => {
                 )}
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{
-                      scale: [1, 1.15, 1],
-                      rotate: [0, 5, -5, 0]
-                    }}
-                    transition={{ duration: 3, repeat: Infinity, repeatDelay: 0.5 }}
+                    animate={!mobilePerformanceMode ? { scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 3, repeat: Infinity, repeatDelay: 0.5 } : undefined}
                     className="w-16 h-16 rounded-2xl bg-white/25 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:bg-white/35 transition-colors duration-300"
                   >
                     <Eye className="h-9 w-9 text-white drop-shadow-lg" />
@@ -2281,8 +2286,8 @@ const ChatRoomsList: React.FC = () => {
                 <div className="absolute inset-0 bg-linear-to-br from-green-600/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                   <motion.div
-                    animate={{ rotate: [0, 5, -5, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                    animate={!mobilePerformanceMode ? { rotate: [0, 5, -5, 0] } : undefined}
+                    transition={!mobilePerformanceMode ? { duration: 2, repeat: Infinity, repeatDelay: 1 } : undefined}
                     className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center"
                   >
                     <Calendar className="h-8 w-8 text-white" />

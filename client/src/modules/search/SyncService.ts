@@ -270,6 +270,48 @@ export class SyncService {
     });
   }
 
+  static async syncTripStory(story: any) {
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        const doc = this.transformForTypesense('trip_stories', story);
+        try {
+          await client.collections('trip_stories').documents().upsert(doc);
+          console.info(`[SyncService] 🔁 Directly synced trip_stories/${story.id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct trip story upsert failed:', err?.message || err);
+
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              await initializeTypesense();
+              await client.collections('trip_stories').documents().upsert(doc);
+              console.info(`[SyncService] 🔁 Directly synced trip_stories/${story.id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense for trip stories failed:', retryErr);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed for trip stories:', err);
+    }
+
+    await QueueService.push({
+      type: 'SYNC',
+      collection: 'trip_stories',
+      id: story.id,
+      data: story
+    });
+  }
+
   static async delete(collection: string, id: string) {
     try {
       const tsAvailable = await this.isTypesenseAvailable();
@@ -478,6 +520,40 @@ export class SyncService {
         adLimits: typeof data.adLimits === 'string' ? data.adLimits : JSON.stringify(data.adLimits || {}),
         adDescriptions: typeof data.adDescriptions === 'string' ? data.adDescriptions : JSON.stringify(data.adDescriptions || {}),
         features: typeof data.features === 'string' ? data.features : JSON.stringify(data.features || {}),
+      };
+    }
+
+    if (collection === 'trip_stories') {
+      const title = String(data.title || '').trim();
+      const destination = String(data.destination || '').trim();
+      const description = String(data.description || '').trim();
+      const likes = Array.isArray(data.likes) ? data.likes : [];
+      return {
+        ...base,
+        title,
+        title_lower: normalizeSearchField(title),
+        destination,
+        destination_lower: normalizeSearchField(destination),
+        authorName: String(data.authorName || '').trim(),
+        authorEmail: String(data.authorEmail || '').trim(),
+        authorId: String(data.authorId || '').trim(),
+        coverImage: String(data.coverImage || '').trim(),
+        description,
+        description_lower: normalizeSearchField(description),
+        fullStory: String(data.fullStory || '').trim(),
+        tripHighlights: String(data.tripHighlights || '').trim(),
+        dayByDay: String(data.dayByDay || '').trim(),
+        localFood: String(data.localFood || '').trim(),
+        travelTips: String(data.travelTips || '').trim(),
+        duration: String(data.duration || '').trim(),
+        budget: String(data.budget || '').trim(),
+        travelType: String(data.travelType || 'Solo').trim(),
+        startDate: String(data.startDate || '').trim(),
+        endDate: String(data.endDate || '').trim(),
+        likes,
+        commentCount: typeof data.commentCount === 'number' ? data.commentCount : 0,
+        featured: data.featured === true,
+        createdAt: data.createdAt ? this.toTimestamp(data.createdAt) : null,
       };
     }
 

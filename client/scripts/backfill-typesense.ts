@@ -121,6 +121,18 @@ async function backfill() {
       })
     );
 
+    console.log('\nTrip Stories');
+    const totalStories = await syncCollectionInBatches(
+      'stories',
+      'trip_stories',
+      'Trip Stories',
+      (data, id) => SyncService.syncTripStory({
+        id,
+        ...data,
+        updatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),
+      })
+    );
+
     const duration = ((Date.now() - tStart) / 1000).toFixed(2);
     console.log(`\n✅ Full Backfill Complete in ${duration}s!`);
     console.log(`📊 Summary:`);
@@ -129,6 +141,7 @@ async function backfill() {
     console.log(`   - Travel Destinations: ${totalTravelDestinations} queued for sync`);
     console.log(`   - Advertisements: ${totalAdvertisements} queued for sync`);
     console.log(`   - Admin Settings: ${totalSettings} queued for sync`);
+    console.log(`   - Trip Stories: ${totalStories} queued for sync`);
     console.log(`\n💡 Next Steps:`);
     console.log(`   1. Start the worker: npm run worker:search-sync`);
     console.log(`   2. Monitor logs for sync progress`);

@@ -1710,7 +1710,12 @@ export default function TripStoriesPage() {
   const handleDeleteStory = useCallback(async (storyId: string) => {
     setStories(prev => prev.filter(s => s.id !== storyId));
     if (!storyId.startsWith('sample-')) {
-      await deleteDoc(doc(firestoreDb, 'stories', storyId));
+      const response = await fetch(`/api/trip-stories?id=${storyId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        console.error('Failed to delete story from server');
+      }
     }
   }, []);
 
@@ -1722,26 +1727,32 @@ export default function TripStoriesPage() {
     setStories(prev => prev.map(s => s.id === storyId ? updated : s));
     if (selectedStory?.id === storyId) setSelectedStory(updated);
     if (!storyId.startsWith('sample-')) {
-      const storyRef = doc(firestoreDb, 'stories', storyId);
-      await updateDoc(storyRef, {
-        title: data.title,
-        destination: data.destination,
-        description: data.description,
-        fullStory: data.fullStory ?? '',
-        tripHighlights: data.tripHighlights ?? '',
-        dayByDay: data.dayByDay ?? '',
-        bestPlaces: data.bestPlaces ?? '',
-        localFood: data.localFood ?? '',
-        travelTips: data.travelTips ?? '',
-        duration: data.duration,
-        budget: data.budget,
-        travelType: data.travelType,
-        startDate: data.startDate,
-        endDate: data.endDate,
-        coverImage: data.coverImage,
-        photos: data.photos,
-        videos: data.videos,
+      const response = await fetch(`/api/trip-stories?id=${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: data.title,
+          destination: data.destination,
+          description: data.description,
+          fullStory: data.fullStory ?? '',
+          tripHighlights: data.tripHighlights ?? '',
+          dayByDay: data.dayByDay ?? '',
+          bestPlaces: data.bestPlaces ?? '',
+          localFood: data.localFood ?? '',
+          travelTips: data.travelTips ?? '',
+          duration: data.duration,
+          budget: data.budget,
+          travelType: data.travelType,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          coverImage: data.coverImage,
+          photos: data.photos,
+          videos: data.videos,
+        }),
       });
+      if (!response.ok) {
+        console.error('Failed to update story on server');
+      }
     }
     setEditingStory(null);
   };
