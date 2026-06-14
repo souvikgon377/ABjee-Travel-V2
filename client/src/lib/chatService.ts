@@ -35,6 +35,13 @@ export interface MessageAttachment {
   duration?: number; // For audio/video in seconds
 }
 
+export interface MessageReplyTo {
+  id: string;
+  text: string;
+  username: string;
+  userId: string;
+}
+
 export interface ChatMessage {
   id?: string;
   roomId: string;
@@ -48,6 +55,7 @@ export interface ChatMessage {
   deletedForEveryone?: boolean;
   deletedBy?: string[]; // Array of userIds who deleted this message for themselves
   attachment?: MessageAttachment;
+  replyTo?: MessageReplyTo;
 }
 
 export interface ChatRoomImage {
@@ -939,7 +947,7 @@ class ChatService {
   /**
    * Send a message to a chat community
    */
-  async sendMessage(roomId: string, text: string, attachment?: MessageAttachment) {
+  async sendMessage(roomId: string, text: string, attachment?: MessageAttachment, replyTo?: MessageReplyTo) {
     const user = this.getCurrentUser();
 
     const roomRef = ref(database, `chatrooms/${roomId}`);
@@ -974,7 +982,8 @@ class ChatService {
       photoURL: user.photoURL || undefined,
       text: trimmedText,
       timestamp: Date.now(),
-      ...(attachment && { attachment })
+      ...(attachment && { attachment }),
+      ...(replyTo && { replyTo })
     };
     
     // Write message
@@ -1262,4 +1271,3 @@ class ChatService {
 
 // Export singleton instance
 export const chatService = new ChatService();
-

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit, getDocs, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit, getDocs } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import type { TouristPlace, MediaItem } from '@/components/ui/tourist-places';
-import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, EffectFade } from 'swiper/modules';
 import 'swiper/css';
@@ -420,10 +420,7 @@ const ChatRoomsList: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchDestination, setSearchDestination] = useState('');
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
-  const [mobilePerformanceMode, setMobilePerformanceMode] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(max-width: 1024px)').matches;
-  });
+  const [mobilePerformanceMode, setMobilePerformanceMode] = useState(false);
   const featureCardHeightClass = isMobile
     ? 'h-[12rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]'
     : 'h-[18rem] sm:h-[20rem] md:h-[22rem] lg:h-[24rem]';
@@ -4482,7 +4479,7 @@ const ChatPage: React.FC = () => {
         setShowResetSuccessPopup(true);
         window.setTimeout(() => setShowResetSuccessPopup(false), 3500);
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, []);

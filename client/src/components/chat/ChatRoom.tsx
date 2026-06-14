@@ -7,13 +7,14 @@ import { uploadImageToR2, createImagePreview, revokeImagePreview } from '../../l
 import { uploadFileToR2, VoiceRecorder, compressImageFile, compressVideoFile, trimVideoFile, formatFileSize, formatDuration, getFileIcon } from '../../lib/r2FileUpload';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '../ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users, Eye, EyeOff } from 'lucide-react';
+import { Lock, MoreVertical, Trash2, SmilePlus, Pencil, Check, X, ArrowUp, Settings, Paperclip, Mic, FileText, File, XCircle, Pause, Download, UserPlus, Search, Loader2, ArrowLeft, Users, Eye, EyeOff, Reply } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -104,11 +105,36 @@ const isGeneralCommunityRoom = (room: RoomType | null): boolean => {
   return typeof room?.name === 'string' && room.name.trim().toLowerCase() === 'general community chat';
 };
 
+const normalizeParticipantIds = (rawParticipants: unknown): string[] => {
+  if (Array.isArray(rawParticipants)) {
+    return rawParticipants
+      .map((id) => String(id || '').trim())
+      .filter((id) => id.length > 0);
+  }
+
+  if (!rawParticipants || typeof rawParticipants !== 'object') {
+    return [];
+  }
+
+  return Object.entries(rawParticipants as Record<string, unknown>)
+    .map(([key, value]) => {
+      if (typeof value === 'string') return value.trim();
+      if (value === true) return key.trim();
+      if (value && typeof value === 'object') {
+        const candidate = value as { id?: unknown; uid?: unknown; userId?: unknown };
+        return String(candidate.id || candidate.uid || candidate.userId || key || '').trim();
+      }
+      return '';
+    })
+    .filter((id) => id.length > 0);
+};
+
 const estimateMessageRowHeight = (message: ChatMessage): number => {
   const baseHeight = 78;
   const textLength = message.text?.length ?? 0;
   const textRows = Math.min(7, Math.ceil(textLength / 42));
   const textHeight = textRows * 18;
+  const replyHeight = message.replyTo ? 46 : 0;
 
   const attachmentHeight = message.attachment
     ? message.attachment.type === 'image' || message.attachment.type === 'video'
@@ -118,7 +144,7 @@ const estimateMessageRowHeight = (message: ChatMessage): number => {
         : 64
     : 0;
 
-  return baseHeight + textHeight + attachmentHeight;
+  return baseHeight + textHeight + attachmentHeight + replyHeight;
 };
 
 type JoinRequestUser = {
@@ -165,6 +191,11 @@ const ChatRoom = () => {
   const [userAvatarMap, setUserAvatarMap] = useState<Record<string, string>>({});
   const [typingUsers, setTypingUsers] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
+  const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [swipingMessageId, setSwipingMessageId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -266,16 +297,9 @@ const ChatRoom = () => {
     user && room && ((room.isPublic && isAdminOrOwner) || (!room.isPublic && room.createdBy === user.uid))
   );
   const participantIds = useMemo(() => {
-    const rawParticipants = room?.participants;
-    const ids: string[] = Array.isArray(rawParticipants)
-      ? rawParticipants
-      : rawParticipants && typeof rawParticipants === 'object'
-        ? Object.values(rawParticipants as Record<string, string>)
-        : [];
-
     const normalizedIds = Array.from(
       new Set(
-        ids
+        normalizeParticipantIds(room?.participants)
           .map((id) => String(id || '').trim())
           .filter((id) => id.length > 0),
       ),
@@ -298,9 +322,15 @@ const ChatRoom = () => {
 
   const filteredCommunityMembers = useMemo(() => {
     const normalizedQuery = membersSearchInput.trim().toLowerCase();
-    if (!normalizedQuery) return communityMembers;
+    const sortedMembers = [...communityMembers].sort((a, b) => {
+      const nameA = a.displayName || a.username || a.email || '';
+      const nameB = b.displayName || b.username || b.email || '';
+      return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+    });
 
-    return communityMembers.filter((member) => {
+    if (!normalizedQuery) return sortedMembers;
+
+    return sortedMembers.filter((member) => {
       const searchable = [
         member.displayName,
         member.firstName,
@@ -314,6 +344,68 @@ const ChatRoom = () => {
       return searchable.includes(normalizedQuery);
     });
   }, [communityMembers, membersSearchInput]);
+
+  const mentionableMembers = useMemo(() => {
+    const membersById = new Map<string, CommunityMember>();
+
+    communityMembers.forEach((member) => {
+      const memberId = String(member.id || '').trim();
+      if (memberId) {
+        membersById.set(memberId, member);
+      }
+    });
+
+    messages.forEach((message) => {
+      const messageUserId = String(message.userId || '').trim();
+      if (!messageUserId || membersById.has(messageUserId)) return;
+
+      const displayName = String(message.username || '').trim() || `User ${messageUserId.slice(0, 6)}`;
+      const avatarUrl = userAvatarMap[messageUserId] || message.photoURL || '';
+
+      membersById.set(messageUserId, {
+        id: messageUserId,
+        displayName,
+        username: displayName,
+        avatar: avatarUrl,
+        avatarUrl,
+        photoURL: avatarUrl,
+        profileImage: avatarUrl,
+        profilePicture: avatarUrl,
+        imageUrl: avatarUrl,
+        role: messageUserId === room?.createdBy ? 'Owner' : 'Member',
+      });
+    });
+
+    return Array.from(membersById.values());
+  }, [communityMembers, messages, room?.createdBy, userAvatarMap]);
+
+  const mentionSuggestions = useMemo(() => {
+    const normalizedQuery = mentionQuery.trim().toLowerCase();
+    const sortedMembers = [...mentionableMembers].sort((a, b) => {
+      if (a.id === user?.uid) return -1;
+      if (b.id === user?.uid) return 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    if (!normalizedQuery) return sortedMembers;
+
+    return sortedMembers
+      .filter((member) => {
+        const searchable = [
+          member.displayName,
+          member.firstName,
+          member.lastName,
+          member.username,
+          member.email,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+
+        return searchable.includes(normalizedQuery);
+      });
+  }, [mentionQuery, mentionableMembers, user?.uid]);
+
+  const showMentionSuggestions = mentionStartIndex !== null && mentionSuggestions.length > 0;
 
   // Add Members dialog state
   const [addMembersDialogOpen, setAddMembersDialogOpen] = useState(false);
@@ -330,6 +422,19 @@ const ChatRoom = () => {
   const [messageViewportHeight, setMessageViewportHeight] = useState(0);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const messageInputTouchYRef = useRef<number | null>(null);
+  const mentionListTouchYRef = useRef<number | null>(null);
+  const swipeReplyRef = useRef<{
+    message: ChatMessage | null;
+    bubbleElement: HTMLDivElement | null;
+    frameId: number | null;
+    startX: number;
+    startY: number;
+    offset: number;
+    active: boolean;
+    locked: boolean;
+  }>({ message: null, bubbleElement: null, frameId: null, startX: 0, startY: 0, offset: 0, active: false, locked: false });
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const typingStateRef = useRef<{ active: boolean; lastSentAt: number }>({ active: false, lastSentAt: 0 });
   const typingUsersKeyRef = useRef('');
@@ -853,6 +958,217 @@ const ChatRoom = () => {
     };
   }, [participantIds, room?.createdBy, user?.uid, user?.displayName, user?.email, user?.photoURL, userProfile]);
 
+  const beginReplyToMessage = useCallback((message: ChatMessage) => {
+    if (!message.id || message.deletedForEveryone) return;
+    setReplyingToMessage(message);
+    window.setTimeout(() => {
+      messageInputRef.current?.focus();
+    }, 0);
+  }, []);
+
+  const cancelReplyToMessage = useCallback(() => {
+    setReplyingToMessage(null);
+  }, []);
+
+  const resizeMessageInput = useCallback((textarea?: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+
+    textarea.style.height = 'auto';
+    const maxHeight = 132;
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+    textarea.style.height = `${Math.max(44, nextHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  }, []);
+
+  useEffect(() => {
+    resizeMessageInput(messageInputRef.current);
+  }, [newMessage, resizeMessageInput]);
+
+  const updateMentionState = useCallback((value: string, cursorPosition: number | null) => {
+    if (cursorPosition === null || cursorPosition < 0) {
+      setMentionStartIndex(null);
+      setMentionQuery('');
+      setSelectedMentionIndex(0);
+      return;
+    }
+
+    const textBeforeCursor = value.slice(0, cursorPosition);
+    const mentionMatch = /(?:^|\s)@([^\s@]*)$/.exec(textBeforeCursor);
+
+    if (!mentionMatch) {
+      setMentionStartIndex(null);
+      setMentionQuery('');
+      setSelectedMentionIndex(0);
+      return;
+    }
+
+    setMentionStartIndex(textBeforeCursor.length - mentionMatch[1].length - 1);
+    setMentionQuery(mentionMatch[1]);
+    setSelectedMentionIndex(0);
+  }, []);
+
+  const insertMention = useCallback((member: CommunityMember) => {
+    if (mentionStartIndex === null) return;
+
+    const input = messageInputRef.current;
+    const cursorPosition = input?.selectionStart ?? newMessage.length;
+    const mentionName = member.displayName.trim() || member.username || member.email || 'User';
+    const nextMessage = `${newMessage.slice(0, mentionStartIndex)}@${mentionName} ${newMessage.slice(cursorPosition)}`;
+    const nextCursorPosition = mentionStartIndex + mentionName.length + 2;
+
+    setNewMessage(nextMessage);
+    setMentionStartIndex(null);
+    setMentionQuery('');
+    setSelectedMentionIndex(0);
+
+    window.setTimeout(() => {
+      messageInputRef.current?.focus();
+      messageInputRef.current?.setSelectionRange(nextCursorPosition, nextCursorPosition);
+    }, 0);
+  }, [mentionStartIndex, newMessage]);
+
+  const handleMessageInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+      return;
+    }
+
+    if (!showMentionSuggestions) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedMentionIndex((index) => (index + 1) % mentionSuggestions.length);
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedMentionIndex((index) => (index - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+      return;
+    }
+
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      insertMention(mentionSuggestions[selectedMentionIndex] || mentionSuggestions[0]);
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setMentionStartIndex(null);
+      setMentionQuery('');
+      setSelectedMentionIndex(0);
+    }
+  }, [insertMention, mentionSuggestions, selectedMentionIndex, showMentionSuggestions]);
+
+  const resetSwipeBubble = useCallback((animate = true) => {
+    const swipe = swipeReplyRef.current;
+
+    if (swipe.frameId !== null) {
+      cancelAnimationFrame(swipe.frameId);
+    }
+
+    if (swipe.bubbleElement) {
+      swipe.bubbleElement.style.transition = animate ? 'transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)' : '';
+      swipe.bubbleElement.style.transform = '';
+    }
+
+    swipeReplyRef.current = {
+      message: null,
+      bubbleElement: null,
+      frameId: null,
+      startX: 0,
+      startY: 0,
+      offset: 0,
+      active: false,
+      locked: false,
+    };
+    setSwipingMessageId(null);
+  }, []);
+
+  const handleMessageSwipeStart = useCallback((event: React.PointerEvent<HTMLDivElement>, message: ChatMessage) => {
+    if (event.pointerType !== 'touch' || !message.id || message.deletedForEveryone || editingMessageId === message.id) return;
+
+    const bubbleElement = event.currentTarget.querySelector<HTMLDivElement>('[data-message-bubble="true"]');
+    if (!bubbleElement) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    bubbleElement.style.transition = 'none';
+    bubbleElement.style.willChange = 'transform';
+
+    swipeReplyRef.current = {
+      message,
+      bubbleElement,
+      frameId: null,
+      startX: event.clientX,
+      startY: event.clientY,
+      offset: 0,
+      active: true,
+      locked: false,
+    };
+  }, [editingMessageId]);
+
+  const handleMessageSwipeMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const swipe = swipeReplyRef.current;
+    if (!swipe.active || !swipe.message || !swipe.bubbleElement) return;
+
+    const deltaX = event.clientX - swipe.startX;
+    const deltaY = event.clientY - swipe.startY;
+
+    if (!swipe.locked && Math.abs(deltaY) > 12 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      resetSwipeBubble(false);
+      return;
+    }
+
+    if (deltaX <= 0) {
+      swipe.offset = 0;
+      if (swipe.frameId === null) {
+        swipe.frameId = requestAnimationFrame(() => {
+          swipe.frameId = null;
+          if (swipe.bubbleElement) {
+            swipe.bubbleElement.style.transform = '';
+          }
+        });
+      }
+      return;
+    }
+
+    event.preventDefault();
+    swipe.locked = true;
+    const nextOffset = Math.min(84, deltaX * 0.72);
+    swipe.offset = nextOffset;
+
+    if (swipingMessageId !== swipe.message.id) {
+      setSwipingMessageId(swipe.message.id || null);
+    }
+
+    if (swipe.frameId === null) {
+      swipe.frameId = requestAnimationFrame(() => {
+        swipe.frameId = null;
+        if (swipe.bubbleElement) {
+          swipe.bubbleElement.style.transform = `translate3d(${swipe.offset}px, 0, 0)`;
+        }
+      });
+    }
+  }, [resetSwipeBubble, swipingMessageId]);
+
+  const handleMessageSwipeEnd = useCallback((event?: React.PointerEvent<HTMLDivElement>) => {
+    const swipe = swipeReplyRef.current;
+    const shouldReply = swipe.active && swipe.message && swipe.offset >= 54;
+
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    const swipedMessage = swipe.message;
+    resetSwipeBubble(true);
+
+    if (shouldReply && swipedMessage) {
+      beginReplyToMessage(swipedMessage);
+    }
+  }, [beginReplyToMessage, resetSwipeBubble]);
+
   const handleSendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!newMessage.trim() && !attachmentFile) || !roomId || !user) return;
@@ -863,9 +1179,21 @@ const ChatRoom = () => {
 
     const messageText = newMessage.trim();
     const fileToSend = attachmentFile;
+    const replyToSend = replyingToMessage?.id
+      ? {
+          id: replyingToMessage.id,
+          text: replyingToMessage.text || (replyingToMessage.attachment ? replyingToMessage.attachment.name : 'Attachment'),
+          username: replyingToMessage.username,
+          userId: replyingToMessage.userId,
+        }
+      : undefined;
     
     // Clear input immediately for instant feedback
     setNewMessage('');
+    setReplyingToMessage(null);
+    setMentionStartIndex(null);
+    setMentionQuery('');
+    setSelectedMentionIndex(0);
     setAttachmentFile(null);
     setAttachmentPreview(null);
     setVideoSizeComparison(null);
@@ -898,17 +1226,21 @@ const ChatRoom = () => {
         setUploadingAttachment(false);
       }
       
-      await chatService.sendMessage(roomId, messageText || '', attachment);
+      await chatService.sendMessage(roomId, messageText || '', attachment, replyToSend);
     } catch (error: any) {
       // Restore message on error
       setNewMessage(messageText);
+      setReplyingToMessage(replyingToMessage);
+      setMentionStartIndex(null);
+      setMentionQuery('');
+      setSelectedMentionIndex(0);
       if (fileToSend) {
         setAttachmentFile(fileToSend);
       }
       setUploadingAttachment(false);
       alert(`Failed to send message: ${error.message || 'Please try again.'}`);
     }
-  }, [newMessage, attachmentFile, roomId, user, hasMessageAccess]);
+  }, [newMessage, attachmentFile, roomId, user, hasMessageAccess, replyingToMessage]);
 
   const handleTyping = useCallback(() => {
     if (!roomId || !user || !hasMessageAccess) return;
@@ -930,6 +1262,25 @@ const ChatRoom = () => {
       chatService.stopTyping(roomId).catch(() => {});
     }, 2200);
   }, [roomId, user, hasMessageAccess]);
+
+  const handleMessageInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setNewMessage(value);
+    resizeMessageInput(e.target);
+    updateMentionState(value, e.target.selectionStart);
+
+    if (value.trim().length > 0) {
+      handleTyping();
+      return;
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = undefined;
+    }
+    typingStateRef.current = { active: false, lastSentAt: 0 };
+    chatService.stopTyping(roomId).catch(() => {});
+  }, [handleTyping, resizeMessageInput, roomId, updateMentionState]);
 
   const handleLeaveRoom = useCallback(async () => {
     if (!roomId) return;
@@ -3093,7 +3444,11 @@ const ChatRoom = () => {
                 return (
                   <div
                     key={message.id}
-                    className={`flex items-start gap-2 sm:gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
+                    className={`flex touch-pan-y items-start gap-2 sm:gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}
+                    onPointerDown={(event) => handleMessageSwipeStart(event, message)}
+                    onPointerMove={handleMessageSwipeMove}
+                    onPointerUp={handleMessageSwipeEnd}
+                    onPointerCancel={handleMessageSwipeEnd}
                   >
                     <Avatar className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 shrink-0">
                       <AvatarImage 
@@ -3114,6 +3469,16 @@ const ChatRoom = () => {
                         </span>
                       </div>
                       <div className={`group relative flex items-center gap-2 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                        {swipingMessageId === message.id && (
+                          <div
+                            className={`pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full bg-primary/15 p-2 text-primary ${
+                              isOwnMessage ? 'right-full mr-2' : 'left-full ml-2'
+                            }`}
+                            aria-hidden="true"
+                          >
+                            <Reply className="h-4 w-4" />
+                          </div>
+                        )}
                         {/* Inline Edit UI */}
                         {editingMessageId === message.id ? (
                           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -3149,8 +3514,9 @@ const ChatRoom = () => {
                           </div>
                         ) : (
                           <>
-                            <div 
-                              className={isOnlyEmoji ? 'text-2xl sm:text-3xl md:text-4xl animate-bounce-in' : `rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 backdrop-blur-sm shadow-md ${
+                            <div
+                              data-message-bubble="true"
+                              className={isOnlyEmoji ? 'text-2xl sm:text-3xl md:text-4xl animate-bounce-in transform-gpu' : `transform-gpu rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 md:px-4 md:py-2 backdrop-blur-sm shadow-md ${
                                 isDeleted 
                                   ? 'bg-muted/70 text-muted-foreground italic'
                                   : hasImageBasedStyling
@@ -3182,6 +3548,17 @@ const ChatRoom = () => {
                                 </span>
                               ) : (
                                 <>
+                                  {message.replyTo && (
+                                    <div className="mb-1.5 border-l-2 border-current/50 bg-black/10 px-2 py-1 text-left">
+                                      <div className="text-[10px] sm:text-xs font-semibold opacity-80">
+                                        {message.replyTo.username}
+                                      </div>
+                                      <div className="max-w-48 sm:max-w-64 truncate text-[10px] sm:text-xs opacity-75">
+                                        {message.replyTo.text}
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* Attachment Rendering */}
                                   {message.attachment && (
                                     <div className="mb-1.5 sm:mb-2">
@@ -3280,6 +3657,18 @@ const ChatRoom = () => {
                             
                             {/* Delete Menu - Only show for non-deleted messages */}
                             {!isDeleted && (
+                              <>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => beginReplyToMessage(message)}
+                                className="h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hidden sm:inline-flex"
+                                title="Reply"
+                                aria-label="Reply"
+                              >
+                                <Reply className="h-4 w-4" />
+                              </Button>
                               <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -3318,6 +3707,7 @@ const ChatRoom = () => {
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          </>
                         )}
                           </>
                         )}
@@ -3392,6 +3782,40 @@ const ChatRoom = () => {
               borderTopColor: `${imageColors.primary}40`
             } : { backgroundColor: 'hsl(var(--card) / 0.8)' }}
           >
+            {replyingToMessage && (
+              <div
+                className="mb-2 sm:mb-3 flex items-center justify-between gap-2 rounded-lg border-l-4 p-2 sm:p-3"
+                style={imageColors ? {
+                  backgroundColor: `${imageColors.primary}15`,
+                  borderLeftColor: imageColors.primary,
+                } : {
+                  backgroundColor: 'hsl(var(--muted))',
+                  borderLeftColor: 'hsl(var(--primary))',
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold">
+                    <Reply className="h-3.5 w-3.5" />
+                    <span>Replying to {replyingToMessage.username}</span>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs sm:text-sm text-muted-foreground">
+                    {replyingToMessage.text || (replyingToMessage.attachment ? replyingToMessage.attachment.name : 'Attachment')}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelReplyToMessage}
+                  className="h-7 w-7 shrink-0 p-0"
+                  aria-label="Cancel reply"
+                  title="Cancel reply"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
             {/* Attachment Preview */}
             {(attachmentFile || isRecording) && (
               <div className="mb-2 sm:mb-3 p-2 sm:p-3 rounded-lg border" style={imageColors ? {
@@ -3449,33 +3873,81 @@ const ChatRoom = () => {
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 shrink-0">
-                    <SmilePlus className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80" align="start">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Pick an emoji</p>
-                    <div className="grid grid-cols-10 gap-2 max-h-60 overflow-y-auto">
-                      {EMOJI_LIST.map((emoji, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          onClick={() => insertEmoji(emoji)}
-                          className="text-2xl p-1 hover:scale-125 hover:animate-wiggle transition-transform cursor-pointer"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
+            {showMentionSuggestions && (
+              <div className="mb-2 sm:mb-3 overflow-hidden rounded-lg border border-slate-300 bg-white text-slate-950 shadow-2xl ring-1 ring-black/10 dark:border-slate-700 dark:bg-[#020617] dark:text-slate-50">
+                <div
+                  data-lenis-prevent
+                  className="max-h-48 overflow-y-auto overscroll-contain py-1 [scrollbar-gutter:stable] touch-pan-y"
+                  onWheel={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.currentTarget.scrollTop += event.deltaY;
+                  }}
+                  onTouchStart={(event) => {
+                    mentionListTouchYRef.current = event.touches[0]?.clientY ?? null;
+                  }}
+                  onTouchMove={(event) => {
+                    const previousY = mentionListTouchYRef.current;
+                    const nextY = event.touches[0]?.clientY ?? null;
+                    if (previousY === null || nextY === null) return;
 
-              {/* File Attachment Button */}
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.currentTarget.scrollTop += previousY - nextY;
+                    mentionListTouchYRef.current = nextY;
+                  }}
+                  onTouchEnd={() => {
+                    mentionListTouchYRef.current = null;
+                  }}
+                  onTouchCancel={() => {
+                    mentionListTouchYRef.current = null;
+                  }}
+                >
+                  {mentionSuggestions.map((member, index) => {
+                    const memberAvatar = resolveAvatarUrl(member as unknown as Record<string, unknown>);
+                    const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim();
+                    const subtitle = member.username || member.email || member.role;
+                    const isSelected = index === selectedMentionIndex;
+
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                        }}
+                        onClick={() => {
+                          insertMention(member);
+                        }}
+                        onMouseEnter={() => setSelectedMentionIndex(index)}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left transition-colors ${
+                          isSelected
+                            ? 'bg-rose-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-900'
+                        }`}
+                      >
+                        <Avatar className="h-7 w-7 shrink-0">
+                          <AvatarImage src={memberAvatar || undefined} alt={member.displayName} />
+                          <AvatarFallback className="text-xs">
+                            {(member.displayName || member.username || '?').charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {fullName || member.displayName}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                            {subtitle}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -3483,64 +3955,116 @@ const ChatRoom = () => {
                 className="hidden"
                 accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
               />
+              <div className="flex min-w-0 flex-1 items-end gap-1 rounded-[1.65rem] border border-border/70 bg-background/95 px-2 py-1.5 shadow-inner dark:bg-slate-900/95">
+                <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="mb-0.5 h-9 w-9 shrink-0 rounded-full">
+                      <SmilePlus className="h-5 w-5 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="start">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Pick an emoji</p>
+                      <div className="grid grid-cols-10 gap-2 max-h-60 overflow-y-auto">
+                        {EMOJI_LIST.map((emoji, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => insertEmoji(emoji)}
+                            className="text-2xl p-1 hover:scale-125 hover:animate-wiggle transition-transform cursor-pointer"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Textarea
+                  ref={messageInputRef}
+                  value={newMessage}
+                  onChange={handleMessageInputChange}
+                  onKeyDown={handleMessageInputKeyDown}
+                  onClick={(e) => updateMentionState(e.currentTarget.value, e.currentTarget.selectionStart)}
+                  onInput={(e) => resizeMessageInput(e.currentTarget)}
+                  onWheel={(event) => {
+                    if (event.currentTarget.scrollHeight > event.currentTarget.clientHeight) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.currentTarget.scrollTop += event.deltaY;
+                    }
+                  }}
+                  onTouchStart={(event) => {
+                    messageInputTouchYRef.current = event.touches[0]?.clientY ?? null;
+                  }}
+                  onTouchMove={(event) => {
+                    if (event.currentTarget.scrollHeight > event.currentTarget.clientHeight) {
+                      const previousY = messageInputTouchYRef.current;
+                      const nextY = event.touches[0]?.clientY ?? null;
+                      if (previousY === null || nextY === null) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.currentTarget.scrollTop += previousY - nextY;
+                      messageInputTouchYRef.current = nextY;
+                    }
+                  }}
+                  onTouchEnd={() => {
+                    messageInputTouchYRef.current = null;
+                  }}
+                  onTouchCancel={() => {
+                    messageInputTouchYRef.current = null;
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      setMentionStartIndex(null);
+                      setMentionQuery('');
+                      setSelectedMentionIndex(0);
+                    }, 120);
+                  }}
+                  placeholder={hasMessageAccess ? 'Type a message...' : 'Waiting for admin approval...'}
+                  disabled={!hasMessageAccess}
+                  rows={1}
+                  data-lenis-prevent
+                  className="min-h-11 max-h-32 min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-2.5 text-sm leading-5 shadow-none outline-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 sm:text-base"
+                />
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!hasMessageAccess || isRecording || uploadingAttachment}
+                  className="mb-0.5 h-9 w-9 shrink-0 rounded-full"
+                >
+                  <Paperclip className="h-5 w-5 text-muted-foreground" />
+                </Button>
+              </div>
               <Button 
-                type="button" 
-                variant="outline" 
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!hasMessageAccess || isRecording || uploadingAttachment}
-                className="h-8 w-8 sm:h-9 sm:w-9 shrink-0"
-              >
-                <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
-              </Button>
-
-              {/* Voice Recording Button */}
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="icon"
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
-                disabled={!hasMessageAccess || !!attachmentFile || uploadingAttachment}
-                className={`h-8 w-8 sm:h-9 sm:w-9 shrink-0 ${isRecording ? 'bg-red-50 border-red-300' : ''}`}
-              >
-                <Mic className={`h-4 w-4 sm:h-5 sm:w-5 ${isRecording ? 'text-red-500' : ''}`} />
-              </Button>
-
-              <Input
-                value={newMessage}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setNewMessage(value);
-
-                  if (value.trim().length > 0) {
-                    handleTyping();
-                    return;
+                type={(newMessage.trim() || attachmentFile) ? 'submit' : 'button'}
+                onClick={() => {
+                  if (!newMessage.trim() && !attachmentFile) {
+                    if (isRecording) {
+                      handleStopRecording();
+                    } else {
+                      handleStartRecording();
+                    }
                   }
-
-                  if (typingTimeoutRef.current) {
-                    clearTimeout(typingTimeoutRef.current);
-                    typingTimeoutRef.current = undefined;
-                  }
-                  typingStateRef.current = { active: false, lastSentAt: 0 };
-                  chatService.stopTyping(roomId).catch(() => {});
                 }}
-                placeholder={hasMessageAccess ? 'Type a message...' : 'Waiting for admin approval...'}
-                disabled={!hasMessageAccess}
-                className="flex-1 min-w-0 text-sm sm:text-base h-8 sm:h-9"
-              />
-              <Button 
-                type="submit" 
-                disabled={!hasMessageAccess || (!newMessage.trim() && !attachmentFile) || uploadingAttachment || isRecording}
-                className="hover:shadow-lg transition-all text-xs sm:text-sm px-2 sm:px-4 h-8 sm:h-9 shrink-0"
+                disabled={!hasMessageAccess || uploadingAttachment}
+                className={`h-11 w-11 shrink-0 rounded-full p-0 shadow-lg transition-all ${
+                  newMessage.trim() || attachmentFile
+                    ? 'bg-rose-600 text-white hover:bg-rose-700'
+                    : isRecording
+                      ? 'bg-red-600 text-white hover:bg-red-700'
+                      : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                }`}
                 style={imageColors ? {
                   background: `linear-gradient(135deg, ${imageColors.primary} 0%, ${imageColors.accent} 100%)`,
                   color: 'white'
                 } : undefined}
               >
-                <span className="hidden sm:inline">{uploadingAttachment ? 'Uploading...' : 'Send'}</span>
-                <span className="sm:hidden">
-                  {uploadingAttachment ? '...' : <ArrowUp className="h-4 w-4" />}
-                </span>
+                {newMessage.trim() || attachmentFile ? <ArrowUp className="h-5 w-5" /> : <Mic className={`h-5 w-5 ${isRecording ? 'animate-pulse' : ''}`} />}
               </Button>
             </div>
 
@@ -3563,6 +4087,3 @@ const ChatRoom = () => {
 };
 
 export default memo(ChatRoom);
-
-
-
