@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, getDocs, query, doc, updateDoc, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 import { CalendarDays, MapPin, Phone, Tag, User, Star, MessageSquare, Trash2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -39,6 +39,7 @@ type AdItem = {
   comments?: any[];
   subscriptionExpiresAt?: string;
   score?: number;
+  userRatings?: Record<string, number>;
 };
 
 type AdsStripProps = {
@@ -267,31 +268,66 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
   useEffect(() => {
     if (selectedItem) {
-      setAdRating(selectedItem.rating || 0);
+      const currentUserId = currentUser?.uid || currentUser?.id;
+      const userSpecificRating = (currentUserId && selectedItem.userRatings?.[currentUserId]) || 0;
+      setAdRating(userSpecificRating);
       setAdComments(selectedItem.comments || []);
     }
-  }, [selectedItem]);
+  }, [selectedItem, currentUser]);
 
   const handleRate = async (newRating: number) => {
     if (!selectedItem) return;
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) {
+      alert("Please log in to rate this advertisement.");
+      return;
+    }
+
     try {
-      setAdRating(newRating);
       const docRef = doc(firestoreDb, 'advertisements', selectedItem.id);
-      await updateDoc(docRef, { rating: newRating });
-      selectedItem.rating = newRating;
+      let finalAvgRating = newRating;
+
+      await runTransaction(firestoreDb, async (transaction) => {
+        const adDoc = await transaction.get(docRef);
+        if (!adDoc.exists()) throw new Error("Advertisement does not exist!");
+        
+        const data = adDoc.data();
+        const userRatings = data.userRatings || {};
+        userRatings[currentUserId] = newRating;
+        
+        let total = 0;
+        let count = 0;
+        for (const uid in userRatings) {
+          total += Number(userRatings[uid]);
+          count++;
+        }
+        
+        // Calculate average to 1 decimal place
+        finalAvgRating = count > 0 ? Number((total / count).toFixed(1)) : newRating;
+        
+        transaction.update(docRef, { userRatings, rating: finalAvgRating });
+      });
+
+      setAdRating(finalAvgRating);
+      selectedItem.rating = finalAvgRating;
+      if (!selectedItem.userRatings) selectedItem.userRatings = {};
+      selectedItem.userRatings[currentUserId] = newRating;
 
       // Trigger Typesense sync
       const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
-      await fetch('/api/advertisements/sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ id: selectedItem.id, action: 'upsert' }),
-      }).catch((err) => console.error('Failed to trigger sync for rating', err));
+      if (token) {
+        await fetch('/api/advertisements/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: selectedItem.id, action: 'upsert' }),
+        }).catch((err) => console.error('Failed to trigger sync for rating', err));
+      }
     } catch (err) {
       console.error('Failed to save rating:', err);
+      alert('Failed to save your rating.');
     }
   };
 
@@ -413,6 +449,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
             updatedAt: data.updatedAt,
             subscriptionExpiresAt: typeof data.subscriptionExpiresAt === 'string' ? data.subscriptionExpiresAt : '',
             rating: typeof data.rating === 'number' ? data.rating : (Number(data.rating) || 0),
+            userRatings: typeof data.userRatings === 'object' && data.userRatings !== null ? data.userRatings : {},
             comments: (() => {
               if (typeof data.comments === 'string') {
                 try {
@@ -571,7 +608,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                             />
                           ))}
                           {item.rating ? (
-                            <span className="text-[10px] text-white/70 ml-1">({item.rating}.0)</span>
+                            <span className="text-[10px] text-white/70 ml-1">({Number(item.rating).toFixed(1)})</span>
                           ) : (
                             <span className="text-[10px] text-white/40 ml-1">(No ratings)</span>
                           )}
@@ -659,7 +696,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col justify-between">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
                       <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                      Rating
+                      Your Rating (Avg: {Number(selectedItem.rating || 0).toFixed(1)})
                     </div>
                     <div className="mt-2 flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
@@ -678,7 +715,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                           />
                         </button>
                       ))}
-                      <span className="ml-2 text-xs text-white/60">({adRating || '0'}.0)</span>
+                      <span className="ml-2 text-xs text-white/60">({Number(adRating || 0).toFixed(1)})</span>
                     </div>
                   </div>
 
