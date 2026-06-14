@@ -234,6 +234,17 @@ export async function PUT(req: NextRequest) {
     const updatedSnapshot = await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
     const updatedData = updatedSnapshot.exists ? (updatedSnapshot.data() as Record<string, unknown>) : {};
 
+    // Sync to Typesense in the background / gracefully
+    try {
+      const { SyncService } = await import('@/modules/search/SyncService');
+      await SyncService.syncSettings({
+        id: SETTINGS_DOC_ID,
+        ...updatedData
+      });
+    } catch (syncErr) {
+      console.error('[Settings API] Failed to sync settings to Typesense:', syncErr);
+    }
+
     return ok(normalizeSettingsPayload(updatedData));
   } catch (error: any) {
     if (error instanceof AuthError) {

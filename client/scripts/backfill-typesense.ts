@@ -109,6 +109,18 @@ async function backfill() {
       })
     );
 
+    console.log('\nAdmin Settings');
+    const totalSettings = await syncCollectionInBatches(
+      'admin_settings',
+      'admin_settings',
+      'Admin Settings',
+      (data, id) => SyncService.syncSettings({
+        id,
+        ...data,
+        updatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),
+      })
+    );
+
     const duration = ((Date.now() - tStart) / 1000).toFixed(2);
     console.log(`\n✅ Full Backfill Complete in ${duration}s!`);
     console.log(`📊 Summary:`);
@@ -116,6 +128,7 @@ async function backfill() {
     console.log(`   - Users: ${totalUsers} queued for sync`);
     console.log(`   - Travel Destinations: ${totalTravelDestinations} queued for sync`);
     console.log(`   - Advertisements: ${totalAdvertisements} queued for sync`);
+    console.log(`   - Admin Settings: ${totalSettings} queued for sync`);
     console.log(`\n💡 Next Steps:`);
     console.log(`   1. Start the worker: npm run worker:search-sync`);
     console.log(`   2. Monitor logs for sync progress`);

@@ -1,4 +1,5 @@
 import { adminDb } from '@/lib/server/firebaseAdminFirestore';
+import client, { TYPESENSE_ENABLED, ADMIN_SETTINGS_COLLECTION } from '@/modules/search/typesenseClient';
 
 type Interval = 'monthly' | 'yearly';
 
@@ -41,6 +42,39 @@ export const DEFAULT_PRIVATE_ROOM_LIMITS: Record<PaidPlanType, number> = {
 const SETTINGS_COLLECTION = 'admin_settings';
 const SETTINGS_DOC_ID = 'system';
 
+const getSettingsFromTypesense = async (): Promise<Record<string, any> | null> => {
+  if (!TYPESENSE_ENABLED || !client) return null;
+  try {
+    const doc = await client
+      .collections(ADMIN_SETTINGS_COLLECTION)
+      .documents(SETTINGS_DOC_ID)
+      .retrieve() as any;
+
+    if (!doc) return null;
+
+    const parseJSON = (str: string, fallback: any) => {
+      try {
+        return typeof str === 'string' ? JSON.parse(str) : (str || fallback);
+      } catch {
+        return fallback;
+      }
+    };
+
+    return {
+      homePageEnabled: doc.homePageEnabled,
+      bookingCategoriesEnabled: doc.bookingCategoriesEnabled,
+      pricing: parseJSON(doc.pricing, {}),
+      privateRoomLimits: parseJSON(doc.privateRoomLimits, {}),
+      adLimits: parseJSON(doc.adLimits, {}),
+      adDescriptions: parseJSON(doc.adDescriptions, {}),
+      features: parseJSON(doc.features, {}),
+    };
+  } catch (err) {
+    console.warn('[subscriptionPlans] Typesense settings retrieval failed, falling back to Firestore:', err);
+    return null;
+  }
+};
+
 const parseAmount = (value: unknown, fallback: number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
@@ -68,8 +102,11 @@ export const getPlanByInterval = (planType: PaidPlanType, interval: Interval) =>
 
 export const getConfiguredSubscriptionPlans = async (): Promise<Record<PaidPlanType, SubscriptionPlanConfig>> => {
   try {
-    const snapshot = await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
-    const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    let data = await getSettingsFromTypesense();
+    if (!data) {
+      const snapshot = await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
+      data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    }
     const pricing = data.pricing && typeof data.pricing === 'object'
       ? (data.pricing as Record<string, unknown>)
       : {};
@@ -125,8 +162,11 @@ export const getConfiguredSubscriptionPlans = async (): Promise<Record<PaidPlanT
 
 export const getConfiguredPrivateRoomLimits = async (): Promise<Record<PaidPlanType, number>> => {
   try {
-    const snapshot = await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
-    const data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    let data = await getSettingsFromTypesense();
+    if (!data) {
+      const snapshot = await adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC_ID).get();
+      data = snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {};
+    }
     const limits = data.privateRoomLimits && typeof data.privateRoomLimits === 'object'
       ? (data.privateRoomLimits as Record<string, unknown>)
       : {};

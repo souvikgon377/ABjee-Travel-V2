@@ -228,6 +228,48 @@ export class SyncService {
     });
   }
 
+  static async syncSettings(settings: any) {
+    try {
+      const tsAvailable = await this.isTypesenseAvailable();
+      if (tsAvailable) {
+        const doc = this.transformForTypesense('admin_settings', settings);
+        try {
+          await client.collections('admin_settings').documents().upsert(doc);
+          console.info(`[SyncService] 🔁 Directly synced admin_settings/${settings.id}`);
+          return;
+        } catch (err: any) {
+          console.warn('[SyncService] Direct admin settings upsert failed:', err?.message || err);
+
+          const isTypesenseNotFound =
+            (err && (err as any).httpStatus === 404) || (err && (err as any).status === 404) ||
+            String((err && (err as any).message) || '').includes('Collection not found') ||
+            String((err && (err as any).message) || '').includes('ObjectNotFound');
+
+          if (isTypesenseNotFound) {
+            try {
+              const { initializeTypesense } = await import('./typesenseClient');
+              await initializeTypesense();
+              await client.collections('admin_settings').documents().upsert(doc);
+              console.info(`[SyncService] 🔁 Directly synced admin_settings/${settings.id} after initialize`);
+              return;
+            } catch (retryErr) {
+              console.warn('[SyncService] Retry after initializeTypesense for admin settings failed:', retryErr);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncService] Typesense availability check failed for admin settings:', err);
+    }
+
+    await QueueService.push({
+      type: 'SYNC',
+      collection: 'admin_settings',
+      id: settings.id,
+      data: settings
+    });
+  }
+
   static async delete(collection: string, id: string) {
     try {
       const tsAvailable = await this.isTypesenseAvailable();
@@ -423,6 +465,19 @@ export class SyncService {
         comments: data.comments ? (typeof data.comments === 'string' ? data.comments : JSON.stringify(data.comments)) : '[]',
         plan: data.plan || 'monthly',
         paid: data.paid === true,
+      };
+    }
+
+    if (collection === 'admin_settings') {
+      return {
+        ...base,
+        homePageEnabled: data.homePageEnabled === true,
+        bookingCategoriesEnabled: data.bookingCategoriesEnabled === true,
+        pricing: typeof data.pricing === 'string' ? data.pricing : JSON.stringify(data.pricing || {}),
+        privateRoomLimits: typeof data.privateRoomLimits === 'string' ? data.privateRoomLimits : JSON.stringify(data.privateRoomLimits || {}),
+        adLimits: typeof data.adLimits === 'string' ? data.adLimits : JSON.stringify(data.adLimits || {}),
+        adDescriptions: typeof data.adDescriptions === 'string' ? data.adDescriptions : JSON.stringify(data.adDescriptions || {}),
+        features: typeof data.features === 'string' ? data.features : JSON.stringify(data.features || {}),
       };
     }
 

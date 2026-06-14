@@ -89,6 +89,7 @@ export const USERS_COLLECTION = 'users';
 export const TRAVEL_DESTINATIONS_COLLECTION = 'travel_destinations';
 export const TRAVEL_REQUESTS_COLLECTION = 'travel_requests';
 export const ADVERTISEMENTS_COLLECTION = 'advertisements';
+export const ADMIN_SETTINGS_COLLECTION = 'admin_settings';
 
 type TypesenseSchemaField = {
   name: string;
@@ -222,6 +223,24 @@ export const advertisementsSchema = {
   default_sorting_field: 'updatedAt',
 };
 
+/**
+ * Schema for admin settings / system config / pricing
+ */
+export const adminSettingsSchema = {
+  name: ADMIN_SETTINGS_COLLECTION,
+  fields: [
+    { name: 'homePageEnabled', type: 'bool' as const },
+    { name: 'bookingCategoriesEnabled', type: 'bool' as const },
+    { name: 'pricing', type: 'string' as const },
+    { name: 'privateRoomLimits', type: 'string' as const },
+    { name: 'adLimits', type: 'string' as const },
+    { name: 'adDescriptions', type: 'string' as const },
+    { name: 'features', type: 'string' as const },
+    { name: 'updatedAt', type: 'int64' as const },
+  ],
+  default_sorting_field: 'updatedAt',
+};
+
 // ─── Health Check ─────────────────────────────────────────────────────────────
 
 /**
@@ -268,7 +287,7 @@ export async function initializeTypesense() {
     return [];
   }
 
-  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema, advertisementsSchema];
+  const schemas = [touristPlacesSchema, usersSchema, travelDestinationsSchema, travelRequestsSchema, advertisementsSchema, adminSettingsSchema];
   const results: { name: string; status: 'created' | 'updated' | 'exists' | 'error'; message?: string }[] = [];
 
   for (const schema of schemas) {

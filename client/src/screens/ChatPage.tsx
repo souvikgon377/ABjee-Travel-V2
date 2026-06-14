@@ -378,6 +378,7 @@ const ChatRoomsList: React.FC = () => {
 
   const [rooms, setRooms] = useState<ChatRoomType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCountryUsers, setLoadingCountryUsers] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
@@ -575,116 +576,163 @@ const ChatRoomsList: React.FC = () => {
     loadPrivateRoomLimits();
   }, []);
 
-  const countryUsersCarousel = countryUsers.length > 0 && !isMobile ? (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45 }}
-      className="overflow-hidden rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
-    >
-      <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
-        <div className="flex items-center gap-3">
-          <motion.div
-            className="p-2.5 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 shadow-lg"
-            animate={{ rotate: [-3, 3, -3] }}
-            transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <Users className="h-5 w-5 text-white" />
-          </motion.div>
-          <div>
-            <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight bg-linear-to-r from-cyan-700 via-sky-600 to-blue-600 bg-clip-text text-transparent">
-              Travelers From Different Countries
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-              Live user highlights pulled from database profiles
-            </p>
+  const countryUsersCarousel = !isMobile ? (
+    loadingCountryUsers ? (
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+        className="overflow-hidden rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
+      >
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-cyan-200/50 dark:bg-cyan-800/20 animate-pulse">
+              <Users className="h-5 w-5 text-cyan-400 dark:text-cyan-600" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-5 w-48 bg-cyan-200/60 dark:bg-cyan-800/40 rounded-md animate-pulse" />
+              <div className="h-3.5 w-64 bg-cyan-100/60 dark:bg-cyan-900/30 rounded-md animate-pulse" />
+            </div>
+          </div>
+
+          <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300 animate-pulse">
+            Loading...
           </div>
         </div>
 
-        <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
-          Live carousel
-        </div>
-      </div>
-
-      <div className="relative overflow-hidden rounded-b-3xl border-t border-cyan-200/70 dark:border-cyan-800/45 bg-linear-to-b from-cyan-100/30 via-white/70 to-cyan-100/55 dark:from-cyan-950/20 dark:via-slate-900/70 dark:to-blue-950/35 px-4 sm:px-5 pt-3 pb-6">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-linear-to-r from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-linear-to-l from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
-
-        <motion.div
-          className="flex w-max items-center gap-8 px-4"
-          animate={{ x: ['0%', '-50%'] }}
-          transition={{
-            duration: Math.max(26, countryUsers.length * 2),
-            repeat: Infinity,
-            ease: 'linear',
-          }}
-        >
-          {[...countryUsers, ...countryUsers].map((countryUser, index) => {
-            const fallbackLetter = (countryUser.name[0] || countryUser.username[0] || 'U').toUpperCase();
-            const avatarSrc = resolveAvatarUrl(countryUser as Record<string, unknown>) || undefined;
-            return (
-              <motion.div
-                key={`${countryUser.id}-${countryUser.country}-${index}`}
-                className="relative flex shrink-0 min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
-                initial={{ opacity: 0.85, y: 4 }}
-                animate={{ opacity: 1, y: [0, -4, 0] }}
-                transition={{
-                  opacity: { duration: 0.35 },
-                  y: {
-                    duration: 3.2,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                    delay: (index % Math.max(1, countryUsers.length)) * 0.08,
-                  },
-                }}
-                whileHover={{ y: -8, scale: 1.02, transition: { duration: 0.2 } }}
+        <div className="relative overflow-hidden rounded-b-3xl border-t border-cyan-200/70 dark:border-cyan-800/45 bg-linear-to-b from-cyan-100/30 via-white/70 to-cyan-100/55 dark:from-cyan-950/20 dark:via-slate-900/70 dark:to-blue-950/35 px-4 sm:px-5 pt-3 pb-6">
+          <div className="flex items-center gap-8 px-4 overflow-hidden">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="relative flex shrink-0 min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/40 dark:border-cyan-700/30 bg-white/60 dark:bg-slate-900/40 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.3)]"
               >
-                <div className="absolute inset-0 rounded-2xl bg-linear-to-r from-cyan-500/0 via-cyan-500/5 to-blue-500/10 pointer-events-none" />
-
-                <Avatar className="h-14 w-14 border-2 border-cyan-300/80 dark:border-cyan-600/70 shadow-md shrink-0">
-                  <AvatarImage src={avatarSrc} alt={countryUser.name} className="object-cover" />
-                  <AvatarFallback className="bg-linear-to-br from-cyan-500 to-blue-600 text-white text-sm font-bold">
-                    {fallbackLetter}
-                  </AvatarFallback>
-                </Avatar>
-
-                <div className="min-w-0 relative z-10">
-                  <p className="text-base font-bold text-slate-800 dark:text-slate-100 truncate">
-                    {countryUser.name}
-                  </p>
-                  <p className="text-sm text-slate-500 dark:text-slate-300 truncate">
-                    @{countryUser.username}
-                  </p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300 inline-flex items-center gap-1.5 truncate font-semibold mt-0.5">
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-300" />
-                    <motion.span
-                      className="truncate"
-                      animate={{ opacity: [1, 0.45, 1], scale: [1, 1.03, 1] }}
-                      transition={{
-                        duration: 0.95,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
-                        delay: (index % Math.max(1, countryUsers.length)) * 0.04,
-                      }}
-                    >
-                      {countryUser.country}
-                    </motion.span>
-                  </p>
+                <div className="h-14 w-14 rounded-full bg-cyan-200/60 dark:bg-cyan-800/40 animate-pulse shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-28 bg-cyan-200/60 dark:bg-cyan-800/40 rounded-md animate-pulse" />
+                  <div className="h-3 w-20 bg-cyan-100/60 dark:bg-cyan-900/30 rounded-md animate-pulse" />
+                  <div className="h-3 w-24 bg-yellow-100/60 dark:bg-yellow-950/35 rounded-md animate-pulse" />
                 </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      </div>
-    </motion.div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    ) : countryUsers.length > 0 ? (
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+        className="overflow-hidden rounded-3xl border border-cyan-200/60 dark:border-cyan-800/40 bg-linear-to-r from-cyan-100/70 via-white/70 to-blue-100/70 dark:from-cyan-950/45 dark:via-slate-900/55 dark:to-blue-950/45 backdrop-blur-xl shadow-[0_18px_50px_-20px_rgba(14,116,144,0.55)]"
+      >
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-3">
+          <div className="flex items-center gap-3">
+            <motion.div
+              className="p-2.5 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 shadow-lg"
+              animate={{ rotate: [-3, 3, -3] }}
+              transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Users className="h-5 w-5 text-white" />
+            </motion.div>
+            <div>
+              <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight bg-linear-to-r from-cyan-700 via-sky-600 to-blue-600 bg-clip-text text-transparent">
+                Travelers From Different Countries
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                Live user highlights pulled from database profiles
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 dark:border-cyan-700/60 bg-white/65 dark:bg-slate-900/65 px-3 py-1 text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+            Live carousel
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-b-3xl border-t border-cyan-200/70 dark:border-cyan-800/45 bg-linear-to-b from-cyan-100/30 via-white/70 to-cyan-100/55 dark:from-cyan-950/20 dark:via-slate-900/70 dark:to-blue-950/35 px-4 sm:px-5 pt-3 pb-6">
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-14 bg-linear-to-r from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-14 bg-linear-to-l from-cyan-100/95 via-white/90 to-transparent dark:from-slate-900 dark:via-slate-900/90" />
+
+          <motion.div
+            className="flex w-max items-center gap-8 px-4"
+            animate={{ x: ['0%', '-50%'] }}
+            transition={{
+              duration: Math.max(26, countryUsers.length * 2),
+              repeat: Infinity,
+              ease: 'linear',
+            }}
+          >
+            {[...countryUsers, ...countryUsers].map((countryUser, index) => {
+              const fallbackLetter = (countryUser.name[0] || countryUser.username[0] || 'U').toUpperCase();
+              const avatarSrc = resolveAvatarUrl(countryUser as Record<string, unknown>) || undefined;
+              return (
+                <motion.div
+                  key={`${countryUser.id}-${countryUser.country}-${index}`}
+                  className="relative flex shrink-0 min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
+                  initial={{ opacity: 0.85, y: 4 }}
+                  animate={{ opacity: 1, y: [0, -4, 0] }}
+                  transition={{
+                    opacity: { duration: 0.35 },
+                    y: {
+                      duration: 3.2,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      delay: (index % Math.max(1, countryUsers.length)) * 0.08,
+                    },
+                  }}
+                  whileHover={{ y: -8, scale: 1.02, transition: { duration: 0.2 } }}
+                >
+                  <div className="absolute inset-0 rounded-2xl bg-linear-to-r from-cyan-500/0 via-cyan-500/5 to-blue-500/10 pointer-events-none" />
+
+                  <Avatar className="h-14 w-14 border-2 border-cyan-300/80 dark:border-cyan-600/70 shadow-md shrink-0">
+                    <AvatarImage src={avatarSrc} alt={countryUser.name} className="object-cover" />
+                    <AvatarFallback className="bg-linear-to-br from-cyan-500 to-blue-600 text-white text-sm font-bold">
+                      {fallbackLetter}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="min-w-0 relative z-10">
+                    <p className="text-base font-bold text-slate-800 dark:text-slate-100 truncate">
+                      {countryUser.name}
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-300 truncate">
+                      @{countryUser.username}
+                    </p>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 inline-flex items-center gap-1.5 truncate font-semibold mt-0.5">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-300" />
+                      <motion.span
+                        className="truncate"
+                        animate={{ opacity: [1, 0.45, 1], scale: [1, 1.03, 1] }}
+                        transition={{
+                          duration: 0.95,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                          delay: (index % Math.max(1, countryUsers.length)) * 0.04,
+                        }}
+                      >
+                        {countryUser.country}
+                      </motion.span>
+                    </p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </div>
+      </motion.div>
+    ) : null
   ) : null;
 
   useEffect(() => {
-    if (isMobile || mobilePerformanceMode) return;
+    if (isMobile || mobilePerformanceMode) {
+      setLoadingCountryUsers(false);
+      return;
+    }
 
     let cancelled = false;
 
     const loadUsers = async () => {
+      setLoadingCountryUsers(true);
       try {
         const usersRef = query(collection(firestoreDb, 'users'), limit(120));
         const snapshot = await getDocs(usersRef);
@@ -722,6 +770,10 @@ const ChatRoomsList: React.FC = () => {
         setCountryUsers(nextCountryUsers);
       } catch {
         if (!cancelled) setCountryUsers([]);
+      } finally {
+        if (!cancelled) {
+          setLoadingCountryUsers(false);
+        }
       }
     };
 
@@ -1746,25 +1798,68 @@ const ChatRoomsList: React.FC = () => {
     return 'Just now';
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <div className="relative">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary/30 border-t-primary mx-auto"></div>
-            <Users className="h-5 w-5 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+  const renderRoomsSkeleton = () => (
+    <div className="space-y-8">
+      {/* Public Rooms Section Skeleton */}
+      <div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-xl bg-green-200/50 dark:bg-green-800/20 animate-pulse">
+            <Compass className="h-6 w-6 text-green-400 dark:text-green-600" />
           </div>
-          <p className="mt-6 text-lg font-medium bg-linear-to-r from-rose-600 to-pink-500 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
-            Loading communities...
-          </p>
-        </motion.div>
+          <div className="h-7 w-56 bg-slate-200/60 dark:bg-slate-700/40 rounded-lg animate-pulse" />
+          <div className="h-4 w-48 bg-slate-100/60 dark:bg-slate-800/30 rounded-md animate-pulse hidden sm:block" />
+        </div>
+        <div className="grid grid-cols-1 gap-6">
+          <Card className="h-[13.5rem] bg-white/50 dark:bg-gray-800/40 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-md rounded-3xl overflow-hidden p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-slate-200/60 dark:bg-slate-700/40 animate-pulse shrink-0" />
+              <div className="space-y-2 flex-1">
+                <div className="h-5 w-48 bg-slate-200/60 dark:bg-slate-700/40 rounded-md animate-pulse" />
+                <div className="h-3.5 w-64 bg-slate-100/60 dark:bg-slate-800/30 rounded-md animate-pulse" />
+              </div>
+            </div>
+            <div className="space-y-3 pt-2">
+              <div className="h-4 w-32 bg-slate-200/50 dark:bg-slate-700/30 rounded-md animate-pulse" />
+              <div className="h-4 w-40 bg-slate-200/50 dark:bg-slate-700/30 rounded-md animate-pulse" />
+            </div>
+          </Card>
+        </div>
       </div>
-    );
-  }
+
+      {/* Private Rooms Section Skeleton */}
+      <div className="space-y-4">
+        <div className="relative z-10 text-center mb-4">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="p-2 rounded-lg bg-purple-200/50 dark:bg-purple-800/20 animate-pulse">
+              <Lock className="h-5 w-5 text-purple-400 dark:text-purple-600" />
+            </div>
+            <div className="h-7 w-48 bg-slate-200/60 dark:bg-slate-700/40 rounded-lg animate-pulse" />
+          </div>
+          <div className="mx-auto h-4 w-32 bg-slate-100/60 dark:bg-slate-800/30 rounded-md animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[1, 2].map((i) => (
+            <Card
+              key={i}
+              className="h-[13.5rem] bg-white/50 dark:bg-gray-800/40 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-md rounded-3xl overflow-hidden p-6 space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-slate-200/60 dark:bg-slate-700/40 animate-pulse shrink-0" />
+                <div className="space-y-2 flex-1">
+                  <div className="h-5 w-32 bg-slate-200/60 dark:bg-slate-700/40 rounded-md animate-pulse" />
+                  <div className="h-3.5 w-48 bg-slate-100/60 dark:bg-slate-800/30 rounded-md animate-pulse" />
+                </div>
+              </div>
+              <div className="space-y-3 pt-2">
+                <div className="h-4 w-28 bg-slate-200/50 dark:bg-slate-700/30 rounded-md animate-pulse" />
+                <div className="h-4 w-36 bg-slate-200/50 dark:bg-slate-700/30 rounded-md animate-pulse" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-linear-to-br from-rose-50 via-pink-50 to-red-50 dark:from-gray-900 dark:via-rose-900/20 dark:to-pink-900/20">
@@ -3499,7 +3594,9 @@ const ChatRoomsList: React.FC = () => {
             {countryUsersCarousel}
 
             {/* Rooms Grid */}
-            {user && rooms.length === 0 ? (
+            {loading ? (
+              renderRoomsSkeleton()
+            ) : user && rooms.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -3553,7 +3650,7 @@ const ChatRoomsList: React.FC = () => {
                       </span>
                     </div>
                     <motion.div
-                      className="max-h-136 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(34,197,94,0.55)_transparent] grid grid-cols-1 gap-6"
+                      className="grid grid-cols-1 gap-6 pb-2"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.5 }}

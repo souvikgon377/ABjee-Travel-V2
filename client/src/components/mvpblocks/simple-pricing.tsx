@@ -628,6 +628,20 @@ export default function SimplePricing() {
   }, []);
 
   useEffect(() => {
+    // Try to load cached plans on mount for instant rendering
+    try {
+      const cached = localStorage.getItem('abjee:pricingPlans');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setPlans(parsed);
+          setLoadingPlans(false);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load cached pricing plans:', e);
+    }
+
     const fetchPricingPlans = async () => {
       try {
         const res = await fetch('/api/subscriptions/plans');
@@ -675,6 +689,13 @@ export default function SimplePricing() {
           
           console.log('Updated Plans:', updatedPlans);
           setPlans(updatedPlans);
+
+          // Cache in localStorage for future instant rendering
+          try {
+            localStorage.setItem('abjee:pricingPlans', JSON.stringify(updatedPlans));
+          } catch (e) {
+            // ignore
+          }
         }
       } catch (error) {
         console.error('Failed to fetch pricing plans:', error);
