@@ -3784,7 +3784,7 @@ const ChatRoom = () => {
           >
             {replyingToMessage && (
               <div
-                className="mb-2 sm:mb-3 flex items-center justify-between gap-2 rounded-lg border-l-4 p-2 sm:p-3"
+                className="mb-2 flex w-full max-w-full min-w-0 items-start justify-between gap-2 overflow-hidden rounded-lg border-l-4 p-2 sm:mb-3 sm:p-3"
                 style={imageColors ? {
                   backgroundColor: `${imageColors.primary}15`,
                   borderLeftColor: imageColors.primary,
@@ -3793,12 +3793,12 @@ const ChatRoom = () => {
                   borderLeftColor: 'hsl(var(--primary))',
                 }}
               >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold">
-                    <Reply className="h-3.5 w-3.5" />
-                    <span>Replying to {replyingToMessage.username}</span>
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="flex min-w-0 items-center gap-1.5 text-xs font-semibold sm:text-sm">
+                    <Reply className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">Replying to {replyingToMessage.username}</span>
                   </div>
-                  <p className="mt-0.5 truncate text-xs sm:text-sm text-muted-foreground">
+                  <p className="mt-0.5 line-clamp-2 max-w-full break-words text-xs text-muted-foreground sm:text-sm">
                     {replyingToMessage.text || (replyingToMessage.attachment ? replyingToMessage.attachment.name : 'Attachment')}
                   </p>
                 </div>
@@ -4075,7 +4075,7 @@ const ChatRoom = () => {
             )}
 
             {room.isPublic && (
-              <p className="mt-2 text-[11px] sm:text-xs text-amber-700 dark:text-amber-400">
+              <p className="mt-2 max-w-full break-words text-[11px] text-amber-700 dark:text-amber-400 sm:text-xs">
                 Public room rules: no phone/email/links. Image limit per day - Free: 5, Trial/Monthly Paid: 50, Yearly Paid: 200. Images are compressed and capped at 1MB.
               </p>
             )}
