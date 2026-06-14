@@ -5,7 +5,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, l
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import type { TouristPlace, MediaItem } from '@/components/ui/tourist-places';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Autoplay, EffectFade } from 'swiper/modules';
 import 'swiper/css';
@@ -3654,25 +3654,19 @@ const ChatRoomsList: React.FC = () => {
                         Anyone can join without a password
                       </span>
                     </div>
-                    <motion.div
-                      className="grid grid-cols-1 gap-6 pb-2"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.5 }}
-                    >
+                    <div className="grid grid-cols-1 gap-6 pb-2">
                       <AnimatePresence mode="popLayout">
                         {publicRooms.map((room, index) => (
                           <motion.div
                             key={room.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ delay: index * 0.05 }}
-                            whileHover={{ y: -8, transition: { duration: 0.2 } }}
-                            layout
+                            initial={!mobilePerformanceMode ? { opacity: 0, y: 20 } : false}
+                            animate={!mobilePerformanceMode ? { opacity: 1, y: 0 } : undefined}
+                            exit={!mobilePerformanceMode ? { opacity: 0, scale: 0.9 } : undefined}
+                            transition={{ delay: !mobilePerformanceMode ? index * 0.05 : 0 }}
+                            whileHover={!mobilePerformanceMode ? { y: -8, transition: { duration: 0.2 } } : undefined}
                           >
                             <Card
-                              className="cursor-pointer h-full bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/50 shadow-xl hover:shadow-2xl hover:border-primary/50 transition-all duration-300 rounded-3xl overflow-hidden group relative"
+                              className={`cursor-pointer h-full border shadow-xl hover:border-primary/50 transition-all duration-300 rounded-3xl overflow-hidden group relative ${mobilePerformanceMode ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' : 'bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border-white/20 dark:border-gray-700/50 hover:shadow-2xl'}`}
                               onClick={() => router.push(`/community/room/${room.id}`)}
                             >
                               {/* Sliding Background Images Carousel */}
@@ -3687,7 +3681,7 @@ const ChatRoomsList: React.FC = () => {
                                     <Swiper
                                       modules={[Autoplay, EffectFade]}
                                       effect="fade"
-                                      autoplay={shouldAutoplayRichMedia ? {
+                                      autoplay={shouldAutoplayRichMedia && !mobilePerformanceMode ? {
                                         delay: 3000,
                                         disableOnInteraction: false,
                                         pauseOnMouseEnter: false
@@ -3767,7 +3761,7 @@ const ChatRoomsList: React.FC = () => {
                                         : 'text-gray-900 dark:text-white'
                                       }`}
                                   >
-                                    <div className="p-1.5 rounded-lg bg-rose-500/30 backdrop-blur-sm">
+                                    <div className="p-1.5 rounded-lg bg-rose-500/30">
                                       <Users className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                                     </div>
                                     <span className="font-semibold" style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 8px rgba(0,0,0,0.55)' : 'none' }}>{room.participants?.length || 0} participants</span>
@@ -3778,7 +3772,7 @@ const ChatRoomsList: React.FC = () => {
                                         : 'text-gray-900 dark:text-white'
                                       }`}
                                   >
-                                    <div className="p-1.5 rounded-lg bg-pink-500/30 backdrop-blur-sm">
+                                    <div className="p-1.5 rounded-lg bg-pink-500/30">
                                       <Clock className="h-4 w-4 text-white" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.8))' }} />
                                     </div>
                                     <span className="font-semibold" style={{ textShadow: room.backgroundImage?.url && room.iconImage?.url ? '0 2px 8px rgba(0,0,0,0.55)' : 'none' }}>Created {formatDate(room.createdAt)}</span>
@@ -3823,7 +3817,7 @@ const ChatRoomsList: React.FC = () => {
                           </motion.div>
                         ))}
                       </AnimatePresence>
-                    </motion.div>
+                    </div>
                   </div>
                 )}
 
@@ -3838,8 +3832,8 @@ const ChatRoomsList: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <motion.div
                           className="p-2.5 rounded-2xl bg-linear-to-br from-cyan-500 to-blue-600 shadow-lg"
-                          animate={{ rotate: [-3, 3, -3] }}
-                          transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+                          animate={!mobilePerformanceMode ? { rotate: [-3, 3, -3] } : undefined}
+                          transition={!mobilePerformanceMode ? { duration: 5.5, repeat: Infinity, ease: 'easeInOut' } : undefined}
                         >
                           <Users className="h-5 w-5 text-white" />
                         </motion.div>
@@ -3864,32 +3858,20 @@ const ChatRoomsList: React.FC = () => {
 
                       <motion.div
                         className="flex w-max items-center gap-8 px-4"
-                        animate={{ x: ['0%', '-50%'] }}
-                        transition={{
+                        animate={!mobilePerformanceMode ? { x: ['0%', '-50%'] } : undefined}
+                        transition={!mobilePerformanceMode ? {
                           duration: Math.max(26, countryUsers.length * 2),
                           repeat: Infinity,
                           ease: 'linear',
-                        }}
+                        } : undefined}
                       >
                         {[...countryUsers, ...countryUsers].map((countryUser, index) => {
                           const fallbackLetter = (countryUser.name[0] || countryUser.username[0] || 'U').toUpperCase();
                           const avatarSrc = resolveAvatarUrl(countryUser as Record<string, unknown>) || undefined;
                           return (
-                            <motion.div
+                            <div
                               key={`${countryUser.id}-${countryUser.country}-${index}`}
                               className="relative flex shrink-0 min-w-72 items-center gap-4 rounded-2xl border border-cyan-200/70 dark:border-cyan-700/50 bg-white/88 dark:bg-slate-900/72 px-4 py-3 shadow-[0_12px_32px_-18px_rgba(14,116,144,0.65)]"
-                              initial={{ opacity: 0.85, y: 4 }}
-                              animate={{ opacity: 1, y: [0, -4, 0] }}
-                              transition={{
-                                opacity: { duration: 0.35 },
-                                y: {
-                                  duration: 3.2,
-                                  repeat: Infinity,
-                                  ease: 'easeInOut',
-                                  delay: (index % Math.max(1, countryUsers.length)) * 0.08,
-                                },
-                              }}
-                              whileHover={{ y: -8, scale: 1.02, transition: { duration: 0.2 } }}
                             >
                               <div className="absolute inset-0 rounded-2xl bg-linear-to-r from-cyan-500/0 via-cyan-500/5 to-blue-500/10 pointer-events-none" />
 
@@ -3909,21 +3891,14 @@ const ChatRoomsList: React.FC = () => {
                                 </p>
                                 <p className="text-sm text-yellow-700 dark:text-yellow-300 inline-flex items-center gap-1.5 truncate font-semibold mt-0.5">
                                   <MapPin className="h-3.5 w-3.5 shrink-0 text-yellow-600 dark:text-yellow-300" />
-                                  <motion.span
+                                  <span
                                     className="truncate"
-                                    animate={{ opacity: [1, 0.45, 1], scale: [1, 1.03, 1] }}
-                                    transition={{
-                                      duration: 0.95,
-                                      repeat: Infinity,
-                                      ease: 'easeInOut',
-                                      delay: (index % Math.max(1, countryUsers.length)) * 0.04,
-                                    }}
                                   >
                                     {countryUser.country}
-                                  </motion.span>
+                                  </span>
                                 </p>
                               </div>
-                            </motion.div>
+                            </div>
                           );
                         })}
                       </motion.div>
@@ -3940,23 +3915,11 @@ const ChatRoomsList: React.FC = () => {
                   >
                     <div className="relative mb-8 py-4">
                       {/* Small Glowing Header */}
-                      <motion.div
-                        className="relative z-10 text-center mb-4"
-                      >
+                      <div className="relative z-10 text-center mb-4">
                         <div className="flex items-center justify-center gap-2 mb-2">
-                          <motion.div
-                            animate={{
-                              boxShadow: [
-                                '0 0 10px rgba(168, 85, 247, 0.5)',
-                                '0 0 20px rgba(168, 85, 247, 0.8)',
-                                '0 0 10px rgba(168, 85, 247, 0.5)'
-                              ]
-                            }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                            className="p-2 rounded-lg bg-linear-to-br from-purple-500 to-pink-500"
-                          >
+                          <div className="p-2 rounded-lg bg-linear-to-br from-purple-500 to-pink-500">
                             <Lock className="h-5 w-5 text-white" />
-                          </motion.div>
+                          </div>
                           <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100">
                             Private Community Chat
                           </h2>
@@ -3964,7 +3927,7 @@ const ChatRoomsList: React.FC = () => {
                         <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
                           🔐 Exposed • 🚫 Private
                         </p>
-                      </motion.div>
+                      </div>
 
                       {/* Compact Search Bar with Glow */}
                       <motion.div
@@ -3974,15 +3937,7 @@ const ChatRoomsList: React.FC = () => {
                         transition={{ delay: 0.1, duration: 0.3 }}
                       >
                         <div className="w-full max-w-md px-4 sm:px-0">
-                          <motion.div
-                            animate={{
-                              boxShadow: [
-                                '0 0 20px rgba(236, 72, 145, 0.6), 0 0 40px rgba(168, 85, 247, 0.4)',
-                                '0 0 35px rgba(236, 72, 145, 0.8), 0 0 60px rgba(168, 85, 247, 0.6)',
-                                '0 0 20px rgba(236, 72, 145, 0.6), 0 0 40px rgba(168, 85, 247, 0.4)'
-                              ]
-                            }}
-                            transition={{ duration: 2, repeat: Infinity }}
+                          <div
                             className="relative bg-white dark:bg-slate-900 rounded-2xl px-4 py-3 flex items-center gap-2 border-2 border-pink-400 dark:border-pink-500 shadow-lg"
                           >
                             <Search className="h-5 w-5 text-pink-500 dark:text-pink-400 font-semibold" />
@@ -4002,7 +3957,7 @@ const ChatRoomsList: React.FC = () => {
                                 <X className="h-5 w-5 text-pink-500 dark:text-pink-400 hover:text-pink-600 dark:hover:text-pink-300" />
                               </motion.button>
                             )}
-                          </motion.div>
+                          </div>
                         </div>
                       </motion.div>
                     </div>
@@ -4028,10 +3983,8 @@ const ChatRoomsList: React.FC = () => {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.45, delay: sectionIndex * 0.08 }}
                         >
-                          <motion.div
+                          <div
                             className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-linear-to-br from-amber-400/25 to-rose-400/20 blur-3xl"
-                            animate={{ scale: [1, 1.1, 1], opacity: [0.55, 0.8, 0.55] }}
-                            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: sectionIndex * 0.4 }}
                           />
                           <div className="flex items-center justify-between gap-3">
                             <h3 className="relative z-10 text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
@@ -4060,12 +4013,11 @@ const ChatRoomsList: React.FC = () => {
                                   {filterPrivateCommunityRooms(section.rooms).map((room, index) => (
                                     <motion.div
                                       key={room.id}
-                                      initial={{ opacity: 0, y: 20 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      exit={{ opacity: 0, scale: 0.9 }}
-                                      transition={{ delay: index * 0.05 }}
-                                      whileHover={{ y: -10, transition: { duration: 0.2 } }}
-                                      layout
+                                      initial={!mobilePerformanceMode ? { opacity: 0, y: 20 } : false}
+                                      animate={!mobilePerformanceMode ? { opacity: 1, y: 0 } : undefined}
+                                      exit={!mobilePerformanceMode ? { opacity: 0, scale: 0.9 } : undefined}
+                                      transition={{ delay: !mobilePerformanceMode ? index * 0.05 : 0 }}
+                                      whileHover={!mobilePerformanceMode ? { y: -10, transition: { duration: 0.2 } } : undefined}
                                     >
                                       {(() => {
                                         const ownerProfile = room.createdBy ? communityOwnerMap[room.createdBy] : undefined;
@@ -4093,7 +4045,7 @@ const ChatRoomsList: React.FC = () => {
                                                   <Swiper
                                                     modules={[Autoplay, EffectFade]}
                                                     effect="fade"
-                                                    autoplay={shouldAutoplayRichMedia ? {
+                                                    autoplay={shouldAutoplayRichMedia && !mobilePerformanceMode ? {
                                                       delay: 3000,
                                                       disableOnInteraction: false,
                                                       pauseOnMouseEnter: false
@@ -4123,43 +4075,24 @@ const ChatRoomsList: React.FC = () => {
 
                                             {/* Gradient overlay on hover */}
                                             <div className="absolute inset-0 bg-linear-to-br from-rose-500/0 via-pink-500/0 to-red-500/0 group-hover:from-rose-500/10 group-hover:via-pink-500/10 group-hover:to-red-500/10 transition-all duration-300 z-2 pointer-events-none"></div>
-                                            <motion.div
+                                            <div
                                               aria-hidden="true"
                                               className={`absolute inset-0 rounded-2xl border-2 pointer-events-none z-30 ${room.visibility === 'exposed'
                                                   ? 'border-green-400/70 dark:border-green-400/80'
                                                   : 'border-blue-400/70 dark:border-blue-400/80'
                                                 }`}
-                                              animate={{ opacity: [0.35, 1, 0.35] }}
-                                              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                                             />
-                                            <motion.div
-                                              className={`pointer-events-none absolute top-2 left-2 z-40 flex items-center gap-2 rounded-full border px-2.5 py-1.5 backdrop-blur-md max-w-46 ${room.visibility === 'exposed'
+                                            <div
+                                              className={`pointer-events-none absolute top-2 left-2 z-40 flex items-center gap-2 rounded-full border px-2.5 py-1.5 backdrop-blur-sm max-w-46 ${room.visibility === 'exposed'
                                                   ? 'border-green-300/80 bg-green-100/85 dark:border-green-500/70 dark:bg-green-950/55'
                                                   : 'border-blue-300/80 bg-blue-100/85 dark:border-blue-500/70 dark:bg-blue-950/55'
                                                 }`}
-                                              animate={{
-                                                boxShadow:
-                                                  room.visibility === 'exposed'
-                                                    ? [
-                                                      '0 0 0 rgba(34,197,94,0)',
-                                                      '0 0 18px rgba(34,197,94,0.65)',
-                                                      '0 0 0 rgba(34,197,94,0)',
-                                                    ]
-                                                    : [
-                                                      '0 0 0 rgba(59,130,246,0)',
-                                                      '0 0 18px rgba(59,130,246,0.65)',
-                                                      '0 0 0 rgba(59,130,246,0)',
-                                                    ],
-                                              }}
-                                              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                                             >
                                               <div className="relative shrink-0">
-                                                <motion.div
+                                                <div
                                                   aria-hidden="true"
                                                   className={`absolute inset-0 rounded-full ${room.visibility === 'exposed' ? 'bg-green-400/45' : 'bg-blue-400/45'
                                                     }`}
-                                                  animate={{ scale: [1, 1.35, 1], opacity: [0.55, 0, 0.55] }}
-                                                  transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                                                 />
                                                 <Avatar className="relative h-8 w-8 border-2 border-white/80 dark:border-white/50 shadow-sm">
                                                   <AvatarImage src={ownerAvatar} alt={ownerName} />
@@ -4172,7 +4105,7 @@ const ChatRoomsList: React.FC = () => {
                                                 <p className="text-[9px] leading-3 font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Owner</p>
                                                 <p className="truncate text-xs font-extrabold text-slate-900 dark:text-slate-50">{ownerName}</p>
                                               </div>
-                                            </motion.div>
+                                            </div>
                                             {!room.isPublic && (
                                               <Badge
                                                 variant="outline"

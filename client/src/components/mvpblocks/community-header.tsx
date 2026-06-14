@@ -87,7 +87,7 @@ const CommunityHeader: React.FC = () => {
 
   return (
     <header
-      className={`sticky top-16 lg:top-20 z-40 border-b dark:border-white/10 dark:bg-black/25 dark:backdrop-blur-xl shadow-[0_8px_26px_rgba(15,23,42,0.28)] ${isTravelThemePage ? 'bg-rose-100/95 border-rose-200/70' : 'bg-background border-border'}`}
+      className={`sticky top-16 lg:top-20 z-40 border-b dark:border-white/10 dark:bg-black/60 md:dark:bg-black/25 md:dark:backdrop-blur-xl shadow-[0_8px_26px_rgba(15,23,42,0.28)] ${isTravelThemePage ? 'bg-rose-100 md:bg-rose-100/95 border-rose-200/70' : 'bg-background border-border'}`}
     >
       <div className="max-w-7xl mx-auto px-4">
         <LayoutGroup>
@@ -101,7 +101,6 @@ const CommunityHeader: React.FC = () => {
                     ? 'text-red-600'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
-                whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
                 {activeTab === item.id && (
