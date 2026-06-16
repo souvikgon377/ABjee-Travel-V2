@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { auth } from './firebase';
+import { getAuthRedirectHref } from './authRedirect';
 
 const API_BASE_URL = '';
 
@@ -48,7 +49,7 @@ api.interceptors.response.use(
       // Redirect only when an authenticated session exists but token became invalid/expired.
       // Signed-out users should be able to browse public pages without forced auth redirects.
       if (auth.currentUser && window.location.pathname !== '/auth') {
-        window.location.href = '/auth';
+        window.location.href = getAuthRedirectHref();
       }
     }
     return Promise.reject(error);
@@ -80,7 +81,7 @@ adminApiInstance.interceptors.response.use(
     if (error.response?.status === 401) {
       // Redirect only when an authenticated session exists but token became invalid/expired.
       if (auth.currentUser && window.location.pathname !== '/auth') {
-        window.location.href = '/auth';
+        window.location.href = getAuthRedirectHref();
       }
     }
     return Promise.reject(error);

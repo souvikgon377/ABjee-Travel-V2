@@ -22,6 +22,7 @@ import confetti from 'canvas-confetti';
 import { Input } from '@/components/ui/input';
 import { ConfettiButton } from '@/components/ui/confetti';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
+import { getAuthRedirectHref } from '@/lib/authRedirect';
 
 const PLAN_ICONS: Record<string, React.ComponentType<any>> = {
   hobby: Star,
@@ -424,7 +425,7 @@ export default function SimplePricing() {
 
     if (!currentUser || !auth.currentUser) {
       alert('Please login to continue with subscription.');
-      router.push('/auth');
+      router.push(getAuthRedirectHref());
       return;
     }
 
@@ -708,7 +709,7 @@ export default function SimplePricing() {
           // Cache in localStorage for future instant rendering
           try {
             localStorage.setItem('abjee:pricingPlans', JSON.stringify(updatedPlans));
-          } catch (e) {
+          } catch {
             // ignore
           }
         }

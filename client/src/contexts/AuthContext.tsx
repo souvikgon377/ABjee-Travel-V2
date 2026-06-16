@@ -22,6 +22,13 @@ import { trackUserSession, trackUserLogout } from '../lib/analyticsTracker';
 
 const REQUEST_TIMEOUT_MS = 15000;
 
+class DeletedAccountError extends Error {
+  constructor() {
+    super('This account has been deleted or deactivated.');
+    this.name = 'DeletedAccountError';
+  }
+}
+
 const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -210,8 +217,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     }).then(async (response) => {
       if (!response.ok) {
-        if (response.status === 404) {
-          return null; // Gracefully handle 404 so Next.js doesn't pop an error overlay
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          throw new DeletedAccountError();
         }
         throw new Error(`Failed to fetch profile: ${response.status}`);
       }
@@ -230,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Create user profile via API
-  const createUserProfile = useCallback(async (user: any, additionalData?: any) => {
+  const createUserProfile = useCallback(async (user: any, additionalData?: any, persist = true) => {
     if (!user) return;
 
     try {
@@ -255,13 +262,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return normalizeUserProfile(merged);
       });
 
+      if (persist) {
+        const token = await refreshToken(user, true);
+        const response = await fetchWithTimeout('/api/auth/register-profile', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newProfile || {}),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to register profile: ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const persistedProfile = normalizeUserProfile(payload.data?.user);
+        if (persistedProfile) {
+          setUserProfile(persistedProfile);
+          lastFetchedUidRef.current = user.uid;
+          lastFetchedAtRef.current = Date.now();
+        }
+      }
+
     } catch (error) {
       if ((process.env.NODE_ENV === "development")) {
         console.error('Error creating user profile:', error);
       }
       throw error;
     }
-  }, [normalizeUserProfile]);
+  }, [normalizeUserProfile, refreshToken]);
 
   // Sign up with email and password
   const signup = async (email: string, password: string, additionalData?: any) => {
@@ -354,10 +385,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth] Admin login complete');
       }
     } catch (error: any) {
-      if ((process.env.NODE_ENV === "development")) {
+      const code = String(error?.code || '');
+      const isCredentialError =
+        code === 'auth/invalid-credential' ||
+        code === 'auth/user-not-found' ||
+        code === 'auth/wrong-password';
+
+      if ((process.env.NODE_ENV === "development") && !isCredentialError) {
         console.error('[Auth] Admin login error:', error);
       }
-      if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/user-not-found' || error?.code === 'auth/wrong-password') {
+      if (isCredentialError) {
         throw new Error('Invalid email or password.');
       }
       throw new Error(error.message || 'Failed to log in as admin. Please try again.');
@@ -543,7 +580,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return null;
 
     const token = await refreshToken(user, true);
-    const profile = await fetchUserProfile(token, true);
+    let profile: any;
+    try {
+      profile = await fetchUserProfile(token, true);
+    } catch (error) {
+      if (error instanceof DeletedAccountError) {
+        await signOut(auth);
+        localStorage.removeItem('token');
+        setCurrentUser(null);
+        setUserProfile(null);
+        lastFetchedUidRef.current = null;
+        lastFetchedAtRef.current = 0;
+        return null;
+      }
+      throw error;
+    }
 
     if (!profile) {
       return null;
@@ -587,7 +638,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (!token) {
-            await createUserProfile(user);
+            await createUserProfile(user, undefined, false);
             if (isActive) setLoading(false);
             return;
           }
@@ -604,13 +655,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (!isActive || isRefreshingRef.current) return;
               try {
                 const user = auth.currentUser;
-                if (user) await refreshToken(user, true);
+                if (user) {
+                  const token = await refreshToken(user, true);
+                  const profile = await fetchUserProfile(token, true);
+                  if (isActive && profile) {
+                    setUserProfile(normalizeUserProfile(profile));
+                    lastFetchedUidRef.current = user.uid;
+                    lastFetchedAtRef.current = Date.now();
+                  }
+                }
               } catch (error) {
+                if (error instanceof DeletedAccountError) {
+                  await signOut(auth);
+                  localStorage.removeItem('token');
+                  if (isActive) {
+                    setCurrentUser(null);
+                    setUserProfile(null);
+                    lastFetchedUidRef.current = null;
+                    lastFetchedAtRef.current = 0;
+                  }
+                  return;
+                }
                 if ((process.env.NODE_ENV === "development") && !isTransientFirebaseNetworkError(error)) {
                   console.error('Periodic token refresh failed:', error);
                 }
               }
-            }, 1000 * 60 * 30); // 30 minutes
+            }, 1000 * 60); // Validate active accounts every minute.
           }
 
           // Load user profile (deduplicated request)
@@ -623,18 +693,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 lastFetchedAtRef.current = Date.now();
               } else if (isActive && !profile) {
                 // If profile doesn't exist on backend yet, use Firebase data temporarily
-                await createUserProfile(user);
+                await createUserProfile(user, undefined, false);
                 lastFetchedUidRef.current = user.uid;
                 lastFetchedAtRef.current = Date.now();
               }
             } catch (error: any) {
+              if (error instanceof DeletedAccountError) {
+                await signOut(auth);
+                localStorage.removeItem('token');
+                if (isActive) {
+                  setCurrentUser(null);
+                  setUserProfile(null);
+                  lastFetchedUidRef.current = null;
+                  lastFetchedAtRef.current = 0;
+                }
+                return;
+              }
               if ((process.env.NODE_ENV === "development")) {
                 console.error('Error loading user profile:', error);
               }
-              // Always fallback to Firebase data if API fails (404, timeout, or other errors)
+              // Use Firebase data locally only for transient API failures. Do not recreate missing users here.
               if (isActive) {
                 try {
-                  await createUserProfile(user);
+                  await createUserProfile(user, undefined, false);
                 } catch (createError) {
                   if ((process.env.NODE_ENV === "development")) {
                     console.error('Error creating user profile fallback:', createError);

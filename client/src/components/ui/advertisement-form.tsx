@@ -208,33 +208,6 @@ export function AdvertisementForm({
   const { currentUser, userProfile } = useAuth();
   const profileEmail = currentUser?.email || userProfile?.email || '';
   const [form, setForm] = useState(emptyState);
-  const [pricing, setPricing] = useState({
-    currency: 'INR',
-    adMonthly: 100,
-    adQuarterly: 250,
-    adYearly: 800,
-  });
-
-  useEffect(() => {
-    let active = true;
-    fetch('/api/public/settings')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!active) return;
-        if (data?.data?.pricing) {
-          setPricing({
-            currency: data.data.pricing.currency || 'INR',
-            adMonthly: Number(data.data.pricing.adMonthly) || 100,
-            adQuarterly: Number(data.data.pricing.adQuarterly) || 250,
-            adYearly: Number(data.data.pricing.adYearly) || 800,
-          });
-        }
-      })
-      .catch((err) => console.error('Failed to load public settings:', err));
-    return () => {
-      active = false;
-    };
-  }, []);
   const [locations, setLocations] = useState<AdvertisementLocationOption[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string>('');
@@ -316,7 +289,7 @@ export function AdvertisementForm({
       setForm((cur) => ({
         ...cur,
         ownerName: cur.ownerName || currentUser.displayName || userProfile?.displayName || '',
-        ownerPhoneNumber: cur.ownerPhoneNumber || (currentUser as any).phoneNumber || (userProfile as any).phoneNumber || '',
+        ownerPhoneNumber: cur.ownerPhoneNumber || currentUser?.phoneNumber || userProfile?.phoneNumber || '',
       }));
     }
   }, [currentUser, userProfile, adId]);
@@ -491,14 +464,14 @@ export function AdvertisementForm({
       if (!idFile && !(initialValues as any)?.idProofUrl) throw new Error('Please upload ID proof (PDF or image)');
 
       if (!adId) {
+        if (isFirstAd && !paidPlan) {
+          throw new Error('Please purchase a subscription plan to post your advertisement.');
+        }
         if (isSubscriptionExpired) {
           throw new Error('Your subscription has expired. Please subscribe to a plan to post new advertisements.');
         }
         if (adLimit !== undefined && activeAdCount !== undefined && adLimit !== -1 && activeAdCount >= adLimit) {
           throw new Error('Ad limit reached for your active plan. Please upgrade or renew to post more advertisements.');
-        }
-        if (isFirstAd && !paidPlan) {
-          throw new Error('Please purchase a subscription plan to post your advertisement.');
         }
       }
 
@@ -698,6 +671,12 @@ export function AdvertisementForm({
   );
 
   const getLockOverlayDetails = () => {
+    if (isFirstAd && !paidPlan) {
+      return {
+        title: "Purchase a Plan to Post",
+        description: "Please choose and purchase a placement plan above before submitting your advertisement.",
+      };
+    }
     if (isSubscriptionExpired) {
       return {
         title: "Subscription Expired",

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import AdminDashboard from '@/components/mvpblocks/index';
+import { getAuthRedirectHref } from '@/lib/authRedirect';
 
 const ADMIN_PROFILE_RECOVERY_KEY = 'admin-profile-recovery-attempted';
 const ADMIN_LOADING_RECOVERY_KEY = 'admin-loading-recovery-attempted';
@@ -16,7 +17,7 @@ export default function AdminPage() {
 
     // If no signed-in Firebase user, send to auth page.
     if (!currentUser) {
-      router.push('/auth');
+      router.push(getAuthRedirectHref());
       return;
     }
 
@@ -46,7 +47,7 @@ export default function AdminPage() {
         return;
       }
 
-      router.replace('/auth');
+      router.replace(getAuthRedirectHref());
     }, 1800);
 
     return () => window.clearTimeout(timer);
@@ -69,7 +70,7 @@ export default function AdminPage() {
         return;
       }
 
-      router.replace('/auth');
+      router.replace(getAuthRedirectHref());
     }, 3500);
 
     return () => window.clearTimeout(timer);

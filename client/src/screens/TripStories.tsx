@@ -14,14 +14,15 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  collection, addDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove,
-  query, orderBy, serverTimestamp, onSnapshot, limit
+  collection, doc, updateDoc, arrayUnion, arrayRemove,
+  query, orderBy, onSnapshot, limit
 } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
 import { buildAbjeeShareText } from '@/lib/socialShare';
 import { modernConfirm, modernAlert } from '@/lib/modernDialog';
+import { getAuthRedirectHref } from '@/lib/authRedirect';
 
 // --------------------------- Types ---------------------------
 
@@ -76,6 +77,55 @@ interface TripStory {
   lat?: number;
   lng?: number;
 }
+
+type TripStoryDraft = {
+  form: {
+    authorName: string;
+    authorEmail: string;
+    destination: string;
+    title: string;
+    description: string;
+    fullStory: string;
+    tripHighlights: string;
+    dayByDay: string;
+    bestPlaces: string;
+    localFood: string;
+    travelTips: string;
+    duration: string;
+    budget: string;
+    travelType: TripStory['travelType'];
+    startDate: string;
+    endDate: string;
+  };
+  videoLinks: string[];
+  savedAt: number;
+};
+
+const TRIP_STORY_DRAFT_KEY = 'abjee:trip-story-draft';
+const TRIP_STORY_RETURN_PATH = '/trip-stories?submitStory=1';
+
+const dedupeStoriesById = (items: TripStory[]) => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (!item.id) return true;
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+};
+
+const readTripStoryDraft = (): TripStoryDraft | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(TRIP_STORY_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as TripStoryDraft;
+    if (!parsed?.form) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
 
 // ----------------------- Utility Helpers ---------------------
 
@@ -598,7 +648,6 @@ function StoryModal({
   const [copied, setCopied] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [heroIdx, setHeroIdx] = useState(0);
   const [heroDir, setHeroDir] = useState(1);
   const [isWindowExpanded, setIsWindowExpanded] = useState(false);
@@ -608,13 +657,20 @@ function StoryModal({
   }, [userProfile, currentUser]);
 
   const handleDelete = async () => {
+    const confirmed = await modernConfirm('Are you sure you want to delete this story?', {
+      title: 'Delete Story',
+      confirmText: 'Yes, delete',
+      cancelText: 'Cancel',
+    });
+
+    if (!confirmed) return;
+
     setDeleting(true);
     try {
       await onDelete(story.id);
       onClose();
     } finally {
       setDeleting(false);
-      setConfirmDelete(false);
     }
   };
 
@@ -833,41 +889,23 @@ function StoryModal({
                   {isWindowExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 </button>
                 {isOwner ? (
-                  confirmDelete ? (
-                    <>
-                      <span className="text-white text-xs bg-black/60 backdrop-blur px-2 py-1 rounded-lg">Delete this story?</span>
-                      <button
-                        onClick={handleDelete}
-                        disabled={deleting}
-                        className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {deleting ? 'Deleting...' : 'Yes, delete'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(false)}
-                        className="bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => onEdit(story)}
-                        className="bg-black/40 backdrop-blur hover:bg-blue-600/80 text-white rounded-full p-2 transition-colors"
-                        title="Edit story"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(true)}
-                        className="bg-black/40 backdrop-blur hover:bg-rose-600/80 text-white rounded-full p-2 transition-colors"
-                        title="Delete story"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onEdit(story)}
+                      className="bg-black/40 backdrop-blur hover:bg-blue-600/80 text-white rounded-full p-2 transition-colors"
+                      title="Edit story"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={deleting}
+                      className="bg-black/40 backdrop-blur hover:bg-rose-600/80 text-white rounded-full p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                      title={deleting ? 'Deleting story' : 'Delete story'}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 ) : null}
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-6">
@@ -1120,7 +1158,7 @@ function StoryModal({
                     <div className="bg-muted/60 rounded-2xl p-6 mb-4 text-center border border-border">
                       <p className="text-sm text-muted-foreground mb-3">You must be signed in to post a comment.</p>
                       <button
-                        onClick={() => window.location.href = '/auth'}
+                        onClick={() => window.location.href = getAuthRedirectHref()}
                         className="px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity"
                       >
                         Sign In to Comment
@@ -1245,32 +1283,40 @@ function SubmitStoryForm({
   onProgress: (progress: number, status: string, done: boolean) => void;
 }) {
   const { currentUser, userProfile } = useAuth();
+  const router = useRouter();
   const isEdit = !!initialData;
+  const draftRef = useRef<TripStoryDraft | null>(!initialData ? readTripStoryDraft() : null);
   const [form, setForm] = useState({
-    authorName: initialData?.authorName ?? userProfile?.displayName ?? currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'User',
-    authorEmail: initialData?.authorEmail ?? userProfile?.email ?? currentUser?.email ?? '',
-    destination: initialData?.destination ?? '',
-    title: initialData?.title ?? '',
-    description: initialData?.description || initialData?.fullStory || '',
-    fullStory: '',
-    tripHighlights: initialData?.tripHighlights ?? '',
-    dayByDay: initialData?.dayByDay ?? '',
-    bestPlaces: initialData?.bestPlaces ?? '',
-    localFood: initialData?.localFood ?? '',
-    travelTips: initialData?.travelTips ?? '',
-    duration: initialData?.duration ?? '',
-    budget: initialData?.budget ?? '',
-    travelType: (initialData?.travelType ?? 'Solo') as TripStory['travelType'],
-    startDate: initialData?.startDate ?? '',
-    endDate: initialData?.endDate ?? '',
+    authorName: initialData?.authorName ?? draftRef.current?.form.authorName ?? userProfile?.displayName ?? currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'User',
+    authorEmail: initialData?.authorEmail ?? draftRef.current?.form.authorEmail ?? userProfile?.email ?? currentUser?.email ?? '',
+    destination: initialData?.destination ?? draftRef.current?.form.destination ?? '',
+    title: initialData?.title ?? draftRef.current?.form.title ?? '',
+    description: initialData?.description || initialData?.fullStory || draftRef.current?.form.description || '',
+    fullStory: initialData?.fullStory ?? draftRef.current?.form.fullStory ?? '',
+    tripHighlights: initialData?.tripHighlights ?? draftRef.current?.form.tripHighlights ?? '',
+    dayByDay: initialData?.dayByDay ?? draftRef.current?.form.dayByDay ?? '',
+    bestPlaces: initialData?.bestPlaces ?? draftRef.current?.form.bestPlaces ?? '',
+    localFood: initialData?.localFood ?? draftRef.current?.form.localFood ?? '',
+    travelTips: initialData?.travelTips ?? draftRef.current?.form.travelTips ?? '',
+    duration: initialData?.duration ?? draftRef.current?.form.duration ?? '',
+    budget: initialData?.budget ?? draftRef.current?.form.budget ?? '',
+    travelType: (initialData?.travelType ?? draftRef.current?.form.travelType ?? 'Solo') as TripStory['travelType'],
+    startDate: initialData?.startDate ?? draftRef.current?.form.startDate ?? '',
+    endDate: initialData?.endDate ?? draftRef.current?.form.endDate ?? '',
   });
 
   useEffect(() => {
     if (!isEdit) {
       setForm(f => ({
         ...f,
-        authorName: f.authorName || userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User',
-        authorEmail: f.authorEmail || userProfile?.email || currentUser?.email || '',
+        authorName:
+          !f.authorName || f.authorName === 'User'
+            ? userProfile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'
+            : f.authorName,
+        authorEmail:
+          !f.authorEmail || f.authorEmail !== currentUser?.email
+            ? userProfile?.email || currentUser?.email || f.authorEmail || ''
+            : f.authorEmail,
       }));
     }
   }, [userProfile, currentUser, isEdit]);
@@ -1285,7 +1331,7 @@ function SubmitStoryForm({
     return d.toISOString().split('T')[0];
   }, []);
   const [videoLinks, setVideoLinks] = useState<string[]>(
-    initialData?.videos?.length ? initialData.videos.map(v => v.url) : ['']
+    initialData?.videos?.length ? initialData.videos.map(v => v.url) : draftRef.current?.videoLinks?.length ? draftRef.current.videoLinks : ['']
   );
   // Existing photos already on Cloudinary (kept unless explicitly removed)
   const [existingPhotos, setExistingPhotos] = useState<StoryPhoto[]>(initialData?.photos ?? []);
@@ -1359,6 +1405,28 @@ function SubmitStoryForm({
       setSubmitError('Please fill in all required fields.');
       return;
     }
+    if (!currentUser && !isEdit) {
+      sessionStorage.setItem(TRIP_STORY_DRAFT_KEY, JSON.stringify({
+        form,
+        videoLinks,
+        savedAt: Date.now(),
+      } satisfies TripStoryDraft));
+
+      const confirmed = await modernConfirm(
+        'Please login to submit your story. Your written progress will be restored after login.',
+        {
+          title: 'Login Required',
+          confirmText: 'Login Now',
+          cancelText: 'Keep Editing',
+        },
+      );
+
+      if (confirmed) {
+        onClose();
+        router.push(`/auth?from=${encodeURIComponent(TRIP_STORY_RETURN_PATH)}`);
+      }
+      return;
+    }
     setSubmitError('');
     // Close the modal immediately - upload continues in background
     onClose();
@@ -1403,6 +1471,9 @@ function SubmitStoryForm({
         likes: initialData?.likes ?? [],
         commentCount: initialData?.commentCount ?? 0,
       });
+      if (!isEdit) {
+        sessionStorage.removeItem(TRIP_STORY_DRAFT_KEY);
+      }
 
       onProgress(
         100,
@@ -1659,7 +1730,6 @@ function SubmitStoryForm({
 
 export default function TripStoriesPage() {
   const { currentUser } = useAuth();
-  const router = useRouter();
   const uid = currentUser?.uid || null;
   const userEmail = currentUser?.email || null;
 
@@ -1693,6 +1763,7 @@ export default function TripStoriesPage() {
 
   const searchParams = useSearchParams();
   const handledStoryParamRef = useRef(false);
+  const handledDraftReturnRef = useRef(false);
   const heroRef = useRef<HTMLDivElement>(null);
 
   // Load stories from Firestore (merged with sample)
@@ -1700,10 +1771,10 @@ export default function TripStoriesPage() {
     const q = query(collection(firestoreDb, 'stories'), orderBy('createdAt', 'desc'), limit(50));
     const unsub = onSnapshot(q, snap => {
       const firestoreStories = snap.docs.map(d => ({ ...(d.data() as TripStory), id: d.id }));
-      setStories([...firestoreStories, ...SAMPLE_STORIES]);
+      setStories(dedupeStoriesById([...firestoreStories, ...SAMPLE_STORIES]));
     }, () => {
       // Firestore unavailable, use samples
-      setStories(SAMPLE_STORIES);
+      setStories(dedupeStoriesById(SAMPLE_STORIES));
     });
     return unsub;
   }, []);
@@ -1720,6 +1791,14 @@ export default function TripStoriesPage() {
       handledStoryParamRef.current = true;
     }
   }, [stories, searchParams]);
+
+  useEffect(() => {
+    if (handledDraftReturnRef.current || !currentUser) return;
+    const shouldOpenDraft = searchParams.get('submitStory') === '1' || !!readTripStoryDraft();
+    if (!shouldOpenDraft) return;
+    handledDraftReturnRef.current = true;
+    setShowSubmitForm(true);
+  }, [currentUser, searchParams]);
 
   // Apply filters
   useEffect(() => {
@@ -1826,13 +1905,13 @@ export default function TripStoriesPage() {
     }
     const created = payload?.data || {};
     // optimistically add
-    setStories(prev => [{
+    setStories(prev => dedupeStoriesById([{
       ...data,
       id: created.id,
       authorId: uid ?? '',
       authorEmail: userEmail ?? data.authorEmail ?? '',
       createdAt: { toDate: () => new Date(created.createdAt || Date.now()) },
-    } as TripStory, ...prev]);
+    } as TripStory, ...prev]));
   };
 
   const featured = useMemo(() => {
@@ -1942,11 +2021,7 @@ export default function TripStoriesPage() {
             {/* Share Story button */}
             <motion.button
               onClick={() => {
-                if (!currentUser) {
-                  router.push('/auth');
-                } else {
-                  setShowSubmitForm(true);
-                }
+                setShowSubmitForm(true);
               }}
               className="mt-5 flex items-center gap-2 mx-auto px-7 py-3 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-2xl hover:opacity-90 transition-opacity shadow-lg shadow-rose-500/25"
               whileHover={{ scale: 1.03 }}
@@ -2105,11 +2180,7 @@ export default function TripStoriesPage() {
             <p className="text-rose-100 text-lg mb-6 max-w-xl mx-auto">Inspire thousands of fellow travelers with your experience. Share your journey with the ABjee Travel community.</p>
             <motion.button
               onClick={() => {
-                if (!currentUser) {
-                  router.push('/auth');
-                } else {
-                  setShowSubmitForm(true);
-                }
+                setShowSubmitForm(true);
               }}
               className="px-8 py-3.5 bg-white text-rose-600 font-bold rounded-2xl hover:bg-rose-50 transition-colors shadow-xl text-sm"
               whileHover={{ scale: 1.04 }}

@@ -20,7 +20,7 @@ export function ProfileCompletionCheck() {
       return;
     }
 
-    const blocklist = ['/profile', '/auth', '/api', '/admin'];
+    const blocklist = ['/profile', '/auth', '/api', '/admin', '/advertisement'];
     const isBlockedPath = blocklist.some((path) => pathname.startsWith(path));
     if (isBlockedPath) {
       setIsOpen(false);

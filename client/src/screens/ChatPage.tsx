@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Plus, MessageCircle, Users, Clock, Share2, Trash2, Copy, Lock, Crown, Shield, Compass, Eye, Calendar, Search, PauseCircle, PlayCircle, X, Upload, Image as ImageIcon, MapPin, Video, Play, ChevronLeft, ChevronRight, Star, Facebook, Instagram, AlertCircle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, limit, getDocs } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
@@ -16,6 +16,7 @@ import { type ChatRoom as ChatRoomType } from '@/lib/chatService';
 import { uploadImageToR2, createImagePreview, revokeImagePreview, type ImageUploadResult } from '@/lib/r2Upload';
 import { publicAsset } from '@/lib/publicAsset';
 import { useAuth } from '@/contexts/AuthContext';
+import { getAuthRedirectHref } from '@/lib/authRedirect';
 import { subscriptionsAPI, placesAPI } from '@/lib/api';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
@@ -372,6 +373,7 @@ const PlaceCard: React.FC<{
  */
 const ChatRoomsList: React.FC = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user, userProfile, refreshUserProfile } = useAuth();
   const isMobile = useIsMobile();
@@ -1319,56 +1321,26 @@ const ChatRoomsList: React.FC = () => {
     }
   }, [isVideoPlaying]);
 
-  const handleAuthCheck = useCallback(async (actionName: string) => {
-    const confirmed = await modernConfirm(
-      `Please login to access ${actionName}.`,
-      {
-        title: 'Login Required',
-        confirmText: 'Login Now',
-        cancelText: 'Cancel'
-      }
-    );
-    if (confirmed) {
-      router.push('/auth');
-    }
-  }, [router]);
-
   const scrollToCommunityRooms = useCallback(() => {
-    if (!user) {
-      void handleAuthCheck('Connect with Fellow Travellers');
-      return;
-    }
     setTimeout(() => {
       communityRoomsRef.current?.scrollIntoView({
         behavior: 'smooth',
         block: 'start'
       });
     }, 100);
-  }, [user, handleAuthCheck]);
+  }, []);
 
   const scrollToExploreOutdoors = useCallback(() => {
-    if (!user) {
-      void handleAuthCheck('Explore Tourist Places');
-      return;
-    }
     router.push('/tourplaces');
-  }, [router, user, handleAuthCheck]);
+  }, [router]);
 
   const openTripStories = useCallback(() => {
-    if (!user) {
-      void handleAuthCheck('Trip Stories');
-      return;
-    }
     router.push('/trip-stories');
-  }, [router, user, handleAuthCheck]);
+  }, [router]);
 
   const openTravelItinerary = useCallback(() => {
-    if (!user) {
-      void handleAuthCheck('Make a Perfect Travel Itinerary');
-      return;
-    }
     router.push('/travel-destinations');
-  }, [router, user, handleAuthCheck]);
+  }, [router]);
 
   // Load chat communities
   useEffect(() => {
@@ -3613,7 +3585,7 @@ const ChatRoomsList: React.FC = () => {
                     </p>
                   </div>
                   <Button asChild className="rounded-xl bg-linear-to-r from-rose-600 to-pink-600 text-white font-semibold shadow-lg hover:from-rose-700 hover:to-pink-700">
-                    <a href="/auth?redirect=%2Fchat">Login to Chat</a>
+                    <a href={getAuthRedirectHref(pathname)}>Login to Chat</a>
                   </Button>
                 </div>
               </motion.div>

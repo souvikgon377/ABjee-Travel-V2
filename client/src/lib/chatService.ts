@@ -485,7 +485,11 @@ class ChatService {
    * Listen to ALL public chat communities
    */
   listenToUserRooms(callback: (rooms: ChatRoom[]) => void) {
-    const user = this.getCurrentUser();
+    const user = auth.currentUser;
+    if (!user) {
+      callback([]);
+      return () => {};
+    }
     const roomsRef = ref(database, 'chatrooms');
     
     return onValue(roomsRef, (snapshot) => {

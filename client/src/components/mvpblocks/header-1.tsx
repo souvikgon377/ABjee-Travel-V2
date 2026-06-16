@@ -4,13 +4,14 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { publicAsset } from '@/lib/publicAsset';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ChevronDown, ArrowRight, Shield, LogOut, Bell, RefreshCw, Trash2, Inbox, Crown, Wallet } from 'lucide-react';
 import { ModeToggle } from './mode-toggle'
 import { useAuth } from '../../contexts/AuthContext';
 import { resolveAvatarUrl } from '@/lib/avatar';
 import { getSubscriptionInfo, hasPaidAccess } from '@/lib/subscriptionPolicy';
+import { getAuthRedirectHref } from '@/lib/authRedirect';
 
 interface NavItem {
   name: string;
@@ -214,6 +215,11 @@ export default function Header1() {
   const { currentUser, userProfile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const authHref = useMemo(
+    () => getAuthRedirectHref(pathname, searchParams.toString()),
+    [pathname, searchParams],
+  );
   const isTravelThemePage =
     pathname?.includes('/travel-itinerary') ||
     pathname?.includes('/travel-destinations') ||
@@ -338,18 +344,6 @@ export default function Header1() {
   );
 
   const mobileNavItems = useMemo(() => visibleNavItems, [visibleNavItems]);
-
-  const navGridStyle = useMemo(
-    () => ({
-      gridTemplateColumns: `repeat(${Math.max(visibleNavItems.length, 1)}, minmax(120px, 1fr))`,
-    }),
-    [visibleNavItems.length],
-  );
-
-  const navMaxWidthClass = useMemo(() => {
-    const hasBookingCategories = visibleNavItems.some((item) => item.href === '/booking-categories');
-    return hasBookingCategories ? 'max-w-3xl xl:max-w-4xl' : 'max-w-2xl';
-  }, [visibleNavItems]);
 
   const fetchNotifications = useCallback(async () => {
     if (!currentUser) {
@@ -1049,14 +1043,14 @@ export default function Header1() {
             ) : (
               <>
                 <Link
-                  href="/auth"
+                  href={authHref}
                   className="font-medium text-foreground transition-colors duration-200 hover:text-rose-500 shrink-0 text-xs lg:text-sm"
                 >
                   Sign In
                 </Link>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="shrink-0">
                   <Link
-                    href="/auth"
+                    href={authHref}
                     className="inline-flex items-center space-x-1.5 rounded-full bg-linear-to-r from-rose-500 to-rose-700 px-4 py-2 lg:px-5 lg:py-2.5 font-medium text-white transition-all duration-200 hover:shadow-lg text-xs lg:text-sm"
                   >
                     <span>Get Started</span>
@@ -1241,14 +1235,14 @@ export default function Header1() {
               ) : (
                 <>
                   <Link
-                    href="/auth"
+                    href={authHref}
                     className="block w-full rounded-lg py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     Sign In
                   </Link>
                   <Link
-                    href="/auth"
+                    href={authHref}
                     className="block w-full rounded-lg bg-linear-to-r from-rose-500 to-rose-700 py-2.5 text-center font-medium text-white transition-all duration-200 hover:shadow-lg"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -1265,4 +1259,3 @@ export default function Header1() {
     </motion.header>
   );
 }
-

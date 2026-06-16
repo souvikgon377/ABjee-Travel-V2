@@ -7,6 +7,7 @@ import Header from '../components/mvpblocks/header-1';
 import { Button } from '../components/ui/button';
 import { LogOut, User } from 'lucide-react';
 import { resolveAvatarUrl } from '@/lib/avatar';
+import { clearSavedAuthReturnPath, getSavedAuthReturnPath, resolveAuthReturnPath, saveAuthReturnPath } from '@/lib/authRedirect';
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
@@ -17,6 +18,12 @@ export default function AuthPage() {
   const searchParams = useSearchParams();
   const canAccessAdmin = userProfile?.role === 'admin' || userProfile?.role === 'owner';
   const profileAvatar = resolveAvatarUrl(userProfile, currentUser);
+
+  const getPostAuthDestination = () =>
+    resolveAuthReturnPath(
+      searchParams.get('from') || searchParams.get('redirect') || getSavedAuthReturnPath(),
+      '/community',
+    );
 
   useEffect(() => {
     setProfileAvatarError(false);
@@ -33,6 +40,11 @@ export default function AuthPage() {
 
   useEffect(() => {
     try {
+      const requestedReturnPath = searchParams.get('from') || searchParams.get('redirect');
+      if (requestedReturnPath) {
+        saveAuthReturnPath(resolveAuthReturnPath(requestedReturnPath));
+      }
+
       const didResetPassword = localStorage.getItem('abjee:passwordResetSuccess');
       if (didResetPassword) {
         localStorage.removeItem('abjee:passwordResetSuccess');
@@ -41,17 +53,19 @@ export default function AuthPage() {
     } catch {
       // ignore storage errors
     }
-  }, []);
+  }, [searchParams]);
 
   const handleAuthComplete = () => {
     // Check if user has admin role and redirect to admin dashboard
     if (canAccessAdmin) {
+      clearSavedAuthReturnPath();
       router.push('/admin');
       return;
     }
     
-    // Get the intended destination from query param, or fallback to chat page
-    const from = searchParams.get('from') || '/community';
+    // Get the intended destination from query param, saved auth-page reload state, or fallback to chat page.
+    const from = getPostAuthDestination();
+    clearSavedAuthReturnPath();
     router.push(from);
   };
 
@@ -102,7 +116,11 @@ export default function AuthPage() {
 
             <div className="space-y-4">
               <Button
-                onClick={() => router.push(canAccessAdmin ? '/admin' : '/community')}
+                onClick={() => {
+                  const destination = canAccessAdmin ? '/admin' : getPostAuthDestination();
+                  clearSavedAuthReturnPath();
+                  router.push(destination);
+                }}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {canAccessAdmin ? 'Go to Admin Dashboard' : 'Go to Community Chat'}
@@ -240,4 +258,3 @@ export default function AuthPage() {
     </div>
   );
 }
-

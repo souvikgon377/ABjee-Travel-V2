@@ -203,7 +203,7 @@ export const authenticateRequest = async (req: NextRequest) => {
   let decoded: Record<string, any>;
 
   try {
-    decoded = await adminAuth.verifyIdToken(token);
+    decoded = await adminAuth.verifyIdToken(token, true);
   } catch (error: any) {
     const code = typeof error?.code === "string" ? error.code : "";
     const message = String(error?.message || "").toLowerCase();
@@ -244,7 +244,7 @@ export const authenticateRequest = async (req: NextRequest) => {
       if (!redisUser.isActive) throw new AuthError("Account is deactivated.", 401);
       return redisUser;
     }
-  } catch (redisErr) {
+  } catch {
     // Redis unavailable — fall through to Firestore
     console.warn('[Auth] Redis auth cache unavailable, falling back to Firestore');
   }
@@ -269,45 +269,30 @@ export const authenticateRequest = async (req: NextRequest) => {
     }
 
     if (!user) {
-      const displayName = decoded.name || "";
-      const nameParts = displayName.split(" ");
-      user = await withDataStoreTimeout(userService.createWithId(decoded.uid, {
-        firebaseUid: decoded.uid,
-        email: decoded.email,
-        emailVerified: decoded.email_verified,
-        displayName,
-        firstName: nameParts[0] || "",
-        lastName: nameParts.slice(1).join(" ") || "",
-        username: decoded.email?.split("@")[0] || "",
-        avatar: decoded.picture || "",
-        photoURL: decoded.picture || "",
-        profileImage: decoded.picture || "",
-        profilePicture: decoded.picture || "",
-        role: elevatedRole || "user",
-      }), "createWithId");
-    } else {
-      const patch: Record<string, unknown> = {};
+      throw new AuthError("Account not found or has been deleted.", 404);
+    }
 
-      if (decoded.picture && decoded.picture !== user.avatar) {
-        patch.avatar = decoded.picture;
-        patch.photoURL = decoded.picture;
-        patch.profileImage = decoded.picture;
-        patch.profilePicture = decoded.picture;
-      }
+    const patch: Record<string, unknown> = {};
 
-      if (decoded.name && decoded.name !== user.displayName) {
-        patch.displayName = decoded.name;
-      }
+    if (decoded.picture && decoded.picture !== user.avatar) {
+      patch.avatar = decoded.picture;
+      patch.photoURL = decoded.picture;
+      patch.profileImage = decoded.picture;
+      patch.profilePicture = decoded.picture;
+    }
 
-      if (elevatedRole && user.role !== elevatedRole) {
-        patch.role = elevatedRole;
-      }
+    if (decoded.name && decoded.name !== user.displayName) {
+      patch.displayName = decoded.name;
+    }
 
-      if (Object.keys(patch).length > 0) {
-        user = await withDataStoreTimeout(userService.update(user.id, patch as Record<string, any>), "userService.update");
-        // Invalidate cache on update so next request gets fresh data
-        invalidateUserProfileCache(decoded.uid);
-      }
+    if (elevatedRole && user.role !== elevatedRole) {
+      patch.role = elevatedRole;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      user = await withDataStoreTimeout(userService.update(user.id, patch as Record<string, any>), "userService.update");
+      // Invalidate cache on update so next request gets fresh data
+      invalidateUserProfileCache(decoded.uid);
     }
 
     // Store in both L1 memory and L2 Redis for subsequent calls

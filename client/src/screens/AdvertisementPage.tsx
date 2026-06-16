@@ -2,18 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { ArrowRight, CheckCircle2, Clock3, Eye, EyeOff, Lock, Mail, Megaphone, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Lock, Mail, Megaphone, Search, ShieldCheck, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { AdvertisementForm } from '@/components/ui/advertisement-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { firestoreDb } from '@/lib/firebaseFirestore';
 import { auth } from '@/lib/firebase';
 import confetti from 'canvas-confetti';
-import { modernConfirm } from '@/lib/modernDialog';
 
 type OwnerAdvertisement = {
   id: string;
@@ -44,8 +41,6 @@ type OwnerAdvertisement = {
 };
 
 const normalizeKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
-
-const normalizePhone = (value: unknown) => String(value ?? '').replace(/\D/g, '');
 
 const formatTimestamp = (value: any) => {
   try {
@@ -122,7 +117,7 @@ const isSubscriptionActive = (plan: string | null, verifiedAt: string | null, cr
 };
 
 export default function AdvertisementPage() {
-  const { currentUser, userProfile, loading, login, signup, changePassword, logout, resetPassword } = useAuth();
+  const { currentUser, userProfile, loading, login, signup, changePassword, resetPassword, loginWithGoogle } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -132,38 +127,16 @@ export default function AdvertisementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [accessGranted, setAccessGranted] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('ad_access_granted') === 'true';
-    }
-    return false;
-  });
+  const [accessGranted, setAccessGranted] = useState(false);
 
   useEffect(() => {
-    if (!loading && !currentUser) {
-      setAccessGranted(false);
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('ad_access_granted');
-      }
-
-      const showLoginPopup = async () => {
-        const confirmed = await modernConfirm(
-          'Please login to access Partner Registration.',
-          {
-            title: 'Login Required',
-            confirmText: 'Login Now',
-            cancelText: 'Cancel'
-          }
-        );
-        if (confirmed) {
-          router.push('/auth');
-        } else {
-          router.push('/');
-        }
-      };
-      void showLoginPopup();
+    if (loading) return;
+    if (currentUser) {
+      setAccessGranted(true);
+      return;
     }
-  }, [currentUser, loading, router]);
+    setAccessGranted(false);
+  }, [currentUser, loading]);
   const [ownerAds, setOwnerAds] = useState<OwnerAdvertisement[]>([]);
   const [ownerAdsLoading, setOwnerAdsLoading] = useState(false);
   const [ownerAdsError, setOwnerAdsError] = useState('');
@@ -229,9 +202,9 @@ export default function AdvertisementPage() {
           }
           if (d.adLimits) {
             setAdLimits({
-              monthly: Number(d.adLimits.monthly) ?? 1,
-              quarterly: Number(d.adLimits.quarterly) ?? 3,
-              yearly: Number(d.adLimits.yearly) ?? -1,
+              monthly: Number(d.adLimits.monthly) || 1,
+              quarterly: Number(d.adLimits.quarterly) || 3,
+              yearly: Number(d.adLimits.yearly) || -1,
             });
           }
           if (d.adDescriptions) {
@@ -724,8 +697,15 @@ export default function AdvertisementPage() {
     event.preventDefault();
     setError('');
 
-    if (!profileEmail) {
-      setError('Please sign in to load your profile email before continuing.');
+    const targetEmail = (profileEmail || email).trim();
+
+    if (!targetEmail) {
+      setError('Please enter your business email to continue.');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      setError('Please enter a valid email address.');
       return;
     }
 
@@ -751,26 +731,37 @@ export default function AdvertisementPage() {
         if (currentUser) {
           await changePassword(password);
         } else {
-          await signup(profileEmail, password);
+          await signup(targetEmail, password);
         }
       } else {
         try {
-          await login(profileEmail, password);
+          await login(targetEmail, password);
         } catch (loginError) {
           if (!currentUser && isMissingCredentialAccountError(loginError)) {
-            await signup(profileEmail, password);
+            await signup(targetEmail, password);
           } else {
             throw loginError;
           }
         }
       }
 
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('ad_access_granted', 'true');
-      }
       setAccessGranted(true);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Failed to continue. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleAccess = async () => {
+    setError('');
+
+    try {
+      setIsSubmitting(true);
+      await loginWithGoogle();
+      setAccessGranted(true);
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'Failed to sign in with Google. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -798,12 +789,12 @@ export default function AdvertisementPage() {
 
             <div className="space-y-3">
               <h1 className="max-w-xl text-4xl font-black tracking-tight text-slate-950 dark:text-white sm:text-5xl">
-                {requiresPasswordSetup ? 'Create your ad password.' : 'Sign In to Register your Business with Us'}
+                {requiresPasswordSetup ? 'Create your ad password.' : 'Register your Business with Us'}
               </h1>
               <p className="max-w-2xl text-base text-slate-600 dark:text-slate-300 sm:text-lg">
                 {requiresPasswordSetup
                   ? 'We pulled your email from your profile. Set a password once, then use the same email and password next time.'
-                  : 'We pulled your email from your profile. Enter the password for this account to continue to the Registration form.'}
+                  : 'Create or sign in to a partner account directly from here. You do not need to complete normal user registration first.'}
               </p>
             </div>
 
@@ -819,7 +810,7 @@ export default function AdvertisementPage() {
                     value={email}
                     disabled={Boolean(profileEmail)}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="Email from your profile"
+                    placeholder="Enter your business email"
                     className="pl-10"
                     autoComplete="email"
                   />
@@ -891,10 +882,32 @@ export default function AdvertisementPage() {
               {/* success message removed per request */}
 
               <div className="flex flex-wrap gap-3">
-                <Button type="submit" className="gap-2 rounded-full" disabled={isSubmitting}>
-                  {isSubmitting ? 'Please wait...' : requiresPasswordSetup ? 'Create Password and Continue' : 'Sign In and Continue'}
+                <Button
+                  type="submit"
+                  className="cursor-pointer gap-2 rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-lg hover:shadow-rose-500/25 active:translate-y-0 active:scale-[0.99]"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Please wait...' : requiresPasswordSetup ? 'Create Password and Continue' : 'Continue with Email'}
                 </Button>
-                <Button type="button" variant="ghost" className="rounded-full" onClick={async () => {
+                <Button
+                  type="button"
+                  className="group cursor-pointer gap-2 rounded-full border border-white/30 bg-[linear-gradient(135deg,#4285f4_0%,#4285f4_25%,#34a853_25%,#34a853_50%,#fbbc05_50%,#fbbc05_75%,#ea4335_75%,#ea4335_100%)] px-[1px] py-[1px] text-slate-950 shadow-lg shadow-rose-500/10 transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/20 active:translate-y-0 active:scale-[0.99] dark:text-white"
+                  disabled={isSubmitting}
+                  onClick={handleGoogleAccess}
+                >
+                  <span className="inline-flex h-full w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2 font-semibold text-slate-950 transition-colors duration-200 group-hover:bg-white/95 dark:bg-slate-950 dark:text-white dark:group-hover:bg-slate-900">
+                    <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-white transition-transform duration-200 group-hover:rotate-[-6deg] group-hover:scale-110">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
+                        <path fill="#4285F4" d="M21.6 12.23c0-.73-.07-1.43-.19-2.11H12v3.99h5.38a4.6 4.6 0 0 1-1.99 3.02v2.51h3.23c1.89-1.74 2.98-4.3 2.98-7.41z" />
+                        <path fill="#34A853" d="M12 22c2.7 0 4.96-.89 6.62-2.41l-3.23-2.51c-.9.6-2.04.95-3.39.95-2.61 0-4.82-1.76-5.61-4.13H3.05v2.59A9.99 9.99 0 0 0 12 22z" />
+                        <path fill="#FBBC05" d="M6.39 13.9A6.01 6.01 0 0 1 6.07 12c0-.66.11-1.3.32-1.9V7.51H3.05A9.99 9.99 0 0 0 2 12c0 1.61.38 3.13 1.05 4.49l3.34-2.59z" />
+                        <path fill="#EA4335" d="M12 5.97c1.47 0 2.79.51 3.83 1.5l2.87-2.87C16.96 2.98 14.7 2 12 2a9.99 9.99 0 0 0-8.95 5.51l3.34 2.59C7.18 7.73 9.39 5.97 12 5.97z" />
+                      </svg>
+                    </span>
+                    Continue with Google
+                  </span>
+                </Button>
+                <Button type="button" variant="ghost" className="cursor-pointer rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02]" onClick={async () => {
                   setForgotMessage(null);
                   const targetEmail = profileEmail || email;
                   if (!targetEmail) {
@@ -913,7 +926,7 @@ export default function AdvertisementPage() {
                 }}>
                   {forgotLoading ? 'Sending…' : 'Forgot password?'}
                 </Button>
-                <Button asChild variant="outline" className="rounded-full">
+                <Button asChild variant="outline" className="cursor-pointer rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02]">
                   <Link href="/">Back to Home</Link>
                 </Button>
               </div>
@@ -933,15 +946,15 @@ export default function AdvertisementPage() {
               </div>
               <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">Match the admin-style view on user side</h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                The email is loaded from your profile, saved with your ads, and the records below use the same card-style layout as the admin panel.
+                Partners can register directly here. The signed-in email is saved with ads, and the records below use the same card-style layout as the admin panel.
               </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-1">
               <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
                 <Megaphone className="h-5 w-5 text-rose-500" />
-                <p className="mt-3 text-sm font-semibold">Profile email</p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Loaded automatically and saved with each submission.</p>
+                <p className="mt-3 text-sm font-semibold">Partner email</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Use email/password or Google and save it with each submission.</p>
               </div>
               <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
                 <ShieldCheck className="h-5 w-5 text-orange-500" />
@@ -962,26 +975,6 @@ export default function AdvertisementPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(244,63,94,0.20),transparent_36%),radial-gradient(circle_at_top_right,rgba(249,115,22,0.20),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,247,237,0.94))] px-4 pb-8 pt-28 dark:bg-[radial-gradient(circle_at_top_left,rgba(244,63,94,0.18),transparent_36%),radial-gradient(circle_at_top_right,rgba(249,115,22,0.14),transparent_28%),linear-gradient(180deg,rgba(2,6,23,0.96),rgba(15,23,42,0.96))] sm:px-6 sm:pt-32 lg:px-8 lg:pt-36">
-      {currentUser && (
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-end mb-4">
-            <button
-              type="button"
-              onClick={() => {
-                setAccessGranted(false);
-                if (typeof window !== 'undefined') {
-                  sessionStorage.removeItem('ad_access_granted');
-                }
-                // Do not sign the user out of the whole site — only exit the Registration flow
-                router.push('/advertisement');
-              }}
-              className="rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
-            >
-              Exit Registration
-            </button>
-          </div>
-        </div>
-      )}
       <div className="mx-auto max-w-7xl space-y-6">
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-stretch">
         <section className="flex flex-col space-y-6 rounded-4xl border border-white/20 bg-white/80 p-6 shadow-2xl shadow-rose-500/10 backdrop-blur dark:border-white/10 dark:bg-slate-950/70">
@@ -1055,7 +1048,7 @@ export default function AdvertisementPage() {
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.monthly}</p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-4">
                       {adFeatures.adMonthlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
-                        <li key={idx}>{feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                        <li key={idx}>{feat.trim().replace(/^[•*-]\s*/, '')}</li>
                       ))}
                     </ul>
                   </div>
@@ -1108,7 +1101,7 @@ export default function AdvertisementPage() {
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.quarterly}</p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-4">
                       {adFeatures.adQuarterlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
-                        <li key={idx}>{feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                        <li key={idx}>{feat.trim().replace(/^[•*-]\s*/, '')}</li>
                       ))}
                     </ul>
                   </div>
@@ -1158,7 +1151,7 @@ export default function AdvertisementPage() {
                     <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{adDescriptions.yearly}</p>
                     <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-4">
                       {adFeatures.adYearlyFeatures.split('\n').filter(line => line.trim()).map((feat, idx) => (
-                        <li key={idx}>{feat.trim().replace(/^[•\-\*]\s*/, '')}</li>
+                        <li key={idx}>{feat.trim().replace(/^[•*-]\s*/, '')}</li>
                       ))}
                     </ul>
                   </div>
@@ -1243,40 +1236,7 @@ export default function AdvertisementPage() {
                 )}
               </div>
             </div>
-
-          <div className="mt-auto space-y-4">
-            <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-100">
-              If you are an admin, open the dashboard to approve submissions or add a live Registration directly.
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button asChild className="gap-2 rounded-full">
-                <Link href="/admin">
-                  Open Admin Dashboard
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="rounded-full">
-                <Link href="/">Back to Home</Link>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="rounded-full border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:opacity-90"
-                onClick={() => {
-                  setAccessGranted(false);
-                  if (typeof window !== 'undefined') {
-                    sessionStorage.removeItem('ad_access_granted');
-                  }
-                  // Do not sign the user out globally
-                  router.push('/advertisement');
-                }}
-              >
-                Exit Registration
-              </Button>
-            </div>
-          </div>
-        </section>
+</section>
 
         <div className="space-y-6">
           {editingAd ? (
@@ -1305,7 +1265,7 @@ export default function AdvertisementPage() {
                 additionalIdProofs: editingAd.additionalIdProofs || [],
                 plan: (editingAd as any).plan || 'monthly',
               }}
-              onSubmitted={(id) => {
+              onSubmitted={(_id) => {
                 setEditingAd(null);
                 setShowNewForm(false);
                 setSuccessMessage('Registration updated and sent for admin approval.');

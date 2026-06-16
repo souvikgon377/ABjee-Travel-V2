@@ -39,6 +39,7 @@ import { buildGoogleMapsEmbedUrl } from "@/components/ui/google-map-display";
 import { compressImageFile, compressVideoFile } from "@/lib/r2FileUpload";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSubscriptionInfo, hasPaidAccess } from "@/lib/subscriptionPolicy";
+import { getAuthRedirectHref } from "@/lib/authRedirect";
 import AdsStrip from "@/components/ui/ads-strip";
 
 const STATIC_VIDEO_V1 = publicAsset("/v1.mp4");
@@ -659,7 +660,7 @@ const TourPlaces: React.FC = () => {
       try {
         const sampleIds = normalizedNextResults.slice(0, 12).map((r) => ({ id: r?.id, name: r?.name }));
         console.info('[Client/Places] Fetched page results', { page, nextResultsCount: normalizedNextResults.length, sampleIds });
-      } catch (e) {
+      } catch {
         console.info('[Client/Places] Fetched page results (unable to sample ids)', { page, nextResultsCount: normalizedNextResults.length });
       }
 
@@ -679,7 +680,7 @@ const TourPlaces: React.FC = () => {
             const params = new URLSearchParams(window.location.search);
             skipDedupe = params.get('debugAppend') === '1';
           }
-        } catch (e) {
+        } catch {
           skipDedupe = false;
         }
 
@@ -1537,7 +1538,7 @@ const TourPlaces: React.FC = () => {
                             </p>
                             <button
                               type="button"
-                              onClick={() => router.push("/auth")}
+                              onClick={() => router.push(getAuthRedirectHref())}
                               className="mt-4 inline-flex items-center justify-center rounded-full bg-rose-500 px-6 py-2 text-xs font-bold text-white hover:bg-rose-600 transition"
                             >
                               Login Now
@@ -1875,7 +1876,7 @@ const TourPlaces: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => router.push("/auth")}
+                  onClick={() => router.push(getAuthRedirectHref())}
                   className="rounded-full bg-rose-500 px-6 py-2 text-xs font-bold text-white hover:bg-rose-600 transition"
                 >
                   Login Now

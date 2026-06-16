@@ -142,11 +142,6 @@ export default function AuthMultiStepForm({
 
       setIsComplete(true);
 
-      if (mode === 'signup') {
-        window.location.href = '/profile?onboarding=1';
-        return;
-      }
-
       if (onComplete) onComplete();
     } catch (error: any) {
       const errorMessage = error.message || 'Failed to sign in with Google';
@@ -406,4 +401,3 @@ const handleNextStep = async (data: any) => {
     </div>
   );
 }
-

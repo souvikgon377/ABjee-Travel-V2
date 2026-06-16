@@ -28,7 +28,7 @@ import {
 	Lock,
 	Trash2,
 } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { modernConfirm, modernAlert } from '@/lib/modernDialog';
 import { Button } from '@/components/ui/button';
@@ -48,6 +48,7 @@ import {
 import { buildAbjeeShareText } from '@/lib/socialShare';
 import Header1 from '@/components/mvpblocks/header-1';
 import CommunityHeader from '@/components/mvpblocks/community-header';
+import { getAuthRedirectHref } from '@/lib/authRedirect';
 
 interface SearchState {
 	query: string;
@@ -1564,7 +1565,7 @@ function TravelDetailModal({
 										<div className="bg-muted/60 rounded-2xl p-6 mb-4 text-center border border-border">
 											<p className="text-sm text-muted-foreground mb-3">You must be signed in to post a comment.</p>
 											<Button
-												onClick={() => window.location.href = '/auth'}
+												onClick={() => window.location.href = getAuthRedirectHref()}
 												className="px-5 py-2 bg-linear-to-r from-rose-500 to-orange-500 text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity"
 											>
 												Sign In to Comment
@@ -1657,7 +1658,6 @@ export default function TravelItenaryDisplay() {
 	const [generationError, setGenerationError] = useState<string | null>(null);
 	const [visibleCount, setVisibleCount] = useState(4);
 	const heroRef = useRef<HTMLElement | null>(null);
-	const generatorRef = useRef<HTMLElement | null>(null);
 	const resultsRef = useRef<HTMLElement | null>(null);
 
 	useEffect(() => {

@@ -6,6 +6,7 @@ import { subscriptionService } from "@/services/subscriptionService";
 import { hybridUpdatePartial } from "@/lib/server/hybridCache";
 import { checkAdminRateLimit } from "@/lib/server/rateLimiter";
 import { SyncService } from "@/modules/search/SyncService";
+import { adminAuth } from "@/lib/server/firebaseAdminAuth";
 
 export const runtime = "nodejs";
 
@@ -133,7 +134,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
           continue;
         }
         
-        let updated = false;
         const rawParticipants = room.participants;
         const participants: string[] = Array.isArray(rawParticipants)
           ? rawParticipants
@@ -142,7 +142,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
             : [];
         if (participants.includes(userId)) {
           updates[`chatrooms/${roomId}/participants`] = participants.filter((uid: string) => uid !== userId);
-          updated = true;
         }
         
         const rawPendingInvites = room.pendingInvites;
@@ -153,7 +152,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
             : [];
         if (pendingInvites.includes(userId)) {
           updates[`chatrooms/${roomId}/pendingInvites`] = pendingInvites.filter((uid: string) => uid !== userId);
-          updated = true;
         }
         
         const rawJoinRequests = room.joinRequests;
@@ -164,7 +162,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
             : [];
         if (joinRequests.includes(userId)) {
           updates[`chatrooms/${roomId}/joinRequests`] = joinRequests.filter((uid: string) => uid !== userId);
-          updated = true;
         }
       }
       
@@ -175,15 +172,25 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ u
       console.error(`[Admin:DeleteUser] Failed to clean up Realtime Database chatrooms for user ${userId}:`, dbErr);
     }
 
-    // 4. Delete the user from Firestore
-    await userService.delete(userId);
-
-    // 5. Auto-invalidate auth cache for this user
-    if (userToDelete?.firebaseUid) {
-      await invalidateUserProfileCache(userToDelete.firebaseUid);
+    // 4. Revoke and delete the Firebase Auth account so existing sessions cannot keep using the app.
+    const firebaseUid = userToDelete.firebaseUid || userId;
+    try {
+      await adminAuth.revokeRefreshTokens(firebaseUid);
+      await adminAuth.deleteUser(firebaseUid);
+    } catch (authErr: any) {
+      if (authErr?.code !== "auth/user-not-found") {
+        console.error(`[Admin:DeleteUser] Failed to delete Firebase Auth user ${firebaseUid}:`, authErr);
+        return fail("Failed to delete user's login account", 500);
+      }
     }
 
-    // 6. Partial Cache Update (Removal)
+    // 5. Delete the user from Firestore
+    await userService.delete(userId);
+
+    // 6. Auto-invalidate auth cache for this user
+    await invalidateUserProfileCache(firebaseUid);
+
+    // 7. Partial Cache Update (Removal)
     void hybridUpdatePartial<any[]>(USERS_CACHE_KEY, (current) => {
       if (!Array.isArray(current)) return current;
       return current.filter(u => u.id !== userId);
