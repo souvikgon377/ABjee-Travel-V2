@@ -6,7 +6,7 @@ export type AdvertisementLocationOption = {
 
 export type AdvertisementLocationResponse = {
   locations: AdvertisementLocationOption[];
-  source: 'cache' | 'firestore';
+  source: 'typesense' | 'cache' | 'firestore';
 };
 
 export async function fetchAdvertisementLocations(): Promise<AdvertisementLocationResponse> {

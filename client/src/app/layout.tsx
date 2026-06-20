@@ -5,8 +5,24 @@ import Script from "next/script";
 import "./globals.css";
 import { Providers } from "./providers";
 import { publicAsset } from "@/lib/publicAsset";
+import { GetYourGuideLoader } from "@/components/integrations/getyourguide-loader";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://abjee-travel.vercel.app";
+const cdnUrl = (process.env.NEXT_PUBLIC_CDN_URL || "").trim();
+
+const preconnectOrigins = Array.from(new Set([
+  "https://firebasestorage.googleapis.com",
+  "https://www.googleapis.com",
+  "https://widget.getyourguide.com",
+  "https://cdn.getyourguide.com",
+  ...(() => {
+    try {
+      return cdnUrl ? [new URL(cdnUrl).origin] : [];
+    } catch {
+      return [];
+    }
+  })(),
+]));
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -75,7 +91,16 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
+      <head>
+        {preconnectOrigins.map((origin) => (
+          <link key={`preconnect-${origin}`} rel="preconnect" href={origin} crossOrigin="anonymous" />
+        ))}
+        {preconnectOrigins.map((origin) => (
+          <link key={`dns-${origin}`} rel="dns-prefetch" href={origin} />
+        ))}
+      </head>
       <body>
+        <GetYourGuideLoader />
         <Providers>
           {children}
           <SpeedInsights />

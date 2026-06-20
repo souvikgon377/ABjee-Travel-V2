@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
-import { collection, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { CheckCircle2, Clock3, Loader2, Megaphone, PencilLine, RefreshCw, Search, Trash2, XCircle, UploadCloud } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { auth } from '@/lib/firebase';
 import { AdvertisementForm } from '@/components/ui/advertisement-form';
+import { AffiliateAdvertisementForm } from '@/components/ui/affiliate-advertisement-form';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,14 @@ type AdvertisementDoc = {
   createdAt?: any;
   updatedAt?: any;
   description?: string;
+  adType?: 'standard' | 'affiliate';
+  affiliateProvider?: string;
+  affiliateLink?: string;
+  widgetHref?: string;
+  partnerId?: string;
+  localeCode?: string;
+  tourIds?: string;
+  numberOfItems?: number;
 };
 
 type AdvertisementEditState = {
@@ -140,6 +149,14 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
           ownerName: candidateName,
           ownerPhoneNumber: candidatePhone,
           category: typeof data.category === 'string' ? data.category : null,
+          adType: data.adType === 'affiliate' ? 'affiliate' : 'standard',
+          affiliateProvider: typeof data.affiliateProvider === 'string' ? data.affiliateProvider : '',
+          affiliateLink: typeof data.affiliateLink === 'string' ? data.affiliateLink : '',
+          widgetHref: typeof data.widgetHref === 'string' ? data.widgetHref : '',
+          partnerId: typeof data.partnerId === 'string' ? data.partnerId : '',
+          localeCode: typeof data.localeCode === 'string' ? data.localeCode : '',
+          tourIds: typeof data.tourIds === 'string' ? data.tourIds : '',
+          numberOfItems: Number(data.numberOfItems) || 1,
           editedByEmail: typeof data.editedByEmail === 'string' ? data.editedByEmail : null,
           editedAt: data.editedAt || null,
           approvedAt: data.approvedAt || null,
@@ -484,6 +501,7 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
             mode="admin"
             onSubmitted={quickAddHandler}
           />
+          <AffiliateAdvertisementForm onSubmitted={quickAddHandler} />
         </div>
 
         <Card className="border-border/70 bg-card/80 shadow-lg">
@@ -757,6 +775,11 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
                     {item.status}
                   </Badge>
                 </div>
+                {item.adType === 'affiliate' ? (
+                  <Badge variant="outline" className="mt-2 border-amber-400/60 bg-amber-400/10 text-amber-700 dark:text-amber-300">
+                    GetYourGuide affiliate
+                  </Badge>
+                ) : null}
                 <p className="mt-1 text-sm text-muted-foreground">{item.mobileNumber}</p>
                 <p className="mt-3 text-sm text-muted-foreground">{item.area}, {item.state}, {item.country}</p>
                 {item.photoUrl ? <img src={item.photoUrl} alt={item.name} className="mt-3 h-36 w-full rounded-xl object-cover" /> : null}
@@ -766,6 +789,12 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
                 {item.ownerName ? <div className="mt-1 text-sm">Owner name: <span className="font-medium">{item.ownerName}</span></div> : null}
                 {item.ownerPhoneNumber ? <div className="mt-1 text-sm">Owner phone: <span className="font-medium">{item.ownerPhoneNumber}</span></div> : null}
                 {item.category ? <div className="mt-1 text-sm">Category: <span className="font-medium">{item.category}</span></div> : null}
+                {item.adType === 'affiliate' ? (
+                  <div className="mt-2 space-y-1 text-sm">
+                    <div>Tour IDs: <span className="font-medium">{item.tourIds || 'Not set'}</span></div>
+                    <a href={item.affiliateLink} target="_blank" rel="noreferrer sponsored" className="block truncate text-amber-600 underline">{item.affiliateLink}</a>
+                  </div>
+                ) : null}
                 {item.editedByEmail ? <div className="mt-1 text-sm">Last edited by: <span className="font-medium">{item.editedByEmail}</span> at <span className="font-medium">{item.editedAt ? toDate(item.editedAt).toLocaleString() : ''}</span></div> : null}
                 {item.approvedAt ? <div className="mt-1 text-sm">Approved at: <span className="font-medium">{toDate(item.approvedAt).toLocaleString()}</span></div> : null}
                 {item.idProofUrl ? (
@@ -788,10 +817,12 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
                   </div>
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => startEdit(item)} className="gap-2">
-                    <PencilLine className="h-3.5 w-3.5" />
-                    Edit
-                  </Button>
+                  {item.adType !== 'affiliate' ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => startEdit(item)} className="gap-2">
+                      <PencilLine className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                  ) : null}
                   <Button type="button" variant="destructive" size="sm" onClick={() => deleteItem(item.id)} disabled={deletingId === item.id} className="gap-2">
                     <Trash2 className="h-3.5 w-3.5" />
                     {deletingId === item.id ? 'Deleting...' : 'Delete'}

@@ -58,9 +58,9 @@ export async function GET() {
         adYearly: Number(pricing.adYearly) || 800,
       },
       adLimits: {
-        monthly: Number((raw.adLimits as any)?.monthly) ?? 1,
-        quarterly: Number((raw.adLimits as any)?.quarterly) ?? 3,
-        yearly: Number((raw.adLimits as any)?.yearly) ?? -1,
+        monthly: Number((raw.adLimits as any)?.monthly) || 1,
+        quarterly: Number((raw.adLimits as any)?.quarterly) || 3,
+        yearly: Number((raw.adLimits as any)?.yearly) || -1,
       },
       adDescriptions: {
         monthly: String((raw.adDescriptions as any)?.monthly || '').trim() || 'Best for a single location and one basic banner.',

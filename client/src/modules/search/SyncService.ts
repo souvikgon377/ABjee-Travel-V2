@@ -507,6 +507,14 @@ export class SyncService {
         comments: data.comments ? (typeof data.comments === 'string' ? data.comments : JSON.stringify(data.comments)) : '[]',
         plan: data.plan || 'monthly',
         paid: data.paid === true,
+        adType: data.adType || 'standard',
+        affiliateProvider: data.affiliateProvider || '',
+        affiliateLink: data.affiliateLink || '',
+        widgetHref: data.widgetHref || '',
+        partnerId: data.partnerId || '',
+        localeCode: data.localeCode || '',
+        tourIds: data.tourIds || '',
+        numberOfItems: Math.min(4, Math.max(1, Number(data.numberOfItems) || 1)),
       };
     }
 

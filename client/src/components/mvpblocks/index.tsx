@@ -482,9 +482,9 @@ export default function AdminDashboard() {
           advertizer: Math.max(0, Math.floor(Number(revenueForm.privateRoomLimits.advertizer) || 0)),
         },
         adLimits: {
-          monthly: Number(revenueForm.adLimits?.monthly) ?? 1,
-          quarterly: Number(revenueForm.adLimits?.quarterly) ?? 3,
-          yearly: Number(revenueForm.adLimits?.yearly) ?? -1,
+          monthly: Number(revenueForm.adLimits?.monthly) || 1,
+          quarterly: Number(revenueForm.adLimits?.quarterly) || 3,
+          yearly: Number(revenueForm.adLimits?.yearly) || -1,
         },
         adDescriptions: {
           monthly: revenueForm.adDescriptions?.monthly || '',
@@ -1474,4 +1474,3 @@ export default function AdminDashboard() {
     </SidebarProvider>
   );
 }
-

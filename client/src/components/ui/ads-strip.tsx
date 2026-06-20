@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs, query, doc, updateDoc, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
-import { CalendarDays, MapPin, Phone, Tag, User, Star, MessageSquare, Trash2 } from 'lucide-react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { doc, updateDoc, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
+import { MapPin, MessageSquare, Phone, Tag, Star, Trash2 } from 'lucide-react';
+import { useReducedMotion } from 'framer-motion';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import type { TouristPlace } from '@/components/ui/tourist-places';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +40,14 @@ type AdItem = {
   subscriptionExpiresAt?: string;
   score?: number;
   userRatings?: Record<string, number>;
+  adType?: 'standard' | 'affiliate';
+  affiliateProvider?: string;
+  affiliateLink?: string;
+  widgetHref?: string;
+  partnerId?: string;
+  localeCode?: string;
+  tourIds?: string;
+  numberOfItems?: number;
 };
 
 type AdsStripProps = {
@@ -47,6 +55,91 @@ type AdsStripProps = {
   searchTerm?: string;
   places?: TouristPlace[];
 };
+
+function AffiliateAdCard({ item, onReviews }: { item: AdItem; onReviews: () => void }) {
+  const [isCardHovered, setIsCardHovered] = useState(false);
+
+  return (
+    <div className="relative h-64 w-full perspective-distant">
+      <a
+        href={item.affiliateLink}
+        target="_blank"
+        rel="sponsored"
+        className="block h-full w-full text-left"
+        aria-label={`Open ${item.name || 'activity'} with ABjee Travel`}
+        onMouseEnter={() => setIsCardHovered(true)}
+        onMouseLeave={() => setIsCardHovered(false)}
+        onFocus={() => setIsCardHovered(true)}
+        onBlur={() => setIsCardHovered(false)}
+      >
+        <div className={`relative h-full w-full rounded-2xl border border-white/15 shadow-lg shadow-black/20 transition-transform duration-700 ease-out transform-3d ${isCardHovered ? 'transform-[rotateY(180deg)]' : ''}`}>
+        <div className="absolute inset-0 overflow-hidden rounded-2xl bg-white backface-hidden">
+          <div
+            data-gyg-href={item.widgetHref}
+            data-gyg-locale-code={item.localeCode || 'en-US'}
+            data-gyg-widget="activities"
+            data-gyg-number-of-items={String(item.numberOfItems || 1)}
+            data-gyg-partner-id={item.partnerId || 'P2598GX'}
+            data-gyg-tour-ids={item.tourIds}
+            className="pointer-events-none min-h-64 w-full origin-top bg-white transform-[scale(1.65)]"
+          >
+            <span className="flex h-64 items-center justify-center text-sm text-slate-600">
+              <span className="font-semibold text-slate-800">Book with ABjee Travel</span>
+            </span>
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-black via-black/95 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
+            <div className="line-clamp-2 text-base font-semibold leading-tight drop-shadow-md">{item.name}</div>
+            <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/70">Click to view details</div>
+          </div>
+        </div>
+
+        <div className="absolute inset-0 rounded-2xl bg-[#121212] p-4 text-white backface-hidden transform-[rotateY(180deg)]">
+          <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+            <div>
+              <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
+              <div className="mt-2 flex items-center gap-1" aria-label={`Average rating ${Number(item.rating || 0).toFixed(1)} out of 5`}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`h-4 w-4 ${star <= (item.rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`}
+                  />
+                ))}
+                <span className="ml-1 text-xs text-white/60">
+                  {item.rating ? `(${Number(item.rating).toFixed(1)})` : '(No ratings)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm leading-5 text-white/80 line-clamp-3 overflow-hidden">
+                {item.description || 'Book this activity securely with ABjee Travel.'}
+              </p>
+              <div className="h-px w-full bg-white/10" />
+              <div className="text-xs text-white/55">Click to view and book with ABjee Travel.</div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </a>
+      <div
+        className="absolute right-0 top-0 z-20 flex h-20 w-40 items-start justify-end p-3"
+        onMouseEnter={() => setIsCardHovered(false)}
+      >
+        <button
+          type="button"
+          onClick={onReviews}
+          className={`inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/70 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur backface-hidden transform-3d transition-[transform,background-color] duration-700 ease-out hover:bg-black/90 ${isCardHovered ? 'transform-[rotateY(180deg)]' : ''}`}
+          aria-label={`Rate and review ${item.name || 'this activity'}`}
+        >
+          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+          {item.rating ? Number(item.rating).toFixed(1) : 'Rate'}
+          <MessageSquare className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
 
@@ -56,13 +149,6 @@ const getTime = (value: any) => {
   if (typeof value.toDate === 'function') return value.toDate().getTime();
   if (typeof value.seconds === 'number') return value.seconds * 1000;
   return Number(new Date(value)) || 0;
-};
-
-const formatDateTime = (value: any) => {
-  if (!value) return 'Not available';
-  if (typeof value?.toDate === 'function') return value.toDate().toLocaleString();
-  if (typeof value?.seconds === 'number') return new Date(value.seconds * 1000).toLocaleString();
-  return new Date(value).toLocaleString();
 };
 
 const PLACE_COUNTRY_MAPPING: Record<string, string> = {
@@ -408,11 +494,6 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
     return [...items, ...items];
   }, [items]);
 
-  const reverseSlidingItems = useMemo(() => {
-    if (items.length === 0) return [];
-    return [...items].reverse().concat([...items].reverse());
-  }, [items]);
-
   const shouldAnimate = !shouldReduceMotion && (items.length > 4 || (items.length > 1 && isOneColumn));
 
   useEffect(() => {
@@ -461,18 +542,29 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
               }
               return Array.isArray(data.comments) ? data.comments : [];
             })(),
+            adType: data.adType === 'affiliate' ? 'affiliate' : 'standard',
+            affiliateProvider: typeof data.affiliateProvider === 'string' ? data.affiliateProvider : '',
+            affiliateLink: typeof data.affiliateLink === 'string' ? data.affiliateLink : '',
+            widgetHref: typeof data.widgetHref === 'string' ? data.widgetHref : '',
+            partnerId: typeof data.partnerId === 'string' ? data.partnerId : '',
+            localeCode: typeof data.localeCode === 'string' ? data.localeCode : '',
+            tourIds: typeof data.tourIds === 'string' ? data.tourIds : '',
+            numberOfItems: Math.min(4, Math.max(1, Number(data.numberOfItems) || 1)),
           };
         });
 
         const approvedRows = rows.filter((row) => {
-          const isApproved = row.photoUrl && (row.status === 'approved' || row.approvalStatus === 'approved');
+          const hasCreative = row.adType === 'affiliate'
+            ? Boolean(row.affiliateLink && row.widgetHref && row.partnerId && row.tourIds)
+            : Boolean(row.photoUrl);
+          const isApproved = hasCreative && (row.status === 'approved' || row.approvalStatus === 'approved');
           if (!isApproved) return false;
           if (row.subscriptionExpiresAt) {
             try {
               if (new Date(row.subscriptionExpiresAt).getTime() < Date.now()) {
                 return false;
               }
-            } catch (e) {
+            } catch {
               // ignore invalid dates
             }
           }
@@ -572,7 +664,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       `}</style>
 
       <div className="ads-container mx-auto mt-5 w-full">
-        <div className="relative w-full overflow-hidden px-1 pb-2">
+        <div className="relative w-full overflow-x-clip px-1 pb-2">
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent z-10" : "hidden"} />
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent z-10" : "hidden"} />
           <div
@@ -584,6 +676,9 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
           >
           {(shouldAnimate ? slidingItems : items).map((item, index) => (
             <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"}>
+              {item.adType === 'affiliate' ? (
+                <AffiliateAdCard item={item} onReviews={() => setSelectedItem(item)} />
+              ) : (
               <button
                 type="button"
                 onClick={() => setSelectedItem(item)}
@@ -649,6 +744,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </div>
                 </div>
               </button>
+              )}
             </div>
           ))}
           </div>
@@ -659,20 +755,47 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
         <DialogContent className="w-[min(92vw,44rem)] max-h-[92vh] overflow-y-auto border-white/10 bg-[#121212] p-0 text-white">
           {selectedItem && (
             <div className="space-y-0">
-              <div className="relative h-64 overflow-hidden">
-                <img
-                  src={selectedItem.photoUrl}
-                  alt={selectedItem.name || 'advertisement'}
-                  className="h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-black via-black/40 to-transparent" />
-                <div className="absolute bottom-4 left-4 right-4">
-                  <DialogTitle className="text-2xl font-bold text-white">{selectedItem.name || 'Advertisement details'}</DialogTitle>
-                  <DialogDescription className="mt-1 text-sm text-white/70">
-                    Full advertisement record and contact details.
+              {selectedItem.adType === 'affiliate' ? (
+                <div className="bg-white p-4 text-slate-900">
+                  <DialogTitle className="sr-only">
+                    {selectedItem.name || 'ABjee Travel activity details'}
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    View this activity and continue securely with ABjee Travel for booking details.
                   </DialogDescription>
+                  <div
+                    data-gyg-href={selectedItem.widgetHref}
+                    data-gyg-locale-code={selectedItem.localeCode || 'en-US'}
+                    data-gyg-widget="activities"
+                    data-gyg-number-of-items={String(selectedItem.numberOfItems || 1)}
+                    data-gyg-partner-id={selectedItem.partnerId || 'P2598GX'}
+                    data-gyg-tour-ids={selectedItem.tourIds}
+                    className="min-h-64 w-full"
+                  >
+                    <span className="flex min-h-64 items-center justify-center text-sm text-slate-600">
+                      Powered by&nbsp;
+                      <a target="_blank" rel="sponsored" href={selectedItem.affiliateLink} className="font-semibold underline">
+                        ABjee Travel
+                      </a>
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="relative h-64 overflow-hidden">
+                  <img
+                    src={selectedItem.photoUrl}
+                    alt={selectedItem.name || 'advertisement'}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-black via-black/40 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <DialogTitle className="text-2xl font-bold text-white">{selectedItem.name || 'Advertisement details'}</DialogTitle>
+                    <DialogDescription className="mt-1 text-sm text-white/70">
+                      Full advertisement record and contact details.
+                    </DialogDescription>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-5 p-5 sm:p-6">
                 <div className="flex flex-wrap gap-2">
@@ -689,6 +812,38 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   )}
                 </div>
 
+                {selectedItem.adType === 'affiliate' ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Available online'} />
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                        Your rating · Avg {Number(selectedItem.rating || 0).toFixed(1)}
+                      </div>
+                      <div className="mt-2 flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => handleRate(star)}
+                            className="transition-transform active:scale-95"
+                            aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
+                          >
+                            <Star className={`h-5 w-5 ${star <= adRating ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <a
+                      href={selectedItem.affiliateLink}
+                      target="_blank"
+                      rel="sponsored"
+                      className="inline-flex h-11 items-center justify-center rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950 transition-colors hover:bg-amber-300 sm:col-span-2"
+                    >
+                      View activity
+                    </a>
+                  </div>
+                ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Not available'} />
                   
@@ -722,11 +877,12 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   <DetailRow icon={<Phone className="h-4 w-4" />} label="Mobile number" value={selectedItem.mobileNumber || 'Not available'} />
                   <DetailRow icon={<Tag className="h-4 w-4" />} label="Email" value={selectedItem.ownerEmail || 'Not available'} />
                 </div>
+                )}
 
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/55">Description</h4>
                   <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-white/80">
-                    {selectedItem.description || 'No description available for this advertisement.'}
+                    {selectedItem.description || (selectedItem.adType === 'affiliate' ? 'Book this activity securely with ABjee Travel.' : 'No description available for this advertisement.')}
                   </p>
                 </div>
 

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticateRequest, AuthError, requireAdmin } from '@/lib/server/auth';
 import { fail, ok } from '@/lib/server/http';
-import { fetchUsersFromFirestore } from '@/app/api/admin/users/route';
+import { fetchUsersFromFirestore } from '@/app/api/admin/users/service';
 
 export const runtime = 'nodejs';
 

@@ -1,6 +1,6 @@
-import { fetchStatsFromFirestore } from "@/app/api/admin/stats/route";
-import { fetchUsersFromFirestore } from "@/app/api/admin/users/route";
-import { fetchDashboardFromFirestore } from "@/app/api/admin/dashboard-data/route";
+import { fetchStatsFromFirestore } from "@/app/api/admin/stats/service";
+import { fetchUsersFromFirestore } from "@/app/api/admin/users/service";
+import { fetchDashboardFromFirestore } from "@/app/api/admin/dashboard-data/service";
 import { refreshSharedPlacesCache } from "@/lib/server/sharedPlacesCache";
 import { hybridSet } from "./hybridCache";
 import { getRedis } from "./redis";

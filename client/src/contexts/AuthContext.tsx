@@ -111,18 +111,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const lastFetchedAtRef = useRef<number>(0);
 
   const isTransientFirebaseNetworkError = useCallback((error: unknown) => {
+    const name = typeof (error as { name?: unknown })?.name === 'string'
+      ? ((error as { name?: string }).name as string)
+      : '';
     const code = typeof (error as { code?: unknown })?.code === 'string'
       ? ((error as { code?: string }).code as string)
       : '';
     const message = typeof (error as { message?: unknown })?.message === 'string'
       ? ((error as { message?: string }).message as string)
       : '';
+    const normalizedMessage = message.toLowerCase();
 
     return (
+      name === 'AbortError' ||
+      name === 'TimeoutError' ||
       code === 'auth/network-request-failed' ||
       code === 'unavailable' ||
-      message.includes('network-request-failed') ||
-      message.includes("didn't respond within 10 seconds")
+      normalizedMessage === 'failed to fetch' ||
+      normalizedMessage.includes('network request failed') ||
+      normalizedMessage.includes('networkerror') ||
+      normalizedMessage.includes('load failed') ||
+      normalizedMessage.includes('network-request-failed') ||
+      normalizedMessage.includes("didn't respond within 10 seconds")
     );
   }, []);
 
@@ -217,10 +227,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     }).then(async (response) => {
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403 || response.status === 404) {
+        const payload = await response.json().catch(() => null);
+        const responseMessage = String(payload?.message || '').trim();
+        const normalizedMessage = responseMessage.toLowerCase();
+        const accountIsUnavailable =
+          response.status === 404 ||
+          normalizedMessage.includes('account is deactivated') ||
+          normalizedMessage.includes('account not found') ||
+          normalizedMessage.includes('account has been deleted');
+
+        if (accountIsUnavailable) {
           throw new DeletedAccountError();
         }
-        throw new Error(`Failed to fetch profile: ${response.status}`);
+        throw new Error(responseMessage || `Failed to fetch profile: ${response.status}`);
       }
       const data = await response.json();
       return data.data?.user;
@@ -709,7 +728,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
                 return;
               }
-              if ((process.env.NODE_ENV === "development")) {
+              if ((process.env.NODE_ENV === "development") && !isTransientFirebaseNetworkError(error)) {
                 console.error('Error loading user profile:', error);
               }
               // Use Firebase data locally only for transient API failures. Do not recreate missing users here.
@@ -735,7 +754,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (error) {
-        if ((process.env.NODE_ENV === "development")) {
+        if ((process.env.NODE_ENV === "development") && !isTransientFirebaseNetworkError(error)) {
           console.error('Auth state change error:', error);
         }
       } finally {
