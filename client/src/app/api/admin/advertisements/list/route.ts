@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const status = params.get('status') || 'all';
     const category = params.get('category') || 'all';
     const page = Math.max(1, Number(params.get('page') || '1'));
-    const limit = Math.min(1000, Math.max(1, Number(params.get('limit') || '1000'))); // High limit cap to maintain compatibility with existing list UI.
+    const limit = Math.max(1, Number(params.get('limit') || '10000'));
     const forceRefresh = params.get('forceRefresh') === 'true';
 
     const result = await SearchService.searchAdvertisements({

@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { CheckCircle2, Clock3, Loader2, Megaphone, PencilLine, RefreshCw, Search, Trash2, XCircle, UploadCloud } from 'lucide-react';
+import { CheckCircle2, Clock3, Loader2, Megaphone, PencilLine, RefreshCw, Search, Trash2, XCircle, UploadCloud, BadgeDollarSign } from 'lucide-react';
 import { firestoreDb } from '@/lib/firebaseFirestore';
 import { auth } from '@/lib/firebase';
-import { AdvertisementForm } from '@/components/ui/advertisement-form';
+import { AdvertisementForm, MultiSelectChecklist } from '@/components/ui/advertisement-form';
 import { AffiliateAdvertisementForm } from '@/components/ui/affiliate-advertisement-form';
+import { fetchAdvertisementLocations, type AdvertisementLocationOption } from '@/lib/advertisementLocations';
 import { uploadImageToCloudinary } from '@/lib/imageUpload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -104,6 +105,66 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [comments, setComments] = useState<Record<string, string>>({});
+
+  // Affiliate edit state
+  const [editingAffiliate, setEditingAffiliate] = useState<AdvertisementDoc | null>(null);
+  const [affiliateForm, setAffiliateForm] = useState({
+    name: '',
+    description: '',
+    affiliateLink: '',
+    widgetHref: '',
+    partnerId: '',
+    localeCode: '',
+    tourIds: '',
+    numberOfItems: 1,
+  });
+  const [affCountries, setAffCountries] = useState<string[]>([]);
+  const [affStates, setAffStates] = useState<string[]>([]);
+  const [affAreas, setAffAreas] = useState<string[]>([]);
+  const [savingAffiliate, setSavingAffiliate] = useState(false);
+
+  // Location dropdown data
+  const [affLocations, setAffLocations] = useState<AdvertisementLocationOption[]>([]);
+  const [affLocationsLoading, setAffLocationsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetchAdvertisementLocations()
+      .then((response) => {
+        if (active) setAffLocations(response.locations || []);
+      })
+      .catch((err) => console.warn('Failed to load ad locations:', err))
+      .finally(() => { if (active) setAffLocationsLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const affCountryOptions = useMemo(
+    () => Array.from(new Set(affLocations.map((l) => l.country))).sort((a, b) => a.localeCompare(b)),
+    [affLocations],
+  );
+  const affStateOptions = useMemo(
+    () => Array.from(new Set(affLocations.filter((l) => affCountries.includes(l.country)).map((l) => l.state))).sort((a, b) => a.localeCompare(b)),
+    [affCountries, affLocations],
+  );
+  const affAreaOptions = useMemo(
+    () => Array.from(new Set(affLocations.filter((l) => affCountries.includes(l.country) && affStates.includes(l.state)).map((l) => l.area))).sort((a, b) => a.localeCompare(b)),
+    [affCountries, affStates, affLocations],
+  );
+
+  const updateAffCountries = (next: string[]) => {
+    const validStates = new Set(affLocations.filter((l) => next.includes(l.country)).map((l) => l.state));
+    const nextStates = affStates.filter((s) => validStates.has(s));
+    const validAreas = new Set(affLocations.filter((l) => next.includes(l.country) && nextStates.includes(l.state)).map((l) => l.area));
+    setAffCountries(next);
+    setAffStates(nextStates);
+    setAffAreas((prev) => prev.filter((a) => validAreas.has(a)));
+  };
+
+  const updateAffStates = (next: string[]) => {
+    const validAreas = new Set(affLocations.filter((l) => affCountries.includes(l.country) && next.includes(l.state)).map((l) => l.area));
+    setAffStates(next);
+    setAffAreas((prev) => prev.filter((a) => validAreas.has(a)));
+  };
 
   const loadItems = async () => {
     setLoading(true);
@@ -465,6 +526,65 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
     await loadItems();
   };
 
+  const startEditAffiliate = (item: AdvertisementDoc) => {
+    setEditingAffiliate(item);
+    setAffiliateForm({
+      name: item.name || '',
+      description: item.description || '',
+      affiliateLink: item.affiliateLink || '',
+      widgetHref: item.widgetHref || '',
+      partnerId: item.partnerId || '',
+      localeCode: item.localeCode || '',
+      tourIds: item.tourIds || '',
+      numberOfItems: item.numberOfItems || 1,
+    });
+    // Parse comma-separated location strings into arrays
+    const parseCSV = (val: string) => val ? val.split(',').map(s => s.trim()).filter(Boolean) : [];
+    setAffCountries(parseCSV(item.country || ''));
+    setAffStates(parseCSV(item.state || ''));
+    setAffAreas(parseCSV(item.area || ''));
+  };
+
+  const saveAffiliateEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingAffiliate) return;
+
+    setSavingAffiliate(true);
+    setErrorMessage('');
+
+    try {
+      if (!affiliateForm.name.trim()) throw new Error('Title is required');
+      if (!affiliateForm.affiliateLink.trim()) throw new Error('Affiliate link is required');
+      if (!affiliateForm.tourIds.trim()) throw new Error('Tour ID(s) required');
+
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const response = await fetch('/api/admin/advertisements/affiliate', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: editingAffiliate.id,
+          ...affiliateForm,
+          country: affCountries.join(', '),
+          state: affStates.join(', '),
+          area: affAreas.join(', '),
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || 'Failed to update affiliate ad.');
+
+      setEditingAffiliate(null);
+      await loadItems();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to update affiliate ad');
+    } finally {
+      setSavingAffiliate(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
       <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
@@ -766,6 +886,109 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
             </DialogContent>
           </Dialog>
 
+          <Dialog open={!!editingAffiliate} onOpenChange={(open) => { if (!open) setEditingAffiliate(null); }}>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto w-full">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <BadgeDollarSign className="h-5 w-5 text-amber-500" />
+                  Edit Affiliate Ad
+                </DialogTitle>
+                <DialogDescription>Update the affiliate advertisement details.</DialogDescription>
+              </DialogHeader>
+              {editingAffiliate ? (
+                <form onSubmit={saveAffiliateEdit} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="space-y-2 sm:col-span-2">
+                      <span className="text-sm font-medium">Title</span>
+                      <Input value={affiliateForm.name} onChange={(e) => setAffiliateForm(f => ({ ...f, name: e.target.value }))} required />
+                    </label>
+                    <label className="space-y-2 sm:col-span-2">
+                      <span className="text-sm font-medium">Affiliate link</span>
+                      <Input value={affiliateForm.affiliateLink} onChange={(e) => setAffiliateForm(f => ({ ...f, affiliateLink: e.target.value }))} type="url" required />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Tour ID(s)</span>
+                      <Input value={affiliateForm.tourIds} onChange={(e) => setAffiliateForm(f => ({ ...f, tourIds: e.target.value }))} required />
+                      <span className="block text-xs text-muted-foreground">Comma-separated for multiple.</span>
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Partner ID</span>
+                      <Input value={affiliateForm.partnerId} onChange={(e) => setAffiliateForm(f => ({ ...f, partnerId: e.target.value }))} required />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Locale</span>
+                      <Input value={affiliateForm.localeCode} onChange={(e) => setAffiliateForm(f => ({ ...f, localeCode: e.target.value }))} required />
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-medium">Number of items</span>
+                      <Input value={affiliateForm.numberOfItems} onChange={(e) => setAffiliateForm(f => ({ ...f, numberOfItems: Math.min(4, Math.max(1, Number(e.target.value) || 1)) }))} type="number" min={1} max={4} required />
+                    </label>
+                    <label className="space-y-2 sm:col-span-2">
+                      <span className="text-sm font-medium">Widget URL</span>
+                      <Input value={affiliateForm.widgetHref} onChange={(e) => setAffiliateForm(f => ({ ...f, widgetHref: e.target.value }))} type="url" required />
+                    </label>
+                    <label className="space-y-2 sm:col-span-2">
+                      <span className="text-sm font-medium">Description (optional)</span>
+                      <textarea
+                        value={affiliateForm.description}
+                        onChange={(e) => setAffiliateForm(f => ({ ...f, description: e.target.value }))}
+                        rows={3}
+                        maxLength={1000}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location targeting</div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <MultiSelectChecklist
+                        label="Country"
+                        placeholder={affLocationsLoading ? 'Loading...' : 'Select country'}
+                        options={affCountryOptions}
+                        selectedValues={affCountries}
+                        onChange={updateAffCountries}
+                        disabled={affLocationsLoading}
+                      />
+                      <MultiSelectChecklist
+                        label="State"
+                        placeholder="Select state"
+                        options={affStateOptions}
+                        selectedValues={affStates}
+                        onChange={updateAffStates}
+                        disabled={affLocationsLoading || affCountries.length === 0}
+                      />
+                      <MultiSelectChecklist
+                        label="Area / city"
+                        placeholder="Select area / city"
+                        options={affAreaOptions}
+                        selectedValues={affAreas}
+                        onChange={setAffAreas}
+                        disabled={affLocationsLoading || affStates.length === 0}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+                    <div className="font-semibold text-foreground">Current record</div>
+                    <div className="mt-2 space-y-1">
+                      <div>Status: <span className="capitalize">{editingAffiliate.status}</span></div>
+                      <div>ID: {editingAffiliate.id}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap gap-2 justify-end">
+                    <Button type="button" variant="outline" onClick={() => setEditingAffiliate(null)} disabled={savingAffiliate}>Cancel</Button>
+                    <Button type="submit" disabled={savingAffiliate} className="gap-2 bg-amber-500 text-slate-950 hover:bg-amber-400">
+                      <PencilLine className="h-4 w-4" />
+                      {savingAffiliate ? 'Saving...' : 'Save changes'}
+                    </Button>
+                  </div>
+                </form>
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filteredItems.map((item) => (
               <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-4">
@@ -817,12 +1040,17 @@ export function AdvertisementsManager({ externalSearchQuery }: AdvertisementsMan
                   </div>
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {item.adType !== 'affiliate' ? (
+                  {item.adType === 'affiliate' ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => startEditAffiliate(item)} className="gap-2 border-amber-400/60 text-amber-700 hover:bg-amber-400/10 dark:text-amber-300">
+                      <PencilLine className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                  ) : (
                     <Button type="button" variant="outline" size="sm" onClick={() => startEdit(item)} className="gap-2">
                       <PencilLine className="h-3.5 w-3.5" />
                       Edit
                     </Button>
-                  ) : null}
+                  )}
                   <Button type="button" variant="destructive" size="sm" onClick={() => deleteItem(item.id)} disabled={deletingId === item.id} className="gap-2">
                     <Trash2 className="h-3.5 w-3.5" />
                     {deletingId === item.id ? 'Deleting...' : 'Delete'}

@@ -501,7 +501,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
     (async () => {
       try {
-        const response = await fetch('/api/advertisements/list?limit=100');
+        const response = await fetch('/api/advertisements/list?limit=1000');
         if (!response.ok) return;
         const payload = await response.json();
         if (!mounted) return;

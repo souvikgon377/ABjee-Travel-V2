@@ -323,7 +323,7 @@ export class SearchService {
   static async searchAdvertisements(options: AdvertisementSearchOptions = {}): Promise<SearchResult> {
     const tStart = Date.now();
     const page = Math.max(1, options.page || 1);
-    const limit = Math.min(100, Math.max(1, options.limit || 20));
+    const limit = Math.max(1, options.limit || 20);
     const query = String(options.query || '').trim();
     const status = options.status || 'all';
     const category = options.category || 'all';
@@ -367,27 +367,46 @@ export class SearchService {
           filters.push(`subscriptionExpiresAt:>=${nowSeconds}`);
         }
 
-        const params: any = {
-          q: query || '*',
-          query_by: 'name,mobileNumber,country,state,area,category,description',
-          sort_by: query ? '_text_match:desc,updatedAt:desc' : 'updatedAt:desc',
-          per_page: limit,
-          page,
-        };
-        if (filters.length > 0) params.filter_by = filters.join(' && ');
+        // Auto-paginate through Typesense (max 250 per page)
+        const TS_PAGE_SIZE = 250;
+        let allTsRows: any[] = [];
+        let totalFound = 0;
+        let tsPage = 1;
+        let remaining = limit;
 
-        this.logSearchOperation('[SearchService:Advertisements] Typesense query', {
-          collection: ADVERTISEMENTS_COLLECTION,
-          query: params.q,
-          query_by: params.query_by,
-          filter_by: params.filter_by || '(none)',
-          page,
-          limit,
-        });
+        while (remaining > 0) {
+          const perPage = Math.min(TS_PAGE_SIZE, remaining);
+          const params: any = {
+            q: query || '*',
+            query_by: 'name,mobileNumber,country,state,area,category,description',
+            sort_by: query ? '_text_match:desc,updatedAt:desc' : 'updatedAt:desc',
+            per_page: perPage,
+            page: tsPage,
+          };
+          if (filters.length > 0) params.filter_by = filters.join(' && ');
 
-        const tsResult = await client.collections(ADVERTISEMENTS_COLLECTION).documents().search(params);
-        TypesenseBreaker.recordSuccess();
-        let rows = tsResult.hits?.map((hit: any) => hit.document) || [];
+          this.logSearchOperation('[SearchService:Advertisements] Typesense query', {
+            collection: ADVERTISEMENTS_COLLECTION,
+            query: params.q,
+            query_by: params.query_by,
+            filter_by: params.filter_by || '(none)',
+            page: tsPage,
+            limit: perPage,
+          });
+
+          const tsResult = await client.collections(ADVERTISEMENTS_COLLECTION).documents().search(params);
+          TypesenseBreaker.recordSuccess();
+          const pageRows = tsResult.hits?.map((hit: any) => hit.document) || [];
+          totalFound = tsResult.found || 0;
+          allTsRows = allTsRows.concat(pageRows);
+          remaining -= pageRows.length;
+          tsPage++;
+
+          // Stop if this page returned fewer results than requested (no more data)
+          if (pageRows.length < perPage) break;
+        }
+
+        let rows = allTsRows;
         if (!includeExpired) {
           const nowMs = Date.now();
           rows = rows.filter((row: any) => {
@@ -400,14 +419,16 @@ export class SearchService {
         }
         const result: SearchResult = {
           results: rows,
-          totalCount: tsResult.found || rows.length,
-          hasMore: (tsResult.found || 0) > page * limit,
+          totalCount: totalFound,
+          hasMore: false,
           source: 'typesense',
           latencyMs: Date.now() - tStart,
         };
         this.logSearchOperation('[SearchService:Advertisements] Typesense success', {
           query,
           found: result.totalCount,
+          returned: rows.length,
+          pagesScanned: tsPage - 1,
           latencyMs: result.latencyMs,
         });
         if (result.totalCount > 0 || query === '') {
@@ -428,16 +449,30 @@ export class SearchService {
       if (redisCached) return { ...redisCached, latencyMs: Date.now() - tStart };
     }
 
-    // Cap Firestore reads to avoid large collection scans.
-    const fetchLimit = Math.min(this.MAX_FIRESTORE_LIMIT, Math.max(this.SAFE_QUERY_LIMIT, page * limit));
-    let queryRef: any = adminDb.collection('advertisements');
-    let snap;
-    if (ownerEmail) {
-      queryRef = queryRef.where('ownerEmail', '==', ownerEmail);
-      snap = await queryRef.limit(fetchLimit).get();
-    } else {
-      snap = await queryRef.orderBy('createdAt', 'desc').limit(fetchLimit).get();
+    // Firestore fallback: paginate with cursors to fetch ALL documents (no cap).
+    const FIRESTORE_BATCH = 500;
+    let allDocs: any[] = [];
+    let lastDoc: any = null;
+    let hasMoreDocs = true;
+
+    while (hasMoreDocs) {
+      let batchQuery: any = adminDb.collection('advertisements');
+      if (ownerEmail) {
+        batchQuery = batchQuery.where('ownerEmail', '==', ownerEmail);
+      }
+      batchQuery = batchQuery.orderBy('createdAt', 'desc').limit(FIRESTORE_BATCH);
+      if (lastDoc) {
+        batchQuery = batchQuery.startAfter(lastDoc);
+      }
+      const batchSnap = await batchQuery.get();
+      allDocs = allDocs.concat(batchSnap.docs);
+      if (batchSnap.size < FIRESTORE_BATCH) {
+        hasMoreDocs = false;
+      } else {
+        lastDoc = batchSnap.docs[batchSnap.docs.length - 1];
+      }
     }
+    const snap = { docs: allDocs, size: allDocs.length };
 
     const normalizedQuery = this.normalizeText(query);
     let rows = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));

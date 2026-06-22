@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const search = params.get('search') || '';
     const category = params.get('category') || 'all';
     const page = Math.max(1, Number(params.get('page') || '1'));
-    const limit = Math.min(100, Math.max(1, Number(params.get('limit') || '30')));
+    const limit = Math.max(1, Number(params.get('limit') || '10000'));
     const forceRefresh = params.get('forceRefresh') === 'true';
 
     const result = await SearchService.searchAdvertisements({
