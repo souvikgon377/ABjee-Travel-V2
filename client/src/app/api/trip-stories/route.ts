@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { FieldValue, adminDb } from '@/lib/server/firebaseAdminFirestore';
 import { ok, fail } from '@/lib/server/http';
-import { awardTripStoryRebate } from '@/lib/server/rebateWallet';
+import { awardTripStoryRebate, reverseTripStoryRebate } from '@/lib/server/rebateWallet';
 
 export const runtime = 'nodejs';
 
@@ -179,12 +179,23 @@ export async function DELETE(req: NextRequest) {
     }
 
     const storyRef = adminDb.collection('stories').doc(storyId);
-    const doc = await storyRef.get();
-    if (!doc.exists) {
+    const docSnap = await storyRef.get();
+    if (!docSnap.exists) {
       return fail('Story not found.', 404);
     }
 
+    const storyData = docSnap.data() || {};
+    const authorId = String(storyData.authorId || '').trim();
+
     await storyRef.delete();
+
+    if (authorId) {
+      try {
+        await reverseTripStoryRebate({ userId: authorId, storyId });
+      } catch (walletErr) {
+        console.error('[TripStoriesAPI] Failed to reverse wallet rebate:', walletErr);
+      }
+    }
 
     // Sync deletion to Typesense
     try {

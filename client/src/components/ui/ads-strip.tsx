@@ -339,6 +339,69 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
   const { currentUser } = useAuth();
   const [isOneColumn, setIsOneColumn] = useState(false);
 
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const isPaused = React.useRef(false);
+  const resumeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const scrollPosRef = React.useRef(0);
+
+  const handleInteractionStart = () => {
+    isPaused.current = true;
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = null;
+    }
+  };
+
+  const handleInteractionEnd = () => {
+    if (resumeTimeoutRef.current) {
+      clearTimeout(resumeTimeoutRef.current);
+    }
+    resumeTimeoutRef.current = setTimeout(() => {
+      isPaused.current = false;
+    }, 4000); // Resume auto-sliding after 4 seconds of inactivity
+  };
+
+  const isDragging = React.useRef(false);
+  const startX = React.useRef(0);
+  const scrollLeftStart = React.useRef(0);
+  const dragDistance = React.useRef(0);
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = scrollRef.current;
+    if (!container) return;
+    isDragging.current = true;
+    startX.current = e.pageX - container.offsetLeft;
+    scrollLeftStart.current = container.scrollLeft;
+    dragDistance.current = 0;
+    handleInteractionStart();
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    const container = scrollRef.current;
+    if (!container) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX.current) * 1.5;
+    container.scrollLeft = scrollLeftStart.current - walk;
+    scrollPosRef.current = container.scrollLeft;
+    dragDistance.current = Math.abs((e.pageX - container.offsetLeft) - startX.current);
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (isDragging.current) {
+      isDragging.current = false;
+      handleInteractionEnd();
+    }
+  };
+
+  const handleContainerClickCapture = (e: React.MouseEvent) => {
+    if (dragDistance.current > 8) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 639px)');
     const onChange = () => setIsOneColumn(mql.matches);
@@ -497,6 +560,44 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
   const shouldAnimate = !shouldReduceMotion && (items.length > 4 || (items.length > 1 && isOneColumn));
 
   useEffect(() => {
+    if (!shouldAnimate) return;
+
+    let animationFrameId: number;
+    let lastTime = performance.now();
+
+    const loop = (time: number) => {
+      const container = scrollRef.current;
+      if (container) {
+        if (!isPaused.current) {
+          const delta = time - lastTime;
+          // Approximately 35px per second
+          const step = delta * 0.035;
+          scrollPosRef.current += step;
+
+          const halfWidth = container.scrollWidth / 2;
+          if (scrollPosRef.current >= halfWidth) {
+            scrollPosRef.current -= halfWidth;
+          }
+          container.scrollLeft = Math.round(scrollPosRef.current);
+        } else {
+          // Sync float position tracker with actual scroll position during manual drags
+          scrollPosRef.current = container.scrollLeft;
+        }
+      }
+      lastTime = time;
+      animationFrameId = requestAnimationFrame(loop);
+    };
+
+    animationFrameId = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (resumeTimeoutRef.current) {
+        clearTimeout(resumeTimeoutRef.current);
+      }
+    };
+  }, [shouldAnimate, items.length]);
+
+  useEffect(() => {
     let mounted = true;
 
     (async () => {
@@ -620,16 +721,6 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
           container-type: inline-size;
           width: 100%;
         }
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .marquee-track-normal {
-          animation: marquee 18s linear infinite;
-        }
-        .marquee-track-normal:hover {
-          animation-play-state: paused;
-        }
         .scrollbar-none::-webkit-scrollbar {
           display: none;
         }
@@ -668,11 +759,26 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent z-10" : "hidden"} />
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent z-10" : "hidden"} />
           <div
+            ref={scrollRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpOrLeave}
+            onMouseLeave={handleMouseUpOrLeave}
+            onClickCapture={handleContainerClickCapture}
+            onTouchStart={handleInteractionStart}
+            onTouchEnd={handleInteractionEnd}
+            onTouchCancel={handleInteractionEnd}
+            onWheel={handleInteractionStart}
+            onScroll={() => {
+              if (isPaused.current && !isDragging.current) {
+                handleInteractionEnd();
+              }
+            }}
             className={shouldAnimate 
-              ? "marquee-track-normal flex min-w-max gap-5" 
+              ? "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full cursor-grab active:cursor-grabbing select-none" 
               : "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full snap-x snap-mandatory sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:justify-items-center"
             }
-            style={{ willChange: shouldAnimate ? 'transform' : 'auto' }}
+            style={{ willChange: shouldAnimate ? 'scroll-position' : 'auto' }}
           >
           {(shouldAnimate ? slidingItems : items).map((item, index) => (
             <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"}>

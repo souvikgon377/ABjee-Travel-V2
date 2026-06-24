@@ -613,4 +613,51 @@ export const reverseCommentRebate = async (input: {
   return result;
 };
 
+export const reverseTripStoryRebate = async (input: {
+  userId: string;
+  storyId: string;
+}) => {
+  const userRef = await resolveUserDocumentRef(input.userId);
+  const walletTransactionRef = userRef.collection("walletTransactions").doc();
+  const pointsToReverse = 5;
+
+  const result = await adminDb.runTransaction(async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists) {
+      throw new Error("User profile not found.");
+    }
+
+    const userData = userSnap.data() as AnyObject;
+    const wallet = hydrateWalletForMonth(normalizeWalletState(userData.wallet));
+
+    const updatedWallet: WalletState = {
+      availablePoints: Math.max(0, wallet.availablePoints - pointsToReverse),
+      lifetimeEarnedPoints: Math.max(0, wallet.lifetimeEarnedPoints - pointsToReverse),
+      lifetimeRedeemedPoints: wallet.lifetimeRedeemedPoints,
+      lifetimeRedeemedRupees: wallet.lifetimeRedeemedRupees,
+      monthly: wallet.monthly,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    transaction.set(userRef, { wallet: updatedWallet, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    transaction.set(walletTransactionRef, {
+      type: "trip_story_reward_reversal",
+      storyId: input.storyId,
+      points: -pointsToReverse,
+      rupees: -pointsToReverse * REBATE_POINT_VALUE_IN_RUPEES,
+      monthKey: wallet.monthly.monthKey,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      reversedPoints: pointsToReverse,
+      wallet: updatedWallet,
+    };
+  });
+
+  return result;
+};
+
+
 
