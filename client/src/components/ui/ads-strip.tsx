@@ -858,7 +858,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       </div>
 
       <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <DialogContent className="w-[95vw] sm:max-w-lg max-h-[85vh] overflow-y-auto border border-white/10 bg-[#121212] p-0 text-white scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <DialogContent className="w-[95vw] sm:max-w-md max-h-[85vh] overflow-y-auto border border-white/10 bg-[#121212] p-0 text-white scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           {selectedItem && (
             <div className="space-y-0">
               {selectedItem.adType === 'affiliate' ? (
@@ -887,7 +887,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </div>
                 </div>
               ) : (
-                <div className="relative h-64 overflow-hidden">
+                <div className="relative w-full aspect-video overflow-hidden">
                   <img
                     src={selectedItem.photoUrl}
                     alt={selectedItem.name || 'advertisement'}
