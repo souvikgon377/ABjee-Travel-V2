@@ -858,7 +858,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       </div>
 
       <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <DialogContent className="w-[min(92vw,44rem)] max-h-[92vh] overflow-y-auto border-white/10 bg-[#121212] p-0 text-white">
+        <DialogContent className="w-[min(92vw,52rem)] max-h-[92vh] overflow-y-auto border-white/10 bg-[#121212] p-0 text-white">
           {selectedItem && (
             <div className="space-y-0">
               {selectedItem.adType === 'affiliate' ? (
