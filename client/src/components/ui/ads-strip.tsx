@@ -858,11 +858,12 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       </div>
 
       <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <DialogContent className="w-[95vw] sm:max-w-md max-h-[85vh] overflow-y-auto border border-white/10 bg-[#121212] p-0 text-white scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <DialogContent className="w-[95vw] sm:max-w-md max-h-[85vh] overflow-hidden border border-white/10 bg-[#121212] p-0 text-white gap-0">
           {selectedItem && (
-            <div className="space-y-0">
+            <div className="flex flex-col h-full max-h-[85vh]">
+              {/* Image / Affiliate header - not scrollable */}
               {selectedItem.adType === 'affiliate' ? (
-                <div className="bg-white p-4 text-slate-900">
+                <div className="shrink-0 bg-white p-4 text-slate-900">
                   <DialogTitle className="sr-only">
                     {selectedItem.name || 'ABjee Travel activity details'}
                   </DialogTitle>
@@ -887,7 +888,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </div>
                 </div>
               ) : (
-                <div className="relative w-full aspect-video overflow-hidden">
+                <div className="relative shrink-0 h-52 overflow-hidden">
                   <img
                     src={selectedItem.photoUrl}
                     alt={selectedItem.name || 'advertisement'}
@@ -902,6 +903,8 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </div>
                 </div>
               )}
+              {/* Scrollable body below the image */}
+              <div className="overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
 
               <div className="space-y-5 p-5 sm:p-6">
                 <div className="flex flex-wrap gap-2">
@@ -1051,7 +1054,10 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </Button>
                 </div>
               </div>
+              {/* end space-y-5 */}
             </div>
+            {/* end scrollable wrapper */}
+          </div>
           )}
         </DialogContent>
       </Dialog>
