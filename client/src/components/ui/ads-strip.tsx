@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { doc, updateDoc, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
@@ -716,45 +716,7 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
 
   return (
     <>
-      <style>{`
-        .ads-container {
-          container-type: inline-size;
-          width: 100%;
-        }
-        .scrollbar-none::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-none {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        @media (min-width: 1024px) {
-          .ad-item-marquee {
-            width: calc((100cqw - 3.75rem) / 4);
-            max-width: 20rem;
-          }
-        }
-        @media (min-width: 768px) and (max-width: 1023px) {
-          .ad-item-marquee {
-            width: calc((100cqw - 2.5rem) / 3);
-            max-width: 20rem;
-          }
-        }
-        @media (min-width: 640px) and (max-width: 767px) {
-          .ad-item-marquee {
-            width: calc((100cqw - 1.25rem) / 2);
-            max-width: 20rem;
-          }
-        }
-        @media (max-width: 639px) {
-          .ad-item-marquee {
-            width: 100cqw;
-            max-width: 20rem;
-          }
-        }
-      `}</style>
-
-      <div className="ads-container mx-auto mt-5 w-full">
+      <div className="mx-auto mt-5 w-full" style={{ containerType: 'inline-size' }}>
         <div className="relative w-full overflow-x-clip px-1 pb-2">
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 left-0 w-12 bg-linear-to-r from-background to-transparent z-10" : "hidden"} />
           <div className={shouldAnimate ? "pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-background to-transparent z-10" : "hidden"} />
@@ -775,13 +737,19 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
               }
             }}
             className={shouldAnimate
-              ? "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full cursor-grab active:cursor-grabbing select-none"
-              : "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full snap-x snap-mandatory sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:justify-items-center"
+              ? "flex overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] gap-5 pb-2 w-full cursor-grab active:cursor-grabbing select-none"
+              : "flex overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] gap-5 pb-2 w-full snap-x snap-mandatory sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:justify-items-center"
             }
             style={{ willChange: shouldAnimate ? 'scroll-position' : 'auto' }}
           >
             {(shouldAnimate ? slidingItems : items).map((item, index) => (
-              <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"}>
+              <div
+                key={`${item.id}-${index}`}
+                className={shouldAnimate
+                  ? "w-[100cqw] sm:w-[calc((100cqw-1.25rem)/2)] md:w-[calc((100cqw-2.5rem)/3)] lg:w-[calc((100cqw-3.75rem)/4)] max-w-[20rem] shrink-0"
+                  : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"
+                }
+              >
                 {item.adType === 'affiliate' ? (
                   <AffiliateAdCard item={item} onReviews={() => setSelectedItem(item)} />
                 ) : (
