@@ -73,53 +73,53 @@ function AffiliateAdCard({ item, onReviews }: { item: AdItem; onReviews: () => v
         onBlur={() => setIsCardHovered(false)}
       >
         <div className={`relative h-full w-full rounded-2xl border border-white/15 shadow-lg shadow-black/20 transition-transform duration-700 ease-out transform-3d ${isCardHovered ? 'transform-[rotateY(180deg)]' : ''}`}>
-        <div className="absolute inset-0 overflow-hidden rounded-2xl bg-white backface-hidden">
-          <div
-            data-gyg-href={item.widgetHref}
-            data-gyg-locale-code={item.localeCode || 'en-US'}
-            data-gyg-widget="activities"
-            data-gyg-number-of-items={String(item.numberOfItems || 1)}
-            data-gyg-partner-id={item.partnerId || 'P2598GX'}
-            data-gyg-tour-ids={item.tourIds}
-            className="pointer-events-none min-h-64 w-full origin-top bg-white transform-[scale(1.65)]"
-          >
-            <span className="flex h-64 items-center justify-center text-sm text-slate-600">
-              <span className="font-semibold text-slate-800">Book with ABjee Travel</span>
-            </span>
+          <div className="absolute inset-0 overflow-hidden rounded-2xl bg-white backface-hidden">
+            <div
+              data-gyg-href={item.widgetHref}
+              data-gyg-locale-code={item.localeCode || 'en-US'}
+              data-gyg-widget="activities"
+              data-gyg-number-of-items={String(item.numberOfItems || 1)}
+              data-gyg-partner-id={item.partnerId || 'P2598GX'}
+              data-gyg-tour-ids={item.tourIds}
+              className="pointer-events-none min-h-64 w-full origin-top bg-white transform-[scale(1.65)]"
+            >
+              <span className="flex h-64 items-center justify-center text-sm text-slate-600">
+                <span className="font-semibold text-slate-800">Book with ABjee Travel</span>
+              </span>
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-black via-black/95 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
+              <div className="line-clamp-2 text-base font-semibold leading-tight drop-shadow-md">{item.name}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/70">Click to view details</div>
+            </div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-black via-black/95 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4 text-white">
-            <div className="line-clamp-2 text-base font-semibold leading-tight drop-shadow-md">{item.name}</div>
-            <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/70">Click to view details</div>
-          </div>
-        </div>
 
-        <div className="absolute inset-0 rounded-2xl bg-[#121212] p-4 text-white backface-hidden transform-[rotateY(180deg)]">
-          <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-            <div>
-              <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
-              <div className="mt-2 flex items-center gap-1" aria-label={`Average rating ${Number(item.rating || 0).toFixed(1)} out of 5`}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`h-4 w-4 ${star <= (item.rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`}
-                  />
-                ))}
-                <span className="ml-1 text-xs text-white/60">
-                  {item.rating ? `(${Number(item.rating).toFixed(1)})` : '(No ratings)'}
-                </span>
+          <div className="absolute inset-0 rounded-2xl bg-[#121212] p-4 text-white backface-hidden transform-[rotateY(180deg)]">
+            <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+              <div>
+                <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
+                <div className="mt-2 flex items-center gap-1" aria-label={`Average rating ${Number(item.rating || 0).toFixed(1)} out of 5`}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`h-4 w-4 ${star <= (item.rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`}
+                    />
+                  ))}
+                  <span className="ml-1 text-xs text-white/60">
+                    {item.rating ? `(${Number(item.rating).toFixed(1)})` : '(No ratings)'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm leading-5 text-white/80 line-clamp-3 overflow-hidden">
+                  {item.description || 'Book this activity securely with ABjee Travel.'}
+                </p>
+                <div className="h-px w-full bg-white/10" />
+                <div className="text-xs text-white/55">Click to view and book with ABjee Travel.</div>
               </div>
             </div>
-
-            <div className="space-y-3">
-              <p className="text-sm leading-5 text-white/80 line-clamp-3 overflow-hidden">
-                {item.description || 'Book this activity securely with ABjee Travel.'}
-              </p>
-              <div className="h-px w-full bg-white/10" />
-              <div className="text-xs text-white/55">Click to view and book with ABjee Travel.</div>
-            </div>
           </div>
-        </div>
         </div>
       </a>
       <div
@@ -439,21 +439,21 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
       await runTransaction(firestoreDb, async (transaction) => {
         const adDoc = await transaction.get(docRef);
         if (!adDoc.exists()) throw new Error("Advertisement does not exist!");
-        
+
         const data = adDoc.data();
         const userRatings = data.userRatings || {};
         userRatings[currentUserId] = newRating;
-        
+
         let total = 0;
         let count = 0;
         for (const uid in userRatings) {
           total += Number(userRatings[uid]);
           count++;
         }
-        
+
         // Calculate average to 1 decimal place
         finalAvgRating = count > 0 ? Number((total / count).toFixed(1)) : newRating;
-        
+
         transaction.update(docRef, { userRatings, rating: finalAvgRating });
       });
 
@@ -679,11 +679,11 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
         const matchedRows = scoredItems
           .filter((item) => item.matched)
           .map((item) => ({ ...item.row, score: item.score }));
-        
+
         // Show ONLY matched rows if there is a search filter applied. Do not fall back to all approved rows.
         const hasFilter = Boolean(normalize(searchTerm) || places.length > 0);
-        const nextItems = hasFilter 
-          ? matchedRows 
+        const nextItems = hasFilter
+          ? matchedRows
           : approvedRows.map(row => ({ ...row, score: 0 }));
 
         setItems(
@@ -774,99 +774,94 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                 handleInteractionEnd();
               }
             }}
-            className={shouldAnimate 
-              ? "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full cursor-grab active:cursor-grabbing select-none" 
+            className={shouldAnimate
+              ? "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full cursor-grab active:cursor-grabbing select-none"
               : "flex overflow-x-auto scrollbar-none gap-5 pb-2 w-full snap-x snap-mandatory sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:justify-items-center"
             }
             style={{ willChange: shouldAnimate ? 'scroll-position' : 'auto' }}
           >
-          {(shouldAnimate ? slidingItems : items).map((item, index) => (
-            <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"}>
-              {item.adType === 'affiliate' ? (
-                <AffiliateAdCard item={item} onReviews={() => setSelectedItem(item)} />
-              ) : (
-              <button
-                type="button"
-                onClick={() => setSelectedItem(item)}
-                className="group h-64 w-full text-left perspective-distant"
-                aria-label={`View details for ${item.name || 'advertisement'}`}
-              >
-                <div className="relative h-full w-full rounded-2xl border border-white/15 shadow-lg shadow-black/20 transition-transform duration-700 ease-out transform-3d group-hover:transform-[rotateY(180deg)]">
-                  <div className="absolute inset-0 overflow-hidden rounded-2xl bg-black/20 text-white backface-hidden">
-                    <div className="relative h-full w-full">
-                      <img src={item.photoUrl} alt={item.name || 'ad'} className="h-full w-full object-cover" />
-                      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/40 to-transparent p-4 space-y-1">
-                        <div className="truncate text-sm font-semibold">{item.name}</div>
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star
-                              key={star}
-                              className={`h-3 w-3 ${
-                                star <= (item.rating || 0)
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-white/20'
-                              }`}
-                            />
-                          ))}
-                          {item.rating ? (
-                            <span className="text-[10px] text-white/70 ml-1">({Number(item.rating).toFixed(1)})</span>
-                          ) : (
-                            <span className="text-[10px] text-white/40 ml-1">(No ratings)</span>
-                          )}
-                        </div>
-                        <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/65">Click to view details</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="absolute inset-0 rounded-2xl bg-[#121212] p-4 text-white backface-hidden transform-[rotateY(180deg)]">
-                    <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-                      <div>
-                        <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
-                        <div className="flex items-center gap-0.5 mt-1.5">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star
-                              key={star}
-                              className={`h-3.5 w-3.5 ${
-                                star <= (item.rating || 0)
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-white/20'
-                              }`}
-                            />
-                          ))}
+            {(shouldAnimate ? slidingItems : items).map((item, index) => (
+              <div key={`${item.id}-${index}`} className={shouldAnimate ? "ad-item-marquee shrink-0" : "ad-item w-[80vw] max-w-[20rem] shrink-0 snap-start sm:w-full"}>
+                {item.adType === 'affiliate' ? (
+                  <AffiliateAdCard item={item} onReviews={() => setSelectedItem(item)} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedItem(item)}
+                    className="group h-64 w-full text-left perspective-distant"
+                    aria-label={`View details for ${item.name || 'advertisement'}`}
+                  >
+                    <div className="relative h-full w-full rounded-2xl border border-white/15 shadow-lg shadow-black/20 transition-transform duration-700 ease-out transform-3d group-hover:transform-[rotateY(180deg)]">
+                      <div className="absolute inset-0 overflow-hidden rounded-2xl bg-black/20 text-white backface-hidden">
+                        <div className="relative h-full w-full">
+                          <img src={item.photoUrl} alt={item.name || 'ad'} className="h-full w-full object-cover" />
+                          <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/85 via-black/40 to-transparent p-4 space-y-1">
+                            <div className="truncate text-sm font-semibold">{item.name}</div>
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-3 w-3 ${star <= (item.rating || 0)
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-white/20'
+                                    }`}
+                                />
+                              ))}
+                              {item.rating ? (
+                                <span className="text-[10px] text-white/70 ml-1">({Number(item.rating).toFixed(1)})</span>
+                              ) : (
+                                <span className="text-[10px] text-white/40 ml-1">(No ratings)</span>
+                              )}
+                            </div>
+                            <div className="mt-1 text-[11px] uppercase tracking-[0.22em] text-white/65">Click to view details</div>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="space-y-3">
-                        {item.description ? (
-                          <p className="text-sm leading-5 text-white/80 line-clamp-3 overflow-hidden">{item.description}</p>
-                        ) : (
-                          <p className="text-sm leading-5 text-white/60">No description available for this advertisement.</p>
-                        )}
-                        <div className="h-px w-full bg-white/10" />
-                        <div className="text-xs text-white/55">Click to open the full advertisement details.</div>
+                      <div className="absolute inset-0 rounded-2xl bg-[#121212] p-4 text-white backface-hidden transform-[rotateY(180deg)]">
+                        <div className="flex h-full flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+                          <div>
+                            <div className="mt-2 text-base font-semibold leading-tight">{item.name}</div>
+                            <div className="flex items-center gap-0.5 mt-1.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-3.5 w-3.5 ${star <= (item.rating || 0)
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-white/20'
+                                    }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {item.description ? (
+                              <p className="text-sm leading-5 text-white/80 line-clamp-3 overflow-hidden">{item.description}</p>
+                            ) : (
+                              <p className="text-sm leading-5 text-white/60">No description available for this advertisement.</p>
+                            )}
+                            <div className="h-px w-full bg-white/10" />
+                            <div className="text-xs text-white/55">Click to open the full advertisement details.</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </button>
-              )}
-            </div>
-          ))}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
       <Dialog open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <DialogContent
-          className="w-[95vw] sm:max-w-md border border-white/10 bg-[#121212] text-white"
-          style={{ padding: 0, gap: 0, maxHeight: '85vh', overflowY: 'auto' }}
-        >
+        <DialogContent className="w-[95vw] sm:max-w-md max-h-[85vh] !overflow-hidden border border-white/10 bg-[#121212] !p-0 text-white !gap-0">
           {selectedItem && (
-            <div>
-              {/* Header */}
+            <div className="flex flex-col h-full max-h-[85vh]">
+              {/* Image / Affiliate header - not scrollable */}
               {selectedItem.adType === 'affiliate' ? (
-                <div className="bg-white p-4 text-slate-900">
+                <div className="shrink-0 bg-white p-4 text-slate-900">
                   <DialogTitle className="sr-only">
                     {selectedItem.name || 'ABjee Travel activity details'}
                   </DialogTitle>
@@ -891,14 +886,14 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </div>
                 </div>
               ) : (
-                <div style={{ position: 'relative', width: '100%', height: '210px', overflow: 'hidden', display: 'block' }}>
+                <div className="relative shrink-0 h-52 overflow-hidden">
                   <img
                     src={selectedItem.photoUrl}
                     alt={selectedItem.name || 'advertisement'}
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    className="h-full w-full object-cover"
                   />
-                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, black, rgba(0,0,0,0.4), transparent)' }} />
-                  <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16 }}>
+                  <div className="absolute inset-0 bg-linear-to-t from-black via-black/40 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4">
                     <DialogTitle className="text-2xl font-bold text-white">{selectedItem.name || 'Advertisement details'}</DialogTitle>
                     <DialogDescription className="mt-1 text-sm text-white/70">
                       Full advertisement record and contact details.
@@ -906,114 +901,159 @@ export default function AdsStrip({ maxItems = 20, searchTerm = '', places = [] }
                   </div>
                 </div>
               )}
+              {/* Scrollable body below the image */}
+              <div className="overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
 
-              {/* Body */}
-              <div className="space-y-5 p-5 sm:p-6">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="border-green-500/60 bg-green-500/10 text-green-300 capitalize">
-                    {(() => {
-                      const status = selectedItem.approvalStatus || selectedItem.status || 'approved';
-                      return status === 'approved' ? 'verified' : status;
-                    })()}
-                  </Badge>
-                  {selectedItem.category && (
-                    <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80">
-                      {selectedItem.category}
+                <div className="space-y-5 p-5 sm:p-6">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="border-green-500/60 bg-green-500/10 text-green-300 capitalize">
+                      {(() => {
+                        const status = selectedItem.approvalStatus || selectedItem.status || 'approved';
+                        return status === 'approved' ? 'verified' : status;
+                      })()}
                     </Badge>
-                  )}
-                </div>
-
-                {selectedItem.adType === 'affiliate' ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Available online'} />
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-                        <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                        Your rating Â· Avg {Number(selectedItem.rating || 0).toFixed(1)}
-                      </div>
-                      <div className="mt-2 flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button key={star} type="button" onClick={() => handleRate(star)} className="transition-transform active:scale-95" aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}>
-                            <Star className={`h-5 w-5 ${star <= adRating ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <a href={selectedItem.affiliateLink} target="_blank" rel="sponsored" className="inline-flex h-11 items-center justify-center rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950 transition-colors hover:bg-amber-300 sm:col-span-2">
-                      View activity
-                    </a>
-                  </div>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Not available'} />
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col justify-between">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-                        <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                        Your Rating (Avg: {Number(selectedItem.rating || 0).toFixed(1)})
-                      </div>
-                      <div className="mt-2 flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button key={star} onClick={() => handleRate(star)} className="focus:outline-none transition-transform active:scale-95 text-white" type="button">
-                            <Star className={`h-5 w-5 ${star <= adRating ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
-                          </button>
-                        ))}
-                        <span className="ml-2 text-xs text-white/60">({Number(adRating || 0).toFixed(1)})</span>
-                      </div>
-                    </div>
-                    <DetailRow icon={<Phone className="h-4 w-4" />} label="Mobile number" value={selectedItem.mobileNumber || 'Not available'} />
-                    <DetailRow icon={<Tag className="h-4 w-4" />} label="Email" value={selectedItem.ownerEmail || 'Not available'} />
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/55">Description</h4>
-                  <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-white/80">
-                    {selectedItem.description || (selectedItem.adType === 'affiliate' ? 'Book this activity securely with ABjee Travel.' : 'No description available for this advertisement.')}
-                  </p>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t border-white/10">
-                  <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/55">Comments & Reviews</h4>
-                  <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                    {adComments.length === 0 ? (
-                      <p className="text-xs text-white/45 italic">No comments posted yet. Be the first to write a comment!</p>
-                    ) : (
-                      adComments.map((c: any) => (
-                        <div key={c.id} className="rounded-xl border border-white/5 bg-white/5 p-3 space-y-1">
-                          <div className="flex items-center justify-between text-[11px] text-white/50">
-                            <span className="font-semibold text-white/80">{c.userName}</span>
-                            <div className="flex items-center gap-2">
-                              <span>{new Date(c.createdAt).toLocaleDateString()}</span>
-                              <button type="button" onClick={() => handleDeleteComment(c)} className="text-white/40 hover:text-red-400 transition-colors p-0.5" title="Delete comment">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                          <p className="text-xs text-white/90 leading-relaxed">{c.text}</p>
-                        </div>
-                      ))
+                    {selectedItem.category && (
+                      <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80">
+                        {selectedItem.category}
+                      </Badge>
                     )}
                   </div>
-                  <form onSubmit={handlePostComment} className="flex gap-2 items-start mt-2">
-                    <textarea
-                      value={newCommentText}
-                      onChange={(e) => setNewCommentText(e.target.value)}
-                      placeholder="Write a comment..."
-                      rows={2}
-                      className="flex-1 rounded-xl border border-white/10 bg-[#1e1e1e] p-2.5 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-rose-500/50 focus:border-rose-500/50 resize-none"
-                    />
-                    <Button type="submit" disabled={!newCommentText.trim() || commentPosting} className="shrink-0 rounded-xl bg-rose-600 text-white hover:bg-rose-700 h-9 px-3 text-xs">
-                      {commentPosting ? 'Posting...' : 'Post'}
-                    </Button>
-                  </form>
-                </div>
 
-                <div className="flex justify-end">
-                  <Button type="button" variant="outline" onClick={() => setSelectedItem(null)} className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-                    Close
-                  </Button>
+                  {selectedItem.adType === 'affiliate' ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Available online'} />
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                          Your rating · Avg {Number(selectedItem.rating || 0).toFixed(1)}
+                        </div>
+                        <div className="mt-2 flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => handleRate(star)}
+                              className="transition-transform active:scale-95"
+                              aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
+                            >
+                              <Star className={`h-5 w-5 ${star <= adRating ? 'fill-amber-400 text-amber-400' : 'text-white/20'}`} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <a
+                        href={selectedItem.affiliateLink}
+                        target="_blank"
+                        rel="sponsored"
+                        className="inline-flex h-11 items-center justify-center rounded-xl bg-amber-400 px-5 text-sm font-bold text-slate-950 transition-colors hover:bg-amber-300 sm:col-span-2"
+                      >
+                        View activity
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <DetailRow icon={<MapPin className="h-4 w-4" />} label="Location" value={[selectedItem.area, selectedItem.state, selectedItem.country].filter(Boolean).join(', ') || 'Not available'} />
+
+                      {/* Rating Card */}
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col justify-between">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                          <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+                          Your Rating (Avg: {Number(selectedItem.rating || 0).toFixed(1)})
+                        </div>
+                        <div className="mt-2 flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              onClick={() => handleRate(star)}
+                              className="focus:outline-none transition-transform active:scale-95 text-white"
+                              type="button"
+                            >
+                              <Star
+                                className={`h-5 w-5 ${star <= adRating
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-white/20'
+                                  }`}
+                              />
+                            </button>
+                          ))}
+                          <span className="ml-2 text-xs text-white/60">({Number(adRating || 0).toFixed(1)})</span>
+                        </div>
+                      </div>
+
+                      <DetailRow icon={<Phone className="h-4 w-4" />} label="Mobile number" value={selectedItem.mobileNumber || 'Not available'} />
+                      <DetailRow icon={<Tag className="h-4 w-4" />} label="Email" value={selectedItem.ownerEmail || 'Not available'} />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/55">Description</h4>
+                    <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-white/80">
+                      {selectedItem.description || (selectedItem.adType === 'affiliate' ? 'Book this activity securely with ABjee Travel.' : 'No description available for this advertisement.')}
+                    </p>
+                  </div>
+
+                  {/* Comment Section under description */}
+                  <div className="space-y-4 pt-4 border-t border-white/10">
+                    <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/55">Comments & Reviews</h4>
+
+                    <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                      {adComments.length === 0 ? (
+                        <p className="text-xs text-white/45 italic">No comments posted yet. Be the first to write a comment!</p>
+                      ) : (
+                        adComments.map((c: any) => (
+                          <div key={c.id} className="rounded-xl border border-white/5 bg-white/5 p-3 space-y-1">
+                            <div className="flex items-center justify-between text-[11px] text-white/50">
+                              <span className="font-semibold text-white/80">{c.userName}</span>
+                              <div className="flex items-center gap-2">
+                                <span>{new Date(c.createdAt).toLocaleDateString()}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(c)}
+                                  className="text-white/40 hover:text-red-400 transition-colors p-0.5"
+                                  title="Delete comment"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-white/90 leading-relaxed">{c.text}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <form onSubmit={handlePostComment} className="flex gap-2 items-start mt-2">
+                      <textarea
+                        value={newCommentText}
+                        onChange={(e) => setNewCommentText(e.target.value)}
+                        placeholder="Write a comment..."
+                        rows={2}
+                        className="flex-1 rounded-xl border border-white/10 bg-[#1e1e1e] p-2.5 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-rose-500/50 focus:border-rose-500/50 resize-none"
+                      />
+                      <Button
+                        type="submit"
+                        disabled={!newCommentText.trim() || commentPosting}
+                        className="shrink-0 rounded-xl bg-rose-600 text-white hover:bg-rose-700 h-9 px-3 text-xs"
+                      >
+                        {commentPosting ? 'Posting...' : 'Post'}
+                      </Button>
+                    </form>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setSelectedItem(null)}
+                      className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
+                {/* end space-y-5 */}
               </div>
+              {/* end scrollable wrapper */}
             </div>
           )}
         </DialogContent>
@@ -1041,4 +1081,3 @@ function DetailRow({
     </div>
   );
 }
-
