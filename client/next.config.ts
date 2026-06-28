@@ -18,7 +18,6 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   assetPrefix: useCdnPrefix ? cdnUrl : "",
   crossOrigin: useCdnPrefix ? "anonymous" : undefined,
-  turbopack: {},
   experimental: {
     optimizePackageImports: ["lucide-react", "framer-motion"],
   },
